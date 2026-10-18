@@ -54,6 +54,15 @@ export class Viewer {
 
   get currentBoard() { return this.boards.get(this.current); }
 
+  /** Invalidate a render already in flight when the source changes. */
+  cancelPendingRender() { ++this.revision; this.cancelTransition(); }
+
+  highlightShapes(ids: readonly string[]) {
+    for (const shape of this.stage.querySelectorAll<SVGElement>('[data-shape-id]')) {
+      shape.classList.toggle('zf-source-selected', ids.includes(shape.dataset.shapeId!));
+    }
+  }
+
   setTheme(dark: boolean) {
     this.dark = dark;
     this.applyTheme(this.stage);
@@ -99,7 +108,7 @@ export class Viewer {
     await this.navigate(board.id, undefined, 'replace', trail);
   }
 
-  private svgElement(svg: string): SVGElement {
+  private svgElement(svg: string, board: Board): SVGElement {
     const doc = new DOMParser().parseFromString(svg, 'image/svg+xml');
     if (doc.querySelector('parsererror') || doc.documentElement.localName !== 'svg') throw new Error('Invalid SVG from renderer');
     const element = document.importNode(doc.documentElement, true) as unknown as SVGElement;
@@ -113,7 +122,7 @@ export class Viewer {
     }
     for (const link of element.querySelectorAll('a')) {
       const href = link.getAttribute('href') ?? link.getAttribute('xlink:href') ?? '';
-      const action = classifyHref(href, this.current);
+      const action = classifyHref(href, board.id);
       link.setAttribute('tabindex', '0');
       link.setAttribute('role', 'link');
       if (action.kind === 'external') {
@@ -124,6 +133,13 @@ export class Viewer {
         link.removeAttribute('href');
         link.removeAttribute('xlink:href');
       }
+    }
+    for (const shape of board.diagram.shapes) {
+      // D2 uses padded URL-safe base64, including for non-ASCII identifiers.
+      const encoded = btoa(Array.from(new TextEncoder().encode(shape.id), (byte) => String.fromCharCode(byte)).join(''))
+        .replace(/\+/g, '-').replace(/\//g, '_');
+      const group = [...element.querySelectorAll('g')].find((node) => node.classList.contains(encoded));
+      if (group) group.dataset.shapeId = shape.id;
     }
     this.applyTheme(element);
     return element;
@@ -173,7 +189,7 @@ export class Viewer {
       }
       const svg = await rendered;
       if (revision !== this.revision) return;
-      const content = board.diagram.shapes.length ? this.svgElement(svg) : document.createElement('p');
+      const content = board.diagram.shapes.length ? this.svgElement(svg, board) : document.createElement('p');
       if (!board.diagram.shapes.length) content.textContent = 'This board is empty.';
       if (origin && origin.width > 0 && origin.height > 0 && !matchMedia('(prefers-reduced-motion: reduce)').matches) {
         const target = this.stage.getBoundingClientRect();
@@ -198,6 +214,7 @@ export class Viewer {
       this.current = id;
       this.trail = trail ?? (this.trail.at(-1) === id ? this.trail : [...this.trail, id]);
       this.stage.dataset.board = id;
+      this.stage.dispatchEvent(new Event('zf-boardchange'));
       const state = { ...history.state, zoomflowTrail: this.trail };
       if (mode === 'replace' || location.hash === board.hash) history.replaceState(state, '', board.hash);
       else history.pushState(state, '', board.hash);

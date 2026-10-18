@@ -14,3 +14,8 @@ The `?pad=` app parameter controls D2's rendering padding for these checks.
 and checks remote-image embedding and fallback. Root PNG baselines are per browser
 and OS; review the images before deliberately updating them with
 `pnpm exec playwright test tests/e2e/export.spec.ts --update-snapshots`.
+
+`editor.spec.ts` exercises real CodeMirror input, retained previews and inline
+diagnostics on syntax errors, recovery, startup edits, exact source selections
+(including Unicode and container names), selection-driven board navigation,
+preview highlights, editor keyboard isolation and file replacement.

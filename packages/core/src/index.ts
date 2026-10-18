@@ -1,6 +1,7 @@
 import type { Diagram } from '@d2lang/d2';
 export { renderExportBoards, exportBoardsZip, exportBoardsHtml, type ExportBoard } from './export';
 export type { Diagram, CompileResponse, RenderOptions } from '@d2lang/d2';
+export { indexShapeSources, parseSourceRange, type SourceRange, type ShapeSource } from './source';
 
 export interface Board {
   id: string;

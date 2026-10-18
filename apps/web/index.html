@@ -14,8 +14,15 @@
       <button id="export" disabled>Download</button>
       <label>Theme <select id="theme"><option value="system">System</option><option value="light">Light</option><option value="dark">Dark</option></select></label>
     </header>
-    <main id="viewer"></main>
-    <footer>Click a linked shape to explore · Esc or Backspace goes up · Drop a .d2 file to open</footer>
+    <div id="workspace">
+      <section id="source-pane" aria-label="Source editor">
+        <div class="pane-title">D2 source <span>Edit to update the preview</span></div>
+        <div id="compile-error" role="alert" hidden></div>
+        <div id="editor"></div>
+      </section>
+      <main id="viewer" aria-label="Live preview"></main>
+    </div>
+    <footer>Click a shape to select its source · Linked shapes open boards (Alt+click selects source only) · Esc or Backspace outside the editor goes up</footer>
     <script type="module" src="/src/index.ts"></script>
   </body>
 </html>

@@ -24,3 +24,17 @@ main { flex: 1; min-height: 0; display: flex; flex-direction: column; padding: 1
 .zf-zoom { position: fixed; z-index: 10; pointer-events: none; overflow: hidden; transform-origin: 0 0; background: white; border: 1px solid #8192a488; }
 [data-theme="dark"] .zf-zoom { background: #0a0f25; }
 footer { color: #7a899d; padding: 10px 24px; font-size: 12px; }
+#workspace { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(240px, 38%) minmax(0, 1fr); }
+#source-pane { min-width: 0; min-height: 0; display: flex; flex-direction: column; border-right: 1px solid #8192a444; }
+.pane-title { padding: 12px 16px; font-weight: 600; }
+.pane-title span { display: block; font-size: 12px; font-weight: normal; color: #7a899d; }
+#editor { flex: 1; min-height: 0; overflow: hidden; }
+#compile-error { color: #d64e52; padding: 8px 16px; max-height: 120px; overflow: auto; white-space: pre-wrap; }
+.zf-stage [data-shape-id] { cursor: pointer; }
+.zf-stage .zf-source-selected { outline: 3px solid #e89d23; outline-offset: 4px; }
+@media (max-width: 600px) {
+  #workspace { grid-template-columns: 1fr; grid-template-rows: minmax(180px, 40%) minmax(240px, 1fr); overflow: auto; }
+  #source-pane { border-right: 0; border-bottom: 1px solid #8192a444; }
+  header { gap: 10px; padding: 10px 16px; }
+  #viewer { padding: 8px 16px; }
+}

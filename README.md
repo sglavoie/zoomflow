@@ -16,6 +16,16 @@ navigation. Deep links such as `#/checkout/charge` open a board directly in the
 loaded diagram. Open a file or drop one onto the page; files are compiled locally
 with D2's WASM worker. Light, dark and system themes use D2's generated palettes.
 
+Edit the D2 source in the CodeMirror pane for a live preview (350 ms debounce).
+Compile errors appear in a banner and inline diagnostics while the last good
+diagram stays available. Successful edits preserve the current board, falling
+back to its nearest existing ancestor if it was removed. Click a shape to select
+its source identifier; selecting an identifier in the editor highlights its shape
+and opens its board when needed. Linked shapes still navigate; Alt+click selects
+their source without navigating. Source links pause while edits are uncompiled,
+so an old diagram cannot select an outdated text range. Editor keyboard shortcuts,
+including undo, search, Escape and Backspace, stay in the editor.
+
 Use Export → Download for the current board as SVG or PNG, all boards as a ZIP
 of SVGs, or one navigable HTML file. The HTML opens directly from disk without a
 server or network connection and includes every board, including cyclic links.
@@ -37,12 +47,12 @@ Firefox and WebKit; install them with `pnpm exec playwright install` if needed.
 The app build is written to `apps/web/dist`. D2 is loaded lazily, but its bundled
 compiler is still a large download (roughly 8.5 MB gzip).
 
-`@zoomflow/core` provides board indexing, href classification, ZIP generation and
+`@zoomflow/core` provides board indexing, shape source ranges, href classification, ZIP generation and
 HTML packaging; `@zoomflow/viewer` provides the DOM viewer, resource embedding,
 PNG rasterization and the standalone HTML navigation runtime.
 D2 is pinned to the local `0.1.34-zoomflow.1` compatibility build, which fixes a
 Goldmark regex initialization overflow in WebKit. [Build provenance and licenses](vendor/d2/README.md)
 include the exact source, patch, tool versions and checksums. Upgrades must
 deliberately review the compiler contract.
-This MVP opens individual files; resolving filesystem imports and editing diagrams
-are not yet provided. Rich HTML labels (`foreignObject`) remain unsupported.
+This MVP opens individual files; resolving filesystem imports and saving edited
+D2 source to disk are not yet provided. Rich HTML labels (`foreignObject`) remain unsupported.
