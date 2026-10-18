@@ -10,6 +10,8 @@
       <strong>Zoomflow</strong>
       <label class="file-button">Open .d2<input id="file" type="file" accept=".d2,text/plain" /></label>
       <span id="filename">order.d2</span>
+      <label>Export <select id="export-format"><option value="svg">Current board SVG</option><option value="png">Current board PNG</option><option value="zip">All boards ZIP (SVG)</option><option value="html">Single-file HTML</option></select></label>
+      <button id="export" disabled>Download</button>
       <label>Theme <select id="theme"><option value="system">System</option><option value="light">Light</option><option value="dark">Dark</option></select></label>
     </header>
     <main id="viewer"></main>

@@ -1,6 +1,7 @@
 import { classifyHref, indexBoards, type Board, type Diagram } from '@zoomflow/core';
 
 export type RenderBoard = (target: string) => Promise<string>;
+export { prepareExportSvg, rasterizeSvg, offlineViewerScript } from './export';
 
 /** DOM viewer with an injected renderer so callers can reuse compiled documents. */
 export class Viewer {
@@ -50,6 +51,8 @@ export class Viewer {
   }
 
   setBusy(busy: boolean) { this.host.setAttribute('aria-busy', String(busy)); }
+
+  get currentBoard() { return this.boards.get(this.current); }
 
   setTheme(dark: boolean) {
     this.dark = dark;

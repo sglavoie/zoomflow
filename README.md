@@ -16,6 +16,15 @@ navigation. Deep links such as `#/checkout/charge` open a board directly in the
 loaded diagram. Open a file or drop one onto the page; files are compiled locally
 with D2's WASM worker. Light, dark and system themes use D2's generated palettes.
 
+Use Export → Download for the current board as SVG or PNG, all boards as a ZIP
+of SVGs, or one navigable HTML file. The HTML opens directly from disk without a
+server or network connection and includes every board, including cyclic links.
+Exports preserve the selected theme. Remote images are embedded when accessible;
+failed fetches produce a placeholder and a visible warning. ZIP paths follow the
+board tree (`root.svg`, `checkout.svg`, `checkout/charge.svg`); scenarios and steps
+use `@scenarios/` and `@steps/` directories. PNG uses the board's native dimensions
+and has a 64 megapixel limit.
+
 ```sh
 pnpm test:unit
 pnpm test:e2e
@@ -28,11 +37,12 @@ Firefox and WebKit; install them with `pnpm exec playwright install` if needed.
 The app build is written to `apps/web/dist`. D2 is loaded lazily, but its bundled
 compiler is still a large download (roughly 8.5 MB gzip).
 
-`@zoomflow/core` provides board indexing and href classification;
-`@zoomflow/viewer` provides the DOM viewer with an injected async board renderer.
+`@zoomflow/core` provides board indexing, href classification, ZIP generation and
+HTML packaging; `@zoomflow/viewer` provides the DOM viewer, resource embedding,
+PNG rasterization and the standalone HTML navigation runtime.
 D2 is pinned to the local `0.1.34-zoomflow.1` compatibility build, which fixes a
 Goldmark regex initialization overflow in WebKit. [Build provenance and licenses](vendor/d2/README.md)
 include the exact source, patch, tool versions and checksums. Upgrades must
 deliberately review the compiler contract.
-This MVP opens individual files; resolving filesystem imports and editing or
-exporting diagrams are not yet provided.
+This MVP opens individual files; resolving filesystem imports and editing diagrams
+are not yet provided. Rich HTML labels (`foreignObject`) remain unsupported.

@@ -8,3 +8,9 @@ The geometry tests pause the actual zoom animation at time zero and measure the
 rendered overlay on the next animation frame. They compare all four box dimensions
 with the clicked SVG anchor, within 2 px, at two viewport sizes and D2 pad 0/100.
 The `?pad=` app parameter controls D2's rendering padding for these checks.
+
+`export.spec.ts` downloads real SVG, PNG, ZIP and HTML files. It opens HTML via
+`file://` with the browser offline, exercises nested and cyclic board navigation,
+and checks remote-image embedding and fallback. Root PNG baselines are per browser
+and OS; review the images before deliberately updating them with
+`pnpm exec playwright test tests/e2e/export.spec.ts --update-snapshots`.

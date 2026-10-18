@@ -1,0 +1,112 @@
+import { readFile } from 'node:fs/promises';
+import { pathToFileURL } from 'node:url';
+import { expect, test, type Page, type TestInfo } from '@playwright/test';
+
+async function board(page: Page, id: string) {
+  await expect(page.locator('.zf-stage')).toHaveAttribute('data-board', id);
+}
+async function drill(page: Page, id: string) {
+  await page.locator(`.zf-stage a[href="${id}"]`).click();
+  await board(page, id);
+}
+async function download(page: Page, format: string, info: TestInfo) {
+  await page.selectOption('#export-format', format);
+  const pending = page.waitForEvent('download');
+  await page.getByRole('button', { name: 'Download', exact: true }).click();
+  const result = await pending;
+  const path = info.outputPath(result.suggestedFilename());
+  await result.saveAs(path);
+  await expect(page.getByRole('button', { name: 'Download', exact: true })).toBeEnabled();
+  return path;
+}
+
+test.use({ colorScheme: 'light', reducedMotion: 'reduce' });
+
+test('downloads the current SVG and PNG and matches the root PNG snapshot', async ({ page }, info) => {
+  await page.goto('/');
+  await board(page, 'root');
+  const png = await readFile(await download(page, 'png', info));
+  expect(png.subarray(0, 8)).toEqual(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]));
+  expect(png).toMatchSnapshot('order-root.png', { maxDiffPixelRatio: 0.001 });
+  await drill(page, 'root.layers.checkout');
+  await drill(page, 'root.layers.checkout.layers.charge');
+  const svg = await readFile(await download(page, 'svg', info), 'utf8');
+  expect(svg).toContain('Capture');
+  expect(svg).not.toContain('Browse');
+  const childPng = await readFile(await download(page, 'png', info));
+  expect(childPng.equals(png)).toBe(false);
+  const zip = await readFile(await download(page, 'zip', info));
+  expect(zip.subarray(0, 2).toString()).toBe('PK');
+});
+
+test('opens a single HTML file offline and drills every level with history and backlinks', async ({ page, context }, info) => {
+  await page.goto('/');
+  await board(page, 'root');
+  const path = await download(page, 'html', info);
+  const html = await readFile(path, 'utf8');
+  expect(html).not.toMatch(/<script[^>]+src=|d2\.wasm/);
+  await page.goto('about:blank');
+  const network: string[] = [];
+  context.on('request', (request) => { if (/^https?:/.test(request.url())) network.push(request.url()); });
+  await context.route(/^https?:/, (route) => route.abort());
+  await context.setOffline(true);
+  const errors: string[] = [];
+  page.on('pageerror', (error) => errors.push(error.message));
+  await page.goto(pathToFileURL(path).href);
+  await board(page, 'root');
+  await expect(page.locator('.zf-stage')).toContainText('Browse');
+  await drill(page, 'root.layers.checkout');
+  await drill(page, 'root.layers.checkout.layers.charge');
+  await expect(page.locator('.zf-stage')).toContainText('Capture');
+  await page.reload();
+  await board(page, 'root.layers.checkout.layers.charge');
+  await page.keyboard.press('Escape');
+  await board(page, 'root.layers.checkout');
+  await page.goBack();
+  await board(page, 'root.layers.checkout.layers.charge');
+  await page.goForward();
+  await board(page, 'root.layers.checkout');
+  await drill(page, 'root');
+  await drill(page, 'root.layers.checkout');
+  await drill(page, 'root.layers.checkout.layers.charge');
+  await page.getByRole('button', { name: 'Root', exact: true }).first().click();
+  await board(page, 'root');
+  await expect(page.locator('a[href="https://example.com/docs"]')).toHaveAttribute('target', '_blank');
+  expect(network).toEqual([]);
+  expect(errors).toEqual([]);
+});
+
+test('exports cyclic links without looping and preserves the visited breadcrumb offline', async ({ page, context }, info) => {
+  await page.goto('/');
+  await board(page, 'root');
+  await page.locator('#file').setInputFiles('fixtures/cycle.d2');
+  await expect(page.locator('#filename')).toHaveText('cycle.d2');
+  const path = await download(page, 'html', info);
+  await context.setOffline(true);
+  await page.goto(pathToFileURL(path).href);
+  await drill(page, 'root.layers.A');
+  await drill(page, 'root.layers.B');
+  await drill(page, 'root.layers.A');
+  await expect(page.getByRole('navigation').getByRole('button')).toHaveText(['Root', 'A', 'B', 'A']);
+  await page.keyboard.press('Backspace');
+  await board(page, 'root');
+});
+
+test('inlines remote images for PNG and reports a placeholder when fetching fails', async ({ page }, info) => {
+  await page.route('https://assets.example/icon.svg', (route) => route.fulfill({
+    contentType: 'image/svg+xml', headers: { 'Access-Control-Allow-Origin': '*' },
+    body: '<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40"><rect width="40" height="40" fill="red"/></svg>',
+  }));
+  await page.goto('/');
+  await board(page, 'root');
+  await page.locator('#file').setInputFiles({ name: 'image.d2', mimeType: 'text/plain', buffer: Buffer.from('Picture: {icon: https://assets.example/icon.svg}') });
+  await expect(page.locator('#filename')).toHaveText('image.d2');
+  const svg = await readFile(await download(page, 'svg', info), 'utf8');
+  expect(svg).toContain('data:image/svg+xml;base64,');
+  expect(svg).not.toContain('https://assets.example');
+  await download(page, 'png', info);
+  await page.unroute('https://assets.example/icon.svg');
+  await page.route('https://assets.example/icon.svg', (route) => route.abort());
+  await download(page, 'png', info);
+  await expect(page.getByRole('alert')).toContainText('used a placeholder');
+});

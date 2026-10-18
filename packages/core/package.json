@@ -5,6 +5,7 @@
   "type": "module",
   "exports": "./src/index.ts",
   "dependencies": {
-    "@d2lang/d2": "file:../../vendor/d2/d2lang-d2-0.1.34-zoomflow.1.tgz"
+    "@d2lang/d2": "file:../../vendor/d2/d2lang-d2-0.1.34-zoomflow.1.tgz",
+    "fflate": "0.8.2"
   }
 }
