@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "dependencies": {
-    "@d2lang/d2": "0.1.34",
+    "@d2lang/d2": "file:../../vendor/d2/d2lang-d2-0.1.34-zoomflow.1.tgz",
     "@zoomflow/core": "workspace:*",
     "@zoomflow/viewer": "workspace:*"
   },

@@ -182,8 +182,8 @@ importers:
   apps/web:
     dependencies:
       '@d2lang/d2':
-        specifier: 0.1.34
-        version: 0.1.34
+        specifier: file:../../vendor/d2/d2lang-d2-0.1.34-zoomflow.1.tgz
+        version: file:vendor/d2/d2lang-d2-0.1.34-zoomflow.1.tgz
       '@zoomflow/core':
         specifier: workspace:*
         version: link:../../packages/core
@@ -204,8 +204,8 @@ importers:
   packages/core:
     dependencies:
       '@d2lang/d2':
-        specifier: 0.1.34
-        version: 0.1.34
+        specifier: file:../../vendor/d2/d2lang-d2-0.1.34-zoomflow.1.tgz
+        version: file:vendor/d2/d2lang-d2-0.1.34-zoomflow.1.tgz
 
   packages/viewer:
     dependencies:
@@ -215,8 +215,9 @@ importers:
 
 packages:
 
-  '@d2lang/d2@0.1.34':
-    resolution: {integrity: sha512-35m2DaRUgeBy1cFbF9XEGIuaN/pMWrqkJtGj/tsq7OrU4N8degbY80Js7Mw7UeuE+fwGpxdZaGckEUVOPAj7CA==}
+  '@d2lang/d2@file:vendor/d2/d2lang-d2-0.1.34-zoomflow.1.tgz':
+    resolution: {integrity: sha512-+wchlV2983FghZWxYUiMv0ppXzMtqESzEAn91oZHiY33q0oa9rJpnG9nQj/Al81Yfeowpb5fsn1/ZJjdiaGZMg==, tarball: file:vendor/d2/d2lang-d2-0.1.34-zoomflow.1.tgz}
+    version: 0.1.34-zoomflow.1
 
   '@jridgewell/resolve-uri@3.1.2':
     resolution: {integrity: sha512-bRISgCIjP20/tbWSPWMEi54QVPRZExkuD9lJL+UIxUKtwVJA8wW1Trb1jMs1RFXo1CBTNZ/5hpC9QvmKWdopKw==}
@@ -747,7 +748,7 @@ packages:
 
 snapshots:
 
-  '@d2lang/d2@0.1.34': {}
+  '@d2lang/d2@file:vendor/d2/d2lang-d2-0.1.34-zoomflow.1.tgz': {}
 
   '@jridgewell/resolve-uri@3.1.2': {}
 

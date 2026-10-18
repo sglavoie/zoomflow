@@ -1,3 +1,6 @@
+import { readFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
+import { dirname, resolve } from 'node:path';
 import { D2, type CompileResponse, type Diagram } from '@d2lang/d2';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
@@ -47,7 +50,7 @@ function shapeIds(diagram: Diagram): string[] {
   return diagram.shapes.map((shape) => shape.id);
 }
 
-describe('D2 0.1.34 compiler and SVG contract', () => {
+describe('D2 0.1.34-zoomflow.1 compiler and SVG contract', () => {
   let d2: D2;
   let compiled: CompileResponse;
   let rootSvg: string;
@@ -70,6 +73,19 @@ describe('D2 0.1.34 compiler and SVG contract', () => {
 
   afterAll(async () => {
     await d2?.dispose();
+  });
+
+  it('loads the audited WebKit compatibility build', () => {
+    const entry = createRequire(import.meta.url).resolve('@d2lang/d2');
+    const packageRoot = resolve(dirname(entry), '../..');
+    const manifest = JSON.parse(readFileSync(resolve(packageRoot, 'package.json'), 'utf8'));
+    const provenance = JSON.parse(readFileSync(resolve(packageRoot, 'ZOOMFLOW_BUILD.json'), 'utf8'));
+    expect(manifest.version).toBe('0.1.34-zoomflow.1');
+    expect(provenance).toMatchObject({
+      commit: 'd5a51743b6d5c00f1ec6f8340003f5d5a6ba4eda',
+      d2_version: 'v0.9.0', package_version: manifest.version,
+      go: '1.27.1', bun: '1.3.14', goldmark: '1.8.5',
+    });
   });
 
   it('compiles a three-level board tree with independent layers', () => {

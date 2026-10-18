@@ -1,0 +1,18 @@
+--- a/vendor/github.com/yuin/goldmark/extension/linkify.go
++++ b/vendor/github.com/yuin/goldmark/extension/linkify.go
+@@ -11,9 +11,12 @@
+ 	"github.com/yuin/goldmark/util"
+ )
+ 
+-var wwwURLRegxp = regexp.MustCompile(`^www\.[-a-zA-Z0-9@:%._\+~#=]{1,256}\.[a-z]+(?:[/#?][-a-zA-Z0-9@:%_\+.~#!?&/=\(\);,'">\^{}\[\]` + "`" + `]*)?`) //nolint:golint,lll
+-
+-var urlRegexp = regexp.MustCompile(`^(?:http|https|ftp)://[-a-zA-Z0-9@:%._\+~#=]{1,256}\.[a-z]+(?::\d+)?(?:[/#?][-a-zA-Z0-9@:%_+.~#$!?&/=\(\);,'">\^{}\[\]` + "`" + `]*)?`) //nolint:golint,lll
++// Zoomflow compatibility: factor the 1..256 host repeat into 16-byte blocks.
++// This preserves greedy matching while avoiding 256 nested optional regexp
++// nodes, which overflow the WebKit WASM stack during Go initialization.
++var wwwURLRegxp = regexp.MustCompile(`^www\.(?:[-a-zA-Z0-9@:%._\+~#=]{16}){0,15}[-a-zA-Z0-9@:%._\+~#=]{1,16}\.[a-z]+(?:[/#?][-a-zA-Z0-9@:%_\+.~#!?&/=\(\);,'">\^{}\[\]` + "`" + `]*)?`) //nolint:golint,lll
++
++var urlRegexp = regexp.MustCompile(`^(?:http|https|ftp)://(?:[-a-zA-Z0-9@:%._\+~#=]{16}){0,15}[-a-zA-Z0-9@:%._\+~#=]{1,16}\.[a-z]+(?::\d+)?(?:[/#?][-a-zA-Z0-9@:%_+.~#$!?&/=\(\);,'">\^{}\[\]` + "`" + `]*)?`) //nolint:golint,lll
+ 
+ // An LinkifyConfig struct is a data structure that holds configuration of the
+ // Linkify extension.
