@@ -23,8 +23,14 @@ async function download(page: Page, format: string, info: TestInfo) {
 test.use({ colorScheme: 'light', reducedMotion: 'reduce' });
 
 test('downloads the current SVG and PNG and matches the root PNG snapshot', async ({ page }, info) => {
+  const fonts = new Set<string>();
+  page.on('response', (response) => {
+    const face = response.url().match(/SourceSansPro-(Regular|Bold|Italic|Semibold)\.ttf/);
+    if (face && response.ok()) fonts.add(face[1]);
+  });
   await page.goto('/');
   await board(page, 'root');
+  expect([...fonts].sort()).toEqual(['Bold', 'Italic', 'Regular', 'Semibold']);
   const png = await readFile(await download(page, 'png', info));
   expect(png.subarray(0, 8)).toEqual(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]));
   expect(png).toMatchSnapshot('order-root.png', { maxDiffPixelRatio: 0.001 });
@@ -33,10 +39,21 @@ test('downloads the current SVG and PNG and matches the root PNG snapshot', asyn
   const svg = await readFile(await download(page, 'svg', info), 'utf8');
   expect(svg).toContain('Capture');
   expect(svg).not.toContain('Browse');
+  expect(svg).toContain('data:application/font-woff;base64,');
   const childPng = await readFile(await download(page, 'png', info));
   expect(childPng.equals(png)).toBe(false);
   const zip = await readFile(await download(page, 'zip', info));
   expect(zip.subarray(0, 2).toString()).toBe('PK');
+});
+
+test('uses the shipped font bytes for compilation instead of silently falling back', async ({ page }) => {
+  await page.route('**/SourceSansPro-Regular.ttf', (route) => route.fulfill({
+    contentType: 'font/ttf', body: 'invalid font bytes',
+  }));
+  await page.goto('/');
+  await expect(page.locator('#compile-error')).toBeVisible();
+  await expect(page.locator('#compile-error')).toContainText(/font/i);
+  await expect(page.locator('.zf-stage svg')).toHaveCount(0);
 });
 
 test('opens a single HTML file offline and drills every level with history and backlinks', async ({ page, context }, info) => {

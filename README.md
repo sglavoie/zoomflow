@@ -42,6 +42,10 @@ board tree (`root.svg`, `checkout.svg`, `checkout/charge.svg`); scenarios and st
 use `@scenarios/` and `@steps/` directories. PNG uses the board's native dimensions
 and has a 64 megapixel limit.
 
+The viewer and browser/CLI exports use the same shipped Source Sans Pro Regular,
+Bold, Italic and Semibold fonts, with embedded font subsets in SVG and HTML.
+See [font assets, license and renderer wiring](fonts/README.md).
+
 ```sh
 pnpm test:unit
 pnpm test:e2e
@@ -118,7 +122,7 @@ same source snapshot in a temporary directory, then runs native D2 with ELK,
 asset bundling and one explicit board target at a time. Local icon/image paths resolve
 from the original input directory, must remain within the project root, and are
 staged alongside the sources; remote images must be accessible during export.
-D2 embeds its default fonts and bundled assets; HTML needs no compiler or network
+D2 embeds the shipped fonts and bundled assets; HTML needs no compiler or network
 at viewing time. Native D2 handles PNG rendering. No Go or Bun is needed for the CLI build.
 
 `pnpm --filter cli test` builds the executable and runs real fixture subprocesses:

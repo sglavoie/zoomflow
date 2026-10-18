@@ -7,8 +7,13 @@ import { copyFile, lstat, mkdir, mkdtemp, readFile, readdir, rename, rm, writeFi
 import { tmpdir } from 'node:os';
 import { basename, dirname, extname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { parseArgs, promisify } from 'node:util';
+import { fileURLToPath } from 'node:url';
 
 const exec = promisify(execFile);
+// Resolve against the installed workspace, never the input file or caller's cwd.
+const fontArgs = Object.entries({
+  'font-regular': 'Regular', 'font-bold': 'Bold', 'font-italic': 'Italic', 'font-semibold': 'Semibold',
+}).map(([flag, face]) => `--${flag}=${fileURLToPath(new URL(`../../../fonts/SourceSansPro-${face}.ttf`, import.meta.url))}`);
 
 /** Native D2 rewrites shape links as file paths when rendering a child alone.
  * Recover the exact compiler links using D2's encoded shape wrapper identity.
@@ -152,7 +157,7 @@ export async function main(args = process.argv.slice(2)): Promise<number> {
         await stageIcons(compiled.diagram, input, root, temp);
         const render = async (target: string, type: string): Promise<Buffer> => {
           try {
-            const result = await exec('d2', ['--layout=elk', '--bundle=true', '--watch=false', `--target=${target}`,
+            const result = await exec('d2', ['--layout=elk', '--bundle=true', '--watch=false', ...fontArgs, `--target=${target}`,
               `--stdout-format=${type}`, join(temp, inputPath), '-'],
             { cwd: dirname(input), encoding: 'buffer', maxBuffer: 128 * 1024 * 1024, timeout: 180_000 });
             if (result.stderr.length) process.stderr.write(result.stderr);

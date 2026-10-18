@@ -5,6 +5,7 @@ import standardLibrary from '../../../stdlib/zoomflow.d2?raw';
 import exportStyle from './style.css?raw';
 import './style.css';
 import { SourceEditor, compilerDiagnostics, lintDiagnostics } from './editor';
+import { diagramFonts } from './fonts';
 
 const viewer = new Viewer(document.querySelector<HTMLElement>('#viewer')!);
 const filename = document.querySelector<HTMLElement>('#filename')!;
@@ -82,14 +83,17 @@ async function load(source: string, name: string) {
   viewer.setBusy(true);
   viewer.setMessage('Compiling diagram…');
   try {
-    const d2 = await compiler;
+    const [d2, fonts] = await Promise.all([compiler, diagramFonts()]);
     const padValue = new URLSearchParams(location.search).get('pad');
     const pad = padValue === null ? 100 : Number(padValue);
     const compiled = await d2.compile({ fs: { index: source, 'zoomflow.d2': standardLibrary } }, {
+      ...fonts,
       layout: 'elk', themeID: 0, darkThemeID: 200,
       pad: Number.isFinite(pad) && pad >= 0 ? pad : 100,
     });
     if (request !== generation) return;
+    // D2 registers fonts at compile time for both text measurement and rendering.
+    // This diagram carries that family into every viewer/export render call.
     const render: RenderBoard = (target) => d2.render(compiled.diagram, {
       ...compiled.renderOptions, target, noXMLTag: true,
     });
