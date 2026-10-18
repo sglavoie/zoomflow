@@ -1,0 +1,10 @@
+{
+  "name": "@zoomflow/web",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@zoomflow/core": "workspace:*",
+    "@zoomflow/viewer": "workspace:*"
+  }
+}
