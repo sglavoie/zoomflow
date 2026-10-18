@@ -1,0 +1,43 @@
+name: Diagram lint and export
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  diagrams:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '26'
+      - name: Install pnpm and workspace
+        run: |
+          npm install --global pnpm@12.6.0
+          pnpm install --frozen-lockfile
+      - name: Install D2 v0.9.0
+        run: |
+          curl --fail --silent --show-error --location https://d2lang.com/install.sh -o "$RUNNER_TEMP/install-d2.sh"
+          sh "$RUNNER_TEMP/install-d2.sh" --version v0.9.0 --method standalone --prefix "$RUNNER_TEMP/d2"
+          echo "$RUNNER_TEMP/d2/bin" >> "$GITHUB_PATH"
+      - name: Build CLI
+        run: pnpm --filter cli build
+      - name: Lint diagram boundaries
+        # Replace this valid fixture with your project's entry diagrams.
+        # A lint error exits 1 and fails the job; warnings exit 0.
+        run: pnpm zoomflow lint fixtures/lint/imported.d2
+      - name: Export diagrams
+        run: |
+          pnpm zoomflow export fixtures/order.d2 --all --format svg -o artifacts/order-svg.zip
+          pnpm zoomflow export fixtures/order.d2 --all --format html -o artifacts/order.html
+      - uses: actions/upload-artifact@v4
+        with:
+          name: diagrams
+          path: artifacts/
+          if-no-files-found: error

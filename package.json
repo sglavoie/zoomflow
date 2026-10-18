@@ -10,11 +10,13 @@
     "test:e2e": "playwright test",
     "typecheck": "tsc --noEmit",
     "dev": "pnpm --filter @zoomflow/web dev",
-    "build": "pnpm --filter @zoomflow/web build"
+    "build": "pnpm --filter @zoomflow/web build",
+    "zoomflow": "node packages/cli/bin/zoomflow.mjs"
   },
   "devDependencies": {
     "@playwright/test": "1.64.1",
     "@types/node": "26.6.5",
+    "@zoomflow/cli": "workspace:*",
     "typescript": "7.0.2",
     "vitest": "5.0.5"
   }
