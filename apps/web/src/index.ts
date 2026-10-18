@@ -6,8 +6,10 @@ import exportStyle from './style.css?raw';
 import './style.css';
 import { SourceEditor, compilerDiagnostics, lintDiagnostics } from './editor';
 import { diagramFonts } from './fonts';
+import { setupReference } from './reference';
 
 const viewer = new Viewer(document.querySelector<HTMLElement>('#viewer')!);
+setupReference();
 const filename = document.querySelector<HTMLElement>('#filename')!;
 const theme = document.querySelector<HTMLSelectElement>('#theme')!;
 const media = matchMedia('(prefers-color-scheme: dark)');

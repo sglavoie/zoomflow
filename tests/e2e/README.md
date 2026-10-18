@@ -20,6 +20,13 @@ diagnostics on syntax errors, recovery, startup edits, exact source selections
 (including Unicode and container names), selection-driven board navigation,
 preview highlights, editor keyboard isolation and file replacement.
 
+`reference.spec.ts` checks reference shortcuts from the editor and reference,
+source/selection preservation, focus restoration, search and scroll retention,
+pointer and keyboard resizing, stored split size, offline search and clipboard
+handling, board navigation isolation, and narrow-screen/dark-mode layouts with
+storage disabled. `apps/web/test/reference.test.ts` compiles and renders each
+bundled example with the pinned D2 compiler and checks Zoomflow lint.
+
 `lint.spec.ts` checks the bundled stdlib import, inline and list diagnostics,
 opt-in boundary checking (name mismatches and the zero-pairs guard), optional backlink warnings, dangling
 links, orphan layers, and recovery after both lint and compiler errors.

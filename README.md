@@ -39,6 +39,21 @@ their source without navigating. Source links pause while edits are uncompiled,
 so an old diagram cannot select an outdated text range. Editor keyboard shortcuts,
 including undo, search, Escape and Backspace, stay in the editor.
 
+The diagram is on the left and the source editor is on the right. Click **D2
+reference** or press **⌘/** (also **⌘?**) on macOS, or **Ctrl+/** (also
+**Ctrl+Shift+/**) on Windows/Linux, to toggle a syntax reference below the diagram.
+This shortcut also works while editing and takes precedence over CodeMirror's
+comment shortcut. The bundled reference works without a network connection once
+the app is loaded, with searchable examples, copy buttons and links to the full D2
+documentation. Each example is tested against the bundled compiler.
+
+Drag the horizontal divider to resize the diagram/reference split, or focus it
+and use Up/Down (5% steps) and Home/End (25%/75%). The split starts at 60% diagram
+and 40% reference and remembers your size when browser storage is available.
+Closing and reopening preserves the search and scroll position. Escape inside the
+reference closes it and restores focus without navigating the diagram. On narrow
+screens, the diagram and reference appear above the source editor.
+
 Successful compilations also run Zoomflow lint. **Show diagnostics** opens the
 editor's diagnostic list. Missing board links are errors; unlinked layers are
 warnings. **Check boundary ports** opts into explicit `zf-in`/`zf-out` validation;
