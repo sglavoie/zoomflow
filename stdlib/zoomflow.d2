@@ -1,0 +1,36 @@
+# Spread-import with ...@zoomflow (the browser supplies zoomflow.d2).
+# Neutral D2 palettes keep the library legible in both light and dark exports.
+vars: {
+  d2-config: {
+    theme-id: 0
+    dark-theme-id: 200
+  }
+}
+classes: {
+  zf-in: {
+    shape: oval
+    style: {stroke-width: 2; stroke-dash: 3}
+  }
+  zf-out: {
+    shape: oval
+    style: {stroke-width: 2; stroke-dash: 3}
+  }
+  zf-initial: {
+    shape: circle
+    label: ""
+    width: 20
+    height: 20
+    style: {fill: "#64748b"; stroke: "#64748b"}
+  }
+  zf-final: {
+    shape: circle
+    label: ""
+    width: 24
+    height: 24
+    style: {fill: "#64748b"; stroke: "#64748b"; double-border: true}
+  }
+  zf-state: {
+    shape: rectangle
+    style: {border-radius: 8; stroke-width: 2}
+  }
+}

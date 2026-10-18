@@ -1,0 +1,15 @@
+...@zoomflow
+a: Browse catalogue
+b: Completed receipt
+a -> checkout: Submit
+checkout -> b: Success
+checkout.link: layers.checkout
+layers: {
+  checkout: {
+    a: Entry from browse {class: zf-in}
+    b: Exit to receipt {class: zf-out}
+    a -> working -> b
+    working.class: zf-state
+    back.link: _
+  }
+}

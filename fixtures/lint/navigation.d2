@@ -1,0 +1,11 @@
+entry.link: layers.A
+missing.link: layers.absent
+docs.link: https://example.com/docs
+layers: {
+  A: {
+    next.link: _.layers.B
+    missing.link: layers.absent
+  }
+  B: {next.link: _.layers.A; back.link: _}
+  unused: {alone}
+}

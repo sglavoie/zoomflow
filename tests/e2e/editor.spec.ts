@@ -28,7 +28,9 @@ test('live edits retain the last good render on syntax errors and recover with d
   await page.locator('.zf-stage a[href="root.layers.checkout"]').click();
   await ready(page, 'root.layers.checkout');
   const before = await page.locator('.zf-stage').innerHTML();
-  await sourceInput(page).click();
+  // Focus without moving the cursor onto an arbitrary (possibly nested) shape.
+  // A click in the editor intentionally navigates to that identifier's board.
+  await sourceInput(page).focus();
   await sourceInput(page).press('ControlOrMeta+End');
   // Appending by keyboard exercises CodeMirror input and the debounce path.
   await page.keyboard.insertText('\nbroken: {');

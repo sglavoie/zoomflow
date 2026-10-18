@@ -1,0 +1,14 @@
+...@zoomflow
+shop: {
+  browse: Browse catalogue
+  checkout: Checkout {link: layers.checkout}
+  receipt: Completed receipt
+  browse -> checkout -> receipt
+}
+layers: {
+  checkout: {
+    shop.browse: Entry {class: zf-in}
+    shop.receipt: Exit {class: zf-out}
+    shop.browse -> work -> shop.receipt
+  }
+}

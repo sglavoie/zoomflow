@@ -1,8 +1,18 @@
 import { basicSetup } from 'codemirror';
 import { EditorState, Transaction } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';
-import { lintGutter, setDiagnostics, type Diagnostic } from '@codemirror/lint';
-import { parseSourceRange, type SourceRange } from '@zoomflow/core';
+import { lintGutter, openLintPanel, setDiagnostics, type Diagnostic } from '@codemirror/lint';
+import { parseSourceRange, type SourceRange, type LintDiagnostic, type ShapeSource } from '@zoomflow/core';
+
+export function lintDiagnostics(items: LintDiagnostic[], source: string, sources: ShapeSource[]): Diagnostic[] {
+  return items.map((item) => {
+    const range = (item.range && parseSourceRange(item.range, source)) ||
+      sources.find((entry) => entry.board === item.board && entry.shape === item.shape) ||
+      { from: 0, to: Math.min(1, source.length) };
+    return { from: range.from, to: range.to, severity: item.severity, source: `Zoomflow ${item.rule}`,
+      message: `${item.board}: ${item.message}` };
+  });
+}
 
 export function compilerDiagnostics(error: unknown, source: string): Diagnostic[] {
   const message = String(error);
@@ -59,5 +69,6 @@ export class SourceEditor {
     } finally { this.selectingShape = false; }
   }
   diagnostics(diagnostics: Diagnostic[]) { this.view.dispatch(setDiagnostics(this.view.state, diagnostics)); }
+  showDiagnostics() { openLintPanel(this.view); }
   destroy() { this.view.destroy(); }
 }

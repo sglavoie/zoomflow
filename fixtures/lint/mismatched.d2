@@ -1,0 +1,12 @@
+...@zoomflow
+a: Browse catalogue
+b: Receipt
+a -> checkout -> b
+checkout.link: layers.checkout
+layers: {
+  checkout: {
+    wrong: Browse catalogue {class: zf-in}
+    another: Receipt {class: zf-out}
+    wrong -> another
+  }
+}

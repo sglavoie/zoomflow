@@ -1,0 +1,9 @@
+...@zoomflow
+...@nodes
+layers: {
+  checkout: {
+    upstream.browse: Entry {class: zf-in}
+    downstream.receipt: Exit {class: zf-out}
+    upstream.browse -> work -> downstream.receipt
+  }
+}

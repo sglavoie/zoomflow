@@ -1,9 +1,10 @@
-import { exportBoardsHtml, exportBoardsZip, renderExportBoards, indexShapeSources, type ShapeSource, type Diagram } from '@zoomflow/core';
+import { exportBoardsHtml, exportBoardsZip, renderExportBoards, indexShapeSources, lint, type CompileResponse, type ShapeSource, type Diagram } from '@zoomflow/core';
 import { Viewer, prepareExportSvg, rasterizeSvg, offlineViewerScript, type RenderBoard } from '@zoomflow/viewer';
 import example from '../../../fixtures/order.d2?raw';
+import standardLibrary from '../../../stdlib/zoomflow.d2?raw';
 import exportStyle from './style.css?raw';
 import './style.css';
-import { SourceEditor, compilerDiagnostics } from './editor';
+import { SourceEditor, compilerDiagnostics, lintDiagnostics } from './editor';
 
 const viewer = new Viewer(document.querySelector<HTMLElement>('#viewer')!);
 const filename = document.querySelector<HTMLElement>('#filename')!;
@@ -27,15 +28,31 @@ let sourceMap: ShapeSource[] = [];
 let mappedSource: string | undefined;
 let debounce: ReturnType<typeof setTimeout> | undefined;
 const errorBanner = document.querySelector<HTMLElement>('#compile-error')!;
+const lintSummary = document.querySelector<HTMLElement>('#lint-summary')!;
+const missingBacklink = document.querySelector<HTMLInputElement>('#missing-backlink')!;
+let lintDocument: CompileResponse | undefined;
 const editor = new SourceEditor(document.querySelector<HTMLElement>('#editor')!, example, () => {
   // Invalidate immediately, including requests still awaiting WASM/render startup.
   ++generation;
   viewer.cancelPendingRender();
   sourceMap = [];
+  lintDocument = undefined;
+  lintSummary.textContent = 'Lint pending…';
   viewer.highlightShapes([]);
   clearTimeout(debounce);
   debounce = setTimeout(() => void load(editor.source, documentName), 350);
 }, () => void highlightSelection(true));
+
+function updateLint() {
+  if (!lintDocument || mappedSource !== editor.source) return;
+  const result = lint(lintDocument, { missingBacklink: missingBacklink.checked });
+  editor.diagnostics(lintDiagnostics(result.diagnostics, editor.source, sourceMap));
+  const errors = result.diagnostics.filter((item) => item.severity === 'error').length;
+  const warnings = result.diagnostics.length - errors;
+  lintSummary.textContent = errors || warnings ? `${errors} lint error(s), ${warnings} warning(s)` : 'No lint issues';
+}
+missingBacklink.addEventListener('change', updateLint);
+document.querySelector('#show-diagnostics')!.addEventListener('click', () => editor.showDiagnostics());
 
 async function highlightSelection(navigate: boolean) {
   if (mappedSource !== editor.source) return;
@@ -68,7 +85,7 @@ async function load(source: string, name: string) {
     const d2 = await compiler;
     const padValue = new URLSearchParams(location.search).get('pad');
     const pad = padValue === null ? 100 : Number(padValue);
-    const compiled = await d2.compile(source, {
+    const compiled = await d2.compile({ fs: { index: source, 'zoomflow.d2': standardLibrary } }, {
       layout: 'elk', themeID: 0, darkThemeID: 200,
       pad: Number.isFinite(pad) && pad >= 0 ? pad : 100,
     });
@@ -81,7 +98,8 @@ async function load(source: string, name: string) {
       filename.textContent = name;
       sourceMap = indexShapeSources(compiled.diagram, compiled.graph, source);
       mappedSource = source;
-      editor.diagnostics([]);
+      lintDocument = compiled;
+      updateLint();
       errorBanner.hidden = true;
       errorBanner.textContent = '';
       void highlightSelection(false);
@@ -92,6 +110,8 @@ async function load(source: string, name: string) {
     if (request === generation) {
       const diagnostics = compilerDiagnostics(error, source);
       editor.diagnostics(diagnostics);
+      lintDocument = undefined;
+      lintSummary.textContent = 'Lint unavailable until compilation succeeds';
       errorBanner.textContent = `Error: ${diagnostics.map((item) => item.message).join('\n')} — Showing the last good preview.`;
       errorBanner.hidden = false;
       viewer.setMessage('');

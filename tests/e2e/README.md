@@ -19,3 +19,7 @@ and OS; review the images before deliberately updating them with
 diagnostics on syntax errors, recovery, startup edits, exact source selections
 (including Unicode and container names), selection-driven board navigation,
 preview highlights, editor keyboard isolation and file replacement.
+
+`lint.spec.ts` checks the bundled stdlib import, inline and list diagnostics,
+name mismatches and the zero-pairs guard, optional backlink warnings, dangling
+links, orphan layers, and recovery after both lint and compiler errors.

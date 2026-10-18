@@ -18,6 +18,11 @@
       <section id="source-pane" aria-label="Source editor">
         <div class="pane-title">D2 source <span>Edit to update the preview</span></div>
         <div id="compile-error" role="alert" hidden></div>
+        <div class="lint-controls">
+          <span id="lint-summary" role="status">Lint pending…</span>
+          <button id="show-diagnostics">Show diagnostics</button>
+          <label><input id="missing-backlink" type="checkbox" /> Check parent backlinks</label>
+        </div>
         <div id="editor"></div>
       </section>
       <main id="viewer" aria-label="Live preview"></main>
