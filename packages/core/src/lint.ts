@@ -8,6 +8,8 @@ export interface LintDiagnostic {
   message: string;
   board: string;
   shape?: string;
+  /** Resolved missing board ID for dangling-link diagnostics. */
+  target?: string;
   /** Original D2 range, possibly in an imported file. Never assume it is index. */
   range?: string;
 }
@@ -93,7 +95,7 @@ export function lint(compiled: Pick<CompileResponse, 'diagram' | 'graph'>, optio
     const key = JSON.stringify([board.id, shape, target]);
     if (linkKeys.has(key)) return;
     linkKeys.add(key);
-    diagnostics.push({ rule: 'dangling-link', severity: 'error', board: board.id, shape, range,
+    diagnostics.push({ rule: 'dangling-link', severity: 'error', board: board.id, shape, range, target,
       message: `Link targets missing board "${target}".` });
   }
 

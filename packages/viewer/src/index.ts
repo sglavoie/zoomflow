@@ -1,4 +1,5 @@
-import { classifyHref, indexBoards, type Board, type Diagram } from '@zoomflow/core';
+import { classifyHref, indexBoards, type Board, type Diagram, type LintDiagnostic } from '@zoomflow/core';
+import { restoreMissingLinks } from './missing-links';
 
 export type RenderBoard = (target: string) => Promise<string>;
 export { prepareExportSvg, rasterizeSvg, offlineViewerScript } from './export';
@@ -9,6 +10,7 @@ export class Viewer {
   private readonly crumbs = document.createElement('nav');
   private readonly message = document.createElement('div');
   private boards = new Map<string, Board>();
+  private diagnostics: readonly LintDiagnostic[] = [];
   private render: RenderBoard = async () => '';
   private cache = new Map<string, Promise<string>>();
   private current = 'root';
@@ -79,8 +81,9 @@ export class Viewer {
     }
   }
 
-  async setDocument(diagram: Diagram, render: RenderBoard) {
+  async setDocument(diagram: Diagram, render: RenderBoard, diagnostics: readonly LintDiagnostic[] = []) {
     this.boards = indexBoards(diagram);
+    this.diagnostics = diagnostics;
     this.render = render;
     this.cache = new Map();
     // Preserve the requested route, falling back to its nearest existing ancestor.
@@ -120,6 +123,7 @@ export class Viewer {
           (/href$/i.test(attribute.name) && /^\s*(javascript|vbscript):/i.test(attribute.value))) node.removeAttributeNode(attribute);
       }
     }
+    restoreMissingLinks(element, this.diagnostics.filter((item) => item.board === board.id));
     for (const link of element.querySelectorAll('a')) {
       const href = link.getAttribute('href') ?? link.getAttribute('xlink:href') ?? '';
       const action = classifyHref(href, board.id);

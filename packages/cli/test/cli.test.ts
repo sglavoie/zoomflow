@@ -105,6 +105,25 @@ it('exports cyclic boards into HTML that navigates offline from file://', async 
   } finally { await browser.close(); }
 });
 
+it('exports missing board links with a dashed outline and a click message offline', async () => {
+  const output = join(temp, 'missing-links.html');
+  success(await run(['export', 'fixtures/missing-links.d2', '--format', 'html', '-o', output]));
+  const browser = await chromium.launch();
+  try {
+    const page = await browser.newPage({ offline: true });
+    await page.goto(pathToFileURL(output).href);
+    for (const [target, board] of [['root.layers.missing', 'root'], ['root.layers.child.layers.absent', 'root.layers.child']]) {
+      if (board !== 'root') await page.locator(`.zf-stage a[href="${board}"]`).click();
+      const link = page.locator(`.zf-stage a[href="${target}"]`);
+      expect(await link.evaluate((node) => getComputedStyle(node).outlineStyle)).toBe('dashed');
+      await link.click();
+      expect(await page.locator('.zf-message').textContent()).toBe(`Missing board: ${target}`);
+      expect(await page.locator('.zf-message').isVisible()).toBe(true);
+      expect(await page.locator('.zf-stage').getAttribute('data-board')).toBe(board);
+    }
+  } finally { await browser.close(); }
+});
+
 it('supports parent-relative imports inside --root and paths with spaces', async () => {
   const root = join(temp, 'project with spaces');
   await mkdir(join(root, 'nested'), { recursive: true });

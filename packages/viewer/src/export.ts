@@ -1,4 +1,5 @@
 import type { ExportBoard } from '@zoomflow/core';
+import { restoreMissingLinks } from './missing-links';
 
 const placeholder = 'data:image/svg+xml;base64,' + btoa('<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64"><rect width="64" height="64" fill="#eee"/><path d="M8 8L56 56M56 8L8 56" stroke="#999" stroke-width="3"/></svg>');
 
@@ -83,7 +84,7 @@ export async function rasterizeSvg(svg: string): Promise<Blob> {
 
 // Keep this runtime self-contained: its compiled function body is embedded in HTML.
 // It consumes the same board IDs, hashes, parent and visited-trail model as Viewer.
-function offlineViewer() {
+function offlineViewer(restoreLinks: typeof restoreMissingLinks) {
   const boards: ExportBoard[] = JSON.parse(document.getElementById('zoomflow-data')!.textContent!);
   const byId = new Map(boards.map((board) => [board.id, board]));
   const stage = document.querySelector<HTMLElement>('.zf-stage')!;
@@ -108,6 +109,7 @@ function offlineViewer() {
           if (/^on/i.test(attr.name) || (/href$/i.test(attr.name) && /^\s*(javascript|vbscript):/i.test(attr.value))) node.removeAttributeNode(attr);
         }
       }
+      restoreLinks(svg, board.missingLinks ?? []);
       for (const link of svg.querySelectorAll('a')) {
         const href = link.getAttribute('href') ?? link.getAttribute('xlink:href') ?? '';
         link.setAttribute('tabindex', '0');
@@ -168,4 +170,4 @@ function offlineViewer() {
   restore();
 }
 
-export function offlineViewerScript(): string { return `(${offlineViewer.toString()})();`; }
+export function offlineViewerScript(): string { return `(${offlineViewer.toString()})(${restoreMissingLinks.toString()});`; }

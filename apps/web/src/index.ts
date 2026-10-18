@@ -1,4 +1,4 @@
-import { exportBoardsHtml, exportBoardsZip, renderExportBoards, indexShapeSources, lint, type CompileResponse, type ShapeSource, type Diagram } from '@zoomflow/core';
+import { exportBoardsHtml, exportBoardsZip, renderExportBoards, indexShapeSources, lint, type CompileResponse, type ShapeSource, type Diagram, type LintDiagnostic } from '@zoomflow/core';
 import { Viewer, prepareExportSvg, rasterizeSvg, offlineViewerScript, type RenderBoard } from '@zoomflow/viewer';
 import example from '../../../fixtures/order.d2?raw';
 import standardLibrary from '../../../stdlib/zoomflow.d2?raw';
@@ -75,7 +75,7 @@ viewer.stage.addEventListener('click', (event) => {
   editor.select(entry, !linked || event.altKey);
   void highlightSelection(false);
 }, { capture: true });
-let documentExport: { diagram: Diagram; render: RenderBoard; name: string } | undefined;
+let documentExport: { diagram: Diagram; render: RenderBoard; name: string; diagnostics: LintDiagnostic[] } | undefined;
 const exportButton = document.querySelector<HTMLButtonElement>('#export')!;
 async function load(source: string, name: string) {
   const request = ++generation;
@@ -93,7 +93,8 @@ async function load(source: string, name: string) {
     const render: RenderBoard = (target) => d2.render(compiled.diagram, {
       ...compiled.renderOptions, target, noXMLTag: true,
     });
-    await viewer.setDocument(compiled.diagram, render);
+    const diagnostics = lint(compiled).diagnostics;
+    await viewer.setDocument(compiled.diagram, render, diagnostics);
     if (request === generation) {
       filename.textContent = name;
       sourceMap = indexShapeSources(compiled.diagram, compiled.graph, source);
@@ -103,7 +104,7 @@ async function load(source: string, name: string) {
       errorBanner.hidden = true;
       errorBanner.textContent = '';
       void highlightSelection(false);
-      documentExport = { diagram: compiled.diagram, render, name };
+      documentExport = { diagram: compiled.diagram, render, name, diagnostics };
       exportButton.disabled = false;
     }
   } catch (error) {
@@ -142,7 +143,7 @@ exportButton.addEventListener('click', async () => {
       blob = format === 'png' ? await rasterizeSvg(svg) : new Blob([svg], { type: 'image/svg+xml' });
       name += `-${board.name === 'Root' ? 'root' : encodeURIComponent(board.name)}.${format}`;
     } else {
-      const boards = await renderExportBoards(loaded.diagram, prepare);
+      const boards = await renderExportBoards(loaded.diagram, prepare, loaded.diagnostics);
       blob = format === 'zip' ? new Blob([exportBoardsZip(boards)], { type: 'application/zip' })
         : new Blob([exportBoardsHtml(boards, { title: loaded.name, script: offlineViewerScript(),
           style: exportStyle + (dark ? ':root{color-scheme:dark;color:#e4eaf2;background:#111722}.zf-stage{background:#0a0f25}' : '') })], { type: 'text/html' });

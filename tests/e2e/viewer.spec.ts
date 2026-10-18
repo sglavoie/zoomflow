@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { pathToFileURL } from 'node:url';
 
 async function board(page: Page, id: string) {
   await expect(page.locator('.zf-stage')).toHaveAttribute('data-board', id);
@@ -8,6 +9,58 @@ async function drill(page: Page, id: string) {
   await page.locator(`.zf-stage a[href="${id}"]`).click();
   await board(page, id);
 }
+
+test('missing board link has a dashed outline and names its target in the viewer and offline HTML', async ({ page, context }, info) => {
+  await page.goto('/');
+  await board(page, 'root');
+  await page.locator('#file').setInputFiles('fixtures/missing-links.d2');
+  await expect(page.locator('#filename')).toHaveText('missing-links.d2');
+  await board(page, 'root');
+
+  async function missing(target: string, current: string) {
+    const link = page.locator(`.zf-stage a[href="${target}"]`);
+    await expect(link).toHaveAttribute('data-missing', '');
+    await expect(link).toHaveCSS('outline-style', 'dashed');
+    await expect(link).toHaveCSS('outline-width', '2px');
+    await link.click();
+    await expect(page.locator('.zf-message')).toBeVisible();
+    await expect(page.locator('.zf-message')).toHaveText(`Missing board: ${target}`);
+    await expect(page.locator('.zf-stage')).toHaveAttribute('data-board', current);
+    await expect(link).toHaveCSS('outline-style', 'dashed');
+    await link.focus();
+    await page.keyboard.press('Enter');
+    await expect(page.locator('.zf-message')).toHaveText(`Missing board: ${target}`);
+  }
+  async function checkLinks() {
+    await missing('root.layers.missing', 'root');
+    await page.locator('.zf-stage a[href="root.layers.child"]').click();
+    await expect(page.locator('.zf-stage')).toHaveAttribute('data-board', 'root.layers.child');
+    await missing('root.layers.child.layers.absent', 'root.layers.child');
+    await page.locator('.zf-stage a[href="root"]').click();
+    await expect(page.locator('.zf-stage')).toHaveAttribute('data-board', 'root');
+  }
+  await checkLinks();
+  await board(page, 'root');
+  await page.selectOption('#export-format', 'html');
+  const pending = page.waitForEvent('download');
+  await page.getByRole('button', { name: 'Download', exact: true }).click();
+  const download = await pending;
+  const path = info.outputPath('missing-links.html');
+  await download.saveAs(path);
+
+  // A successful edit must clear stale missing-link annotations and restore navigation.
+  await page.locator('#file').setInputFiles({ name: 'repaired.d2', mimeType: 'text/plain',
+    buffer: Buffer.from('shop.📦: {link: layers.missing}\nlayers.missing: {Found}') });
+  await expect(page.locator('#filename')).toHaveText('repaired.d2');
+  await board(page, 'root');
+  await expect(page.locator('.zf-stage [data-missing]')).toHaveCount(0);
+  await drill(page, 'root.layers.missing');
+
+  await context.setOffline(true);
+  await page.goto(pathToFileURL(path).href);
+  await expect(page.locator('.zf-stage')).toHaveAttribute('data-board', 'root');
+  await checkLinks();
+});
 
 test('opens order.d2, drills three levels and returns by breadcrumb, Esc and browser history', async ({ page }) => {
   await page.goto('/');

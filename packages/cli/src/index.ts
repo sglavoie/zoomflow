@@ -171,7 +171,7 @@ export async function main(args = process.argv.slice(2)): Promise<number> {
             const data = await render(target, format === 'html' ? 'svg' : format);
             binaries.push(data);
             return format === 'png' ? '' : format === 'html' ? htmlLinks(data.toString('utf8'), byTarget.get(target)!) : data.toString('utf8');
-          });
+          }, format === 'html' ? lint(compiled).diagnostics : []);
           if (format === 'html') {
             await save(output, exportBoardsHtml(boards, { title: basename(input), script: offlineViewerScript(), style }));
           } else {

@@ -1,5 +1,6 @@
 import { strToU8, zipSync } from 'fflate';
 import { indexBoards, type Diagram } from './index';
+import type { LintDiagnostic } from './lint';
 
 export interface ExportBoard {
   id: string;
@@ -9,6 +10,7 @@ export interface ExportBoard {
   path: string;
   empty: boolean;
   svg: string;
+  missingLinks?: LintDiagnostic[];
 }
 
 /** Encode each name independently: slashes and dot segments cannot escape the ZIP. */
@@ -17,7 +19,7 @@ function segment(name: string): string {
 }
 
 /** Render every tree node exactly once, including unlinked and empty boards. */
-export async function renderExportBoards(diagram: Diagram, render: (target: string) => Promise<string>): Promise<ExportBoard[]> {
+export async function renderExportBoards(diagram: Diagram, render: (target: string) => Promise<string>, diagnostics: readonly LintDiagnostic[] = []): Promise<ExportBoard[]> {
   const result: ExportBoard[] = [];
   const paths = new Map<string, string>();
   for (const board of indexBoards(diagram).values()) {
@@ -27,7 +29,8 @@ export async function renderExportBoards(diagram: Diagram, render: (target: stri
     paths.set(board.id, path);
     result.push({ id: board.id, name: board.name, hash: board.hash, parent: board.parent,
       path: board.parent ? `${path.slice(0, -1)}.svg` : 'root.svg',
-      empty: board.diagram.shapes.length === 0, svg: await render(board.target) });
+      empty: board.diagram.shapes.length === 0, svg: await render(board.target),
+      missingLinks: diagnostics.filter((item) => item.rule === 'dangling-link' && item.board === board.id && item.shape && item.target) });
   }
   // A layer named root would otherwise collide with the root document.
   const used = new Set<string>();
