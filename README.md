@@ -10,7 +10,8 @@ pnpm install
 pnpm dev
 ```
 
-Click a linked shape to drill into a board. Breadcrumbs record visited boards;
+Click a linked shape to drill into a board. Breadcrumbs record the visited path,
+trimming back to an earlier board whenever you revisit it so cycles do not repeat.
 Esc or Backspace goes to the tree parent, and browser back/forward retraces your
 navigation. Deep links such as `#/checkout/charge` open a board directly in the
 loaded diagram. Open a file or drop one onto the page; files are compiled locally

@@ -1,5 +1,6 @@
 import type { ExportBoard } from '@zoomflow/core';
 import { restoreMissingLinks } from './missing-links';
+import { simplifyTrail } from './navigation';
 
 const placeholder = 'data:image/svg+xml;base64,' + btoa('<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64"><rect width="64" height="64" fill="#eee"/><path d="M8 8L56 56M56 8L8 56" stroke="#999" stroke-width="3"/></svg>');
 
@@ -84,7 +85,7 @@ export async function rasterizeSvg(svg: string): Promise<Blob> {
 
 // Keep this runtime self-contained: its compiled function body is embedded in HTML.
 // It consumes the same board IDs, hashes, parent and visited-trail model as Viewer.
-function offlineViewer(restoreLinks: typeof restoreMissingLinks) {
+function offlineViewer(restoreLinks: typeof restoreMissingLinks, normalizeTrail: typeof simplifyTrail) {
   const boards: ExportBoard[] = JSON.parse(document.getElementById('zoomflow-data')!.textContent!);
   const byId = new Map(boards.map((board) => [board.id, board]));
   const stage = document.querySelector<HTMLElement>('.zf-stage')!;
@@ -97,7 +98,7 @@ function offlineViewer(restoreLinks: typeof restoreMissingLinks) {
   }
   function show(board: ExportBoard, visits: string[], replace = false) {
     current = board;
-    trail = visits;
+    trail = normalizeTrail(visits);
     message.textContent = '';
     if (board.empty) stage.textContent = 'This board is empty.';
     else {
@@ -170,4 +171,6 @@ function offlineViewer(restoreLinks: typeof restoreMissingLinks) {
   restore();
 }
 
-export function offlineViewerScript(): string { return `(${offlineViewer.toString()})(${restoreMissingLinks.toString()});`; }
+export function offlineViewerScript(): string {
+  return `(${offlineViewer.toString()})(${restoreMissingLinks.toString()}, ${simplifyTrail.toString()});`;
+}

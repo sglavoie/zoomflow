@@ -10,6 +10,73 @@ async function drill(page: Page, id: string) {
   await board(page, id);
 }
 
+for (const offline of [false, true]) {
+  test(`Back links collapse breadcrumb cycles ${offline ? 'in offline HTML' : 'in the viewer'}`, async ({ page, context }, info) => {
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    await page.goto('/');
+    await board(page, 'root');
+    if (offline) {
+      await page.selectOption('#export-format', 'html');
+      const pending = page.waitForEvent('download');
+      await page.getByRole('button', { name: 'Download', exact: true }).click();
+      const download = await pending;
+      const path = info.outputPath('breadcrumbs.html');
+      await download.saveAs(path);
+      await context.setOffline(true);
+      await page.goto(pathToFileURL(path).href);
+    }
+    const crumbs = page.getByRole('navigation', { name: 'Breadcrumb' });
+    async function visit(id: string, names: string[]) {
+      await page.locator(`.zf-stage a[href="${id}"]`).click();
+      await expect(page.locator('.zf-stage')).toHaveAttribute('data-board', id);
+      await expect(crumbs.getByRole('button')).toHaveText(names);
+      await expect(crumbs.locator('[aria-current="page"]')).toHaveText(names.at(-1)!);
+    }
+    await visit('root.layers.checkout', ['Root', 'checkout']);
+    for (let i = 0; i < 3; i++) {
+      await visit('root.layers.checkout.layers.charge', ['Root', 'checkout', 'charge']);
+      await visit('root.layers.checkout', ['Root', 'checkout']);
+    }
+    await page.goBack();
+    await expect(crumbs.getByRole('button')).toHaveText(['Root', 'checkout', 'charge']);
+    await page.goForward();
+    await expect(crumbs.getByRole('button')).toHaveText(['Root', 'checkout']);
+
+    // Older history entries may already contain repeated cycles.
+    await page.evaluate(() => history.replaceState({ zoomflowTrail: [
+      'root', 'root.layers.checkout', 'root.layers.checkout.layers.charge',
+      'root.layers.checkout', 'root.layers.checkout.layers.charge', 'root.layers.checkout',
+    ] }, ''));
+    await page.reload();
+    await expect(crumbs.getByRole('button')).toHaveText(['Root', 'checkout']);
+    expect(await page.evaluate(() => history.state.zoomflowTrail)).toEqual(['root', 'root.layers.checkout']);
+    await visit('root', ['Root']);
+  });
+}
+
+test('collapses sibling-board cycles while preserving browser history', async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.goto('/');
+  await board(page, 'root');
+  await page.locator('#file').setInputFiles('fixtures/cycle.d2');
+  await expect(page.locator('#filename')).toHaveText('cycle.d2');
+  const crumbs = page.getByRole('navigation').getByRole('button');
+  await drill(page, 'root.layers.A');
+  await drill(page, 'root.layers.B');
+  await expect(crumbs).toHaveText(['Root', 'A', 'B']);
+  await drill(page, 'root.layers.A');
+  await expect(crumbs).toHaveText(['Root', 'A']);
+  await page.goBack();
+  await board(page, 'root.layers.B');
+  await expect(crumbs).toHaveText(['Root', 'A', 'B']);
+  await page.goForward();
+  await board(page, 'root.layers.A');
+  await expect(crumbs).toHaveText(['Root', 'A']);
+  await page.keyboard.press('Escape');
+  await board(page, 'root');
+  await expect(crumbs).toHaveText(['Root']);
+});
+
 test('missing board link has a dashed outline and names its target in the viewer and offline HTML', async ({ page, context }, info) => {
   await page.goto('/');
   await board(page, 'root');

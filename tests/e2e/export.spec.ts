@@ -93,20 +93,33 @@ test('opens a single HTML file offline and drills every level with history and b
   expect(errors).toEqual([]);
 });
 
-test('exports cyclic links without looping and preserves the visited breadcrumb offline', async ({ page, context }, info) => {
+test('exports cyclic links and collapses breadcrumb loops offline', async ({ page, context }, info) => {
   await page.goto('/');
   await board(page, 'root');
   await page.locator('#file').setInputFiles('fixtures/cycle.d2');
   await expect(page.locator('#filename')).toHaveText('cycle.d2');
+  await expect(page.locator('#viewer')).toHaveAttribute('aria-busy', 'false');
+  await expect(page.locator('.zf-stage a[href="root.layers.A"]')).toBeVisible();
   const path = await download(page, 'html', info);
   await context.setOffline(true);
   await page.goto(pathToFileURL(path).href);
   await drill(page, 'root.layers.A');
   await drill(page, 'root.layers.B');
+  await expect(page.getByRole('navigation').getByRole('button')).toHaveText(['Root', 'A', 'B']);
   await drill(page, 'root.layers.A');
-  await expect(page.getByRole('navigation').getByRole('button')).toHaveText(['Root', 'A', 'B', 'A']);
+  await expect(page.getByRole('navigation').getByRole('button')).toHaveText(['Root', 'A']);
+  await page.reload();
+  await board(page, 'root.layers.A');
+  await expect(page.getByRole('navigation').getByRole('button')).toHaveText(['Root', 'A']);
+  await page.goBack();
+  await board(page, 'root.layers.B');
+  await expect(page.getByRole('navigation').getByRole('button')).toHaveText(['Root', 'A', 'B']);
+  await page.goForward();
+  await board(page, 'root.layers.A');
+  await expect(page.getByRole('navigation').getByRole('button')).toHaveText(['Root', 'A']);
   await page.keyboard.press('Backspace');
   await board(page, 'root');
+  await expect(page.getByRole('navigation').getByRole('button')).toHaveText(['Root']);
 });
 
 test('inlines remote images for PNG and reports a placeholder when fetching fails', async ({ page }, info) => {

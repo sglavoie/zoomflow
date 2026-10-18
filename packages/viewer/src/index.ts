@@ -1,5 +1,6 @@
 import { classifyHref, indexBoards, type Board, type Diagram, type LintDiagnostic } from '@zoomflow/core';
 import { restoreMissingLinks } from './missing-links';
+import { simplifyTrail } from './navigation';
 
 export type RenderBoard = (target: string) => Promise<string>;
 export { prepareExportSvg, rasterizeSvg, offlineViewerScript } from './export';
@@ -216,7 +217,7 @@ export class Viewer {
       } else this.stage.replaceChildren(content);
       if (revision !== this.revision) return;
       this.current = id;
-      this.trail = trail ?? (this.trail.at(-1) === id ? this.trail : [...this.trail, id]);
+      this.trail = simplifyTrail(trail ?? [...this.trail, id]);
       this.stage.dataset.board = id;
       this.stage.dispatchEvent(new Event('zf-boardchange'));
       const state = { ...history.state, zoomflowTrail: this.trail };
