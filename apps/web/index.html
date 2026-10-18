@@ -10,7 +10,17 @@
       <strong>Zoomflow</strong>
       <div class="header-controls">
         <label class="file-button">Open .d2<input id="file" type="file" accept=".d2,text/plain" /></label>
-        <span id="filename">order.d2</span>
+        <details id="example-picker">
+          <summary aria-label="Choose a diagram" title="Choose a built-in example or return to your file">
+            <span id="filename">order.d2</span><span class="picker-chevron" aria-hidden="true">⌄</span>
+          </summary>
+          <section class="example-menu" aria-label="Diagram examples">
+            <div class="example-menu-heading">Built-in examples</div>
+            <p class="example-menu-hint">Explore a diagram, then make it your own.</p>
+            <div id="example-options"></div>
+            <p class="example-menu-footer">Edits are kept while this page is open.</p>
+          </section>
+        </details>
         <label>Export <select id="export-format"><option value="svg">Current board SVG</option><option value="png">Current board PNG</option><option value="zip">All boards ZIP (SVG)</option><option value="html">Single-file HTML</option></select></label>
         <button id="export" disabled>Download</button>
         <label>Theme <select id="theme"><option value="system">System</option><option value="light">Light</option><option value="dark">Dark</option></select></label>

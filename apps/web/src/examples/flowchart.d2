@@ -1,0 +1,22 @@
+# Flowchart basics: labels, shapes, edge labels, direction and Markdown.
+# Try editing a label, then click Format. Click a shape to find its source.
+# Reference: https://d2lang.com/tour/shapes/
+direction: down
+request: Support request {shape: oval}
+triage: Review the request
+decision: Enough information? {shape: diamond}
+clarify: Ask for details
+resolve: Resolve the issue {style.border-radius: 12}
+done: Customer notified {shape: oval}
+request -> triage -> decision
+decision -> clarify: No
+clarify -> triage: Updated request {style.stroke-dash: 4}
+decision -> resolve: Yes
+resolve -> done
+guide: |md
+  **Try it**
+
+  - Change the decision label
+  - Switch direction to right
+  - Export an SVG or PNG
+|

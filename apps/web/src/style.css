@@ -11,7 +11,25 @@ button, select, .file-button { font: inherit; border: 1px solid #8192a466; borde
 .file-button { position: relative; }
 .file-button input { position: absolute; inset: 0; opacity: 0; width: 100%; cursor: pointer; }
 .file-button:focus-within, button:focus-visible { outline: 2px solid #477de5; }
-#filename { color: #7a899d; }
+#example-picker { position: relative; min-width: 0; max-width: 100%; }
+#example-picker summary { display: flex; align-items: center; gap: 18px; padding: 7px 12px; border: 1px solid #8192a466; border-radius: 6px; cursor: pointer; list-style: none; }
+#example-picker summary::-webkit-details-marker { display: none; }
+#filename { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.picker-chevron { color: #7a899d; margin-left: auto; }
+#example-picker[open] summary, #example-picker summary:hover { background: #477de510; border-color: #477de5; }
+#example-picker summary:focus-visible, .example-option:focus-visible { outline: 2px solid #477de5; outline-offset: 2px; }
+.example-menu { position: fixed; z-index: 20; width: min(380px, calc(100vw - 32px)); max-height: min(620px, 70dvh); overflow: auto; overscroll-behavior: contain; padding: 14px 8px 8px; border: 1px solid #8192a466; border-radius: 12px; background: #fff; box-shadow: 0 12px 36px #20304426; }
+[data-theme="dark"] .example-menu { background: #182231; }
+.example-menu-heading { padding: 0 8px; font-size: 13px; font-weight: 650; }
+.example-menu-hint, .example-menu-footer { margin: 5px 8px 10px; font-size: 12px; color: #52657d; }
+[data-theme="dark"] .example-menu-hint, [data-theme="dark"] .example-menu-footer, [data-theme="dark"] .example-description { color: #adbbcd; }
+.example-menu-footer { padding-top: 10px; margin-bottom: 4px; border-top: 1px solid #8192a433; }
+.example-option { display: block; width: 100%; padding: 10px 12px; border-color: transparent; text-align: left; }
+.example-option:hover, .example-option[aria-current="true"] { background: #477de512; }
+.example-option[aria-current="true"] { border-color: #477de555; }
+.example-title { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 600; }
+.example-option[aria-current="true"] .example-title::after { content: '✓'; color: #477de5; margin-left: auto; }
+.example-description { display: block; margin-top: 4px; color: #52657d; font-size: 12px; line-height: 1.45; }
 main { flex: 1; min-height: 0; display: flex; flex-direction: column; padding: 16px 24px; }
 .zf-breadcrumbs { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; min-height: 36px; }
 .zf-breadcrumbs button[aria-current] { font-weight: bold; }

@@ -1,0 +1,33 @@
+# Containers, dotted paths, parent scope, variables and reusable styles.
+# All visuals are local: no imports, remote icons or images are needed.
+# Reference: https://d2lang.com/tour/containers/
+direction: right
+vars: {
+  product: Bookshop
+  accent: "#dcefe4"
+}
+classes: {
+  service: {
+    style.fill: ${accent}
+    style.font-color: "#203044"
+    style.stroke: "#497760"
+    style.border-radius: 10
+  }
+}
+reader: Reader {shape: person}
+platform: ${product} {
+  web: Storefront {class: service}
+  api: Catalogue API {class: service}
+  cache: Cache {shape: cylinder}
+  database: Books {shape: cylinder}
+  web -> api: HTTPS
+  api <-> cache: Read / refresh
+  api -> database: Query
+  _.reader -> web: Browse
+}
+queue: Event queue {shape: queue}
+worker: Email worker {class: service}
+platform.api -> queue: Order placed {style.stroke-dash: 4}
+queue -> worker: Deliver
+monitor: Metrics {shape: hexagon}
+monitor -- platform.api: Observes

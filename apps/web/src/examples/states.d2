@@ -1,0 +1,45 @@
+# Zoomflow boundary ports and state pieces, defined inline for portability.
+# These classes mirror the bundled zoomflow.d2 library without needing an import.
+# Enable "Check boundary ports": this example has one matched input and output.
+# Port identifiers must match the neighbouring shapes on the parent board.
+direction: right
+classes: {
+  zf-in: {shape: oval; style.stroke-dash: 3}
+  zf-out: {shape: oval; style.stroke-dash: 3}
+  zf-state: {style.border-radius: 8; style.stroke-width: 2}
+  zf-initial: {
+    shape: circle
+    label: ""
+    width: 20
+    height: 20
+  }
+  zf-final: {
+    shape: circle
+    label: ""
+    width: 24
+    height: 24
+    style.double-border: true
+  }
+}
+submitted: Submitted
+review: Review {link: layers.review}
+published: Published
+submitted -> review -> published
+layers: {
+  review: {
+    direction: right
+    submitted: Entry {class: zf-in}
+    published: Exit {class: zf-out}
+    start: {class: zf-initial}
+    checking: Checking {class: zf-state}
+    revision: Needs revision {class: zf-state}
+    approved: Approved {class: zf-state}
+    finish: {class: zf-final}
+    submitted -> start -> checking
+    checking -> revision: Changes requested
+    revision -> checking: Resubmit
+    checking -> approved: Accept
+    approved -> finish -> published
+    back: Overview {link: _}
+  }
+}

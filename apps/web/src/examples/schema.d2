@@ -1,0 +1,26 @@
+# SQL tables: types, constraints and connections to individual columns.
+# The ELK layout engine used by Zoomflow routes links to the referenced row.
+# Reference: https://d2lang.com/tour/sql-tables/
+direction: right
+customers: Customers {
+  shape: sql_table
+  id: uuid {constraint: primary_key}
+  email: text {constraint: unique}
+  name: text
+}
+orders: Orders {
+  shape: sql_table
+  id: uuid {constraint: primary_key}
+  customer_id: uuid {constraint: foreign_key}
+  total: decimal
+  status: text
+}
+items: Order items {
+  shape: sql_table
+  id: uuid {constraint: primary_key}
+  order_id: uuid {constraint: foreign_key}
+  sku: text
+  quantity: integer
+}
+orders.customer_id -> customers.id: Placed by
+items.order_id -> orders.id: Belongs to

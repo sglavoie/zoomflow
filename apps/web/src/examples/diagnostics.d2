@@ -1,0 +1,15 @@
+# A deliberately broken navigation link, with a valid diagram preview.
+# Open "Show diagnostics" to see one error and one warning.
+# Repair it by changing layers.missing to layers.details below.
+# Both diagnostics disappear when the details layer is reachable.
+direction: right
+start: Start
+inspect: Inspect details {link: layers.missing}
+finish: Finish
+start -> inspect -> finish
+layers: {
+  details: {
+    validate -> save
+    back: Overview {link: _}
+  }
+}

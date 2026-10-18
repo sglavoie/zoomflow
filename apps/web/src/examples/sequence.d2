@@ -1,0 +1,17 @@
+# Sequence diagrams preserve message order from top to bottom.
+# Declare participants before using them inside a group.
+# Reference: https://d2lang.com/tour/sequence-diagrams/
+shape: sequence_diagram
+customer: Customer {shape: person}
+store: Storefront
+payments: Payments
+warehouse: Warehouse
+customer -> store: Place order
+store -> store: Validate basket
+payment: Authorize payment {
+  store -> payments: Create authorization
+  payments -> store: Authorized {style.stroke-dash: 4}
+}
+store -> warehouse: Reserve items
+warehouse -> store: Reservation confirmed {style.stroke-dash: 4}
+store -> customer: Order confirmation {style.stroke-dash: 4}

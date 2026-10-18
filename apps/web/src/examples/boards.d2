@@ -1,0 +1,48 @@
+# Three board types in one document. Click the navigation shapes to explore.
+# Layers start fresh, scenarios inherit their parent, steps accumulate changes.
+# Export Single-file HTML to keep every board and its navigation offline.
+# Reference: https://d2lang.com/tour/layers/
+direction: right
+client: Client
+api: API
+client -> api: Request
+detail: Implementation {link: layers.implementation}
+failure: Failure scenario {link: scenarios.failure}
+rollout: Rollout steps {link: steps.cache}
+layers: {
+  implementation: {
+    direction: right
+    validate -> execute -> respond
+    back: Overview {link: _}
+  }
+}
+scenarios: {
+  failure: {
+    # These shapes and the request edge are inherited from the root.
+    api.label: API unavailable
+    api.style.stroke-dash: 4
+    client -> fallback: Use cached response
+    # Inherited navigation is relative to this board: point back to root.
+    detail.link: _.layers.implementation
+    failure.link: _
+    failure.label: Overview
+    rollout.link: _.steps.cache
+  }
+}
+steps: {
+  cache: {
+    api -> cache: Add cache
+    cache.shape: cylinder
+    detail.link: _.layers.implementation
+    failure.link: _.scenarios.failure
+    rollout.link: _.steps.worker
+    rollout.label: Next step
+    back: Overview {link: _}
+  }
+  worker: {
+    # Inherits the cache and API connection from the previous step.
+    api -> worker: Add background jobs
+    rollout.link: _.steps.cache
+    rollout.label: Previous step
+  }
+}

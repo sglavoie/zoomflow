@@ -2,6 +2,14 @@
 
 Navigable, drill-down diagrams built on D2. The framework-free Vite app opens
 local `.d2` files and starts with `fixtures/order.d2` as an example.
+Click the filename dropdown to explore eight built-in templates: order drill-down,
+flowchart basics, service architecture, sequence diagrams, SQL schemas, layers /
+scenarios / steps, state transitions with boundary ports, and a guided lint repair.
+Every example includes source comments and compiles without imports or remote
+assets. The lint repair intentionally reports one error and one warning until fixed.
+Switching examples starts at the root board and retains your source edits and
+opened files in the dropdown for the current page session; reloading clears them.
+The source lives in `apps/web/src/examples/`, with the catalog in `examples.ts`.
 
 Use pnpm 12.6.0 and Node 26 (verified with Node 26.10.0):
 

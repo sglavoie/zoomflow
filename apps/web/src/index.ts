@@ -1,6 +1,7 @@
 import { exportBoardsHtml, exportBoardsZip, renderExportBoards, indexShapeSources, lint, type CompileResponse, type ShapeSource, type Diagram, type LintDiagnostic } from '@zoomflow/core';
 import { Viewer, prepareExportSvg, rasterizeSvg, offlineViewerScript, type RenderBoard } from '@zoomflow/viewer';
-import example from '../../../fixtures/order.d2?raw';
+import { examples } from './examples';
+import { setupExamplePicker } from './example-picker';
 import standardLibrary from '../../../stdlib/zoomflow.d2?raw';
 import exportStyle from './style.css?raw';
 import './style.css';
@@ -10,7 +11,6 @@ import { setupReference } from './reference';
 
 const viewer = new Viewer(document.querySelector<HTMLElement>('#viewer')!);
 setupReference();
-const filename = document.querySelector<HTMLElement>('#filename')!;
 const theme = document.querySelector<HTMLSelectElement>('#theme')!;
 const media = matchMedia('(prefers-color-scheme: dark)');
 function updateTheme() {
@@ -26,7 +26,7 @@ updateTheme();
 // so the shell and loading state paint before the compiler is downloaded.
 const compiler = import('@d2lang/d2').then(({ D2 }) => new D2());
 let generation = 0;
-let documentName = 'order.d2';
+let documentName = examples[0].name;
 let sourceMap: ShapeSource[] = [];
 let mappedSource: string | undefined;
 let debounce: ReturnType<typeof setTimeout> | undefined;
@@ -37,7 +37,7 @@ const boundaryPorts = document.querySelector<HTMLInputElement>('#boundary-ports'
 const formatButton = document.querySelector<HTMLButtonElement>('#format-source')!;
 const formatStatus = document.querySelector<HTMLElement>('#format-status')!;
 let lintDocument: CompileResponse | undefined;
-const editor = new SourceEditor(document.querySelector<HTMLElement>('#editor')!, example, () => {
+const editor = new SourceEditor(document.querySelector<HTMLElement>('#editor')!, examples[0].source, () => {
   // Invalidate immediately, including requests still awaiting WASM/render startup.
   ++generation;
   formatStatus.hidden = true;
@@ -49,6 +49,19 @@ const editor = new SourceEditor(document.querySelector<HTMLElement>('#editor')!,
   clearTimeout(debounce);
   debounce = setTimeout(() => void load(editor.source, documentName), 350);
 }, () => void highlightSelection(true), () => void formatSource());
+
+const examplePicker = setupExamplePicker(() => editor.source, (source, name) => {
+  // Example changes start at their overview; live edits still preserve the route.
+  history.replaceState(null, '', `${location.pathname}${location.search}#/`);
+  void replaceDocument(source, name);
+});
+
+async function replaceDocument(source: string, name: string) {
+  documentName = name;
+  editor.replace(source);
+  clearTimeout(debounce);
+  await load(source, name);
+}
 
 async function compileSource(source: string) {
   const [d2, fonts] = await Promise.all([compiler, diagramFonts()]);
@@ -135,7 +148,6 @@ async function load(source: string, name: string) {
     const diagnostics = lint(compiled).diagnostics;
     await viewer.setDocument(compiled.diagram, render, diagnostics);
     if (request === generation) {
-      filename.textContent = name;
       sourceMap = indexShapeSources(compiled.diagram, compiled.graph, source);
       mappedSource = source;
       lintDocument = compiled;
@@ -203,11 +215,8 @@ exportButton.addEventListener('click', async () => {
 async function openFile(file: File) {
   try {
     const source = await file.text();
-    documentName = file.name;
-    filename.textContent = file.name;
-    editor.replace(source);
-    clearTimeout(debounce);
-    await load(source, file.name);
+    examplePicker.rememberFile(file.name, source);
+    await replaceDocument(source, file.name);
   }
   catch (error) { viewer.setMessage(String(error), true); }
 }
@@ -222,4 +231,4 @@ document.addEventListener('drop', (event) => {
   if (file) void openFile(file);
 });
 window.addEventListener('pagehide', () => { clearTimeout(debounce); ++generation; editor.destroy(); viewer.destroy(); void compiler.then((d2) => d2.dispose()); });
-void load(example, 'order.d2');
+void load(examples[0].source, examples[0].name);
