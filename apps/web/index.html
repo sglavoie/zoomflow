@@ -16,7 +16,8 @@
     </header>
     <div id="workspace">
       <section id="source-pane" aria-label="Source editor">
-        <div class="pane-title">D2 source <span>Edit to update the preview</span></div>
+        <div class="pane-title"><div>D2 source <span>Edit to update the preview</span></div><button id="format-source" title="Format D2 source (Shift+Alt+F)">Format</button></div>
+        <div id="format-status" role="status" hidden></div>
         <div id="compile-error" role="alert" hidden></div>
         <div class="lint-controls">
           <span id="lint-summary" role="status">Lint pending…</span>

@@ -176,4 +176,26 @@ describe('D2 0.1.34-zoomflow.1 compiler and SVG contract', () => {
     expect(svg).toContain('<g class="YQ==">');
     expect(svg).toContain('<g class="Yg==">');
   });
+
+  it('returns formatted source with comments and literal braces preserved', async () => {
+    const source = `# Keep this comment
+box: {
+quoted: "A {literal} label"
+code: |text
+function example() {
+  return "}";
+}
+|
+}`;
+    const result = await d2.compile(source, { layout: 'elk' });
+    const formatted = result.fs[result.inputPath]!;
+    expect(formatted).toContain('# Keep this comment\nbox: {\n  quoted: "A {literal} label"');
+    expect(formatted).toContain('  code: |text\n');
+    const again = await d2.compile(formatted, { layout: 'elk' });
+    expect(again.fs[again.inputPath]).toBe(formatted);
+    const labels = (diagram: Diagram) => diagram.shapes.map((shape) => ({
+      id: shape.id, label: 'label' in shape ? shape.label : undefined,
+    }));
+    expect(labels(again.diagram)).toEqual(labels(result.diagram));
+  });
 });

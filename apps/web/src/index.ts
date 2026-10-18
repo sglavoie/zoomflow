@@ -31,10 +31,13 @@ let debounce: ReturnType<typeof setTimeout> | undefined;
 const errorBanner = document.querySelector<HTMLElement>('#compile-error')!;
 const lintSummary = document.querySelector<HTMLElement>('#lint-summary')!;
 const missingBacklink = document.querySelector<HTMLInputElement>('#missing-backlink')!;
+const formatButton = document.querySelector<HTMLButtonElement>('#format-source')!;
+const formatStatus = document.querySelector<HTMLElement>('#format-status')!;
 let lintDocument: CompileResponse | undefined;
 const editor = new SourceEditor(document.querySelector<HTMLElement>('#editor')!, example, () => {
   // Invalidate immediately, including requests still awaiting WASM/render startup.
   ++generation;
+  formatStatus.hidden = true;
   viewer.cancelPendingRender();
   sourceMap = [];
   lintDocument = undefined;
@@ -42,7 +45,41 @@ const editor = new SourceEditor(document.querySelector<HTMLElement>('#editor')!,
   viewer.highlightShapes([]);
   clearTimeout(debounce);
   debounce = setTimeout(() => void load(editor.source, documentName), 350);
-}, () => void highlightSelection(true));
+}, () => void highlightSelection(true), () => void formatSource());
+
+async function compileSource(source: string) {
+  const [d2, fonts] = await Promise.all([compiler, diagramFonts()]);
+  const padValue = new URLSearchParams(location.search).get('pad');
+  const pad = padValue === null ? 100 : Number(padValue);
+  return d2.compile({ fs: { index: source, 'zoomflow.d2': standardLibrary } }, {
+    ...fonts,
+    layout: 'elk', themeID: 0, darkThemeID: 200,
+    pad: Number.isFinite(pad) && pad >= 0 ? pad : 100,
+  });
+}
+
+async function formatSource() {
+  if (formatButton.disabled) return;
+  const document = editor.view.state.doc;
+  const source = editor.source;
+  formatButton.disabled = true;
+  formatStatus.textContent = 'Formatting…';
+  formatStatus.hidden = false;
+  try {
+    const compiled = mappedSource === source && lintDocument ? lintDocument : await compileSource(source);
+    // Edits or opening another file invalidate this request, even after undo.
+    if (editor.view.state.doc !== document) return;
+    const formatted = compiled.fs[compiled.inputPath];
+    if (typeof formatted !== 'string') throw new Error('D2 did not return formatted source.');
+    formatStatus.textContent = editor.format(formatted) ? 'Source formatted.' : 'Source is already formatted.';
+    formatStatus.hidden = false;
+  } catch (error) {
+    if (editor.view.state.doc !== document) return;
+    formatStatus.textContent = `Formatting failed: ${compilerDiagnostics(error, source).map((item) => item.message).join('\n')}`;
+    formatStatus.hidden = false;
+  } finally { formatButton.disabled = false; }
+}
+formatButton.addEventListener('click', () => void formatSource());
 
 function updateLint() {
   if (!lintDocument || mappedSource !== editor.source) return;
@@ -83,14 +120,8 @@ async function load(source: string, name: string) {
   viewer.setBusy(true);
   viewer.setMessage('Compiling diagram…');
   try {
-    const [d2, fonts] = await Promise.all([compiler, diagramFonts()]);
-    const padValue = new URLSearchParams(location.search).get('pad');
-    const pad = padValue === null ? 100 : Number(padValue);
-    const compiled = await d2.compile({ fs: { index: source, 'zoomflow.d2': standardLibrary } }, {
-      ...fonts,
-      layout: 'elk', themeID: 0, darkThemeID: 200,
-      pad: Number.isFinite(pad) && pad >= 0 ? pad : 100,
-    });
+    const d2 = await compiler;
+    const compiled = await compileSource(source);
     if (request !== generation) return;
     // D2 registers fonts at compile time for both text measurement and rendering.
     // This diagram carries that family into every viewer/export render call.

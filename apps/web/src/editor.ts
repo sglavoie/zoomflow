@@ -1,6 +1,7 @@
 import { basicSetup } from 'codemirror';
 import { EditorState, Transaction } from '@codemirror/state';
-import { EditorView } from '@codemirror/view';
+import { EditorView, keymap } from '@codemirror/view';
+import { isolateHistory } from '@codemirror/commands';
 import { lintGutter, openLintPanel, setDiagnostics, type Diagnostic } from '@codemirror/lint';
 import { parseSourceRange, type SourceRange, type LintDiagnostic, type ShapeSource } from '@zoomflow/core';
 
@@ -33,11 +34,12 @@ export function compilerDiagnostics(error: unknown, source: string): Diagnostic[
 export class SourceEditor {
   readonly view: EditorView;
   private selectingShape = false;
-  constructor(parent: HTMLElement, source: string, changed: () => void, selected: () => void) {
+  constructor(parent: HTMLElement, source: string, changed: () => void, selected: () => void, format: () => void) {
     this.view = new EditorView({
       parent,
       state: EditorState.create({ doc: source, extensions: [
         basicSetup, lintGutter(), EditorView.lineWrapping,
+        keymap.of([{ key: 'Shift-Alt-f', run: () => { format(); return true; } }]),
         EditorView.contentAttributes.of({ 'aria-label': 'D2 source', 'aria-multiline': 'true' }),
         EditorView.theme({
           '&': { height: '100%', backgroundColor: 'transparent', color: 'inherit' },
@@ -60,6 +62,22 @@ export class SourceEditor {
   replace(source: string) {
     this.view.dispatch({ changes: { from: 0, to: this.view.state.doc.length, insert: source },
       selection: { anchor: 0 }, annotations: Transaction.addToHistory.of(false) });
+  }
+  format(source: string) {
+    const current = this.source;
+    if (source === current) return false;
+    // Keep unchanged text outside the transaction so selections there stay put.
+    let from = 0;
+    let oldEnd = current.length;
+    let newEnd = source.length;
+    while (from < oldEnd && from < newEnd && current[from] === source[from]) ++from;
+    while (oldEnd > from && newEnd > from && current[oldEnd - 1] === source[newEnd - 1]) {
+      --oldEnd;
+      --newEnd;
+    }
+    this.view.dispatch({ changes: { from, to: oldEnd, insert: source.slice(from, newEnd) },
+      userEvent: 'input.format', annotations: isolateHistory.of('full') });
+    return true;
   }
   select(range: SourceRange, focus: boolean) {
     this.selectingShape = true;

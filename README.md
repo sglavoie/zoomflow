@@ -18,6 +18,10 @@ loaded diagram. Open a file or drop one onto the page; files are compiled locall
 with D2's WASM worker. Light, dark and system themes use D2's generated palettes.
 
 Edit the D2 source in the CodeMirror pane for a live preview (350 ms debounce).
+Click **Format** or press **Shift+Alt+F** in the editor to apply D2's automatic
+source formatting, including nested indentation. Formatting is one undoable edit
+and refreshes the preview. Invalid diagrams leave the source unchanged and show
+a formatting error; edits made while formatting is running are preserved.
 Compile errors appear in a banner and inline diagnostics while the last good
 diagram stays available. Successful edits preserve the current board, falling
 back to its nearest existing ancestor if it was removed. Click a shape to select
