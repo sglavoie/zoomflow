@@ -20,7 +20,12 @@ The library is opt-in; existing documents are not rewritten.
 - `zf-final`: filled circle with a double border.
 - `zf-state`: rounded rectangle.
 
-Boundary ports use the **same full identifier** as the neighbour outside the
+Boundary ports are optional. Ordinary drill-down diagrams need only a board link;
+the viewer infers parent connection hints without adding ports to your source.
+Enable **Check boundary ports** in the editor, `--boundary-ports` in the CLI, or
+`lint(compiled, { boundaryPorts: true })` to validate explicit contracts.
+
+When using explicit ports, use the **same full identifier** as the neighbour outside the
 parent's drillable node. Labels can differ. For `a: Browse catalogue`, name its
 child port `a`, not `Browse catalogue`. For `shop.browse`, use `shop.browse` in
 the child too; `"shop.browse"` is a different, literal identifier in D2.
@@ -40,7 +45,7 @@ layers.checkout: {
 }
 ```
 
-Lint compares each shape linked to an immediate child layer with that child's
+With boundary checking enabled, lint compares each shape linked to an immediate child layer with that child's
 ports. Reverse arrows reverse the requirements; bidirectional arrows require
 both classes. Parallel edges to the same neighbour share one requirement.
 Unconnected or incorrectly named ports are errors. A node with incident edges

@@ -31,7 +31,7 @@ jobs:
       - name: Lint diagram boundaries
         # Replace this valid fixture with your project's entry diagrams.
         # A lint error exits 1 and fails the job; warnings exit 0.
-        run: pnpm zoomflow lint fixtures/lint/imported.d2
+        run: pnpm zoomflow lint fixtures/lint/imported.d2 --boundary-ports
       - name: Export diagrams
         run: |
           pnpm zoomflow export fixtures/order.d2 --all --format svg -o artifacts/order-svg.zip

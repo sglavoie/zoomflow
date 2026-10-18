@@ -9,6 +9,8 @@ test('bundled stdlib and live lint diagnostics recover, with optional backlink w
     await page.locator('#file').setInputFiles({ name: 'lint.d2', mimeType: 'text/plain', buffer: Buffer.from(source) });
   };
   await open(fixture('mismatched'));
+  await expect(page.locator('#lint-summary')).toHaveText('No lint issues');
+  await page.getByLabel('Check boundary ports').check();
   await expect(page.locator('#lint-summary')).toContainText('5 lint error(s)');
   await expect(page.locator('#compile-error')).toBeHidden();
   await expect(page.locator('.zf-stage [data-shape-id="checkout"]')).toBeVisible();
@@ -16,6 +18,9 @@ test('bundled stdlib and live lint diagnostics recover, with optional backlink w
   await page.getByRole('button', { name: 'Show diagnostics' }).click();
   await expect(page.locator('.cm-panel-lint')).toContainText('Zero boundary pairs evaluated');
   await expect(page.locator('.cm-panel-lint')).toContainText('boundary-out');
+  await page.getByLabel('Check boundary ports').uncheck();
+  await expect(page.locator('#lint-summary')).toHaveText('No lint issues');
+  await page.getByLabel('Check boundary ports').check();
 
   // Exercise the debounce/edit path rather than only file loading.
   const source = page.getByRole('textbox', { name: 'D2 source', exact: true });

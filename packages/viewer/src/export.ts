@@ -1,6 +1,6 @@
 import type { ExportBoard } from '@zoomflow/core';
 import { restoreMissingLinks } from './missing-links';
-import { simplifyTrail } from './navigation';
+import { renderParentContext, simplifyTrail } from './navigation';
 
 const placeholder = 'data:image/svg+xml;base64,' + btoa('<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64"><rect width="64" height="64" fill="#eee"/><path d="M8 8L56 56M56 8L8 56" stroke="#999" stroke-width="3"/></svg>');
 
@@ -85,11 +85,12 @@ export async function rasterizeSvg(svg: string): Promise<Blob> {
 
 // Keep this runtime self-contained: its compiled function body is embedded in HTML.
 // It consumes the same board IDs, hashes, parent and visited-trail model as Viewer.
-function offlineViewer(restoreLinks: typeof restoreMissingLinks, normalizeTrail: typeof simplifyTrail) {
+function offlineViewer(restoreLinks: typeof restoreMissingLinks, normalizeTrail: typeof simplifyTrail, renderContext: typeof renderParentContext) {
   const boards: ExportBoard[] = JSON.parse(document.getElementById('zoomflow-data')!.textContent!);
   const byId = new Map(boards.map((board) => [board.id, board]));
   const stage = document.querySelector<HTMLElement>('.zf-stage')!;
   const crumbs = document.querySelector<HTMLElement>('.zf-breadcrumbs')!;
+  const context = document.querySelector<HTMLElement>('.zf-context')!;
   const message = document.querySelector<HTMLElement>('.zf-message')!;
   let current = boards[0];
   let trail: string[] = [];
@@ -125,6 +126,7 @@ function offlineViewer(restoreLinks: typeof restoreMissingLinks, normalizeTrail:
       stage.replaceChildren(svg);
     }
     stage.dataset.board = board.id;
+    renderContext(context, board.parentContext ?? []);
     crumbs.replaceChildren();
     trail.forEach((id, index) => {
       const button = document.createElement('button');
@@ -172,5 +174,5 @@ function offlineViewer(restoreLinks: typeof restoreMissingLinks, normalizeTrail:
 }
 
 export function offlineViewerScript(): string {
-  return `(${offlineViewer.toString()})(${restoreMissingLinks.toString()}, ${simplifyTrail.toString()});`;
+  return `(${offlineViewer.toString()})(${restoreMissingLinks.toString()}, ${simplifyTrail.toString()}, ${renderParentContext.toString()});`;
 }

@@ -13,6 +13,7 @@ button, select, .file-button { font: inherit; border: 1px solid #8192a466; borde
 main { flex: 1; min-height: 0; display: flex; flex-direction: column; padding: 16px 24px; }
 .zf-breadcrumbs { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; min-height: 36px; }
 .zf-breadcrumbs button[aria-current] { font-weight: bold; }
+.zf-context { padding-top: 8px; font-size: 13px; line-height: 1.5; overflow-wrap: anywhere; }
 .zf-message { min-height: 26px; padding: 6px 0; }
 .zf-message[role="alert"] { color: #d64e52; }
 .zf-stage { position: relative; flex: 1; min-height: 0; overflow: hidden; display: grid; place-items: center; border: 1px solid #8192a433; border-radius: 10px; background: white; }

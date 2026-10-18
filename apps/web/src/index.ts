@@ -31,6 +31,7 @@ let debounce: ReturnType<typeof setTimeout> | undefined;
 const errorBanner = document.querySelector<HTMLElement>('#compile-error')!;
 const lintSummary = document.querySelector<HTMLElement>('#lint-summary')!;
 const missingBacklink = document.querySelector<HTMLInputElement>('#missing-backlink')!;
+const boundaryPorts = document.querySelector<HTMLInputElement>('#boundary-ports')!;
 const formatButton = document.querySelector<HTMLButtonElement>('#format-source')!;
 const formatStatus = document.querySelector<HTMLElement>('#format-status')!;
 let lintDocument: CompileResponse | undefined;
@@ -83,13 +84,14 @@ formatButton.addEventListener('click', () => void formatSource());
 
 function updateLint() {
   if (!lintDocument || mappedSource !== editor.source) return;
-  const result = lint(lintDocument, { missingBacklink: missingBacklink.checked });
+  const result = lint(lintDocument, { missingBacklink: missingBacklink.checked, boundaryPorts: boundaryPorts.checked });
   editor.diagnostics(lintDiagnostics(result.diagnostics, editor.source, sourceMap));
   const errors = result.diagnostics.filter((item) => item.severity === 'error').length;
   const warnings = result.diagnostics.length - errors;
   lintSummary.textContent = errors || warnings ? `${errors} lint error(s), ${warnings} warning(s)` : 'No lint issues';
 }
 missingBacklink.addEventListener('change', updateLint);
+boundaryPorts.addEventListener('change', updateLint);
 document.querySelector('#show-diagnostics')!.addEventListener('click', () => editor.showDiagnostics());
 
 async function highlightSelection(navigate: boolean) {

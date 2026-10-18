@@ -32,7 +32,7 @@ function htmlLinks(svg: string, diagram: Diagram): string {
 }
 const help = `Usage:
   zoomflow export file.d2 [--all] [--format svg|png|html] [-o output] [--root directory]
-  zoomflow lint file.d2 [--missing-backlink] [--json] [--root directory]
+  zoomflow lint file.d2 [--boundary-ports] [--missing-backlink] [--json] [--root directory]
 
 SVG/PNG export the root board by default; --all creates a ZIP of every board.
 HTML always includes every board in one navigable, self-contained file.
@@ -40,6 +40,7 @@ Default output: file.svg, file.png, file.html, or file-svg.zip / file-png.zip.
 --root bounds local imports (default: cwd if it contains the input, otherwise
  the input directory). Local zoomflow.d2 files override the bundled stdlib.
 Export requires D2 v0.9.0 on PATH. Lint uses the bundled D2 compiler.
+Boundary ports are optional; --boundary-ports checks explicit zf-in/zf-out contracts.
 Exit codes: 0 success (warnings allowed), 1 lint errors, 2 usage/compile/export failure.
 `;
 
@@ -107,7 +108,7 @@ const style = `:root{font:16px system-ui;color:#172033;background:#f5f7fa}
 body{margin:0}header,footer,.zf-breadcrumbs{padding:1rem}header{font-size:1.2rem}
 .zf-stage{padding:1rem;overflow:auto;background:white}.zf-stage>svg{width:100%;height:auto;max-height:80vh}
 button{font:inherit;cursor:pointer;padding:.4rem .7rem}button[aria-current]{font-weight:bold}
-.zf-message{color:#a22;padding:0 1rem}a[data-missing]{outline:2px dashed #b33}`;
+.zf-message{color:#a22;padding:0 1rem}.zf-context{padding:0 1rem;overflow-wrap:anywhere}a[data-missing]{outline:2px dashed #b33}`;
 
 export async function main(args = process.argv.slice(2)): Promise<number> {
   try {
@@ -115,12 +116,13 @@ export async function main(args = process.argv.slice(2)): Promise<number> {
       all: { type: 'boolean' }, format: { type: 'string' }, output: { type: 'string', short: 'o' },
       root: { type: 'string' }, json: { type: 'boolean' },
       'missing-backlink': { type: 'boolean' }, help: { type: 'boolean', short: 'h' },
+      'boundary-ports': { type: 'boolean' },
     } });
     if (values.help) { console.log(help); return 0; }
     const [command, filename] = positionals;
     if (!['lint', 'export'].includes(command) || positionals.length !== 2) throw new Error(help);
     if (command === 'lint' && (values.all || values.format || values.output)) throw new Error('Export options cannot be used with lint.');
-    if (command === 'export' && (values.json || values['missing-backlink'])) throw new Error('Lint options cannot be used with export.');
+    if (command === 'export' && (values.json || values['missing-backlink'] || values['boundary-ports'])) throw new Error('Lint options cannot be used with export.');
     const format = values.format ?? 'svg';
     if (!['svg', 'png', 'html'].includes(format)) throw new Error(`Unsupported format: ${format}`);
     const input = resolve(filename);
@@ -138,7 +140,7 @@ export async function main(args = process.argv.slice(2)): Promise<number> {
     try {
       const compiled = await d2.compile({ fs, inputPath, options: { layout: 'elk' } });
       if (command === 'lint') {
-        const result = lint(compiled, { missingBacklink: values['missing-backlink'] });
+        const result = lint(compiled, { missingBacklink: values['missing-backlink'], boundaryPorts: values['boundary-ports'] });
         if (values.json) console.log(JSON.stringify(result, null, 2));
         else {
           for (const diagnostic of result.diagnostics) {

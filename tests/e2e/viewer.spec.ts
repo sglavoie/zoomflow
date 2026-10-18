@@ -1,5 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import { pathToFileURL } from 'node:url';
+import { readFileSync } from 'node:fs';
 
 async function board(page: Page, id: string) {
   await expect(page.locator('.zf-stage')).toHaveAttribute('data-board', id);
@@ -8,6 +9,61 @@ async function board(page: Page, id: string) {
 async function drill(page: Page, id: string) {
   await page.locator(`.zf-stage a[href="${id}"]`).click();
   await board(page, id);
+}
+
+for (const offline of [false, true]) {
+  test(`port-free layers infer parent context ${offline ? 'in offline HTML' : 'in the viewer'}`, async ({ page, context }, info) => {
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    await page.goto('/');
+    await board(page, 'root');
+    const source = readFileSync('fixtures/lint/nested-navigation.d2', 'utf8');
+    await page.locator('#file').setInputFiles({ name: 'nested.d2', mimeType: 'text/plain', buffer: Buffer.from(source) });
+    await expect(page.locator('#lint-summary')).toHaveText('1 lint error(s), 0 warning(s)');
+    await page.getByRole('button', { name: 'Show diagnostics' }).click();
+    await expect(page.locator('.cm-panel-lint')).toContainText('Use link: _');
+    await expect(page.locator('.cm-panel-lint')).not.toContainText('boundary-in');
+    const repaired = source.replace('Capture: {link: layers.charge}', 'Capture: {link: _}');
+    await page.locator('#file').setInputFiles({ name: 'repaired.d2', mimeType: 'text/plain', buffer: Buffer.from(repaired) });
+    await expect(page.locator('#lint-summary')).toHaveText('No lint issues');
+    await board(page, 'root');
+    if (offline) {
+      await page.selectOption('#export-format', 'html');
+      const pending = page.waitForEvent('download');
+      await page.getByRole('button', { name: 'Download', exact: true }).click();
+      const download = await pending;
+      const path = info.outputPath('parent-context.html');
+      await download.saveAs(path);
+      await context.setOffline(true);
+      await page.goto(pathToFileURL(path).href);
+    }
+    const parentContext = page.getByRole('group', { name: 'Parent connections' });
+    await expect(parentContext).toBeHidden();
+    for (const [id, expected] of [
+      ['root.layers.checkout', 'Checkout · From Browse · To Receipt'],
+      ['root.layers.checkout.layers.charge', 'Charge · From Cart · To Confirm'],
+      ['root.layers.checkout.layers.charge.layers.capture', 'Capture · From Authorize · To Receipt'],
+    ]) {
+      await page.locator(`.zf-stage a[href="${id}"]`).click();
+      await expect(page.locator('.zf-stage')).toHaveAttribute('data-board', id);
+      await expect(parentContext).toHaveText(expected);
+    }
+    // Resolve context from the document, even without a visited navigation trail.
+    if (offline) {
+      await page.evaluate(() => history.replaceState(null, ''));
+      await page.reload();
+    } else {
+      // Reloading the app resets an uploaded document; simulate a direct route on load.
+      await page.evaluate(() => history.replaceState(null, '', '#/checkout/charge/capture'));
+      await page.locator('#file').setInputFiles({ name: 'reopened.d2', mimeType: 'text/plain', buffer: Buffer.from(repaired) });
+      await expect(page.locator('#filename')).toHaveText('reopened.d2');
+      await board(page, 'root.layers.checkout.layers.charge.layers.capture');
+    }
+    await expect(parentContext).toHaveText('Capture · From Authorize · To Receipt');
+    await page.keyboard.press('Escape');
+    await expect(parentContext).toHaveText('Charge · From Cart · To Confirm');
+    await page.getByRole('navigation', { name: 'Breadcrumb' }).getByRole('button', { name: 'Root', exact: true }).click();
+    await expect(parentContext).toBeHidden();
+  });
 }
 
 for (const offline of [false, true]) {

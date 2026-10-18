@@ -131,6 +131,9 @@ test('inlines remote images for PNG and reports a placeholder when fetching fail
   await board(page, 'root');
   await page.locator('#file').setInputFiles({ name: 'image.d2', mimeType: 'text/plain', buffer: Buffer.from('Picture: {icon: https://assets.example/icon.svg}') });
   await expect(page.locator('#filename')).toHaveText('image.d2');
+  // The filename changes before compilation; wait for the new diagram before exporting.
+  await expect(page.locator('.zf-stage [data-shape-id="Picture"]')).toBeVisible();
+  await expect(page.locator('#viewer')).toHaveAttribute('aria-busy', 'false');
   const svg = await readFile(await download(page, 'svg', info), 'utf8');
   expect(svg).toContain('data:image/svg+xml;base64,');
   expect(svg).not.toContain('https://assets.example');

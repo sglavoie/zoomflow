@@ -1,6 +1,7 @@
 import { strToU8, zipSync } from 'fflate';
 import { indexBoards, type Diagram } from './index';
 import type { LintDiagnostic } from './lint';
+import { parentContext, type ParentContext } from './context';
 
 export interface ExportBoard {
   id: string;
@@ -11,6 +12,7 @@ export interface ExportBoard {
   empty: boolean;
   svg: string;
   missingLinks?: LintDiagnostic[];
+  parentContext?: ParentContext[];
 }
 
 /** Encode each name independently: slashes and dot segments cannot escape the ZIP. */
@@ -22,7 +24,8 @@ function segment(name: string): string {
 export async function renderExportBoards(diagram: Diagram, render: (target: string) => Promise<string>, diagnostics: readonly LintDiagnostic[] = []): Promise<ExportBoard[]> {
   const result: ExportBoard[] = [];
   const paths = new Map<string, string>();
-  for (const board of indexBoards(diagram).values()) {
+  const boards = indexBoards(diagram);
+  for (const board of boards.values()) {
     const prefix = board.parent ? paths.get(board.parent)! : '';
     const path = board.parent
       ? `${prefix}${board.kind === 'layers' ? '' : `@${board.kind}/`}${segment(board.name)}/` : '';
@@ -30,6 +33,7 @@ export async function renderExportBoards(diagram: Diagram, render: (target: stri
     result.push({ id: board.id, name: board.name, hash: board.hash, parent: board.parent,
       path: board.parent ? `${path.slice(0, -1)}.svg` : 'root.svg',
       empty: board.diagram.shapes.length === 0, svg: await render(board.target),
+      parentContext: parentContext(board, boards),
       missingLinks: diagnostics.filter((item) => item.rule === 'dangling-link' && item.board === board.id && item.shape && item.target) });
   }
   // A layer named root would otherwise collide with the root document.
@@ -60,7 +64,7 @@ export function exportBoardsHtml(boards: readonly ExportBoard[], options: { titl
   return `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>${title}</title><style>${options.style}</style></head><body>
-<header><strong>${title}</strong></header><main id="viewer"><nav class="zf-breadcrumbs" aria-label="Breadcrumb"></nav><div class="zf-message" role="status"></div><div class="zf-stage" aria-label="Diagram"></div></main>
+<header><strong>${title}</strong></header><main id="viewer"><nav class="zf-breadcrumbs" aria-label="Breadcrumb"></nav><div class="zf-context" role="group" aria-label="Parent connections" hidden></div><div class="zf-message" role="status"></div><div class="zf-stage" aria-label="Diagram"></div></main>
 <footer>Click a linked shape to explore · Esc or Backspace goes up</footer>
 <script id="zoomflow-data" type="application/json">${data}</script><script>${options.script}</script></body></html>`;
 }

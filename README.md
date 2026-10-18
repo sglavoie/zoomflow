@@ -17,6 +17,14 @@ navigation. Deep links such as `#/checkout/charge` open a board directly in the
 loaded diagram. Open a file or drop one onto the page; files are compiled locally
 with D2's WASM worker. Light, dark and system themes use D2's generated palettes.
 
+Drill-down navigation needs no boundary ports or library import. Inside a child
+layer, the viewer shows its parent connections (for example, **From Browse** and
+**To Receipt**) using the parent's directed edges. This also works for deep links
+and offline HTML. If several parent nodes open the same layer, each node's context
+is listed separately. These hints do not add nodes or guess internal connections.
+`layers.name` targets a child of the current board; `_` targets its parent. A missing
+child link that matches an ancestor's name suggests the corresponding `_` path.
+
 Edit the D2 source in the CodeMirror pane for a live preview (350 ms debounce).
 Click **Format** or press **Shift+Alt+F** in the editor to apply D2's automatic
 source formatting, including nested indentation. Formatting is one undoable edit
@@ -32,9 +40,10 @@ so an old diagram cannot select an outdated text range. Editor keyboard shortcut
 including undo, search, Escape and Backspace, stay in the editor.
 
 Successful compilations also run Zoomflow lint. **Show diagnostics** opens the
-editor's diagnostic list. Boundary mismatches and missing board links are errors;
-unlinked layers are warnings. **Check parent backlinks** enables an additional
-warning that is off by default. Lint errors do not prevent preview or export.
+editor's diagnostic list. Missing board links are errors; unlinked layers are
+warnings. **Check boundary ports** opts into explicit `zf-in`/`zf-out` validation;
+boundary mismatches are errors only when this is enabled. **Check parent backlinks**
+enables an additional warning that is off by default. Lint errors do not prevent preview or export.
 Use `...@zoomflow` to import the bundled boundary ports, state pieces and default
 theme; see [stdlib conventions and examples](stdlib/README.md).
 
@@ -73,9 +82,12 @@ deliberately review the compiler contract.
 The browser opens individual files with the bundled `zoomflow.d2` import; resolving other filesystem imports and saving edited
 D2 source to disk are not yet provided in the browser. The CLI resolves local D2 imports within its project root. Rich HTML labels (`foreignObject`) remain unsupported.
 
-The core API `lint(compiled, { missingBacklink: false })` accepts the D2 compile
+The core API `lint(compiled, { missingBacklink: false, boundaryPorts: false })` accepts the D2 compile
 response and returns `diagnostics`, `boundaries` (per-node expected/evaluated
-counts), and `boundaryPairsEvaluated`. Diagnostics carry a rule, severity, board,
+counts), and `boundaryPairsEvaluated`. Boundary checking is off by default, returning
+an empty `boundaries` array and zero evaluated pairs; set `boundaryPorts: true` to
+validate explicit ports. `parentContext(board, boards)` exposes inferred parent
+connections independently of lint. Diagnostics carry a rule, severity, board,
 optional shape ID and optional original D2 source range. Consumers must check the
 range's filename before applying it to an editor. When no local range is available,
 the editor lists the board and anchors the diagnostic at the document start.
@@ -95,7 +107,7 @@ exports (`brew install d2` on macOS), then build the CLI:
 ```sh
 pnpm install --frozen-lockfile
 pnpm --filter cli build
-pnpm zoomflow lint fixtures/lint/imported.d2
+pnpm zoomflow lint fixtures/lint/imported.d2 --boundary-ports
 pnpm zoomflow export fixtures/order.d2 --all --format svg -o artifacts/order-svg.zip
 pnpm zoomflow export fixtures/order.d2 --all --format png -o artifacts/order-png.zip
 pnpm zoomflow export fixtures/order.d2 --all --format html -o artifacts/order.html
@@ -113,8 +125,9 @@ successful rendering. Existing exports at that destination are replaced.
 Lint uses the pinned bundled WASM compiler and needs no native D2 installation.
 Exit status is **0** for success (including warnings), **1** for lint errors,
 and **2** for invalid arguments, missing input/dependencies, compilation or export
-failure. `--json` prints the core lint result; `--missing-backlink` opts into
-parent-backlink warnings. Human diagnostics include rule, board, shape and the
+failure. `--json` prints the core lint result; `--boundary-ports` opts into explicit
+port validation, and `--missing-backlink` opts into parent-backlink warnings.
+Human diagnostics include rule, board, shape and the
 compiler's source range when available.
 
 Both commands snapshot `.d2` files under a project root: the working directory if

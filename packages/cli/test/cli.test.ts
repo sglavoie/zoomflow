@@ -31,14 +31,14 @@ async function run(args: string[], options: { cwd?: string; env?: NodeJS.Process
 function success(result: Awaited<ReturnType<typeof run>>) { expect(result.code, result.stderr).toBe(0); }
 
 it.each(['labelled', 'dotted', 'imported'])('lints the real %s fixture with stdlib and local imports', async (name) => {
-  const result = await run(['lint', `fixtures/lint/${name}.d2`, '--json']);
+  const result = await run(['lint', `fixtures/lint/${name}.d2`, '--boundary-ports', '--json']);
   success(result);
   expect(JSON.parse(result.stdout)).toMatchObject({ diagnostics: [], boundaryPairsEvaluated: 2 });
 });
 
 it('returns a non-zero process exit for boundary and dangling-link errors', async () => {
   for (const [name, rule] of [['mismatched', 'boundary-in'], ['navigation', 'dangling-link']]) {
-    const result = await run(['lint', `fixtures/lint/${name}.d2`]);
+    const result = await run(['lint', `fixtures/lint/${name}.d2`, '--boundary-ports']);
     expect(result.code).toBe(1);
     expect(result.stdout).toContain(`error ${rule}`);
   }
@@ -137,6 +137,7 @@ it('supports parent-relative imports inside --root and paths with spaces', async
 });
 
 it('reports usage, missing files, compilation and native failures without replacing outputs', async () => {
+  expect((await run(['export', 'fixtures/order.d2', '--boundary-ports'])).code).toBe(2);
   expect((await run(['export', 'fixtures/order.d2', '--format', 'pdf'])).code).toBe(2);
   expect((await run(['lint', join(temp, 'missing.d2')])).code).toBe(2);
   expect((await run(['lint', join(temp, 'zoomflow.d2')])).code).toBe(2);
@@ -173,4 +174,24 @@ it('includes empty boards, scenarios, steps and a layer named root in HTML', asy
     await page.locator('.zf-stage a[href="root.scenarios.alternate"]').click();
     expect(await page.locator('.zf-stage').getAttribute('data-board')).toBe('root.scenarios.alternate');
   } finally { await browser.close(); }
+});
+
+
+it('allows port-free diagrams by default and retains actionable dangling-link errors', async () => {
+  const source = await readFile(resolve(repo, 'fixtures/lint/nested-navigation.d2'), 'utf8');
+  const input = join(temp, 'nested.d2');
+  await writeFile(input, source);
+  const missing = await run(['lint', input, '--json']);
+  expect(missing.code).toBe(1);
+  const diagnostics = JSON.parse(missing.stdout).diagnostics;
+  expect(diagnostics).toHaveLength(1);
+  expect(diagnostics[0].message).toContain('Use link: _');
+  await writeFile(input, source.replace('Capture: {link: layers.charge}', 'Capture: {link: _}'));
+  const ordinary = await run(['lint', input, '--json']);
+  success(ordinary);
+  expect(JSON.parse(ordinary.stdout)).toMatchObject({ diagnostics: [], boundaries: [] });
+  const strict = await run(['lint', input, '--boundary-ports']);
+  expect(strict.code).toBe(1);
+  expect(strict.stdout).toContain('error boundary-in');
+  success(await run(['lint', 'fixtures/lint/mismatched.d2']));
 });

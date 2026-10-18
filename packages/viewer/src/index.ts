@@ -1,6 +1,6 @@
-import { classifyHref, indexBoards, type Board, type Diagram, type LintDiagnostic } from '@zoomflow/core';
+import { classifyHref, indexBoards, parentContext, type Board, type Diagram, type LintDiagnostic } from '@zoomflow/core';
 import { restoreMissingLinks } from './missing-links';
-import { simplifyTrail } from './navigation';
+import { renderParentContext, simplifyTrail } from './navigation';
 
 export type RenderBoard = (target: string) => Promise<string>;
 export { prepareExportSvg, rasterizeSvg, offlineViewerScript } from './export';
@@ -9,6 +9,7 @@ export { prepareExportSvg, rasterizeSvg, offlineViewerScript } from './export';
 export class Viewer {
   readonly stage = document.createElement('div');
   private readonly crumbs = document.createElement('nav');
+  private readonly context = document.createElement('div');
   private readonly message = document.createElement('div');
   private boards = new Map<string, Board>();
   private diagnostics: readonly LintDiagnostic[] = [];
@@ -26,11 +27,15 @@ export class Viewer {
   constructor(private readonly host: HTMLElement) {
     this.crumbs.className = 'zf-breadcrumbs';
     this.crumbs.setAttribute('aria-label', 'Breadcrumb');
+    this.context.className = 'zf-context';
+    this.context.setAttribute('role', 'group');
+    this.context.setAttribute('aria-label', 'Parent connections');
+    this.context.hidden = true;
     this.message.className = 'zf-message';
     this.message.setAttribute('role', 'status');
     this.stage.className = 'zf-stage';
     this.stage.setAttribute('aria-label', 'Diagram');
-    host.replaceChildren(this.crumbs, this.message, this.stage);
+    host.replaceChildren(this.crumbs, this.context, this.message, this.stage);
     const options = { signal: this.events.signal };
     this.stage.addEventListener('click', (event) => this.follow(event), options);
     this.stage.addEventListener('keydown', (event) => {
@@ -224,6 +229,7 @@ export class Viewer {
       if (mode === 'replace' || location.hash === board.hash) history.replaceState(state, '', board.hash);
       else history.pushState(state, '', board.hash);
       this.updateCrumbs();
+      renderParentContext(this.context, parentContext(board, this.boards));
       this.setMessage('');
     } catch (error) {
       if (revision === this.revision) { this.cancelTransition(); this.setMessage(String(error), true); }

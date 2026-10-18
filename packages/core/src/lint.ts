@@ -1,5 +1,6 @@
 import type { CompileResponse } from '@d2lang/d2';
 import { classifyHref, indexBoards, type Board } from './index';
+import { boundaryNeighbours } from './context';
 
 export type LintRule = 'boundary-in' | 'boundary-out' | 'orphan-board' | 'dangling-link' | 'missing-backlink';
 export interface LintDiagnostic {
@@ -13,7 +14,11 @@ export interface LintDiagnostic {
   /** Original D2 range, possibly in an imported file. Never assume it is index. */
   range?: string;
 }
-export interface LintOptions { missingBacklink?: boolean }
+export interface LintOptions {
+  missingBacklink?: boolean;
+  /** Opt into explicit zf-in/zf-out contracts. Navigation never requires ports. */
+  boundaryPorts?: boolean;
+}
 export interface BoundaryEvaluation {
   board: string;
   shape: string;
@@ -95,8 +100,19 @@ export function lint(compiled: Pick<CompileResponse, 'diagram' | 'graph'>, optio
     const key = JSON.stringify([board.id, shape, target]);
     if (linkKeys.has(key)) return;
     linkKeys.add(key);
+    let hint = '';
+    const childPath = target.startsWith(`${board.id}.`) ? target.slice(board.id.length + 1) : '';
+    // Suggest an ancestor only for a missing immediate child with the same name/kind.
+    // Leave resolution unchanged, including when a child and ancestor share a name.
+    for (let ancestor = board.parent && boards.get(board.parent), up = '_'; ancestor;
+      ancestor = ancestor.parent && boards.get(ancestor.parent), up += '._') {
+      if (childPath === `${ancestor.kind}.${ancestor.name}`) {
+        hint = ` Did you mean the ${up === '_' ? 'parent' : 'ancestor'} board "${ancestor.name}"? Use link: ${up}.`;
+        break;
+      }
+    }
     diagnostics.push({ rule: 'dangling-link', severity: 'error', board: board.id, shape, range, target,
-      message: `Link targets missing board "${target}".` });
+      message: `Link targets missing board "${target}".${hint}` });
   }
 
   for (const board of boards.values()) {
@@ -169,25 +185,13 @@ export function lint(compiled: Pick<CompileResponse, 'diagram' | 'graph'>, optio
       rule: 'missing-backlink', severity: 'warning', board: board.id, range: boardRanges.get(board.id),
       message: `Board "${board.id}" has no link to its parent "${board.parent}".`,
     });
+    if (!options.boundaryPorts) continue;
     for (const shape of board.diagram.shapes) {
       const target = boardTarget(shape.link, board, boards);
       const child = target && boards.get(target);
       // Only immediate child layers represent a parent's drillable node.
       if (!child || child.kind !== 'layers' || child.parent !== board.id) continue;
-      const required = { in: new Set<string>(), out: new Set<string>() };
-      let incident = false;
-      for (const edge of board.diagram.connections) {
-        if (edge.src !== shape.id && edge.dst !== shape.id) continue;
-        incident = true;
-        if (edge.dstArrow !== 'none') {
-          if (edge.dst === shape.id) required.in.add(edge.src);
-          if (edge.src === shape.id) required.out.add(edge.dst);
-        }
-        if (edge.srcArrow !== 'none') {
-          if (edge.src === shape.id) required.in.add(edge.dst);
-          if (edge.dst === shape.id) required.out.add(edge.src);
-        }
-      }
+      const required = boundaryNeighbours(board.diagram, shape.id);
       const evaluation: BoundaryEvaluation = { board: board.id, shape: shape.id, child: child.id,
         expected: required.in.size + required.out.size, evaluated: 0 };
       for (const direction of ['in', 'out'] as const) {
@@ -205,7 +209,7 @@ export function lint(compiled: Pick<CompileResponse, 'diagram' | 'graph'>, optio
           });
         }
       }
-      if (incident && evaluation.evaluated === 0) diagnostics.push({
+      if (required.incident && evaluation.evaluated === 0) diagnostics.push({
         rule: required.out.size && !required.in.size ? 'boundary-out' : 'boundary-in',
         severity: 'error', board: board.id, shape: shape.id,
         message: `Zero boundary pairs evaluated for "${shape.id}" → "${child.id}" despite incident edges. Add matching zf-in/zf-out ports and directed edges.`,

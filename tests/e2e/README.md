@@ -21,5 +21,7 @@ diagnostics on syntax errors, recovery, startup edits, exact source selections
 preview highlights, editor keyboard isolation and file replacement.
 
 `lint.spec.ts` checks the bundled stdlib import, inline and list diagnostics,
-name mismatches and the zero-pairs guard, optional backlink warnings, dangling
+opt-in boundary checking (name mismatches and the zero-pairs guard), optional backlink warnings, dangling
 links, orphan layers, and recovery after both lint and compiler errors.
+`viewer.spec.ts` also checks port-free nested navigation, ancestor-link suggestions,
+and inferred parent connections in the live viewer and offline HTML.
