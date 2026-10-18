@@ -7,11 +7,11 @@ layers: {
     direction: right
     Cart -> Charge -> Confirm
     Charge: {link: layers.charge}
-    Back: {link: _}
+    Back: {link: _; near: top-left; width: 64; height: 32; style.font-size: 14}
     layers: {
       charge: {
         Authorize -> Capture -> Receipt
-        Back: {link: _}
+        Back: {link: _; near: top-left; width: 64; height: 32; style.font-size: 14}
       }
     }
   }

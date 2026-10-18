@@ -13,7 +13,7 @@ layers: {
   implementation: {
     direction: right
     validate -> execute -> respond
-    back: Overview {link: _}
+    back: Overview {link: _; near: top-left; width: 88; height: 32; style.font-size: 14}
   }
 }
 scenarios: {
@@ -37,7 +37,7 @@ steps: {
     failure.link: _.scenarios.failure
     rollout.link: _.steps.worker
     rollout.label: Next step
-    back: Overview {link: _}
+    back: Overview {link: _; near: top-left; width: 88; height: 32; style.font-size: 14}
   }
   worker: {
     # Inherits the cache and API connection from the previous step.
