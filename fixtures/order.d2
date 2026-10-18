@@ -1,0 +1,18 @@
+direction: right
+Browse -> Checkout -> Receipt
+Checkout: {link: layers.checkout}
+Docs: {link: https://example.com/docs}
+layers: {
+  checkout: {
+    direction: right
+    Cart -> Charge -> Confirm
+    Charge: {link: layers.charge}
+    Back: {link: _}
+    layers: {
+      charge: {
+        Authorize -> Capture -> Receipt
+        Back: {link: _}
+      }
+    }
+  }
+}

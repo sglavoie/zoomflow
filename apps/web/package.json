@@ -4,7 +4,16 @@
   "private": true,
   "type": "module",
   "dependencies": {
+    "@d2lang/d2": "0.1.34",
     "@zoomflow/core": "workspace:*",
     "@zoomflow/viewer": "workspace:*"
+  },
+  "devDependencies": {
+    "vite": "^8.3.4"
+  },
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "build": "vite build",
+    "preview": "vite preview --host 127.0.0.1"
   }
 }

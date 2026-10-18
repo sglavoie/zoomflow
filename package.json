@@ -7,8 +7,10 @@
   "scripts": {
     "test": "pnpm test:unit && pnpm test:e2e",
     "test:unit": "vitest run",
-    "test:e2e": "playwright test --pass-with-no-tests",
-    "typecheck": "tsc --noEmit"
+    "test:e2e": "playwright test",
+    "typecheck": "tsc --noEmit",
+    "dev": "pnpm --filter @zoomflow/web dev",
+    "build": "pnpm --filter @zoomflow/web build"
   },
   "devDependencies": {
     "@playwright/test": "1.64.1",

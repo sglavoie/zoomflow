@@ -181,12 +181,19 @@ importers:
 
   apps/web:
     dependencies:
+      '@d2lang/d2':
+        specifier: 0.1.34
+        version: 0.1.34
       '@zoomflow/core':
         specifier: workspace:*
         version: link:../../packages/core
       '@zoomflow/viewer':
         specifier: workspace:*
         version: link:../../packages/viewer
+    devDependencies:
+      vite:
+        specifier: ^8.3.4
+        version: 8.3.4(@types/node@26.6.5)
 
   packages/cli:
     dependencies:
