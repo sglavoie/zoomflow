@@ -51,9 +51,9 @@ per-document and per-board view restoration, mobile error repair, compact stable
 source chrome, zoom hints, and explicit export scope. Draft-store unit tests cover
 revision conflicts, migration, deletion, and edits to recovered copies.
 
-`visual.spec.ts` captures 18 Chromium workspace baselines at 1440×900 and 390×844:
+`visual.spec.ts` captures 24 Chromium workspace baselines at 1440×900 and 390×844:
 light/dark healthy views, source errors, mobile preview errors, expanded AI/lint
-panels, and the reference panel. It fixes locale, timezone, reduced motion, and the
+panels, the reference panel, and expanded settings at short, landscape, and enlarged-text phone sizes. It fixes locale, timezone, reduced motion, and the
 local AI availability response; it uses the real editor and D2 renderer.
 
 The application workflow runs all checks on `macos-15`, matching the macOS baseline
@@ -69,3 +69,10 @@ Inspect changed PNGs before committing them. CI never updates baselines; failure
 upload `playwright-report` and `test-results` for inspection. Changes to the runner
 OS or Playwright version may require reviewed baseline updates. Do not run separate
 Playwright invocations concurrently: they share a server and output directory.
+
+`finishing.spec.ts` covers source-pane continuity across project files, keyboard
+shape selection and focus after recompilation, file-aware diagnostic navigation
+and unavailable locations, normalized wheel units, expanded-tool scrolling,
+larger text, and module/worker/font startup recovery. Chromium also exercises
+real multi-touch events through CDP. Software-keyboard layout is simulated with
+short viewports and a `visualViewport` resize; it is not a physical-device keyboard test.

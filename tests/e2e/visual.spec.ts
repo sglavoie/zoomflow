@@ -35,6 +35,21 @@ for (const mobile of [false, true]) for (const theme of ['light', 'dark'] as con
     await page.locator('#lint-details summary').click();
     await expect(page.locator('#ai-availability')).toContainText('ready on this computer');
     await screenshot('expanded-tools');
+    if (mobile) {
+      await page.locator('.ai-settings > summary').click();
+      await page.setViewportSize({ width: 390, height: 450 });
+      await expect.poll(() => page.evaluate(() => document.body.clientHeight)).toBe(450);
+      await screenshot('short-tools');
+      await page.setViewportSize({ width: 844, height: 390 });
+      await expect.poll(() => page.evaluate(() => document.body.clientHeight)).toBe(390);
+      await screenshot('landscape-tools');
+      await page.setViewportSize({ width: 390, height: 844 });
+      await expect.poll(() => page.evaluate(() => document.body.clientHeight)).toBe(844);
+      const enlarged = await page.addStyleTag({ content: 'button, summary, select, .pane-title, .status-copy, #draft-status, #ai-form input, #ai-form textarea { font-size: 18px !important; }' });
+      await screenshot('large-text-tools');
+      await enlarged.evaluate((element) => element.parentNode?.removeChild(element));
+      await page.locator('.ai-settings > summary').click();
+    }
     await page.locator('#ai-assistant summary').first().click();
     await page.locator('#lint-details summary').click();
     await page.locator('#toggle-reference').click();

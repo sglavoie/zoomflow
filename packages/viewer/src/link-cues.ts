@@ -26,11 +26,19 @@ export function decorateLinks(svg: Element, boards: Map<string, { name: string }
     });
     if (!badge) continue;
     const circle = document.createElementNS(ns, 'circle');
-    circle.setAttribute('cx', '16'); circle.setAttribute('cy', '16'); circle.setAttribute('r', '15');
-    circle.setAttribute('fill', '#fff'); circle.setAttribute('stroke', '#8192a4');
+    circle.setAttribute('cx', '16'); circle.setAttribute('cy', '16'); circle.setAttribute('r', '12');
+    // Frozen exported SVGs supply their own theme; live CSS follows the appearance selector.
+    const background = svg.querySelector('svg > rect');
+    const text = link.querySelector('text');
+    const surface = background ? getComputedStyle(background).fill : '#fff';
+    const ink = text ? getComputedStyle(text).fill : '#52657d';
+    circle.setAttribute('fill', `var(--zf-badge-surface, ${surface})`);
+    circle.setAttribute('stroke', `var(--zf-badge-ink, ${ink})`);
+    circle.setAttribute('stroke-opacity', '0.5');
     const arrow = document.createElementNS(ns, 'path');
     arrow.setAttribute('d', external ? 'M10 22 L22 10 M12 10 H22 V20' : 'M9 10 H16 V22 M10 16 L16 22 L22 16');
-    arrow.setAttribute('fill', 'none'); arrow.setAttribute('stroke', '#235db8');
+    arrow.setAttribute('fill', 'none'); arrow.setAttribute('stroke', `var(--zf-badge-ink, ${ink})`);
+    arrow.setAttribute('transform', 'translate(4 4) scale(0.75)');
     arrow.setAttribute('stroke-width', '2'); arrow.setAttribute('stroke-linecap', 'round'); arrow.setAttribute('stroke-linejoin', 'round');
     badge.replaceChildren(circle, arrow);
     badge.setAttribute('aria-hidden', 'true');

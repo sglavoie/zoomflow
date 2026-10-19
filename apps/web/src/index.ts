@@ -3,15 +3,15 @@ import { Viewer, prepareExportSvg, rasterizeSvg, offlineViewerScript, offlineVie
 import { examples } from './examples';
 import { setupExamplePicker } from './example-picker';
 import './style.css';
-import { SourceEditor, compilerDiagnostics, lintDiagnostics, type CompilerDiagnostic } from './editor';
-import { diagramFonts } from './fonts';
+import { SourceEditor } from './editor';
+import { compilerDiagnostics, lintDiagnostics, type SourceDiagnostic } from './diagnostics';
+import { createCompiler, CompilerStartupError } from './compiler';
 import { setupReference } from './reference';
 import { setupSourceSplit } from './source-split';
 import { setupFullscreen } from './fullscreen';
 import { setupAiAssistant } from './ai-assistant';
 import { setupMobileView } from './mobile-view';
 import { projectFileSystem, readDirectoryHandle, readFolderInput } from './project-files';
-import type { Diagnostic } from '@codemirror/lint';
 import { setupShortcuts } from './shortcuts';
 
 setupShortcuts();
@@ -64,7 +64,15 @@ updateTheme();
 
 // The pinned browser entry creates and owns D2's WASM worker. Import it lazily
 // so the shell and loading state paint before the compiler is downloaded.
-const compiler = import('@d2lang/d2').then(({ D2 }) => new D2());
+const compiler = createCompiler();
+const engineNotice = document.querySelector<HTMLElement>('#engine-notice')!;
+const engineMessage = document.querySelector<HTMLElement>('#engine-message')!;
+const retryEngine = document.querySelector<HTMLButtonElement>('#retry-engine')!;
+retryEngine.addEventListener('click', () => {
+  clearTimeout(debounce);
+  invalidateSource();
+  void load(editor.source, documentName, true);
+});
 let generation = 0;
 let documentRevision = 0;
 let ai: ReturnType<typeof setupAiAssistant> | undefined;
@@ -95,10 +103,9 @@ const activityStatus = document.querySelector<HTMLElement>('#activity-status')!;
 const exportStatus = document.querySelector<HTMLElement>('#export-status')!;
 const projectDownloadButton = document.querySelector<HTMLButtonElement>('#save-project')!;
 const diagnosticsButton = document.querySelector<HTMLButtonElement>('#show-diagnostics')!;
-let activeDiagnostics: Diagnostic[] = [];
-let externalCompilerError: CompilerDiagnostic | undefined;
+let activeDiagnostics: SourceDiagnostic[] = [];
 let previewTimer: ReturnType<typeof setTimeout> | undefined;
-function setPreviewState(state: 'loading' | 'updating' | 'ready' | 'error') {
+function setPreviewState(state: 'loading' | 'updating' | 'ready' | 'error' | 'unavailable') {
   if (state === 'updating') {
     if (previewTimer || previewStatus.dataset.state === 'updating') return;
     previewTimer = setTimeout(() => {
@@ -114,7 +121,7 @@ function setPreviewState(state: 'loading' | 'updating' | 'ready' | 'error') {
   previewTimer = undefined;
   previewStatus.dataset.state = state;
   previewStatus.textContent = { loading: 'Loading preview…',
-    ready: 'Preview ready', error: 'Preview out of date' }[state];
+    ready: 'Preview ready', error: 'Preview out of date', unavailable: 'Preview unavailable' }[state];
   if (state === 'error') viewer.stage.dataset.previewState = 'stale';
   else delete viewer.stage.dataset.previewState;
 }
@@ -134,13 +141,13 @@ function setFileError(message: string) {
   fileStatus.hidden = !message;
   if (message) setActivity(message, 'error');
 }
-function setEditorDiagnostics(diagnostics: Diagnostic[]) {
+function setEditorDiagnostics(diagnostics: SourceDiagnostic[]) {
   activeDiagnostics = diagnostics;
   const errors = diagnostics.filter((item) => item.severity === 'error').length;
   const warnings = diagnostics.length - errors;
   document.querySelector('#mobile-source')!.textContent = errors ? `Source · ${errors} error${errors === 1 ? '' : 's'}`
     : warnings ? `Source · ${warnings} warning${warnings === 1 ? '' : 's'}` : 'Source';
-  editor.diagnostics(diagnostics);
+  editor.diagnostics(diagnostics, examplePicker.compilation().inputPath, documentName, canOpenDiagnostic, (item) => void openDiagnostic(item));
   diagnosticsButton.disabled = diagnostics.length === 0;
   diagnosticsButton.textContent = diagnostics.length ? `Diagnostics (${diagnostics.length})` : 'Diagnostics';
   diagnosticsButton.setAttribute('aria-label', `Review ${diagnostics.length} diagnostic${diagnostics.length === 1 ? '' : 's'}`);
@@ -157,7 +164,6 @@ function invalidateSource() {
   sourceMap = [];
   lintDocument = undefined;
   setEditorDiagnostics([]);
-  externalCompilerError = undefined;
   mobileError.hidden = true;
   viewer.highlightShapes([]);
   documentExport = undefined;
@@ -259,7 +265,6 @@ async function replaceDocument(source: string, name: string, key: string, reset 
   currentDocumentKey = key;
   projectDownloadButton.hidden = !examplePicker.projectName;
   examplePicker.refresh();
-  showMobileView('preview');
   editor.open(key, source, reset);
   invalidateSource();
   errorBanner.hidden = true;
@@ -269,8 +274,8 @@ async function replaceDocument(source: string, name: string, key: string, reset 
 }
 
 async function compileSource(source: string) {
-  const [d2, fonts] = await Promise.all([compiler, diagramFonts()]);
   const context = examplePicker.compilation();
+  const { d2, fonts } = await compiler.get();
   const input = projectFileSystem(context.inputPath, context.fs, source);
   const padValue = new URLSearchParams(location.search).get('pad');
   const pad = padValue === null ? 100 : Number(padValue);
@@ -322,28 +327,34 @@ function updateLint() {
 }
 missingBacklink.addEventListener('change', updateLint);
 boundaryPorts.addEventListener('change', updateLint);
-diagnosticsButton.addEventListener('click', () => {
-  const first = activeDiagnostics[0];
-  if (!first) return;
+function canOpenDiagnostic(item: SourceDiagnostic) {
+  if (item.filename === examplePicker.compilation().inputPath) return Boolean(item.range);
+  const text = item.filename && examplePicker.compilation().fs[item.filename];
+  return typeof text === 'string' && Boolean(item.rawRange && parseSourceRange(item.rawRange, text, item.filename));
+}
+async function openDiagnostic(item: SourceDiagnostic) {
+  if (!canOpenDiagnostic(item)) return;
   showMobileView('source');
-  editor.select(first, true);
+  if (item.filename === examplePicker.compilation().inputPath) {
+    if (item.range) editor.select(item.range, true);
+    return;
+  }
+  const target = examplePicker.selectProjectPath(item.filename!);
+  if (!target || !item.rawRange) return;
+  const key = target.key;
+  await replaceDocument(target.source, target.name, key);
+  // A second navigation during compilation must not move the new document's cursor.
+  if (currentDocumentKey !== key || editor.source !== target.source) return;
+  const range = parseSourceRange(item.rawRange, target.source, item.filename);
+  if (range) editor.select(range, true);
+}
+diagnosticsButton.addEventListener('click', () => {
+  showMobileView('source');
   editor.showDiagnostics();
 });
 mobileErrorButton.addEventListener('click', () => document.querySelector<HTMLButtonElement>('#go-to-error')!.click());
-document.querySelector('#go-to-error')!.addEventListener('click', async () => {
-  showMobileView('source');
-  const foreign = externalCompilerError;
-  if (foreign?.filename && foreign.rawRange) {
-    const target = examplePicker.selectProjectPath(foreign.filename);
-    if (target) {
-      await replaceDocument(target.source, target.name, target.key);
-      const range = parseSourceRange(foreign.rawRange, target.source, foreign.filename);
-      if (range) editor.select(range, true);
-      showMobileView('source');
-      return;
-    }
-  }
-  if (activeDiagnostics[0]) editor.select(activeDiagnostics[0], true);
+document.querySelector('#go-to-error')!.addEventListener('click', () => {
+  if (activeDiagnostics[0]) void openDiagnostic(activeDiagnostics[0]);
 });
 
 async function highlightSelection(navigate: boolean) {
@@ -364,18 +375,25 @@ viewer.stage.addEventListener('zf-boardchange', () => {
   });
   void highlightSelection(false);
 });
-viewer.stage.addEventListener('click', (event) => {
+function selectShape(event: MouseEvent | KeyboardEvent) {
   if (mappedSource !== editor.source) return;
   const shape = event.target instanceof Element ? event.target.closest<SVGElement>('[data-shape-id]')
     ?? event.target.closest('a')?.querySelector<SVGElement>('[data-shape-id]') : null;
   const entry = shape && sourceMap.find((item) => item.board === viewer.currentBoard?.id && item.shape === shape.dataset.shapeId);
   if (!entry) return;
   const linked = Boolean(shape.closest('a'));
+  if (event instanceof KeyboardEvent) {
+    if (event.key !== 'Enter' && event.key !== ' ' || linked && !event.altKey) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+  }
   if (linked && event.altKey) { event.preventDefault(); event.stopImmediatePropagation(); }
   if (!linked || event.altKey) showMobileView('source');
   editor.select(entry, !linked || event.altKey);
   void highlightSelection(false);
-}, { capture: true });
+}
+viewer.stage.addEventListener('click', selectShape, { capture: true });
+viewer.stage.addEventListener('keydown', selectShape, { capture: true });
 let documentExport: { diagram: Diagram; render: RenderBoard; name: string; diagnostics: LintDiagnostic[] } | undefined;
 const exportButton = document.querySelector<HTMLButtonElement>('#export')!;
 const exportFormat = document.querySelector<HTMLSelectElement>('#export-format')!;
@@ -400,8 +418,19 @@ async function load(source: string, name: string, preserveViewport = false) {
   viewer.setBusy(true);
   viewer.setMessage('');
   setPreviewState(viewer.stage.querySelector('svg') ? 'updating' : 'loading');
+  engineNotice.hidden = true;
+  retryEngine.hidden = true;
+  const startupTimer = !compiler.ready ? setTimeout(() => {
+    if (request !== generation) return;
+    engineNotice.setAttribute('role', 'status');
+    engineMessage.textContent = 'Loading the diagram engine… The first download can take a moment. You can keep editing.';
+    engineNotice.hidden = false;
+  }, 1200) : undefined;
   try {
-    const d2 = await compiler;
+    const { d2 } = await compiler.get();
+    clearTimeout(startupTimer);
+    if (request !== generation) return;
+    engineNotice.hidden = true;
     const compiled = await compileSource(source);
     if (request !== generation) return;
     // D2 registers fonts at compile time for both text measurement and rendering.
@@ -410,9 +439,11 @@ async function load(source: string, name: string, preserveViewport = false) {
       ...compiled.renderOptions, target, noXMLTag: true,
     });
     const diagnostics = lint(compiled).diagnostics;
+    const compiledSources = indexShapeSources(compiled.diagram, compiled.graph, source, compiled.inputPath);
+    viewer.setSourceShapes(compiledSources);
     await viewer.setDocument(compiled.diagram, render, diagnostics, preserveViewport);
     if (request === generation) {
-      sourceMap = indexShapeSources(compiled.diagram, compiled.graph, source, compiled.inputPath);
+      sourceMap = compiledSources;
       mappedSource = source;
       lintDocument = compiled;
       updateLint();
@@ -428,22 +459,34 @@ async function load(source: string, name: string, preserveViewport = false) {
     }
   } catch (error) {
     if (request === generation) {
+      if (error instanceof CompilerStartupError) {
+        setEditorDiagnostics([]);
+        errorBanner.hidden = true;
+        document.querySelector<HTMLButtonElement>('#go-to-error')!.hidden = true;
+        mobileError.hidden = true;
+        lintSummary.textContent = '';
+        engineNotice.setAttribute('role', 'alert');
+        engineMessage.textContent = 'The diagram engine could not start. Check your connection and retry. Your source is preserved.';
+        engineNotice.hidden = false;
+        retryEngine.hidden = false;
+        setPreviewState('unavailable');
+        return;
+      }
       const diagnostics = compilerDiagnostics(error, source, examplePicker.compilation().inputPath);
       setEditorDiagnostics(diagnostics);
       lintDocument = undefined;
       lintSummary.textContent = `${diagnostics.length} source error${diagnostics.length === 1 ? '' : 's'}`;
       const first = diagnostics[0];
       const filename = examplePicker.compilation().inputPath;
-      externalCompilerError = first.filename && first.filename !== filename ? first : undefined;
-      const line = editor.view.state.doc.lineAt(first.from);
+      const externalCompilerError = first.filename && first.filename !== filename ? first : undefined;
       const message = first.message.replace(/^[^:]+:\d+:\d+:\s*/, '');
       document.querySelector('#compile-error-message')!.textContent = externalCompilerError
-        ? `Error · ${first.message}` : `Error · Line ${line.number}, column ${first.from - line.from + 1}: ${message}`;
+        ? `Error · ${first.message}` : first.range ? `Error · Line ${first.line}, column ${first.column}: ${message}` : `Error · Source location unavailable: ${message}`;
       const goToError = document.querySelector<HTMLButtonElement>('#go-to-error')!;
       goToError.textContent = externalCompilerError ? `Open ${externalCompilerError.filename}` : 'Go to error';
       goToError.title = goToError.textContent;
       goToError.hidden = false;
-      goToError.disabled = Boolean(externalCompilerError && !examplePicker.hasProjectPath(externalCompilerError.filename!));
+      goToError.disabled = !canOpenDiagnostic(first);
       errorBanner.title = document.querySelector('#compile-error-message')!.textContent!;
       mobileErrorText.textContent = errorBanner.title;
       mobileErrorButton.textContent = goToError.textContent;
@@ -454,6 +497,7 @@ async function load(source: string, name: string, preserveViewport = false) {
       setPreviewState('error');
     }
   } finally {
+    clearTimeout(startupTimer);
     if (request === generation) viewer.setBusy(false);
   }
 }
@@ -572,7 +616,7 @@ document.addEventListener('drop', (event) => {
   const file = event.dataTransfer?.files[0];
   if (file) void openFile(file);
 });
-window.addEventListener('pagehide', () => { clearTimeout(debounce); clearTimeout(previewTimer); ai?.dispose(); examplePicker.flush(); ++generation; editor.destroy(); viewer.destroy(); void compiler.then((d2) => d2.dispose()); });
+window.addEventListener('pagehide', () => { clearTimeout(debounce); clearTimeout(previewTimer); ai?.dispose(); examplePicker.flush(); ++generation; editor.destroy(); viewer.destroy(); compiler.dispose(); });
 documentName = examplePicker.initial.name;
 currentDocumentKey = examplePicker.initial.key;
 projectDownloadButton.hidden = !examplePicker.projectName;

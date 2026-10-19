@@ -1,4 +1,4 @@
-import { classifyHref, indexBoards, parentContext, type Board, type Diagram, type LintDiagnostic } from '@zoomflow/core';
+import { classifyHref, indexBoards, parentContext, type Board, type Diagram, type LintDiagnostic, type ShapeSource } from '@zoomflow/core';
 import { restoreMissingLinks } from './missing-links';
 import { decorateLinks } from './link-cues';
 import { renderParentContext, simplifyTrail } from './navigation';
@@ -19,6 +19,7 @@ export class Viewer {
   private diagnostics: readonly LintDiagnostic[] = [];
   private render: RenderBoard = async () => '';
   private cache = new Map<string, Promise<string>>();
+  private sourceShapes: readonly ShapeSource[] = [];
   private current = 'root';
   private trail: string[] = [];
   private revision = 0;
@@ -66,6 +67,8 @@ export class Viewer {
   }
 
   setBusy(busy: boolean) { this.host.setAttribute('aria-busy', String(busy)); }
+
+  setSourceShapes(sources: readonly ShapeSource[]) { this.sourceShapes = sources; }
 
   get currentBoard() { return this.boards.get(this.current); }
 
@@ -162,7 +165,14 @@ export class Viewer {
       const encoded = btoa(Array.from(new TextEncoder().encode(shape.id), (byte) => String.fromCharCode(byte)).join(''))
         .replace(/\+/g, '-').replace(/\//g, '_');
       const group = [...element.querySelectorAll('g')].find((node) => node.classList.contains(encoded));
-      if (group) group.dataset.shapeId = shape.id;
+      if (group) {
+        group.dataset.shapeId = shape.id;
+        if (!group.closest('a') && this.sourceShapes.some((entry) => entry.board === board.id && entry.shape === shape.id)) {
+          group.setAttribute('tabindex', '0');
+          group.setAttribute('role', 'button');
+          group.setAttribute('aria-label', `Select source for ${group.querySelector('text')?.textContent || shape.id}`);
+        }
+      }
     }
     this.applyTheme(element);
     return element;
@@ -200,6 +210,8 @@ export class Viewer {
     const revision = ++this.revision;
     const active = document.activeElement;
     const focusStage = this.stage.contains(active);
+    const focusedShape = active instanceof Element
+      ? (active.closest<SVGElement>('[data-shape-id]') ?? active.querySelector<SVGElement>('[data-shape-id]'))?.dataset.shapeId : undefined;
     const focusCrumb = this.crumbs.contains(active);
     this.cancelTransition();
     this.setBusy(true);
@@ -233,7 +245,12 @@ export class Viewer {
       if (mode === 'replace' || location.hash === board.hash) history.replaceState(state, '', board.hash);
       else history.pushState(state, '', board.hash);
       this.updateCrumbs();
-      if (keepFocus && focusStage) this.stage.focus({ preventScroll: true });
+      if (keepFocus && focusStage) {
+        const shape = preserveViewport && sameBoard && focusedShape
+          ? [...this.stage.querySelectorAll<SVGElement>('[data-shape-id]')].find((node) => node.dataset.shapeId === focusedShape) : undefined;
+        const target = shape?.closest<SVGElement>('a') ?? (shape?.hasAttribute('tabindex') ? shape : this.stage);
+        target.focus({ preventScroll: true });
+      }
       else if (keepFocus && focusCrumb) this.crumbs.querySelector<HTMLButtonElement>('button[aria-current]')?.focus({ preventScroll: true });
       renderParentContext(this.context, parentContext(board, this.boards));
       this.setMessage('');

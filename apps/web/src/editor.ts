@@ -1,52 +1,28 @@
 import { basicSetup } from 'codemirror';
-import { EditorState, type Extension } from '@codemirror/state';
+import { EditorState, Prec, type Extension } from '@codemirror/state';
 import { EditorView, keymap } from '@codemirror/view';
 import { insertTab, isolateHistory, undo } from '@codemirror/commands';
-import { lintGutter, openLintPanel, closeLintPanel, setDiagnostics, type Diagnostic } from '@codemirror/lint';
-import { parseSourceRange, type SourceRange, type LintDiagnostic, type ShapeSource } from '@zoomflow/core';
+import { lintGutter, setDiagnostics } from '@codemirror/lint';
+import type { SourceRange } from '@zoomflow/core';
+import { diagnosticLocation, type SourceDiagnostic } from './diagnostics';
 import { d2Language } from './d2-language';
-
-export function lintDiagnostics(items: LintDiagnostic[], source: string, sources: ShapeSource[], filename = 'index'): Diagnostic[] {
-  return items.map((item) => {
-    const range = (item.range && parseSourceRange(item.range, source, filename)) ||
-      sources.find((entry) => entry.board === item.board && entry.shape === item.shape) ||
-      { from: 0, to: Math.min(1, source.length) };
-    return { from: range.from, to: range.to, severity: item.severity, source: `Zoomflow ${item.rule}`,
-      message: `${item.board}: ${item.message}` };
-  });
-}
-
-export type CompilerDiagnostic = Diagnostic & { filename?: string; rawRange?: string };
-export function compilerDiagnostics(error: unknown, source: string, filename = 'index'): CompilerDiagnostic[] {
-  const message = String(error);
-  try {
-    const entries: unknown = JSON.parse(message.slice(message.indexOf('[')));
-    if (Array.isArray(entries)) {
-      const diagnostics = entries.flatMap((entry) => {
-        if (typeof entry?.range !== 'string' || typeof entry?.errmsg !== 'string') return [];
-        const range = parseSourceRange(entry.range, source, filename) ?? { from: 0, to: Math.min(1, source.length) };
-        return [{ ...range, severity: 'error' as const, message: entry.errmsg,
-          filename: entry.range.split(',')[0], rawRange: entry.range }];
-      });
-      if (diagnostics.length) return diagnostics;
-    }
-  } catch { /* Non-parser failures still appear in the banner and editor. */ }
-  return [{ from: 0, to: Math.min(1, source.length), severity: 'error', message }];
-}
 
 export class SourceEditor {
   readonly view: EditorView;
   private selectingShape = false;
+  private readonly panel = document.createElement('section');
+  private readonly diagnosticList = document.createElement('ul');
   private readonly extensions: Extension[];
   private currentKey = '';
   private readonly documents = new Map<string, { state: EditorState; scroll: ReturnType<EditorView['scrollSnapshot']> }>();
   constructor(parent: HTMLElement, source: string, changed: () => void, selected: () => void, format: () => void) {
     this.extensions = [
         basicSetup, d2Language, lintGutter(), EditorView.lineWrapping,
-        keymap.of([
+        Prec.high(keymap.of([
           { key: 'Tab', run: insertTab },
+          { key: 'Mod-Shift-m', run: () => { this.showDiagnostics(); return true; } },
           { key: 'Shift-Alt-f', run: () => { format(); return true; } },
-        ]),
+        ])),
         EditorView.contentAttributes.of({ 'aria-label': 'D2 source', 'aria-multiline': 'true' }),
         EditorView.domEventHandlers({ focus: (_event, view) => {
           const { scrollTop, scrollLeft } = view.scrollDOM;
@@ -73,22 +49,34 @@ export class SourceEditor {
         }),
       ];
     this.view = new EditorView({ parent, state: EditorState.create({ doc: source, extensions: this.extensions }) });
+    this.panel.className = 'cm-panel-lint source-diagnostics';
+    this.panel.id = 'diagnostics-panel';
+    this.panel.hidden = true;
+    this.panel.setAttribute('aria-label', 'Diagnostic list');
+    const close = document.createElement('button');
+    close.type = 'button';
+    close.textContent = 'Close diagnostics';
+    const dismiss = () => { this.panel.hidden = true; this.view.focus(); };
+    close.addEventListener('click', dismiss);
+    this.panel.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); dismiss(); }
+      if (event.key === 'Backspace') event.stopPropagation();
+    });
+    this.panel.append(close, this.diagnosticList);
+    parent.append(this.panel);
   }
   get source() { return this.view.state.doc.toString(); }
   get selection() { return this.view.state.selection.main; }
   open(key: string, source: string, reset = false) {
     const active = document.activeElement;
     const editing = this.view.hasFocus;
-    const diagnosticsOpen = Boolean(this.view.dom.querySelector('.cm-panel-lint'));
     if (this.currentKey) this.documents.set(this.currentKey, { state: this.view.state, scroll: this.view.scrollSnapshot() });
     const saved = reset ? undefined : this.documents.get(key);
     this.currentKey = key;
     const restore = saved?.state.doc.toString() === source ? saved : undefined;
     this.view.setState(restore?.state ?? EditorState.create({ doc: source, extensions: this.extensions }));
-    (diagnosticsOpen ? openLintPanel : closeLintPanel)(this.view);
     this.view.dispatch({ effects: restore?.scroll ?? EditorView.scrollIntoView(0, { y: 'start' }) });
-    // Opening the diagnostics panel focuses its list. Document switches must keep
-    // focus with the picker, diagram, or editor that initiated them instead.
+    // Keep focus with the picker, diagram, or editor that initiated the switch.
     if (editing) this.view.focus();
     else if (active === document.body) (document.activeElement as HTMLElement | null)?.blur();
     else if (active?.isConnected && (active instanceof HTMLElement || active instanceof SVGElement)) active.focus({ preventScroll: true });
@@ -118,7 +106,31 @@ export class SourceEditor {
       if (focus) this.view.focus();
     } finally { this.selectingShape = false; }
   }
-  diagnostics(diagnostics: Diagnostic[]) { this.view.dispatch(setDiagnostics(this.view.state, diagnostics)); }
-  showDiagnostics() { openLintPanel(this.view); }
+  diagnostics(items: SourceDiagnostic[], filename: string, documentName: string, canOpen: (item: SourceDiagnostic) => boolean, open: (item: SourceDiagnostic) => void) {
+    this.view.dispatch(setDiagnostics(this.view.state, items.flatMap((item) =>
+      item.filename === filename && item.range ? [{ ...item.range, severity: item.severity, message: item.message, source: item.source }] : [])));
+    this.diagnosticList.replaceChildren();
+    for (const item of items) {
+      const row = document.createElement('li');
+      row.className = `cm-diagnostic cm-diagnostic-${item.severity}`;
+      const location = diagnosticLocation(item, documentName);
+      const text = `${item.severity === 'error' ? 'Error' : 'Warning'} · ${location} · ${item.message}${item.source ? ` (${item.source})` : ''}`;
+      if (canOpen(item)) {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.textContent = text;
+        button.addEventListener('click', () => open(item));
+        row.append(button);
+      } else {
+        row.textContent = `${text}${item.filename && item.line !== undefined ? ' · Source location unavailable in this document or project' : ''}`;
+      }
+      this.diagnosticList.append(row);
+    }
+    if (!items.length) this.diagnosticList.textContent = 'No diagnostics.';
+  }
+  showDiagnostics() {
+    this.panel.hidden = false;
+    (this.diagnosticList.querySelector('button') ?? this.panel.querySelector('button'))?.focus();
+  }
   destroy() { this.view.destroy(); }
 }

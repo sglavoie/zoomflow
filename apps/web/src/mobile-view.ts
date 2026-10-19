@@ -17,6 +17,18 @@ export function setupMobileView(onPreview: () => void) {
     if (mobile.matches && document.querySelector('#source-pane')!.contains(document.activeElement)) show('source');
     else if (!mobile.matches || workspace.dataset.mobileView === 'preview') requestAnimationFrame(onPreview);
   });
+  // iOS can shrink only the visual viewport when the software keyboard opens.
+  // Do not constrain the layout during pinch magnification (browser accessibility zoom).
+  function resizeViewport() {
+    const viewport = window.visualViewport;
+    if (mobile.matches && viewport && viewport.scale === 1) {
+      document.body.style.setProperty('--workspace-height', `${viewport.height}px`);
+    } else document.body.style.removeProperty('--workspace-height');
+  }
+  window.visualViewport?.addEventListener('resize', resizeViewport);
+  window.addEventListener('resize', resizeViewport);
+  mobile.addEventListener('change', resizeViewport);
+  resizeViewport();
   show('preview');
   return show;
 }

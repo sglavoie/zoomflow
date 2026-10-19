@@ -56,7 +56,7 @@ export function setupViewport(stage: HTMLElement, host: HTMLElement) {
   stage.addEventListener('pointerleave', () => { hovered = false; });
   window.addEventListener('keydown', (event) => {
     if (event.code !== 'Space' || event.repeat || event.target instanceof Element &&
-      event.target.closest('button, input, textarea, select, [contenteditable="true"]')) return;
+      event.target.closest('button, [role="button"], input, textarea, select, [contenteditable="true"]')) return;
     if (Math.abs(scale() - 1) <= zoomEpsilon || !hovered && !stage.contains(document.activeElement)) return;
     event.preventDefault();
     spaceHeld = true;
@@ -80,7 +80,8 @@ export function setupViewport(stage: HTMLElement, host: HTMLElement) {
     out.disabled = !svg || currentScale <= minZoom + zoomEpsilon;
     inside.disabled = !svg || currentScale >= maxZoom - zoomEpsilon;
     fit.disabled = !svg || !zoomed;
-    if (svg) svg.style.touchAction = zoomed ? 'none' : 'pan-y';
+    // Reserve gestures from the first contact: changing touch-action mid-pinch is too late.
+    if (svg) svg.style.touchAction = 'none';
     stage.classList.toggle('zf-pan-ready', spaceHeld && zoomed);
   }
   function setBox(next: Box) {
@@ -176,7 +177,11 @@ export function setupViewport(stage: HTMLElement, host: HTMLElement) {
   fit.addEventListener('click', () => { if (base) setBox({ ...base }); });
   stage.addEventListener('wheel', (event) => {
     if (!svg || !(event.target instanceof Node) || !svg.contains(event.target)) return;
-    const factor = Math.exp(-event.deltaY * 0.0015);
+    const unit = event.deltaMode === WheelEvent.DOM_DELTA_LINE ? 16
+      : event.deltaMode === WheelEvent.DOM_DELTA_PAGE ? stage.clientHeight : 1;
+    // Trackpad pinch is delivered as ctrl+wheel. Bound individual jumps from coarse wheels.
+    const delta = Math.max(-240, Math.min(240, event.deltaY * unit));
+    const factor = Math.exp(-delta * (event.ctrlKey ? 0.01 : 0.0015));
     if (Math.max(minZoom, Math.min(maxZoom, scale() * factor)) === scale()) return;
     event.preventDefault();
     zoom(factor, event.clientX, event.clientY);

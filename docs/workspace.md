@@ -1,0 +1,177 @@
+# Working with diagrams
+
+Navigable, drill-down diagrams built on D2. The framework-free Vite app opens
+local `.d2` files or a folder of related D2 files and starts with `fixtures/order.d2` as an example.
+Click the filename dropdown to explore eight built-in templates: order drill-down,
+flowchart basics, service architecture, sequence diagrams, SQL schemas, layers /
+scenarios / steps, state transitions with boundary ports, and a guided lint repair.
+Every example includes source comments and compiles without imports or remote
+assets. The lint repair intentionally reports one error and one warning until fixed.
+First-time opens start at the root board. Returning to an open document restores its
+last board and breadcrumb trail, with zoom and pan remembered separately for each board
+during the page session. Restoring an example resets its saved view. Source edits and
+opened files remain in the dropdown and are backed up in browser storage for reload recovery. The
+source toolbar reserves space for save status so saving does not move the editor.
+Use **Save .d2** above the editor or **⌘S / Ctrl+S** to save a disk copy.
+Browsers with file-system access can write back to a file you opened or a destination
+you choose. Other browsers download the source and label the button **Download .d2**.
+**Export → Download .d2 source** always starts a separate download.
+The status beside the save controls distinguishes browser recovery from a disk save.
+Browser storage can be cleared. Drafts are stored independently per document and tab;
+simultaneous edits are preserved as **(recovered)** copies in the diagram menu after
+reload. A notice appears when another tab changes a draft. Recovered project files
+retain their imports and can be exported as a project ZIP without replacing the
+canonical file. Superseded revisions are reclaimed after their replacements are
+saved, while concurrent versions are retained. Existing browser backups migrate automatically. The picker puts the
+active project or draft first,
+followed by other drafts ordered by edit time, then built-in examples. It marks
+modified examples and shows edit timestamps and distinct draft numbers for same-name uploads.
+**Restore** resets an example after confirmation; opened file drafts
+can be removed from the dropdown. Project files are grouped under their folder name;
+**Remove project** removes that project's browser drafts after confirmation and leaves disk files intact.
+Each document keeps its own undo history, selection, and editor scroll position
+while switching within the page. Restoring an example starts
+a fresh history. Browser reload recovery saves source, not undo history.
+The source lives in `apps/web/src/examples/`, with the catalog in `examples.ts`.
+
+## Projects
+
+Open a project with **Open folder** (also in the filename menu on narrow screens).
+Zoomflow loads its `.d2` files into a shared virtual filesystem, so relative imports
+resolve from each file's folder. Pick another project file from the filename menu to
+edit it; changes to imported files appear when you return to the main diagram.
+Project drafts survive reload in browser storage. In browsers that support directory
+access, **Save .d2** writes the active project file to its original folder. Other
+browsers offer a Save dialog or source download. **Export → Download project .zip**
+keeps all project sources and their relative paths together. Local image assets are
+not yet loaded with folder projects.
+
+
+
+
+## Explore a diagram
+
+Click a linked shape to drill into a board. Breadcrumbs record the visited path,
+trimming back to an earlier board whenever you revisit it so cycles do not repeat.
+Esc or Backspace goes to the tree parent, and browser back/forward retraces your
+navigation. Deep links such as `#/checkout/charge` open a board directly in the
+loaded diagram. Board links show a downward arrow badge, while external links show an
+outward arrow. Hover or focus a link to identify its destination; hovering a shape
+highlights its selectable boundary. These link cues also appear in exported HTML.
+Open a `.d2` file or drop one onto the page; files are compiled locally
+with D2's WASM worker. Light, dark and system themes use D2's generated palettes.
+Theme and export format are remembered when browser storage is available. The appearance
+selector is in the header, separate from **Export**, which closes on Escape and restores focus to its button.
+Use the preview's +, − and Fit controls or the mouse wheel to zoom. Drag empty
+space to pan, or hold Space and drag a shape or link; middle-button dragging also
+pans. Touch dragging works after zooming. Each board opens fitted around its
+rendered content. Edits on the same board preserve zoom and pan; returning to a board
+restores its view.
+The zoom readout says **Fit** at the fitted baseline; percentages describe magnification
+relative to that fit. A hint below the canvas explains panning after zooming in.
+Keyboard navigation moves focus to the new board or breadcrumb and
+announces its name.
+Switching documents preserves the active Preview or Source pane.
+On phones and tablets narrower than 1,000px, use the **Preview** and **Source** buttons to give each pane the full
+workspace. The Source button includes diagnostic counts. When compilation fails,
+Preview keeps the last good diagram and shows the error with a **Go to error** action
+that opens and focuses the relevant source location. Selecting an unlinked shape
+opens its source in the Source pane.
+
+Drill-down navigation needs no boundary ports or library import. Inside a child
+layer, the viewer shows its parent connections (for example, **From Browse** and
+**To Receipt**) using the parent's directed edges. This also works for deep links
+and offline HTML. If several parent nodes open the same layer, each node's context
+is listed separately. These hints do not add nodes or guess internal connections.
+`layers.name` targets a child of the current board; `_` targets its parent. A missing
+child link that matches an ancestor's name suggests the corresponding `_` path.
+
+## Edit and repair source
+
+Edit the syntax-highlighted D2 source in the CodeMirror pane for a live preview (350 ms debounce).
+Click **Format** or press **Shift+Alt+F** in the editor to apply D2's automatic
+source formatting, including nested indentation. Formatting is one undoable edit
+and refreshes the preview. Invalid diagrams leave the source unchanged and show
+a formatting error; edits made while formatting is running are preserved.
+The compact status strip above the editor reports preview freshness and diagnostic counts.
+Use **Diagnostics** to open the detailed list; the toolbar and editor stay in place
+through compilation failures and recovery.
+Transient progress appears only after 700 ms so quick edits do not flash indicators;
+source mapping and exports are invalidated immediately. Compiler errors replace the normal status with one summary emphasizing the
+first issue's line and column, with **Go to error** focusing its source location,
+and **Diagnostics** opens a file-aware list of issues. Each available location opens
+the correct project file; issues without a usable location say so. The summary reserves its space
+to keep the editor still, with inline diagnostics while the last good diagram is marked as the
+previous preview. Export is disabled until the current source compiles;
+an export already running is canceled if the source changes. Successful edits
+preserve the current board, falling
+back to its nearest existing ancestor if it was removed. Click a shape to select
+its source identifier; selecting an identifier in the editor highlights its shape
+and opens its board when needed. Linked shapes still navigate; Alt+click selects
+their source without navigating. Source links pause while edits are uncompiled,
+so an old diagram cannot select an outdated text range. Editor keyboard shortcuts,
+including undo, search, Escape and Backspace, stay in the editor.
+
+## Syntax reference and workspace layout
+
+The diagram is on the left and the source editor is on the right. Click **D2
+reference** or press **⌘⇧/** on macOS, or **Ctrl+Shift+/** on Windows/Linux,
+to toggle a syntax reference below the diagram. This shortcut also works while editing;
+**⌘/** or **Ctrl+/** toggles D2 line comments in the editor.
+On phones and tablets, opening the reference reveals Preview and closing it returns focus to the source when opened from the editor.
+The bundled reference works without a network connection once
+the app is loaded, with searchable examples, copy buttons and links to the full D2
+documentation. Each example is tested against the bundled compiler.
+
+Drag the horizontal divider to resize the diagram/reference split, or focus it
+and use Up/Down (5% steps) and Home/End (25%/75%). The split starts at 60% diagram
+and 40% reference and remembers your size when browser storage is available.
+Closing and reopening preserves the search and scroll position. Escape inside the
+reference closes it and restores focus without navigating the diagram. On narrow
+screens, the diagram and reference share the Preview pane. Zoom and fullscreen
+controls sit in a toolbar below the canvas so they do not cover diagram content, including
+in fullscreen. Export controls stay in their menu so the editor remains visible.
+
+## Lint checks
+
+Successful compilations also run Zoomflow lint. **Diagnostics** opens the
+editor's diagnostic list. Missing board links are errors; unlinked layers are
+warnings. **Check boundary ports** opts into explicit `zf-in`/`zf-out` validation;
+boundary mismatches in layers that declare ports are errors only when this is
+enabled. Port-free layers remain valid. **Check parent backlinks** enables an
+additional warning that is off by default. Lint errors do not prevent preview or export.
+Use `...@zoomflow` to import the bundled boundary ports, state pieces and default
+theme; see [stdlib conventions and examples](../stdlib/README.md).
+
+## Export
+
+Use Export → Download SVG/PNG/ZIP/HTML for the current board as SVG or PNG, all boards as a ZIP
+of SVGs, or one navigable HTML file. The HTML opens directly from disk without a
+server or network connection and includes every board, including cyclic links.
+The export menu names the current board for SVG/PNG, or shows the total board count
+for ZIP/HTML, and explains that HTML preserves offline drill-down navigation.
+Exports preserve the selected theme. Remote images are embedded when accessible;
+failed fetches produce a placeholder and a visible warning. ZIP paths follow the
+board tree (`root.svg`, `checkout.svg`, `checkout/charge.svg`); scenarios and steps
+use `@scenarios/` and `@steps/` directories. PNG uses the board's native dimensions
+and has a 64 megapixel limit.
+
+The viewer and browser/CLI exports use the same shipped Source Sans Pro Regular,
+Bold, Italic and Semibold fonts, with embedded font subsets in SVG and HTML.
+See [font assets, license and renderer wiring](../fonts/README.md).
+
+
+## Mobile editing and keyboard controls
+
+Expanded tools scroll independently to leave room for the source editor. The mobile
+workspace follows the visible viewport when the software keyboard opens.
+
+Unlinked shapes with source locations are keyboard-focusable: press Enter or Space
+to select their source. Alt+Enter selects a linked shape’s source without navigating.
+Recompiling the same board retains focus on a surviving shape. Wheel zoom normalizes
+pixel, line and page deltas; pinch zoom works from Fit.
+
+If the diagram engine fails to load, **Retry preview** starts it again without
+changing your source. Startup failures are separate from D2 diagnostics.
+
+[Ask AI](ai.md) · [Back to the quick start](../README.md)

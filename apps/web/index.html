@@ -74,6 +74,8 @@
       <section aria-labelledby="shortcuts-diagram">
         <h3 id="shortcuts-diagram">In the diagram</h3>
         <dl class="shortcut-list">
+          <div><dt>Select a focused shape’s source</dt><dd><kbd>Enter</kbd> or <kbd>Space</kbd></dd></div>
+          <div><dt>Select a linked shape’s source</dt><dd><kbd>Alt</kbd> + <kbd>Enter</kbd></dd></div>
           <div><dt>Open a focused board link</dt><dd><kbd>Enter</kbd></dd></div>
           <div><dt>Go to the parent board</dt><dd><kbd>Esc</kbd> or <kbd>Backspace</kbd></dd></div>
           <div><dt>Pan a zoomed diagram</dt><dd><kbd>Space</kbd> + drag</dd></div>
@@ -90,6 +92,7 @@
     </dialog>
     <div id="draft-conflict" role="status" hidden>Drafts changed in another tab. Your open source is unchanged. Reload to review saved versions; conflicting edits appear as recovered copies.</div>
     <div id="file-status" role="alert" hidden></div>
+    <div id="engine-notice" role="status" hidden><span id="engine-message"></span><button id="retry-engine" type="button" hidden>Retry preview</button></div>
     <div id="workspace">
       <div id="mobile-view-switch" role="group" aria-label="Workspace view">
         <button id="mobile-preview" type="button" aria-pressed="true" aria-controls="preview-pane">Preview</button>
@@ -160,9 +163,9 @@
             <label><input id="missing-backlink" type="checkbox" /> Check parent backlinks</label>
           </div>
         </details>
-        </div>
         <div id="ai-status" role="status" aria-live="polite"></div>
         <button id="ai-undo" type="button" hidden>Undo AI change</button>
+        </div>
         <div id="editor"></div>
       </section>
     </div>
