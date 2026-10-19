@@ -27,7 +27,7 @@ test('reference shortcuts work from the editor and panel without changing source
   await expect(panel(page)).toBeHidden();
   await source(page).focus();
   const before = await editorState(page);
-  for (const shortcut of ['Meta+/', 'Meta+Shift+?', 'Control+/', 'Control+Shift+?']) {
+  for (const shortcut of ['Meta+Shift+/', 'Meta+Shift+?', 'Control+Shift+/', 'Control+Shift+?']) {
     await page.keyboard.press(shortcut);
     await expect(panel(page)).toBeVisible();
     await expect(search(page)).toBeFocused();
@@ -39,9 +39,11 @@ test('reference shortcuts work from the editor and panel without changing source
   }
   // A held shortcut opens once instead of repeatedly flashing the panel.
   await page.keyboard.down('Meta');
+  await page.keyboard.down('Shift');
   await page.keyboard.down('/');
   await page.keyboard.down('/');
   await page.keyboard.up('/');
+  await page.keyboard.up('Shift');
   await page.keyboard.up('Meta');
   await expect(panel(page)).toBeVisible();
   await search(page).press('Escape');
@@ -151,13 +153,13 @@ test('reference controls preserve board navigation and focus follows the current
   await ready(page);
   const checkout = page.locator('.zf-stage a[href="root.layers.checkout"]');
   await checkout.focus();
-  await page.keyboard.press('Meta+/');
+  await page.keyboard.press('Meta+Shift+/');
   await page.keyboard.press('Escape');
   await expect(checkout).toBeFocused();
   await checkout.click();
   await expect(page.locator('.zf-stage')).toHaveAttribute('data-board', 'root.layers.checkout');
   await source(page).focus();
-  await page.keyboard.press('Meta+/');
+  await page.keyboard.press('Meta+Shift+/');
   await search(page).fill('layers');
   await search(page).press('Backspace');
   await expect(page.locator('.zf-stage')).toHaveAttribute('data-board', 'root.layers.checkout');
@@ -169,7 +171,7 @@ test('reference controls preserve board navigation and focus follows the current
   await expect(page.locator('.zf-stage')).toHaveAttribute('data-board', 'root.layers.checkout');
   await toggle(page).click();
   await source(page).focus();
-  await page.keyboard.press('Meta+/');
+  await page.keyboard.press('Meta+Shift+/');
   await expect(source(page)).toBeFocused();
   await toggle(page).click();
   await page.locator('.zf-stage a[href="root.layers.checkout.layers.charge"]').click();

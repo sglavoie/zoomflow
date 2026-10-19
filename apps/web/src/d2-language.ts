@@ -3,6 +3,7 @@ import { tags } from '@lezer/highlight';
 
 /** Lightweight D2 highlighting. Compilation remains the authority for syntax errors. */
 const language = StreamLanguage.define<{ block: string | null }>({
+  languageData: { commentTokens: { line: '#' } },
   startState: () => ({ block: null }),
   token(stream, state) {
     if (state.block) {

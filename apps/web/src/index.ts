@@ -69,6 +69,13 @@ let debounce: ReturnType<typeof setTimeout> | undefined;
 const errorBanner = document.querySelector<HTMLElement>('#compile-error')!;
 const lintSummary = document.querySelector<HTMLElement>('#lint-summary')!;
 const draftStatus = document.querySelector<HTMLElement>('#draft-status')!;
+const saveFileButton = document.querySelector<HTMLButtonElement>('#save-file')!;
+type PickerWindow = Window & {
+  showOpenFilePicker?: (options?: object) => Promise<FileSystemFileHandle[]>;
+  showSaveFilePicker?: (options?: object) => Promise<FileSystemFileHandle>;
+  showDirectoryPicker?: () => Promise<FileSystemDirectoryHandle>;
+};
+const pickerWindow = window as PickerWindow;
 const fileStatus = document.querySelector<HTMLElement>('#file-status')!;
 const previewStatus = document.querySelector<HTMLElement>('#preview-status')!;
 const missingBacklink = document.querySelector<HTMLInputElement>('#missing-backlink')!;
@@ -159,16 +166,15 @@ const examplePicker = setupExamplePicker(() => editor.source, (source, name, key
   void replaceDocument(source, name, key, reset);
 }, (dirty, recoveryAvailable, savePending, hasDraft, downloadRequested) => {
   const handle = fileHandles.get(currentDocumentKey);
-  draftStatus.textContent = downloadRequested ? 'Source download started · browser draft saved'
-    : !recoveryAvailable ? 'Browser storage unavailable · download source'
-      : savePending ? 'Saving browser draft…'
-        : handle ? dirty ? 'Unsaved file edits · browser draft saved' : 'Saved to file'
-          : dirty ? 'Unsaved file edits · browser draft saved'
-            : currentDocumentKey.startsWith('file:') || currentDocumentKey.startsWith('project:')
-              ? 'Browser copy · save to a file to keep edits' : hasDraft ? 'Browser draft saved · save a file copy' : '';
-  draftStatus.title = recoveryAvailable
-    ? 'Browser drafts can be cleared. Download the source to keep a copy outside this browser.'
-    : 'Browser draft recovery is unavailable. Download the source to keep your changes.';
+  const canSave = Boolean(handle || pickerWindow.showSaveFilePicker);
+  saveFileButton.textContent = canSave ? 'Save .d2' : 'Download .d2';
+  saveFileButton.title = `${canSave ? 'Save source to a file' : 'Download a source copy; this browser cannot write back to your file'} (⌘S or Ctrl+S)`;
+  const recovery = !recoveryAvailable ? 'Browser draft unavailable' : savePending ? 'Saving browser draft…' : 'Browser draft saved';
+  const file = downloadRequested ? 'Source download started' : handle && !dirty ? 'Saved to file'
+    : dirty ? 'File has unsaved changes' : hasDraft ? 'Save a file copy to keep' : 'Edit to update the preview';
+  draftStatus.textContent = !hasDraft && !dirty && !handle && recoveryAvailable && !downloadRequested
+    ? file : `${recovery} · ${file}`;
+  draftStatus.title = `${draftStatus.textContent}. ${canSave ? 'Save keeps a copy on disk.' : 'Download keeps a separate file copy.'} Browser drafts can be cleared.`;
 }, (key) => { editor.forget(key); fileHandles.delete(key); });
 
 function download(blob: Blob, name: string) {
@@ -200,13 +206,6 @@ projectDownloadButton.addEventListener('click', () => {
   } catch (error) { setExportStatus(`Project source download failed: ${String(error)}`, 'error'); }
 });
 
-const saveFileButton = document.querySelector<HTMLButtonElement>('#save-file')!;
-type PickerWindow = Window & {
-  showOpenFilePicker?: (options?: object) => Promise<FileSystemFileHandle[]>;
-  showSaveFilePicker?: (options?: object) => Promise<FileSystemFileHandle>;
-  showDirectoryPicker?: () => Promise<FileSystemDirectoryHandle>;
-};
-const pickerWindow = window as PickerWindow;
 saveFileButton.addEventListener('click', async () => {
   saveFileButton.disabled = true;
   const key = currentDocumentKey;
@@ -217,7 +216,6 @@ saveFileButton.addEventListener('click', async () => {
     if (!handle && pickerWindow.showSaveFilePicker) {
       handle = await pickerWindow.showSaveFilePicker({ suggestedName: name,
         types: [{ description: 'D2 source', accept: { 'text/plain': ['.d2'] } }] });
-      fileHandles.set(key, handle);
     }
     if (!handle) {
       document.querySelector<HTMLButtonElement>('#save-source')!.click();
@@ -226,11 +224,17 @@ saveFileButton.addEventListener('click', async () => {
     const writable = await handle.createWritable();
     try { await writable.write(source); await writable.close(); }
     catch (error) { await writable.abort(); throw error; }
+    fileHandles.set(key, handle);
     examplePicker.markDiskSaved(key, source);
-    setActivity(`Saved ${handle.name} to disk.`);
+    if (currentDocumentKey === key) setActivity(`Saved ${handle.name} to disk.`);
   } catch (error) {
-    if (!(error instanceof DOMException && error.name === 'AbortError')) setActivity(`Could not save file: ${String(error)}`, 'error');
+    if (currentDocumentKey === key && !(error instanceof DOMException && error.name === 'AbortError')) setActivity(`Could not save file: ${String(error)}`, 'error');
   } finally { saveFileButton.disabled = false; }
+});
+window.addEventListener('keydown', (event) => {
+  if (event.isComposing || event.altKey || event.shiftKey || !(event.metaKey || event.ctrlKey) || event.key.toLowerCase() !== 's') return;
+  event.preventDefault();
+  if (!event.repeat) saveFileButton.click();
 });
 
 async function replaceDocument(source: string, name: string, key: string, reset = false) {
@@ -242,6 +246,7 @@ async function replaceDocument(source: string, name: string, key: string, reset 
   editor.open(key, source, reset);
   invalidateSource();
   errorBanner.hidden = true;
+  document.querySelector<HTMLButtonElement>('#go-to-error')!.hidden = true;
   clearTimeout(debounce);
   await load(source, name);
 }
@@ -376,6 +381,7 @@ async function load(source: string, name: string, preserveViewport = false) {
       lintDocument = compiled;
       updateLint();
       errorBanner.hidden = true;
+      document.querySelector<HTMLButtonElement>('#go-to-error')!.hidden = true;
       document.querySelector('#compile-error-message')!.textContent = '';
       void highlightSelection(false);
       documentExport = { diagram: compiled.diagram, render, name, diagnostics };
@@ -397,6 +403,8 @@ async function load(source: string, name: string, preserveViewport = false) {
         ? `Error · ${first.message}` : `Error · Line ${line.number}, column ${first.from - line.from + 1}: ${message}`;
       const goToError = document.querySelector<HTMLButtonElement>('#go-to-error')!;
       goToError.textContent = externalCompilerError ? `Open ${externalCompilerError.filename}` : 'Go to error';
+      goToError.title = goToError.textContent;
+      goToError.hidden = false;
       goToError.disabled = Boolean(externalCompilerError && !examplePicker.hasProjectPath(externalCompilerError.filename!));
       errorBanner.hidden = false;
       viewer.setMessage('');

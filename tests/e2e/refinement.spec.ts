@@ -95,8 +95,9 @@ test('header stays stable while saving and preferences survive reload', async ({
   expect(Math.abs(center(title) - center(picker))).toBeLessThan(1);
   expect(Math.abs(center(open) - center(picker))).toBeLessThan(1);
   const status = (await page.locator('#draft-status').boundingBox())!;
-  expect(status.y).toBeGreaterThanOrEqual(picker.y + picker.height - 1);
-  expect(status.y + status.height).toBeLessThanOrEqual(before!.y + before!.height);
+  const save = (await page.locator('#save-file').boundingBox())!;
+  expect(status.y).toBeGreaterThanOrEqual(save.y + save.height);
+  expect(status.y - save.y - save.height).toBeLessThan(12);
   await source(page).fill('a: Edited');
   expect(await page.locator('header').boundingBox()).toEqual(before);
   await expect(page.locator('#draft-status')).toContainText(/browser draft saved/i);
@@ -108,7 +109,7 @@ test('header stays stable while saving and preferences survive reload', async ({
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
   await openDownloads(page);
   await expect(page.locator('#export-format')).toHaveValue('html');
-  await page.locator('#theme').press('Escape');
+  await page.locator('#export-format').press('Escape');
   await expect(page.locator('#header-more-toggle')).toBeFocused();
   await expect(page.locator('#header-more-content')).toBeHidden();
 });

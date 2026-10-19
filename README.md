@@ -9,16 +9,20 @@ Every example includes source comments and compiles without imports or remote
 assets. The lint repair intentionally reports one error and one warning until fixed.
 Switching examples starts at the root board. Source edits and opened files remain
 in the dropdown and are backed up in browser storage for reload recovery. The
-header reserves space for browser draft status so saving does not move the workspace.
-Use **Save .d2** above the editor to save a disk copy. Browsers with file-system access
-can write back to a file you opened or a destination you choose; other browsers download
-the source. **Export & theme → Download .d2 source** always starts a separate download.
-The status below the filename distinguishes browser recovery from a disk save.
-Browser storage can be cleared. The picker separates built-in examples from your drafts,
-marks modified examples, and shows edit timestamps and distinct draft numbers for
-same-name uploads. **Restore** resets an example after confirmation; opened file drafts
-can be removed from the dropdown. Each document keeps its own undo history, selection,
-and editor scroll position while switching within the page. Restoring an example starts
+source toolbar reserves space for save status so saving does not move the editor.
+Use **Save .d2** above the editor or **⌘S / Ctrl+S** to save a disk copy.
+Browsers with file-system access can write back to a file you opened or a destination
+you choose. Other browsers download the source and label the button **Download .d2**.
+**Export → Download .d2 source** always starts a separate download.
+The status beside the save controls distinguishes browser recovery from a disk save.
+Browser storage can be cleared. The picker puts the active project or draft first,
+followed by other drafts ordered by edit time, then built-in examples. It marks
+modified examples and shows edit timestamps and distinct draft numbers for same-name uploads.
+**Restore** resets an example after confirmation; opened file drafts
+can be removed from the dropdown. Project files are grouped under their folder name;
+**Remove project** removes that project's browser drafts after confirmation and leaves disk files intact.
+Each document keeps its own undo history, selection, and editor scroll position
+while switching within the page. Restoring an example starts
 a fresh history. Browser reload recovery saves source, not undo history.
 The source lives in `apps/web/src/examples/`, with the catalog in `examples.ts`.
 
@@ -28,7 +32,7 @@ resolve from each file's folder. Pick another project file from the filename men
 edit it; changes to imported files appear when you return to the main diagram.
 Project drafts survive reload in browser storage. In browsers that support directory
 access, **Save .d2** writes the active project file to its original folder. Other
-browsers offer a Save dialog or source download. **Export & theme → Download project .zip**
+browsers offer a Save dialog or source download. **Export → Download project .zip**
 keeps all project sources and their relative paths together. Local image assets are
 not yet loaded with folder projects.
 
@@ -48,15 +52,15 @@ outward arrow. Hover or focus a link to identify its destination; hovering a sha
 highlights its selectable boundary. These link cues also appear in exported HTML.
 Open a `.d2` file or drop one onto the page; files are compiled locally
 with D2's WASM worker. Light, dark and system themes use D2's generated palettes.
-Theme and export format are remembered when browser storage is available. Both live
-under **Export & theme**, which closes on Escape and restores focus to its button.
+Theme and export format are remembered when browser storage is available. The appearance
+selector is in the header, separate from **Export**, which closes on Escape and restores focus to its button.
 Use the preview's +, − and Fit controls or the mouse wheel to zoom. Drag empty
 space to pan, or hold Space and drag a shape or link; middle-button dragging also
 pans. Touch dragging works after zooming. Each board opens fitted around its
 rendered content. Edits on the same board preserve zoom and pan; switching boards
 or diagrams starts with a fresh fit. Keyboard navigation moves focus to the new board or breadcrumb and
 announces its name.
-On phones, use the **Preview** and **Source** buttons to give each pane the full
+On phones and tablets narrower than 1,000px, use the **Preview** and **Source** buttons to give each pane the full
 workspace. Selecting an unlinked shape opens its source in the Source pane.
 
 Drill-down navigation needs no boundary ports or library import. Inside a child
@@ -97,10 +101,10 @@ and refreshes the preview. Invalid diagrams leave the source unchanged and show
 a formatting error; edits made while formatting is running are preserved.
 The status row above the editor reports preview freshness and diagnostic counts.
 Transient progress appears only after 700 ms so quick edits do not flash indicators;
-source mapping and exports are invalidated immediately. Compiler errors emphasize the
+source mapping and exports are invalidated immediately. Compiler errors replace the normal status with one summary emphasizing the
 first issue's line and column, with **Go to error** focusing its source location,
-and **Review diagnostics** opens the list at the first issue. Compile errors appear
-in a banner and inline diagnostics while the last good diagram is marked as the
+and **Review diagnostics** opens the list at the first issue. The summary reserves its space
+to keep the editor still, with inline diagnostics while the last good diagram is marked as the
 previous preview. Export is disabled until the current source compiles;
 an export already running is canceled if the source changes. Successful edits
 preserve the current board, falling
@@ -112,10 +116,11 @@ so an old diagram cannot select an outdated text range. Editor keyboard shortcut
 including undo, search, Escape and Backspace, stay in the editor.
 
 The diagram is on the left and the source editor is on the right. Click **D2
-reference** or press **⌘/** (also **⌘?**) on macOS, or **Ctrl+/** (also
-**Ctrl+Shift+/**) on Windows/Linux, to toggle a syntax reference below the diagram.
-This shortcut also works while editing and takes precedence over CodeMirror's
-comment shortcut. The bundled reference works without a network connection once
+reference** or press **⌘⇧/** on macOS, or **Ctrl+Shift+/** on Windows/Linux,
+to toggle a syntax reference below the diagram. This shortcut also works while editing;
+**⌘/** or **Ctrl+/** toggles D2 line comments in the editor.
+On phones and tablets, opening the reference reveals Preview and closing it returns focus to the source when opened from the editor.
+The bundled reference works without a network connection once
 the app is loaded, with searchable examples, copy buttons and links to the full D2
 documentation. Each example is tested against the bundled compiler.
 
@@ -124,7 +129,7 @@ and use Up/Down (5% steps) and Home/End (25%/75%). The split starts at 60% diagr
 and 40% reference and remembers your size when browser storage is available.
 Closing and reopening preserves the search and scroll position. Escape inside the
 reference closes it and restores focus without navigating the diagram. On narrow
-screens, the diagram and reference appear above the source editor. Zoom and fullscreen
+screens, the diagram and reference share the Preview pane. Zoom and fullscreen
 controls sit in a toolbar below the canvas so they do not cover diagram content, including
 in fullscreen. Export controls stay in their menu so the editor remains visible.
 

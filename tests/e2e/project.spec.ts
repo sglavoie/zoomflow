@@ -9,10 +9,10 @@ test('folder files resolve imports and keep edits across file switches and reloa
   await expect(page.locator('#filename')).toHaveText('main.d2');
   await expect(page.locator('.zf-stage')).toContainText('From a local import');
   await page.locator('#example-picker summary').click();
-  await page.locator('#draft-options .example-option').filter({ hasText: 'browser-project/lib/nodes.d2' }).click();
+  await page.locator('#draft-options .example-option[title="browser-project/lib/nodes.d2"]').click();
   await page.getByRole('textbox', { name: 'D2 source' }).fill('Imported: Changed through project');
   await page.locator('#example-picker summary').click();
-  await page.locator('#draft-options .example-option').filter({ hasText: 'browser-project/main.d2' }).click();
+  await page.locator('#draft-options .example-option[title="browser-project/main.d2"]').click();
   await expect(page.locator('.zf-stage')).toContainText('Changed through project');
   await page.locator('#header-more-toggle').click();
   const [download] = await Promise.all([page.waitForEvent('download'), page.locator('#save-project').click()]);
@@ -28,10 +28,10 @@ test('an error in an imported file opens that file at the reported source', asyn
   await page.locator('#folder').setInputFiles(folder);
   await expect(page.locator('.zf-stage')).toContainText('From a local import');
   await page.locator('#example-picker summary').click();
-  await page.locator('#draft-options .example-option').filter({ hasText: 'browser-project/lib/nodes.d2' }).click();
+  await page.locator('#draft-options .example-option[title="browser-project/lib/nodes.d2"]').click();
   await page.getByRole('textbox', { name: 'D2 source' }).fill('Imported: {');
   await page.locator('#example-picker summary').click();
-  await page.locator('#draft-options .example-option').filter({ hasText: 'browser-project/main.d2' }).click();
+  await page.locator('#draft-options .example-option[title="browser-project/main.d2"]').click();
   await expect(page.locator('#compile-error')).toContainText('lib/nodes.d2');
   await page.getByRole('button', { name: 'Open lib/nodes.d2' }).click();
   await expect(page.locator('#filename')).toHaveText('nodes.d2');
@@ -49,10 +49,10 @@ test('saving uses a file handle after the user chooses a destination', async ({ 
   await page.goto('/');
   await page.getByRole('textbox', { name: 'D2 source' }).fill('saved: First');
   await page.locator('#save-file').click();
-  await expect(page.locator('#draft-status')).toHaveText('Saved to file');
+  await expect(page.locator('#draft-status')).toContainText('Saved to file');
   expect(await page.evaluate(() => (window as typeof window & { savedSource?: string }).savedSource)).toBe('saved: First');
   await page.getByRole('textbox', { name: 'D2 source' }).fill('saved: Second');
-  await expect(page.locator('#draft-status')).toContainText('Unsaved file edits');
+  await expect(page.locator('#draft-status')).toContainText('File has unsaved changes');
   await page.locator('#save-file').click();
   expect(await page.evaluate(() => (window as typeof window & { savedSource?: string }).savedSource)).toBe('saved: Second');
 });
@@ -72,7 +72,7 @@ test('an opened file can be saved back to its original handle', async ({ page })
   await page.getByRole('textbox', { name: 'D2 source' }).fill('original: After');
   await page.locator('#save-file').click();
   expect(await page.evaluate(() => (window as typeof window & { savedOriginal?: string }).savedOriginal)).toBe('original: After');
-  await expect(page.locator('#draft-status')).toHaveText('Saved to file');
+  await expect(page.locator('#draft-status')).toContainText('Saved to file');
 });
 
 test('directory access opens nested imports and saves an edited file back to its handle', async ({ page }) => {
@@ -97,10 +97,10 @@ test('directory access opens nested imports and saves an edited file back to its
   await page.locator('#open-folder').click();
   await expect(page.locator('.zf-stage')).toContainText('Imported from folder');
   await page.locator('#example-picker summary').click();
-  await page.locator('#draft-options .example-option').filter({ hasText: 'my-project/lib/nodes.d2' }).click();
+  await page.locator('#draft-options .example-option[title="my-project/lib/nodes.d2"]').click();
   await page.getByRole('textbox', { name: 'D2 source' }).fill('Imported: Saved through folder handle');
   await page.locator('#save-file').click();
-  await expect(page.locator('#draft-status')).toHaveText('Saved to file');
+  await expect(page.locator('#draft-status')).toContainText('Saved to file');
   expect(await page.evaluate(() => (window as typeof window & { savedProjectSource?: string }).savedProjectSource))
     .toBe('Imported: Saved through folder handle');
 });

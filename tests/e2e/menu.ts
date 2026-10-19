@@ -5,7 +5,7 @@ export async function openDownloads(page: Page) {
 }
 
 export async function selectMenuOption(page: Page, selector: string, value: string) {
-  await openDownloads(page);
+  if (selector !== '#theme') await openDownloads(page);
   await page.selectOption(selector, value);
 }
 

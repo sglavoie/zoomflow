@@ -67,7 +67,7 @@ test('picker supports keyboard, Escape without navigating, outside dismissal, an
   const summary = page.locator('#example-picker summary');
   await summary.focus();
   await page.keyboard.press('Enter');
-  await expect(page.getByRole('region', { name: 'Diagram examples' })).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Diagrams and projects' })).toBeVisible();
   await page.keyboard.press('Tab');
   // Firefox also puts scrollable regions in the native Tab order.
   if (await page.locator('.example-menu').evaluate((element) => element === document.activeElement)) {

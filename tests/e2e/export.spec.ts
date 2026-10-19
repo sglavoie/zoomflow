@@ -110,7 +110,8 @@ test('HTML export keeps the selected dark theme and shared viewer controls', asy
   await offline.goto(pathToFileURL(path).href);
   await board(offline, 'root');
   expect(await offline.locator('body').evaluate((node) => getComputedStyle(node).backgroundColor)).toBe('rgb(17, 23, 34)');
-  expect(await offline.locator('.zf-zoom-controls').evaluate((node) => getComputedStyle(node).position)).toBe('absolute');
+  const canvas = (await offline.locator('.zf-stage').boundingBox())!;
+  expect((await offline.locator('.zf-zoom-controls').boundingBox())!.y).toBeGreaterThanOrEqual(canvas.y + canvas.height);
   expect(await offline.locator('.zf-visually-hidden').evaluate((node) => ({
     width: getComputedStyle(node).width, height: getComputedStyle(node).height,
     overflow: getComputedStyle(node).overflow,

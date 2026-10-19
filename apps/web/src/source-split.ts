@@ -15,8 +15,8 @@ export function setupSourceSplit() {
   function setShare(value: number) {
     requestedShare = Math.max(25, Math.min(75, value));
     const available = workspace.clientWidth - divider.offsetWidth;
-    const minimum = available >= 580 ? Math.max(25, 280 / available * 100) : 25;
-    const maximum = available >= 580 ? Math.min(75, (available - 300) / available * 100) : 75;
+    const minimum = available >= 720 ? Math.max(25, 360 / available * 100) : 25;
+    const maximum = available >= 720 ? Math.min(75, (available - 360) / available * 100) : 75;
     previewShare = Math.max(minimum, Math.min(maximum, requestedShare));
     workspace.style.setProperty('--preview-share', `${previewShare}fr`);
     workspace.style.setProperty('--source-share', `${100 - previewShare}fr`);

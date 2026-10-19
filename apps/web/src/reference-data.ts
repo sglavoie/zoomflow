@@ -131,7 +131,7 @@ layers: {
   },
   {
     id: 'comments', title: 'Comments and multiline text',
-    description: 'Start a line comment with #. Use a pipe-delimited block for a multiline Markdown label. In Zoomflow, ⌘/ or Ctrl+/ toggles this reference.',
+    description: 'Start a line comment with #, or toggle selected lines with ⌘/ or Ctrl+/. Use a pipe-delimited block for a multiline Markdown label. Open this reference with ⌘⇧/ or Ctrl+Shift+/.',
     keywords: 'annotation markdown label documentation heading newline',
     source: `# Describe why this step exists.
 review: |md

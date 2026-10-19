@@ -24,12 +24,13 @@ export function setupExamplePicker(
   const buttons = new Map<string, HTMLButtonElement>();
   const rows = new Map<string, HTMLElement>();
   const refreshRows = new Map<string, () => void>();
+  const projectGroups = new Map<string, { section: HTMLElement; files: HTMLElement }>();
   const fileHeading = document.createElement('h3');
   fileHeading.className = 'example-menu-heading';
   fileHeading.textContent = 'Your drafts';
   const fileOptions = document.createElement('div');
   fileOptions.id = 'draft-options';
-  options.after(fileHeading, fileOptions);
+  menu.prepend(fileHeading, fileOptions);
   let current = examples[0].name;
   let fileNumber = 0;
   let recoveryAvailable = true;
@@ -91,11 +92,83 @@ export function setupExamplePicker(
     current = key;
     downloadRequested = false;
     filename.textContent = currentDraft().name;
+    filename.title = currentDraft().title;
     for (const [id, button] of buttons) {
       if (id === current) button.setAttribute('aria-current', 'true');
       else button.removeAttribute('aria-current');
     }
     announce();
+  }
+
+  function removeDrafts(item: Draft) {
+    const message = item.projectId
+      ? `Remove all browser drafts for ${item.title.split('/')[0]}? Files on disk are kept. Save any edits first.`
+      : `Remove the local draft for ${item.name}? Download a copy first if you want to keep it.`;
+    if (!window.confirm(message)) return;
+    currentDraft().source = readSource();
+    const removed = [...drafts.values()].filter((draft) => item.projectId ? draft.projectId === item.projectId : draft.key === item.key);
+    for (const draft of removed) {
+      drafts.delete(draft.key);
+      buttons.delete(draft.key);
+      refreshRows.delete(draft.key);
+      rows.get(draft.key)?.remove();
+      rows.delete(draft.key);
+      forget(draft.key);
+    }
+    if (item.projectId) {
+      projectGroups.get(item.projectId)?.section.remove();
+      projectGroups.delete(item.projectId);
+    }
+    summary.focus();
+    if (removed.some((draft) => draft.key === current)) {
+      activate(examples[0].name);
+      picker.open = false;
+      open(currentDraft().source, currentDraft().name, current);
+    }
+    persist();
+  }
+
+  function projectFiles(item: Draft) {
+    const id = item.projectId!;
+    const existing = projectGroups.get(id);
+    if (existing) return existing.files;
+    const section = document.createElement('section');
+    section.className = 'project-group';
+    const name = item.title.split('/')[0];
+    section.setAttribute('aria-label', `${name} project`);
+    const heading = document.createElement('div');
+    heading.className = 'project-heading';
+    const title = document.createElement('h4');
+    title.textContent = name;
+    const remove = document.createElement('button');
+    remove.type = 'button';
+    remove.className = 'example-remove button-quiet';
+    remove.textContent = 'Remove project';
+    remove.setAttribute('aria-label', `Remove ${name} project drafts`);
+    remove.addEventListener('click', () => removeDrafts(item));
+    heading.append(title, remove);
+    const files = document.createElement('div');
+    section.append(heading, files);
+    fileOptions.append(section);
+    projectGroups.set(id, { section, files });
+    return files;
+  }
+
+  // Reorder only when opening the menu so typing and keyboard focus stay stable.
+  function orderDrafts() {
+    const entries = [...drafts.values()].filter((item) => item.projectId || item.key.startsWith('file:'));
+    const groups = new Map<string, { node: HTMLElement; active: boolean; updatedAt: number }>();
+    for (const item of entries) {
+      const key = item.projectId ?? item.key;
+      const group = groups.get(key) ?? { node: item.projectId ? projectGroups.get(item.projectId)!.section : rows.get(item.key)!, active: false, updatedAt: 0 };
+      group.active ||= item.key === current;
+      group.updatedAt = Math.max(group.updatedAt, item.updatedAt ?? 0);
+      groups.set(key, group);
+    }
+    for (const group of [...groups.values()].sort((a, b) => Number(b.active) - Number(a.active) || b.updatedAt - a.updatedAt)) fileOptions.append(group.node);
+    for (const [id, group] of projectGroups) {
+      for (const item of entries.filter((draft) => draft.projectId === id).sort((a, b) => a.path!.localeCompare(b.path!))) group.files.append(rows.get(item.key)!);
+    }
   }
 
   function addOption(item: Draft) {
@@ -107,7 +180,8 @@ export function setupExamplePicker(
     button.className = 'example-option';
     const label = document.createElement('span');
     label.className = 'example-title';
-    label.textContent = item.title;
+    label.textContent = item.projectId ? item.path! : item.title;
+    if (item.projectId) button.title = item.title;
     const detail = document.createElement('span');
     detail.className = 'example-description';
     detail.textContent = item.description;
@@ -122,38 +196,18 @@ export function setupExamplePicker(
       open(item.source, item.name, item.key);
     });
     row.append(button);
-    if (item.key.startsWith('file:') || item.projectId) {
+    if (item.key.startsWith('file:')) {
       const remove = document.createElement('button');
       remove.type = 'button';
-      remove.className = 'example-remove';
+      remove.className = 'example-remove button-quiet';
       remove.textContent = 'Remove';
-      remove.setAttribute('aria-label', item.projectId ? `Remove ${item.title} project` : `Remove ${item.name} draft`);
+      remove.setAttribute('aria-label', `Remove ${item.name} draft`);
       remove.addEventListener('click', (event) => {
         event.stopPropagation();
-        const message = item.projectId ? `Remove all browser drafts for ${item.title.split('/')[0]}? Keep a disk copy first if needed.`
-          : `Remove the local draft for ${item.name}? Download a copy first if you want to keep it.`;
-        if (!window.confirm(message)) return;
-        currentDraft().source = readSource();
-        const removed = [...drafts.values()].filter((draft) => item.projectId ? draft.projectId === item.projectId : draft.key === item.key);
-        for (const draft of removed) {
-          drafts.delete(draft.key);
-          buttons.delete(draft.key);
-          refreshRows.delete(draft.key);
-          rows.get(draft.key)?.remove();
-          rows.delete(draft.key);
-          forget(draft.key);
-        }
-        summary.focus();
-        if (removed.some((draft) => draft.key === current)) {
-          const fallback = examples[0].name;
-          activate(fallback);
-          picker.open = false;
-          open(currentDraft().source, currentDraft().name, current);
-        }
-        persist();
+        removeDrafts(item);
       });
       row.append(remove);
-    } else {
+    } else if (!item.projectId) {
       const restore = document.createElement('button');
       restore.type = 'button';
       restore.className = 'example-restore';
@@ -197,7 +251,7 @@ export function setupExamplePicker(
     });
     refreshRows.get(item.key)!();
     buttons.set(item.key, button);
-    (item.key.startsWith('file:') || item.projectId ? fileOptions : options).append(row);
+    (item.projectId ? projectFiles(item) : item.key.startsWith('file:') ? fileOptions : options).append(row);
   }
 
   for (const item of drafts.values()) addOption(item);
@@ -210,7 +264,7 @@ export function setupExamplePicker(
     menu.style.left = `${Math.max(16, Math.min(anchor.left, window.innerWidth - menu.offsetWidth - 16))}px`;
     menu.style.maxHeight = `${Math.max(0, Math.min(620, window.innerHeight - top - 16))}px`;
   }
-  picker.addEventListener('toggle', positionMenu);
+  picker.addEventListener('toggle', () => { if (picker.open) orderDrafts(); positionMenu(); });
   window.addEventListener('resize', positionMenu);
   document.addEventListener('click', (event) => {
     if (event.target instanceof Node && !picker.contains(event.target)) picker.open = false;

@@ -28,6 +28,11 @@ navigation, and distinct link cues in both live and offline viewers. `ai.spec.ts
 covers availability checks, cancellation, elapsed time, and the explicit undo action;
 the server unit tests verify that aborting a request terminates its CLI process.
 
+`workspace-polish.spec.ts` covers tablet pane switching and reference focus restoration,
+D2 comment toggling, the save shortcut and download fallback, stable editor geometry
+through compile errors, project grouping and scoped removal, independent appearance
+controls, and desktop canvas controls outside the diagram.
+
 `reference.spec.ts` checks reference shortcuts from the editor and reference,
 source/selection preservation, focus restoration, search and scroll retention,
 pointer and keyboard resizing, stored split size, offline search and clipboard

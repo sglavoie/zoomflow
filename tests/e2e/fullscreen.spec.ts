@@ -24,20 +24,19 @@ for (const viewport of [{ width: 1280, height: 900 }, { width: 390, height: 844 
 
     const exit = page.getByRole('button', { name: 'Exit fullscreen', exact: true });
     await expect(exit).toHaveAttribute('aria-pressed', 'true');
-    if (viewport.width > 600) expect(await stage.boundingBox()).toEqual({ x: 0, y: 0, ...viewport });
-    else {
+    {
       const canvas = (await stage.boundingBox())!;
       expect(canvas.width).toBe(viewport.width - 16);
       expect(canvas.height).toBeGreaterThan(viewport.height - 80);
       expect((await exit.boundingBox())!.y).toBeGreaterThanOrEqual(canvas.y + canvas.height);
     }
     const buttonBox = (await exit.boundingBox())!;
-    expect(viewport.width - buttonBox.x - buttonBox.width).toBe(viewport.width > 600 ? 12 : 8);
+    expect(viewport.width - buttonBox.x - buttonBox.width).toBe(8);
     expect(viewport.height - buttonBox.y - buttonBox.height).toBeLessThanOrEqual(16);
     for (const selector of ['header', 'footer', '#source-pane', '#d2-reference', '#reference-divider', '.zf-breadcrumbs', '.zf-message']) {
       await expect(page.locator(selector)).toBeHidden();
     }
-    await page.keyboard.press('Control+/');
+    await page.keyboard.press('Control+Shift+/');
     await expect(exit).toBeFocused();
     await exit.click();
 

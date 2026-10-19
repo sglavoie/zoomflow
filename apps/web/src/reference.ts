@@ -106,16 +106,18 @@ export function setupReference() {
     preview.classList.toggle('reference-open', open);
     toggle.setAttribute('aria-expanded', String(open));
     if (open) {
+      document.querySelector<HTMLButtonElement>('#mobile-preview')!.click();
       search.focus({ preventScroll: true });
       content.scrollTop = scrollTop;
     } else {
       if (drag) finishDrag();
       if (active instanceof Node && (panel.contains(active) || active === divider)) {
+        if (returnFocus && document.querySelector('#source-pane')!.contains(returnFocus)) document.querySelector<HTMLButtonElement>('#mobile-source')!.click();
         (returnFocus?.isConnected ? returnFocus : toggle).focus({ preventScroll: true });
       }
     }
   }
-  toggle.setAttribute('aria-keyshortcuts', 'Meta+/ Meta+Shift+/ Control+/ Control+Shift+/');
+  toggle.setAttribute('aria-keyshortcuts', 'Meta+Shift+/ Control+Shift+/');
   toggle.addEventListener('click', () => {
     // Safari does not focus buttons on pointer clicks. Set focus explicitly so
     // opening/closing from a button has the same return target in every browser.
@@ -126,10 +128,9 @@ export function setupReference() {
     close.focus({ preventScroll: true });
     setOpen(false);
   });
-  // Capture before CodeMirror's Mod-/ comment binding. Do not consume ordinary
-  // typing, composition, or unrelated editor shortcuts.
+  // Leave Mod-/ to the editor's comment command.
   window.addEventListener('keydown', (event) => {
-    if (event.isComposing || event.altKey || !(event.metaKey || event.ctrlKey) ||
+    if (event.isComposing || event.altKey || !event.shiftKey || !(event.metaKey || event.ctrlKey) ||
         !(event.key === '/' || event.key === '?' || event.code === 'Slash')) return;
     event.preventDefault();
     event.stopImmediatePropagation();

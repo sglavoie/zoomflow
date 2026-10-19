@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 
 test('diagram and D2 source divider drags, uses the keyboard, and remembers its width', async ({ page }) => {
-  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.setViewportSize({ width: 1600, height: 900 });
   await page.goto('/');
   await expect(page.locator('#viewer')).toHaveAttribute('aria-busy', 'false');
   const divider = page.getByRole('separator', { name: 'Resize diagram and D2 source' });
@@ -37,22 +37,25 @@ test('diagram and D2 source divider drags, uses the keyboard, and remembers its 
 });
 
 test('source split respects pane minimum widths and restores the chosen share after a narrow viewport', async ({ page }) => {
-  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.setViewportSize({ width: 1600, height: 900 });
   await page.goto('/');
   const divider = page.locator('#source-divider');
   await divider.press('End');
   await expect(divider).toHaveAttribute('aria-valuenow', '75');
-  await page.setViewportSize({ width: 610, height: 900 });
-  await expect.poll(async () => Number(await divider.getAttribute('aria-valuenow'))).toBeLessThan(51);
-  expect((await page.locator('#preview-pane').boundingBox())!.width).toBeGreaterThanOrEqual(280);
-  expect((await page.locator('#source-pane').boundingBox())!.width).toBeGreaterThanOrEqual(300);
-  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(610);
-  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.setViewportSize({ width: 1024, height: 900 });
+  await expect.poll(async () => Number(await divider.getAttribute('aria-valuenow'))).toBeLessThan(66);
+  expect((await page.locator('#preview-pane').boundingBox())!.width).toBeGreaterThanOrEqual(360);
+  expect((await page.locator('#source-pane').boundingBox())!.width).toBeGreaterThanOrEqual(360);
+  await page.setViewportSize({ width: 768, height: 900 });
+  await expect(divider).toBeHidden();
+  await expect(page.locator('#mobile-view-switch')).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(768);
+  await page.setViewportSize({ width: 1600, height: 900 });
   await expect(divider).toHaveAttribute('aria-valuenow', '75');
 });
 
 test('double-clicking the source divider resets and saves its default size', async ({ page }) => {
-  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.setViewportSize({ width: 1600, height: 900 });
   await page.goto('/');
   const divider = page.getByRole('separator', { name: 'Resize diagram and D2 source' });
   await divider.press('End');

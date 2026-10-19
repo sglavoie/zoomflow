@@ -30,7 +30,7 @@ export function setupFullscreen(stage: HTMLElement) {
       event.preventDefault();
       event.stopImmediatePropagation();
       setFullscreen(false);
-    } else if ((event.metaKey || event.ctrlKey) && (event.key === '/' || event.key === '?' || event.code === 'Slash')) {
+    } else if (event.shiftKey && (event.metaKey || event.ctrlKey) && (event.key === '/' || event.key === '?' || event.code === 'Slash')) {
       // Keep the hidden reference panel and its focus unchanged.
       event.preventDefault();
       event.stopImmediatePropagation();
