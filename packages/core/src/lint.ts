@@ -16,7 +16,7 @@ export interface LintDiagnostic {
 }
 export interface LintOptions {
   missingBacklink?: boolean;
-  /** Opt into explicit zf-in/zf-out contracts. Navigation never requires ports. */
+  /** Validate zf-in/zf-out contracts where a child layer declares ports. */
   boundaryPorts?: boolean;
 }
 export interface BoundaryEvaluation {
@@ -191,18 +191,23 @@ export function lint(compiled: Pick<CompileResponse, 'diagram' | 'graph'>, optio
       const child = target && boards.get(target);
       // Only immediate child layers represent a parent's drillable node.
       if (!child || child.kind !== 'layers' || child.parent !== board.id) continue;
+      const ports = {
+        in: child.diagram.shapes.filter((port) => port.classes?.includes('zf-in')),
+        out: child.diagram.shapes.filter((port) => port.classes?.includes('zf-out')),
+      };
+      // Port-free layers use inferred parent connections; they have no explicit contract.
+      if (!ports.in.length && !ports.out.length) continue;
       const required = boundaryNeighbours(board.diagram, shape.id);
       const evaluation: BoundaryEvaluation = { board: board.id, shape: shape.id, child: child.id,
         expected: required.in.size + required.out.size, evaluated: 0 };
       for (const direction of ['in', 'out'] as const) {
-        const ports = child.diagram.shapes.filter((port) => port.classes?.includes(`zf-${direction}`));
         for (const neighbour of required[direction]) {
-          const matches = ports.filter((port) => port.id === neighbour);
+          const matches = ports[direction].filter((port) => port.id === neighbour);
           if (matches.length) evaluation.evaluated++;
           else diagnostics.push({ rule: `boundary-${direction}`, severity: 'error', board: board.id, shape: shape.id,
             message: `"${shape.id}" needs a zf-${direction} port named "${neighbour}" in "${child.id}".` });
         }
-        for (const port of ports) {
+        for (const port of ports[direction]) {
           if (!required[direction].has(port.id)) diagnostics.push({
             rule: `boundary-${direction}`, severity: 'error', board: child.id, shape: port.id,
             message: `zf-${direction} port "${port.id}" has no matching ${direction === 'in' ? 'incoming' : 'outgoing'} neighbour of "${shape.id}" in "${board.id}".`,

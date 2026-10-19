@@ -191,7 +191,7 @@ it('allows port-free diagrams by default and retains actionable dangling-link er
   success(ordinary);
   expect(JSON.parse(ordinary.stdout)).toMatchObject({ diagnostics: [], boundaries: [] });
   const strict = await run(['lint', input, '--boundary-ports']);
-  expect(strict.code).toBe(1);
-  expect(strict.stdout).toContain('error boundary-in');
+  success(strict);
+  expect(strict.stdout).toContain('0 boundary pairs evaluated');
   success(await run(['lint', 'fixtures/lint/mismatched.d2']));
 });

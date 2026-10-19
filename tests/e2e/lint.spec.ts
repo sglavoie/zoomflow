@@ -21,6 +21,8 @@ test('bundled stdlib and live lint diagnostics recover, with optional backlink w
   await page.getByLabel('Check boundary ports').uncheck();
   await expect(page.locator('#lint-summary')).toHaveText('No lint issues');
   await page.getByLabel('Check boundary ports').check();
+  await open(readFileSync('fixtures/order.d2', 'utf8'));
+  await expect(page.locator('#lint-summary')).toHaveText('No lint issues');
 
   // Exercise the debounce/edit path rather than only file loading.
   const source = page.getByRole('textbox', { name: 'D2 source', exact: true });

@@ -82,8 +82,9 @@ screens, the diagram and reference appear above the source editor.
 Successful compilations also run Zoomflow lint. **Show diagnostics** opens the
 editor's diagnostic list. Missing board links are errors; unlinked layers are
 warnings. **Check boundary ports** opts into explicit `zf-in`/`zf-out` validation;
-boundary mismatches are errors only when this is enabled. **Check parent backlinks**
-enables an additional warning that is off by default. Lint errors do not prevent preview or export.
+boundary mismatches in layers that declare ports are errors only when this is
+enabled. Port-free layers remain valid. **Check parent backlinks** enables an
+additional warning that is off by default. Lint errors do not prevent preview or export.
 Use `...@zoomflow` to import the bundled boundary ports, state pieces and default
 theme; see [stdlib conventions and examples](stdlib/README.md).
 
@@ -126,8 +127,9 @@ The core API `lint(compiled, { missingBacklink: false, boundaryPorts: false })` 
 response and returns `diagnostics`, `boundaries` (per-node expected/evaluated
 counts), and `boundaryPairsEvaluated`. Boundary checking is off by default, returning
 an empty `boundaries` array and zero evaluated pairs; set `boundaryPorts: true` to
-validate explicit ports. `parentContext(board, boards)` exposes inferred parent
-connections independently of lint. Diagnostics carry a rule, severity, board,
+validate explicit ports in layers that declare them. `parentContext(board, boards)`
+exposes inferred parent connections independently of lint. Diagnostics carry a
+rule, severity, board,
 optional shape ID and optional original D2 source range. Consumers must check the
 range's filename before applying it to an editor. When no local range is available,
 the editor lists the board and anchors the diagnostic at the document start.

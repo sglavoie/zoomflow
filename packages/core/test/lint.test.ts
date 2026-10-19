@@ -35,8 +35,16 @@ it('reports deliberate name mismatches as boundary errors even with matching dis
   expect(result.diagnostics.some((item) => /Zero boundary pairs evaluated/.test(item.message))).toBe(true);
 });
 
-it('guards zero pairs per drillable node, even when another node matches successfully', async () => {
-  const result = strictLint(await compile(fixture('zero-pairs') + '\na -> good\ngood.link: layers.good\nlayers.good: {a.class: zf-in}'));
+it('ignores port-free layers even when boundary checking is enabled', async () => {
+  const result = strictLint(await compile(readFileSync('fixtures/order.d2', 'utf8')));
+  expect(result.diagnostics).toEqual([]);
+  expect(result.boundaries).toEqual([]);
+  expect(result.boundaryPairsEvaluated).toBe(0);
+});
+
+it('guards zero pairs for declared contracts, even when another node matches successfully', async () => {
+  const source = fixture('zero-pairs').replace('internal -> work', 'internal: {class: zf-in}\n    internal -> work');
+  const result = strictLint(await compile(source + '\na -> good\ngood.link: layers.good\nlayers.good: {a.class: zf-in}'));
   expect(result.boundaryPairsEvaluated).toBe(1);
   expect(result.boundaries.find((item) => item.shape === 'checkout')).toMatchObject({ expected: 2, evaluated: 0 });
   expect(result.diagnostics.find((item) => /Zero boundary pairs evaluated/.test(item.message))).toMatchObject({ shape: 'checkout', severity: 'error' });
@@ -50,6 +58,15 @@ it('reports a partial mismatch even when one pair is valid and rejects unconnect
   expect(result.diagnostics.some((item) => /Zero boundary/.test(item.message))).toBe(false);
 });
 
+it('requires the remaining neighbours when a child declares only one port', async () => {
+  const source = fixture('labelled').replace('    b: Exit to receipt {class: zf-out}\n', '');
+  const result = strictLint(await compile(source));
+  expect(result.boundaries).toMatchObject([{ expected: 2, evaluated: 1 }]);
+  expect(result.diagnostics.filter((item) => item.rule.startsWith('boundary-'))).toMatchObject([
+    { rule: 'boundary-out', shape: 'checkout' },
+  ]);
+});
+
 it('uses reverse and bidirectional arrows, deduplicates parallel neighbours, and guards undirected edges', async () => {
   const result = strictLint(await compile(`...@zoomflow
 checkout <- a
@@ -59,7 +76,7 @@ checkout.link: layers.child
 layers.child: {a.class: zf-in; b.class: [zf-in; zf-out]}`));
   expect(result.diagnostics).toEqual([]);
   expect(result.boundaryPairsEvaluated).toBe(3);
-  const undirected = strictLint(await compile('a -- checkout\ncheckout.link: layers.child\nlayers.child: {x}'));
+  const undirected = strictLint(await compile('a -- checkout\ncheckout.link: layers.child\nlayers.child: {x.class: zf-in}'));
   expect(undirected.diagnostics.some((item) => /Zero boundary pairs/.test(item.message))).toBe(true);
 });
 
@@ -95,7 +112,7 @@ it('does not require boundary ports for sibling links or scenario switches', asy
   expect(result.boundaries).toEqual([]);
 });
 
-it('allows nested navigation without ports and only flags the missing link', async () => {
+it('allows nested navigation without ports, even with boundary checking enabled', async () => {
   const original = await compile(fixture('nested-navigation'));
   const result = lint(original);
   expect(result.boundaries).toEqual([]);
@@ -107,8 +124,8 @@ it('allows nested navigation without ports and only flags the missing link', asy
   const repaired = await compile(fixture('nested-navigation').replace('Capture: {link: layers.charge}', 'Capture: {link: _}'));
   expect(lint(repaired).diagnostics).toEqual([]);
   const strict = strictLint(repaired);
-  expect(strict.boundaries).toHaveLength(3);
-  expect(strict.diagnostics.filter((item) => item.rule.startsWith('boundary-'))).toHaveLength(9);
+  expect(strict.boundaries).toEqual([]);
+  expect(strict.diagnostics).toEqual([]);
 });
 
 it('makes even authored boundary ports opt-in without disabling other checks', async () => {

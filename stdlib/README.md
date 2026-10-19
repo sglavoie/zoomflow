@@ -23,7 +23,8 @@ The library is opt-in; existing documents are not rewritten.
 Boundary ports are optional. Ordinary drill-down diagrams need only a board link;
 the viewer infers parent connection hints without adding ports to your source.
 Enable **Check boundary ports** in the editor, `--boundary-ports` in the CLI, or
-`lint(compiled, { boundaryPorts: true })` to validate explicit contracts.
+`lint(compiled, { boundaryPorts: true })` to validate child layers that declare
+`zf-in` or `zf-out` ports. Port-free layers remain valid with checking enabled.
 
 When using explicit ports, use the **same full identifier** as the neighbour outside the
 parent's drillable node. Labels can differ. For `a: Browse catalogue`, name its
@@ -45,11 +46,13 @@ layers.checkout: {
 }
 ```
 
-With boundary checking enabled, lint compares each shape linked to an immediate child layer with that child's
-ports. Reverse arrows reverse the requirements; bidirectional arrows require
+With boundary checking enabled, lint compares each shape linked to an immediate child layer
+that declares boundary ports with that child's ports. Once a layer declares any
+port, all of its parent neighbours need matching ports. Reverse arrows reverse
+the requirements; bidirectional arrows require
 both classes. Parallel edges to the same neighbour share one requirement.
-Unconnected or incorrectly named ports are errors. A node with incident edges
-and zero matched boundary pairs always produces an error, including when its
+Unconnected or incorrectly named ports are errors. A node with declared ports and
+incident edges but zero matched boundary pairs produces an error, including when its
 edges are undirected. Scenario switches, sibling links and ancestor links do not
 establish a parent/child boundary contract.
 
