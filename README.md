@@ -9,8 +9,8 @@ Every example includes source comments and compiles without imports or remote
 assets. The lint repair intentionally reports one error and one warning until fixed.
 Switching examples starts at the root board. Source edits and opened files remain
 in the dropdown and are backed up in browser storage for reload recovery. The
-header distinguishes changes in the browser from a requested download. Use
-**Download D2 copy** to keep the current text outside browser storage, which can
+header shows when a browser draft is being saved or has been saved. Use
+**Download source (.d2)** to keep the current text outside browser storage, which can
 be cleared. Opened file drafts can be removed from the dropdown.
 The source lives in `apps/web/src/examples/`, with the catalog in `examples.ts`.
 
@@ -29,8 +29,9 @@ loaded diagram. Open a file or drop one onto the page; files are compiled locall
 with D2's WASM worker. Light, dark and system themes use D2's generated palettes.
 Use the preview's +, − and Fit controls or the mouse wheel to zoom. Drag empty
 space to pan, or hold Space and drag a shape or link; middle-button dragging also
-pans. Touch dragging works after zooming. Each board opens fitted to
-the preview. Keyboard navigation moves focus to the new board or breadcrumb and
+pans. Touch dragging works after zooming. Each board opens fitted around its
+rendered content. Edits on the same board preserve zoom and pan; switching boards
+or diagrams starts with a fresh fit. Keyboard navigation moves focus to the new board or breadcrumb and
 announces its name.
 
 Drill-down navigation needs no boundary ports or library import. Inside a child
@@ -42,7 +43,7 @@ is listed separately. These hints do not add nodes or guess internal connections
 child link that matches an ancestor's name suggests the corresponding `_` path.
 
 Edit the syntax-highlighted D2 source in the CodeMirror pane for a live preview (350 ms debounce).
-The **AI** form above the editor can send the current source, active board, and
+The collapsed **Ask AI** panel above the editor can send the current source, active board, and
 your prompt to either Claude Code or Codex. Start the local app with `pnpm dev`,
 install and sign in to the chosen CLI, then select it and click **Send**. Zoomflow
 runs `claude -p` or `codex exec` through a local Vite endpoint. A valid replacement
@@ -51,8 +52,8 @@ return an answer without changing the diagram. Invalid D2 and CLI errors appear
 beside the form, leaving your source untouched. If you edit or switch diagrams
 while a request is running, its replacement is discarded. The AI endpoint is
 available only on a local Vite dev or preview server, not in exported HTML or a
-static build. Provider environment fields are under **AI settings** so the source
-editor stays visible on small screens.
+static build. The AI panel and optional lint controls start collapsed so the
+source editor stays visible. Provider environment fields are under **AI settings**.
 For Claude Code, the `CLAUDE_CONFIG_DIR` field defaults to `~/.claude`;
 `~` expands to your home directory, and relative paths resolve from the server's
 working directory. Both providers accept environment overrides in the shared
@@ -64,8 +65,10 @@ Click **Format** or press **Shift+Alt+F** in the editor to apply D2's automatic
 source formatting, including nested indentation. Formatting is one undoable edit
 and refreshes the preview. Invalid diagrams leave the source unchanged and show
 a formatting error; edits made while formatting is running are preserved.
-Compile errors appear in a banner and inline diagnostics while the last good
-diagram stays available. Export is disabled until the current source compiles;
+The status row above the editor reports preview freshness and diagnostic counts,
+and **Review diagnostics** opens the list at the first issue. Compile errors appear
+in a banner and inline diagnostics while the last good diagram is marked as the
+previous preview. Export is disabled until the current source compiles;
 an export already running is canceled if the source changes. Successful edits
 preserve the current board, falling
 back to its nearest existing ancestor if it was removed. Click a shape to select
@@ -88,10 +91,10 @@ and use Up/Down (5% steps) and Home/End (25%/75%). The split starts at 60% diagr
 and 40% reference and remembers your size when browser storage is available.
 Closing and reopening preserves the search and scroll position. Escape inside the
 reference closes it and restores focus without navigating the diagram. On narrow
-screens, the diagram and reference appear above the source editor; export, AI and
-diagnostic controls start collapsed so the editor remains visible.
+screens, the diagram and reference appear above the source editor; export controls
+start collapsed so the editor remains visible.
 
-Successful compilations also run Zoomflow lint. **Show diagnostics** opens the
+Successful compilations also run Zoomflow lint. **Review diagnostics** opens the
 editor's diagnostic list. Missing board links are errors; unlinked layers are
 warnings. **Check boundary ports** opts into explicit `zf-in`/`zf-out` validation;
 boundary mismatches in layers that declare ports are errors only when this is
@@ -100,7 +103,7 @@ additional warning that is off by default. Lint errors do not prevent preview or
 Use `...@zoomflow` to import the bundled boundary ports, state pieces and default
 theme; see [stdlib conventions and examples](stdlib/README.md).
 
-Use Export → Download for the current board as SVG or PNG, all boards as a ZIP
+Use Export → Download SVG/PNG/ZIP/HTML for the current board as SVG or PNG, all boards as a ZIP
 of SVGs, or one navigable HTML file. The HTML opens directly from disk without a
 server or network connection and includes every board, including cyclic links.
 Exports preserve the selected theme. Remote images are embedded when accessible;

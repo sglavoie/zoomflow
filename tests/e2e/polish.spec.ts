@@ -23,26 +23,26 @@ test('draft recovers after reload and D2 source downloads', async ({ page }) => 
   await page.goto('/');
   await expect(page.locator('.zf-stage > svg')).toBeVisible();
   await page.getByRole('textbox', { name: 'D2 source' }).fill('draft: Recovered');
-  await expect(page.locator('#draft-status')).toContainText('Changes in browser');
+  await expect(page.locator('#draft-status')).toContainText(/browser draft/i);
   await page.reload();
   await expect(page.getByRole('textbox', { name: 'D2 source' })).toContainText('draft: Recovered');
   await expect(page.locator('.zf-stage')).toContainText('Recovered');
   const [download] = await Promise.all([
     page.waitForEvent('download'),
-    page.getByRole('button', { name: 'Download D2 copy' }).click(),
+    page.getByRole('button', { name: 'Download source (.d2)' }).click(),
   ]);
   expect(download.suggestedFilename()).toBe('order.d2');
   expect(await readFile(await download.path(), 'utf8')).toBe('draft: Recovered');
-  await expect(page.locator('#draft-status')).toContainText('Download requested');
+  await expect(page.locator('#draft-status')).toContainText('Source download started');
   await page.reload();
   await expect(page.getByRole('textbox', { name: 'D2 source' })).toContainText('draft: Recovered');
-  await expect(page.locator('#draft-status')).toContainText('Local draft backed up');
+  await expect(page.locator('#draft-status')).toContainText('Browser draft saved');
   await page.locator('#file').setInputFiles({ name: 'custom.d2', mimeType: 'text/plain', buffer: Buffer.from('uploaded: Original') });
   await page.getByRole('textbox', { name: 'D2 source' }).fill('uploaded: Edited');
   await page.reload();
   await expect(page.locator('#filename')).toHaveText('custom.d2');
   await expect(page.getByRole('textbox', { name: 'D2 source' })).toContainText('uploaded: Edited');
-  await expect(page.locator('#draft-status')).toContainText('Changes in browser');
+  await expect(page.locator('#draft-status')).toContainText(/browser draft/i);
 });
 
 test('uploaded drafts can be removed without affecting other diagrams', async ({ page }) => {
@@ -112,7 +112,7 @@ test('source changes cancel an export already embedding images', async ({ page }
   await requestSeen;
   await page.getByRole('textbox', { name: 'D2 source' }).fill('new: Current source');
   release();
-  await expect(page.locator('.zf-message')).toContainText('Export canceled because the source changed.');
+  await expect(page.locator('#activity-status')).toContainText('Export canceled because the source changed.');
   expect(downloads).toBe(0);
   await expect(page.locator('#export')).toBeEnabled();
 });
@@ -146,6 +146,40 @@ test('preview zooms and pans, then fits again', async ({ page }) => {
   await expect(page.locator('.zf-stage')).toHaveAttribute('data-board', 'root');
   await page.getByRole('button', { name: 'Fit diagram' }).click();
   expect(await box()).toEqual(original);
+});
+
+test('live edits keep the current view, while opening another diagram fits it', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.locator('.zf-stage > svg')).toBeVisible();
+  await page.getByRole('button', { name: 'Zoom in' }).click();
+  await expect(page.locator('.zf-zoom-controls span')).toHaveText('150%');
+  const source = page.getByRole('textbox', { name: 'D2 source' });
+  await source.press('ControlOrMeta+End');
+  await source.press('Enter');
+  await source.pressSequentially('Note: Keeps the view');
+  await expect(page.locator('.zf-stage')).toContainText('Keeps the view');
+  await expect(page.locator('.zf-zoom-controls span')).toHaveText('150%');
+  await page.locator('#file').setInputFiles({ name: 'fresh.d2', mimeType: 'text/plain', buffer: Buffer.from('fresh: Fits again') });
+  await expect(page.locator('.zf-stage')).toContainText('Fits again');
+  await expect(page.locator('.zf-zoom-controls span')).toHaveText('100%');
+});
+
+test('mobile first fit fills the canvas and diagnostics lead to the source', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/');
+  await expect(page.locator('.zf-stage > svg')).toBeVisible();
+  const coverage = await page.locator('.zf-stage').evaluate((stage) => {
+    const shapes = [...stage.querySelectorAll('[data-shape-id]')].map((shape) => shape.getBoundingClientRect());
+    return (Math.max(...shapes.map((box) => box.right)) - Math.min(...shapes.map((box) => box.left))) /
+      stage.getBoundingClientRect().width;
+  });
+  expect(coverage).toBeGreaterThan(0.8);
+  await page.getByRole('textbox', { name: 'D2 source' }).fill('broken: {');
+  await expect(page.locator('#preview-status')).toHaveText('Preview out of date');
+  await expect(page.locator('.zf-stage')).toHaveAttribute('data-preview-state', 'stale');
+  await page.locator('#show-diagnostics').click();
+  await expect(page.locator('.cm-panel-lint')).toBeVisible();
+  await expect(page.locator('.cm-panel-lint .cm-diagnostic').first()).toBeVisible();
 });
 
 test('keyboard board navigation retains focus and announces the new board', async ({ page }) => {

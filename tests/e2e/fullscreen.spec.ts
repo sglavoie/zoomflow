@@ -60,7 +60,7 @@ test('fullscreen survives board navigation and Escape exits without navigating u
   await expect(stage).toHaveAttribute('data-board', 'root');
 });
 
-test('nested boards stay centered and fill the preview with their own background', async ({ page }) => {
+test('nested board content stays centered with its own background', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto('/');
   const stage = page.locator('.zf-stage');
@@ -73,10 +73,12 @@ test('nested boards stay centered and fill the preview with their own background
     const geometry = await stage.evaluate((element) => {
       const background = element.querySelector<SVGRectElement>('svg svg > rect')!;
       const stageRect = element.getBoundingClientRect();
-      const boardRect = background.getBoundingClientRect();
+      const shapes = [...element.querySelectorAll('[data-shape-id]')].map((shape) => shape.getBoundingClientRect());
       return {
-        dx: boardRect.x + boardRect.width / 2 - (stageRect.x + stageRect.width / 2),
-        dy: boardRect.y + boardRect.height / 2 - (stageRect.y + stageRect.height / 2),
+        dx: (Math.min(...shapes.map((shape) => shape.left)) + Math.max(...shapes.map((shape) => shape.right))) / 2 -
+          (stageRect.x + stageRect.width / 2),
+        dy: (Math.min(...shapes.map((shape) => shape.top)) + Math.max(...shapes.map((shape) => shape.bottom))) / 2 -
+          (stageRect.y + stageRect.height / 2),
         stageFill: getComputedStyle(element).backgroundColor,
         boardFill: getComputedStyle(background).fill,
       };

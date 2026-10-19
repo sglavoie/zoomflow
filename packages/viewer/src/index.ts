@@ -98,13 +98,13 @@ export class Viewer {
     }
   }
 
-  async setDocument(diagram: Diagram, render: RenderBoard, diagnostics: readonly LintDiagnostic[] = []) {
+  async setDocument(diagram: Diagram, render: RenderBoard, diagnostics: readonly LintDiagnostic[] = [], preserveViewport = false) {
     this.boards = indexBoards(diagram);
     this.diagnostics = diagnostics;
     this.render = render;
     this.cache = new Map();
     // Preserve the requested route, falling back to its nearest existing ancestor.
-    await this.fromLocation();
+    await this.fromLocation(preserveViewport);
   }
 
   private ancestors(id: string): string[] {
@@ -113,7 +113,7 @@ export class Viewer {
     return path;
   }
 
-  private async fromLocation() {
+  private async fromLocation(preserveViewport = false) {
     if (!this.boards.size) return;
     let hash = location.hash || '#/';
     let board: Board | undefined;
@@ -125,7 +125,7 @@ export class Viewer {
     const saved: unknown = history.state?.zoomflowTrail;
     const trail = Array.isArray(saved) && saved.length > 0 && saved.at(-1) === board.id &&
       saved.every((id) => typeof id === 'string' && this.boards.has(id)) ? saved as string[] : this.ancestors(board.id);
-    await this.navigate(board.id, 'replace', trail);
+    await this.navigate(board.id, 'replace', trail, preserveViewport);
   }
 
   private svgElement(svg: string, board: Board): SVGElement {
@@ -193,7 +193,7 @@ export class Viewer {
     animation.cancel();
   }
 
-  async navigate(id: string, mode: 'push' | 'replace' = 'push', trail?: string[]) {
+  async navigate(id: string, mode: 'push' | 'replace' = 'push', trail?: string[], preserveViewport = false) {
     const board = this.boards.get(id);
     if (!board) return;
     const revision = ++this.revision;
@@ -217,6 +217,7 @@ export class Viewer {
       const fade = this.stage.hasChildNodes() && id !== this.current &&
         !matchMedia('(prefers-reduced-motion: reduce)').matches;
       const keepFocus = document.activeElement === active;
+      const sameBoard = id === this.current;
       this.stage.replaceChildren(content);
       this.syncBackground(this.stage);
       if (fade) void this.fadeIn(content);
@@ -225,7 +226,7 @@ export class Viewer {
       this.announcement.textContent = `${board.name} board`;
       this.trail = simplifyTrail(trail ?? [...this.trail, id]);
       this.stage.dataset.board = id;
-      this.stage.dispatchEvent(new Event('zf-boardchange'));
+      this.stage.dispatchEvent(new CustomEvent('zf-boardchange', { detail: { preserveViewport: preserveViewport && sameBoard } }));
       const state = { ...history.state, zoomflowTrail: this.trail };
       if (mode === 'replace' || location.hash === board.hash) history.replaceState(state, '', board.hash);
       else history.pushState(state, '', board.hash);

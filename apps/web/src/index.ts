@@ -10,6 +10,7 @@ import { setupReference } from './reference';
 import { setupSourceSplit } from './source-split';
 import { setupFullscreen } from './fullscreen';
 import { setupAiAssistant } from './ai-assistant';
+import type { Diagnostic } from '@codemirror/lint';
 
 const viewer = new Viewer(document.querySelector<HTMLElement>('#viewer')!);
 setupViewport(viewer.stage, setupFullscreen(viewer.stage));
@@ -25,9 +26,6 @@ function setMoreOpen(open: boolean) {
 moreToggle.addEventListener('click', () => setMoreOpen(Boolean(moreContent.hidden)));
 function setCompactControls() {
   setMoreOpen(!narrowLayout.matches);
-  for (const selector of ['#ai-assistant', '#lint-details']) {
-    document.querySelector<HTMLDetailsElement>(selector)!.open = !narrowLayout.matches;
-  }
 }
 narrowLayout.addEventListener('change', setCompactControls);
 setCompactControls();
@@ -58,6 +56,28 @@ const missingBacklink = document.querySelector<HTMLInputElement>('#missing-backl
 const boundaryPorts = document.querySelector<HTMLInputElement>('#boundary-ports')!;
 const formatButton = document.querySelector<HTMLButtonElement>('#format-source')!;
 const formatStatus = document.querySelector<HTMLElement>('#format-status')!;
+const activityStatus = document.querySelector<HTMLElement>('#activity-status')!;
+const diagnosticsButton = document.querySelector<HTMLButtonElement>('#show-diagnostics')!;
+let activeDiagnostics: Diagnostic[] = [];
+function setPreviewState(state: 'loading' | 'updating' | 'ready' | 'error') {
+  previewStatus.dataset.state = state;
+  previewStatus.textContent = { loading: 'Loading preview…', updating: 'Updating preview…',
+    ready: 'Preview ready', error: 'Preview out of date' }[state];
+  if (state === 'updating' || state === 'error') viewer.stage.dataset.previewState = state === 'error' ? 'stale' : 'updating';
+  else delete viewer.stage.dataset.previewState;
+}
+function setActivity(message: string, kind: 'info' | 'error' = 'info') {
+  activityStatus.textContent = message;
+  activityStatus.dataset.kind = kind;
+  activityStatus.setAttribute('role', kind === 'error' ? 'alert' : 'status');
+  activityStatus.hidden = !message;
+}
+function setEditorDiagnostics(diagnostics: Diagnostic[]) {
+  activeDiagnostics = diagnostics;
+  editor.diagnostics(diagnostics);
+  diagnosticsButton.disabled = diagnostics.length === 0;
+  diagnosticsButton.textContent = diagnostics.length ? `Review ${diagnostics.length} diagnostic${diagnostics.length === 1 ? '' : 's'}` : 'Review diagnostics';
+}
 let lintDocument: CompileResponse | undefined;
 const editor = new SourceEditor(document.querySelector<HTMLElement>('#editor')!, examples[0].source, () => {
   // Invalidate immediately, including requests still awaiting WASM/render startup.
@@ -67,13 +87,15 @@ const editor = new SourceEditor(document.querySelector<HTMLElement>('#editor')!,
   sourceMap = [];
   lintDocument = undefined;
   lintSummary.textContent = 'Lint pending…';
+  setEditorDiagnostics([]);
   viewer.highlightShapes([]);
   documentExport = undefined;
   exportButton.disabled = true;
-  previewStatus.textContent = 'Updating preview…';
+  setPreviewState('updating');
+  setActivity('');
   examplePicker.updateCurrent(editor.source);
   clearTimeout(debounce);
-  debounce = setTimeout(() => void load(editor.source, documentName), 350);
+  debounce = setTimeout(() => void load(editor.source, documentName, true), 350);
 }, () => void highlightSelection(true), () => void formatSource());
 
 const examplePicker = setupExamplePicker(() => editor.source, (source, name) => {
@@ -81,12 +103,13 @@ const examplePicker = setupExamplePicker(() => editor.source, (source, name) => 
   history.replaceState(null, '', `${location.pathname}${location.search}#/`);
   void replaceDocument(source, name);
 }, (dirty, recoveryAvailable, savePending, hasDraft, downloadRequested) => {
-  draftStatus.textContent = downloadRequested ? recoveryAvailable
-    ? 'Download requested · draft backed up locally' : 'Download requested · keep your copy'
-    : dirty ? !recoveryAvailable ? 'Changes in browser · download a copy'
-      : savePending ? 'Changes in browser · backing up draft…' : 'Changes in browser · draft backed up locally'
-      : hasDraft ? recoveryAvailable ? 'Local draft backed up · download a copy to keep it'
-        : 'Local draft · download a copy to keep it' : '';
+  draftStatus.textContent = downloadRequested ? 'Source download started'
+    : !recoveryAvailable ? 'Browser storage unavailable · download source'
+      : savePending ? 'Saving browser draft…'
+        : dirty || hasDraft ? 'Browser draft saved' : '';
+  draftStatus.title = recoveryAvailable
+    ? 'Browser drafts can be cleared. Download the source to keep a copy outside this browser.'
+    : 'Browser draft recovery is unavailable. Download the source to keep your changes.';
 });
 
 function download(blob: Blob, name: string) {
@@ -103,6 +126,7 @@ document.querySelector<HTMLButtonElement>('#save-source')!.addEventListener('cli
   const name = documentName.replace(/[/\\]/g, '_').replace(/\.d2$/i, '') + '.d2';
   download(new Blob([editor.source], { type: 'text/plain;charset=utf-8' }), name);
   examplePicker.markDownloadRequested();
+  setActivity(`Source download started: ${name}`);
 });
 
 async function replaceDocument(source: string, name: string) {
@@ -149,19 +173,25 @@ setupAiAssistant(
   () => ({ source: editor.source, name: documentName, board: viewer.currentBoard?.id ?? 'root', revision: generation }),
   async (source) => { await compileSource(source); },
   (source) => { editor.format(source); },
+  (message, kind) => setActivity(message, kind),
 );
 
 function updateLint() {
   if (!lintDocument || mappedSource !== editor.source) return;
   const result = lint(lintDocument, { missingBacklink: missingBacklink.checked, boundaryPorts: boundaryPorts.checked });
-  editor.diagnostics(lintDiagnostics(result.diagnostics, editor.source, sourceMap));
+  setEditorDiagnostics(lintDiagnostics(result.diagnostics, editor.source, sourceMap));
   const errors = result.diagnostics.filter((item) => item.severity === 'error').length;
   const warnings = result.diagnostics.length - errors;
   lintSummary.textContent = errors || warnings ? `${errors} lint error(s), ${warnings} warning(s)` : 'No lint issues';
 }
 missingBacklink.addEventListener('change', updateLint);
 boundaryPorts.addEventListener('change', updateLint);
-document.querySelector('#show-diagnostics')!.addEventListener('click', () => editor.showDiagnostics());
+diagnosticsButton.addEventListener('click', () => {
+  const first = activeDiagnostics[0];
+  if (!first) return;
+  editor.select(first, true);
+  editor.showDiagnostics();
+});
 
 async function highlightSelection(navigate: boolean) {
   if (mappedSource !== editor.source) return;
@@ -186,10 +216,18 @@ viewer.stage.addEventListener('click', (event) => {
 }, { capture: true });
 let documentExport: { diagram: Diagram; render: RenderBoard; name: string; diagnostics: LintDiagnostic[] } | undefined;
 const exportButton = document.querySelector<HTMLButtonElement>('#export')!;
-async function load(source: string, name: string) {
+const exportFormat = document.querySelector<HTMLSelectElement>('#export-format')!;
+function updateExportLabel() {
+  exportButton.textContent = ({ svg: 'Download SVG', png: 'Download PNG', zip: 'Download SVG ZIP',
+    html: 'Download HTML' } as Record<string, string>)[exportFormat.value] ?? 'Download export';
+}
+exportFormat.addEventListener('change', updateExportLabel);
+updateExportLabel();
+async function load(source: string, name: string, preserveViewport = false) {
   const request = ++generation;
   viewer.setBusy(true);
-  viewer.setMessage('Compiling diagram…');
+  viewer.setMessage('');
+  setPreviewState(viewer.stage.querySelector('svg') ? 'updating' : 'loading');
   try {
     const d2 = await compiler;
     const compiled = await compileSource(source);
@@ -200,7 +238,7 @@ async function load(source: string, name: string) {
       ...compiled.renderOptions, target, noXMLTag: true,
     });
     const diagnostics = lint(compiled).diagnostics;
-    await viewer.setDocument(compiled.diagram, render, diagnostics);
+    await viewer.setDocument(compiled.diagram, render, diagnostics, preserveViewport);
     if (request === generation) {
       sourceMap = indexShapeSources(compiled.diagram, compiled.graph, source);
       mappedSource = source;
@@ -211,18 +249,18 @@ async function load(source: string, name: string) {
       void highlightSelection(false);
       documentExport = { diagram: compiled.diagram, render, name, diagnostics };
       exportButton.disabled = false;
-      previewStatus.textContent = '';
+      setPreviewState('ready');
     }
   } catch (error) {
     if (request === generation) {
       const diagnostics = compilerDiagnostics(error, source);
-      editor.diagnostics(diagnostics);
+      setEditorDiagnostics(diagnostics);
       lintDocument = undefined;
       lintSummary.textContent = 'Lint unavailable until compilation succeeds';
-      errorBanner.textContent = `Error: ${diagnostics.map((item) => item.message).join('\n')} — Showing the last good preview.`;
+      errorBanner.textContent = `Error: ${diagnostics.map((item) => item.message).join('\n')}`;
       errorBanner.hidden = false;
       viewer.setMessage('');
-      previewStatus.textContent = 'Preview out of date · fix source errors before exporting';
+      setPreviewState('error');
     }
   } finally {
     if (request === generation) viewer.setBusy(false);
@@ -235,7 +273,8 @@ exportButton.addEventListener('click', async () => {
   if (!loaded || !board) return;
   const exportRevision = generation;
   exportButton.disabled = true;
-  const format = document.querySelector<HTMLSelectElement>('#export-format')!.value;
+  const format = exportFormat.value;
+  setActivity(`Preparing ${format.toUpperCase()} download…`);
   const dark = document.documentElement.dataset.theme === 'dark';
   const warnings: string[] = [];
   const prepare = async (target: string) => {
@@ -258,12 +297,16 @@ exportButton.addEventListener('click', async () => {
       name += `.${format}`;
     }
     if (exportRevision !== generation || documentExport !== loaded) {
-      viewer.setMessage('Export canceled because the source changed.');
+      setActivity('Export canceled because the source changed.');
       return;
     }
     download(blob, name);
-    viewer.setMessage(warnings.length ? [...new Set(warnings)].join(' ') : `Exported ${name}`, warnings.length > 0);
-  } catch (error) { viewer.setMessage(`Export failed: ${String(error)}`, true); }
+    const result = warnings.length ? `Download started: ${name}. ${[...new Set(warnings)].join(' ')}` : `Download started: ${name}`;
+    setActivity(result, warnings.length > 0 ? 'error' : 'info');
+  } catch (error) {
+    const message = `Export failed: ${String(error)}`;
+    setActivity(message, 'error');
+  }
   finally { exportButton.disabled = !documentExport || mappedSource !== editor.source; }
 });
 async function openFile(file: File) {
@@ -272,7 +315,7 @@ async function openFile(file: File) {
     examplePicker.rememberFile(file.name, source);
     await replaceDocument(source, file.name);
   }
-  catch (error) { viewer.setMessage(String(error), true); }
+  catch (error) { setActivity(`Could not open file: ${String(error)}`, 'error'); }
 }
 document.querySelector<HTMLInputElement>('#file')!.addEventListener('change', (event) => {
   const file = (event.target as HTMLInputElement).files?.[0];

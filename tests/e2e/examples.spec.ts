@@ -24,7 +24,7 @@ test('examples switch source and preview, start at root and export under their o
   await expect(page.getByRole('navigation', { name: 'Breadcrumb' }).getByRole('button')).toHaveText(['Root']);
   await expect(page.locator('#lint-summary')).toHaveText('No lint issues');
   const pending = page.waitForEvent('download');
-  await page.getByRole('button', { name: 'Download', exact: true }).click();
+  await page.locator('#export').click();
   expect((await pending).suggestedFilename()).toBe('schema-root.svg');
   await choose(page, 'Layers, scenarios & steps', 'boards.d2');
   await page.locator('.zf-stage a[href="root.scenarios.failure"]').click();

@@ -1,7 +1,8 @@
 type AiReply = { reply: string; source: string | null };
 type Snapshot = { source: string; name: string; board: string; revision: number };
 
-export function setupAiAssistant(read: () => Snapshot, validate: (source: string) => Promise<void>, apply: (source: string) => void) {
+export function setupAiAssistant(read: () => Snapshot, validate: (source: string) => Promise<void>, apply: (source: string) => void,
+  onStatus: (message: string, kind: 'info' | 'error') => void = () => {}) {
   const form = document.querySelector<HTMLFormElement>('#ai-form')!;
   const provider = document.querySelector<HTMLSelectElement>('#ai-provider')!;
   const claudeConfig = document.querySelector<HTMLElement>('#ai-claude-config')!;
@@ -10,6 +11,12 @@ export function setupAiAssistant(read: () => Snapshot, validate: (source: string
   const prompt = document.querySelector<HTMLTextAreaElement>('#ai-prompt')!;
   const button = document.querySelector<HTMLButtonElement>('#ai-send')!;
   const status = document.querySelector<HTMLElement>('#ai-status')!;
+  const panel = document.querySelector<HTMLDetailsElement>('#ai-assistant')!;
+  panel.addEventListener('toggle', () => {
+    // WebKit can keep the native select hidden to visibility checks after a
+    // details panel opens. A post-toggle style update refreshes its layout.
+    provider.style.display = panel.open ? 'inline-block' : '';
+  });
   function showProviderSettings() {
     const isClaude = provider.value === 'claude';
     claudeConfig.hidden = !isClaude;
@@ -28,6 +35,7 @@ export function setupAiAssistant(read: () => Snapshot, validate: (source: string
     status.setAttribute('role', 'status');
     status.dataset.kind = 'pending';
     status.textContent = `Waiting for ${provider.selectedOptions[0]?.textContent ?? 'AI'}…`;
+    onStatus(status.textContent, 'info');
     try {
       const response = await fetch('/api/ai', { method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ provider: provider.value, prompt: question, source: snapshot.source, name: snapshot.name,
@@ -52,11 +60,13 @@ export function setupAiAssistant(read: () => Snapshot, validate: (source: string
       }
       status.dataset.kind = 'success';
       status.textContent = `${data.source !== null && data.source !== snapshot.source ? 'Diagram updated. ' : ''}${data.reply || 'Done.'}`;
+      onStatus(data.source !== null && data.source !== snapshot.source ? 'AI updated the source.' : 'AI response ready.', 'info');
       prompt.value = '';
     } catch (error) {
       status.setAttribute('role', 'alert');
       status.dataset.kind = 'error';
       status.textContent = error instanceof Error ? error.message : String(error);
+      onStatus('AI request failed. See the assistant response.', 'error');
     } finally { button.disabled = false; }
   });
 }

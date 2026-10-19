@@ -19,7 +19,7 @@ for (const offline of [false, true]) {
     const source = readFileSync('fixtures/lint/nested-navigation.d2', 'utf8');
     await page.locator('#file').setInputFiles({ name: 'nested.d2', mimeType: 'text/plain', buffer: Buffer.from(source) });
     await expect(page.locator('#lint-summary')).toHaveText('1 lint error(s), 0 warning(s)');
-    await page.getByRole('button', { name: 'Show diagnostics' }).click();
+    await page.locator('#show-diagnostics').click();
     await expect(page.locator('.cm-panel-lint')).toContainText('Use link: _');
     await expect(page.locator('.cm-panel-lint')).not.toContainText('boundary-in');
     const repaired = source.replace('Capture: {link: layers.charge}', 'Capture: {link: _}');
@@ -29,7 +29,7 @@ for (const offline of [false, true]) {
     if (offline) {
       await page.selectOption('#export-format', 'html');
       const pending = page.waitForEvent('download');
-      await page.getByRole('button', { name: 'Download', exact: true }).click();
+      await page.locator('#export').click();
       const download = await pending;
       const path = info.outputPath('parent-context.html');
       await download.saveAs(path);
@@ -74,7 +74,7 @@ for (const offline of [false, true]) {
     if (offline) {
       await page.selectOption('#export-format', 'html');
       const pending = page.waitForEvent('download');
-      await page.getByRole('button', { name: 'Download', exact: true }).click();
+      await page.locator('#export').click();
       const download = await pending;
       const path = info.outputPath('breadcrumbs.html');
       await download.saveAs(path);
@@ -166,7 +166,7 @@ test('missing board link has a dashed outline and names its target in the viewer
   await board(page, 'root');
   await page.selectOption('#export-format', 'html');
   const pending = page.waitForEvent('download');
-  await page.getByRole('button', { name: 'Download', exact: true }).click();
+  await page.locator('#export').click();
   const download = await pending;
   const path = info.outputPath('missing-links.html');
   await download.saveAs(path);

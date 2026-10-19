@@ -11,6 +11,7 @@ test('AI updates the current diagram and keeps the edit undoable', async ({ page
   });
   await page.goto('/');
   await expect(page.locator('#viewer')).toHaveAttribute('aria-busy', 'false');
+  await page.locator('#ai-assistant > summary').click();
   await page.getByLabel('AI', { exact: true }).selectOption('codex');
   await expect(page.locator('#ai-claude-config')).toBeHidden();
   await page.locator('.ai-settings summary').click();
@@ -35,6 +36,7 @@ test('Claude config directory is visible and sent with shared environment', asyn
       body: JSON.stringify({ reply: 'No change needed.', source: null }) });
   });
   await page.goto('/');
+  await page.locator('#ai-assistant > summary').click();
   await page.locator('.ai-settings summary').click();
   await expect(page.locator('#ai-claude-config-dir')).toHaveValue('~/.claude');
   await page.locator('#ai-claude-config-dir').fill('~/work-claude');
@@ -53,6 +55,7 @@ test('AI errors and stale responses leave the source alone', async ({ page }) =>
   });
   await page.goto('/');
   await expect(page.locator('#viewer')).toHaveAttribute('aria-busy', 'false');
+  await page.locator('#ai-assistant > summary').click();
   await page.getByRole('textbox', { name: 'Ask AI about this diagram' }).fill('Change it');
   await page.getByRole('button', { name: 'Send' }).click();
   const source = page.getByRole('textbox', { name: 'D2 source', exact: true });
@@ -70,6 +73,7 @@ test('invalid AI D2 is reported without replacing the diagram', async ({ page })
     body: JSON.stringify({ reply: 'Changed it.', source: 'broken: {' }) }));
   await page.goto('/');
   await expect(page.locator('#viewer')).toHaveAttribute('aria-busy', 'false');
+  await page.locator('#ai-assistant > summary').click();
   await page.getByRole('textbox', { name: 'Ask AI about this diagram' }).fill('Change it');
   await page.getByRole('button', { name: 'Send' }).click();
   await expect(page.locator('#ai-status')).toContainText('AI returned invalid D2');
@@ -81,6 +85,7 @@ test('CLI failures are shown beside the prompt', async ({ page }) => {
   await page.route('**/api/ai', (route) => route.fulfill({ status: 500, contentType: 'application/json',
     body: JSON.stringify({ error: 'codex is not installed or is not on the server PATH.' }) }));
   await page.goto('/');
+  await page.locator('#ai-assistant > summary').click();
   await page.getByLabel('AI', { exact: true }).selectOption('codex');
   await page.getByRole('textbox', { name: 'Ask AI about this diagram' }).fill('Add a node');
   await page.getByRole('button', { name: 'Send' }).click();

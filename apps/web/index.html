@@ -21,17 +21,16 @@
             <p class="example-menu-footer">Local drafts survive reloads when browser storage is available. Download a copy to keep.</p>
           </section>
         </details>
-        <button id="save-source" type="button">Download D2 copy</button>
         <span id="draft-status" role="status"></span>
+        <button id="save-source" type="button">Download source (.d2)</button>
         <div id="header-more">
           <button id="header-more-toggle" type="button" aria-expanded="true" aria-controls="header-more-content">Export &amp; theme</button>
           <div id="header-more-content" class="header-more-content">
             <label>Export <select id="export-format"><option value="svg">Current board SVG</option><option value="png">Current board PNG</option><option value="zip">All boards ZIP (SVG)</option><option value="html">Single-file HTML</option></select></label>
-            <button id="export" disabled>Download</button>
+            <button id="export" disabled>Download SVG</button>
             <label>Theme <select id="theme"><option value="system">System</option><option value="light">Light</option><option value="dark">Dark</option></select></label>
           </div>
         </div>
-        <span id="preview-status" role="status"></span>
       </div>
       <button id="toggle-reference" aria-expanded="false" aria-controls="d2-reference" title="D2 reference (⌘/ or Ctrl+/)">D2 reference</button>
     </header>
@@ -56,9 +55,16 @@
       <div id="source-divider" role="separator" aria-label="Resize diagram and D2 source" aria-orientation="vertical" aria-controls="preview-pane source-pane" title="Drag to resize, double-click to reset, or use Left/Right and Home/End when focused" tabindex="0"></div>
       <section id="source-pane" aria-label="Source editor">
         <div class="pane-title"><div>D2 source <span>Edit to update the preview</span></div><button id="format-source" title="Format D2 source (Shift+Alt+F)">Format</button></div>
-        <div id="format-status" role="status" hidden></div>
+        <div id="work-status" role="group" aria-label="Diagram status">
+          <span id="preview-status" role="status">Loading preview…</span>
+          <span id="lint-summary" role="status">Lint pending…</span>
+          <button id="show-diagnostics" type="button" disabled>Review diagnostics</button>
+          <span id="format-status" role="status" hidden></span>
+          <span id="activity-status" role="status" hidden></span>
+        </div>
         <div id="compile-error" role="alert" hidden></div>
-        <details id="ai-assistant" open>
+        <div class="source-tools">
+        <details id="ai-assistant">
           <summary>Ask AI about this diagram</summary>
           <form id="ai-form" aria-label="AI diagram assistant">
             <div class="ai-provider-row">
@@ -77,15 +83,15 @@
             <button id="ai-send" type="submit">Send</button>
           </form>
         </details>
-        <div id="ai-status" role="status" aria-live="polite"></div>
-        <details id="lint-details" open>
-          <summary><span id="lint-summary" role="status">Lint pending…</span></summary>
+        <details id="lint-details">
+          <summary>Lint options</summary>
           <div class="lint-controls">
-            <button id="show-diagnostics">Show diagnostics</button>
             <label><input id="boundary-ports" type="checkbox" /> Check boundary ports</label>
             <label><input id="missing-backlink" type="checkbox" /> Check parent backlinks</label>
           </div>
         </details>
+        </div>
+        <div id="ai-status" role="status" aria-live="polite"></div>
         <div id="editor"></div>
       </section>
     </div>

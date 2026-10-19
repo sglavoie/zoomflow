@@ -98,17 +98,56 @@ export function setupViewport(stage: HTMLElement, host: HTMLElement) {
     if (!matrix || !matrix.a || !matrix.d) return;
     setBox({ ...box, x: box.x - dx / matrix.a, y: box.y - dy / matrix.d });
   }
-  function reset() {
+  function fittedBox(element: SVGSVGElement, fallback: Box): Box {
+    const graph = element.querySelector<SVGSVGElement>(':scope > svg');
+    const matrix = element.getScreenCTM();
+    if (!graph || !matrix) return fallback;
+    const inverse = matrix.inverse();
+    let left = Infinity;
+    let top = Infinity;
+    let right = -Infinity;
+    let bottom = -Infinity;
+    for (const child of graph.children) {
+      if (!(child instanceof SVGGraphicsElement) || !['g', 'a'].includes(child.localName) || child.classList.contains('appendix-icon')) continue;
+      const bounds = child.getBoundingClientRect();
+      if (!bounds.width && !bounds.height) continue;
+      for (const [x, y] of [[bounds.left, bounds.top], [bounds.right, bounds.bottom]]) {
+        const point = new DOMPoint(x, y).matrixTransform(inverse);
+        left = Math.min(left, point.x);
+        top = Math.min(top, point.y);
+        right = Math.max(right, point.x);
+        bottom = Math.max(bottom, point.y);
+      }
+    }
+    if (![left, top, right, bottom].every(Number.isFinite) || right <= left || bottom <= top) return fallback;
+    const margin = Math.max(16, Math.min(32, Math.min(right - left, bottom - top) * 0.12));
+    return { x: left - margin, y: top - margin, width: right - left + margin * 2, height: bottom - top + margin * 2 };
+  }
+  function reset(preserveViewport = false) {
+    const previous = base && box && preserveViewport ? {
+      scale: scale(),
+      centerX: (box.x + box.width / 2 - base.x) / base.width,
+      centerY: (box.y + box.height / 2 - base.y) / base.height,
+    } : null;
     svg = stage.querySelector<SVGSVGElement>(':scope > svg');
     const values = svg?.getAttribute('viewBox')?.trim().split(/[\s,]+/).map(Number);
-    base = values?.length === 4 && values.every(Number.isFinite) && values[2] > 0 && values[3] > 0
+    const original = values?.length === 4 && values.every(Number.isFinite) && values[2] > 0 && values[3] > 0
       ? { x: values[0], y: values[1], width: values[2], height: values[3] } : null;
+    base = svg && original ? fittedBox(svg, original) : null;
     box = base && { ...base };
+    if (svg && base) {
+      if (previous) {
+        const width = base.width / previous.scale;
+        const height = base.height / previous.scale;
+        setBox({ x: base.x + base.width * previous.centerX - width / 2,
+          y: base.y + base.height * previous.centerY - height / 2, width, height });
+      } else svg.setAttribute('viewBox', `${base.x} ${base.y} ${base.width} ${base.height}`);
+    }
     pointers.clear();
     stage.classList.remove('zf-panning');
     updateControls();
   }
-  stage.addEventListener('zf-boardchange', reset);
+  stage.addEventListener('zf-boardchange', (event) => reset((event as CustomEvent<{ preserveViewport?: boolean }>).detail?.preserveViewport));
   reset();
   out.addEventListener('click', () => zoom(1 / 1.5));
   inside.addEventListener('click', () => zoom(1.5));

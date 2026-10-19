@@ -12,11 +12,11 @@ async function drill(page: Page, id: string) {
 async function download(page: Page, format: string, info: TestInfo) {
   await page.selectOption('#export-format', format);
   const pending = page.waitForEvent('download');
-  await page.getByRole('button', { name: 'Download', exact: true }).click();
+  await page.locator('#export').click();
   const result = await pending;
   const path = info.outputPath(result.suggestedFilename());
   await result.saveAs(path);
-  await expect(page.getByRole('button', { name: 'Download', exact: true })).toBeEnabled();
+  await expect(page.locator('#export')).toBeEnabled();
   return path;
 }
 

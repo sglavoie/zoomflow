@@ -5,6 +5,7 @@ const fixture = (name: string) => readFileSync(`fixtures/lint/${name}.d2`, 'utf8
 
 test('bundled stdlib and live lint diagnostics recover, with optional backlink warnings', async ({ page }) => {
   await page.goto('/');
+  await page.locator('#lint-details > summary').click();
   const open = async (source: string) => {
     await page.locator('#file').setInputFiles({ name: 'lint.d2', mimeType: 'text/plain', buffer: Buffer.from(source) });
   };
@@ -15,7 +16,7 @@ test('bundled stdlib and live lint diagnostics recover, with optional backlink w
   await expect(page.locator('#compile-error')).toBeHidden();
   await expect(page.locator('.zf-stage [data-shape-id="checkout"]')).toBeVisible();
   await expect(page.locator('.cm-lintRange-error').first()).toBeVisible();
-  await page.getByRole('button', { name: 'Show diagnostics' }).click();
+  await page.locator('#show-diagnostics').click();
   await expect(page.locator('.cm-panel-lint')).toContainText('Zero boundary pairs evaluated');
   await expect(page.locator('.cm-panel-lint')).toContainText('boundary-out');
   await page.getByLabel('Check boundary ports').uncheck();
