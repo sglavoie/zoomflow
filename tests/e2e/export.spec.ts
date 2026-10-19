@@ -75,6 +75,13 @@ test('opens a single HTML file offline and drills every level with history and b
   await drill(page, 'root.layers.checkout');
   await drill(page, 'root.layers.checkout.layers.charge');
   await expect(page.locator('.zf-stage')).toContainText('Capture');
+  const colors = await page.locator('.zf-stage').evaluate((stage) => ({
+    stage: getComputedStyle(stage).backgroundColor,
+    board: getComputedStyle(stage.querySelector('svg svg > rect')!).fill,
+    alignment: stage.querySelector('svg')!.getAttribute('preserveAspectRatio'),
+  }));
+  expect(colors.stage).toBe(colors.board);
+  expect(colors.alignment).toBe('xMidYMid meet');
   await page.reload();
   await board(page, 'root.layers.checkout.layers.charge');
   await page.keyboard.press('Escape');

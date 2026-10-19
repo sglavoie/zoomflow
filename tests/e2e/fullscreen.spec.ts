@@ -59,3 +59,41 @@ test('fullscreen survives board navigation and Escape exits without navigating u
   await page.keyboard.press('Escape');
   await expect(stage).toHaveAttribute('data-board', 'root');
 });
+
+test('nested boards stay centered and fill the preview with their own background', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto('/');
+  const stage = page.locator('.zf-stage');
+  await expect(stage).toHaveAttribute('data-board', 'root');
+  await page.locator('#theme').selectOption('dark');
+  await page.getByRole('button', { name: 'Fullscreen', exact: true }).click();
+
+  const assertBoard = async () => {
+    await expect(page.locator('#viewer')).toHaveAttribute('aria-busy', 'false');
+    const geometry = await stage.evaluate((element) => {
+      const background = element.querySelector<SVGRectElement>('svg svg > rect')!;
+      const stageRect = element.getBoundingClientRect();
+      const boardRect = background.getBoundingClientRect();
+      return {
+        dx: boardRect.x + boardRect.width / 2 - (stageRect.x + stageRect.width / 2),
+        dy: boardRect.y + boardRect.height / 2 - (stageRect.y + stageRect.height / 2),
+        stageFill: getComputedStyle(element).backgroundColor,
+        boardFill: getComputedStyle(background).fill,
+      };
+    });
+    expect(Math.abs(geometry.dx)).toBeLessThanOrEqual(2);
+    expect(Math.abs(geometry.dy)).toBeLessThanOrEqual(2);
+    expect(geometry.stageFill).toBe(geometry.boardFill);
+  };
+
+  await stage.locator('a[href="root.layers.checkout"]').click();
+  await expect(stage).toHaveAttribute('data-board', 'root.layers.checkout');
+  await assertBoard();
+  await stage.locator('a[href="root.layers.checkout.layers.charge"]').click();
+  await expect(stage).toHaveAttribute('data-board', 'root.layers.checkout.layers.charge');
+  await assertBoard();
+  await page.getByRole('button', { name: 'Exit fullscreen', exact: true }).click();
+  await page.locator('#theme').selectOption('light');
+  await page.getByRole('button', { name: 'Fullscreen', exact: true }).click();
+  await assertBoard();
+});

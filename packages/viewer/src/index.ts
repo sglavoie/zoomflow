@@ -21,7 +21,6 @@ export class Viewer {
   private dark = false;
   private styles = new WeakMap<Element, string>();
   private transitions = new Set<Animation>();
-  private overlay?: HTMLElement;
   private readonly events = new AbortController();
 
   constructor(private readonly host: HTMLElement) {
@@ -74,7 +73,12 @@ export class Viewer {
   setTheme(dark: boolean) {
     this.dark = dark;
     this.applyTheme(this.stage);
-    if (this.overlay) this.applyTheme(this.overlay);
+    this.syncBackground(this.stage);
+  }
+
+  private syncBackground(container: HTMLElement) {
+    const background = container.querySelector<SVGRectElement>('svg svg > rect');
+    container.style.backgroundColor = background ? getComputedStyle(background).fill : '';
   }
 
   private applyTheme(root: Element) {
@@ -114,13 +118,14 @@ export class Viewer {
     const saved: unknown = history.state?.zoomflowTrail;
     const trail = Array.isArray(saved) && saved.length > 0 && saved.at(-1) === board.id &&
       saved.every((id) => typeof id === 'string' && this.boards.has(id)) ? saved as string[] : this.ancestors(board.id);
-    await this.navigate(board.id, undefined, 'replace', trail);
+    await this.navigate(board.id, 'replace', trail);
   }
 
   private svgElement(svg: string, board: Board): SVGElement {
     const doc = new DOMParser().parseFromString(svg, 'image/svg+xml');
     if (doc.querySelector('parsererror') || doc.documentElement.localName !== 'svg') throw new Error('Invalid SVG from renderer');
     const element = document.importNode(doc.documentElement, true) as unknown as SVGElement;
+    element.setAttribute('preserveAspectRatio', 'xMidYMid meet');
     // File content can contain labels and links; never insert executable markup.
     element.querySelectorAll('script, foreignObject').forEach((node) => node.remove());
     for (const node of [element, ...element.querySelectorAll('*')]) {
@@ -164,26 +169,24 @@ export class Viewer {
     event.preventDefault();
     if (action.kind === 'invalid') return;
     if (!this.boards.has(action.target)) { this.setMessage(`Missing board: ${action.target}`, true); return; }
-    const box = action.kind === 'drill' ? link.getBoundingClientRect() : undefined;
-    void this.navigate(action.target, box);
+    void this.navigate(action.target);
   }
 
   private cancelTransition() {
     for (const animation of this.transitions) animation.cancel();
     this.transitions.clear();
-    this.overlay?.remove();
-    this.overlay = undefined;
   }
 
-  private async animate(element: Element, frames: Keyframe[], duration: number) {
-    const animation = element.animate(frames, { duration, easing: 'ease-in-out', fill: 'both' });
+  private async fadeIn(element: Element) {
+    const animation = element.animate([{ opacity: 0.4 }, { opacity: 1 }],
+      { duration: 160, easing: 'ease-out', fill: 'both' });
     this.transitions.add(animation);
     try { await animation.finished; } catch { /* A newer route cancels this transition. */ }
     this.transitions.delete(animation);
     animation.cancel();
   }
 
-  async navigate(id: string, origin?: DOMRect, mode: 'push' | 'replace' = 'push', trail?: string[]) {
+  async navigate(id: string, mode: 'push' | 'replace' = 'push', trail?: string[]) {
     const board = this.boards.get(id);
     if (!board) return;
     const revision = ++this.revision;
@@ -201,26 +204,11 @@ export class Viewer {
       if (revision !== this.revision) return;
       const content = board.diagram.shapes.length ? this.svgElement(svg, board) : document.createElement('p');
       if (!board.diagram.shapes.length) content.textContent = 'This board is empty.';
-      if (origin && origin.width > 0 && origin.height > 0 && !matchMedia('(prefers-reduced-motion: reduce)').matches) {
-        const target = this.stage.getBoundingClientRect();
-        const overlay = document.createElement('div');
-        overlay.className = 'zf-zoom';
-        overlay.setAttribute('aria-hidden', 'true');
-        Object.assign(overlay.style, { left: `${target.x}px`, top: `${target.y}px`, width: `${target.width}px`, height: `${target.height}px` });
-        overlay.append(content.cloneNode(true));
-        this.overlay = overlay;
-        document.body.append(overlay);
-        await this.animate(overlay, [
-          { transform: `translate(${origin.x - target.x}px, ${origin.y - target.y}px) scale(${origin.width / target.width}, ${origin.height / target.height})` },
-          { transform: 'translate(0, 0) scale(1, 1)' },
-        ], 320);
-        if (revision !== this.revision) return;
-        this.stage.replaceChildren(content);
-        await this.animate(overlay, [{ opacity: 1 }, { opacity: 0 }], 120);
-        overlay.remove();
-        this.overlay = undefined;
-      } else this.stage.replaceChildren(content);
-      if (revision !== this.revision) return;
+      const fade = this.stage.hasChildNodes() && id !== this.current &&
+        !matchMedia('(prefers-reduced-motion: reduce)').matches;
+      this.stage.replaceChildren(content);
+      this.syncBackground(this.stage);
+      if (fade) void this.fadeIn(content);
       this.current = id;
       this.trail = simplifyTrail(trail ?? [...this.trail, id]);
       this.stage.dataset.board = id;
@@ -244,7 +232,7 @@ export class Viewer {
       const button = document.createElement('button');
       button.textContent = this.boards.get(id)!.name;
       if (index === this.trail.length - 1) button.setAttribute('aria-current', 'page');
-      button.addEventListener('click', () => void this.navigate(id, undefined, 'push', this.trail.slice(0, index + 1)));
+      button.addEventListener('click', () => void this.navigate(id, 'push', this.trail.slice(0, index + 1)));
       if (index) this.crumbs.append(document.createTextNode(' / '));
       this.crumbs.append(button);
     });

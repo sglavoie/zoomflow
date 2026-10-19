@@ -101,10 +101,14 @@ function offlineViewer(restoreLinks: typeof restoreMissingLinks, normalizeTrail:
     current = board;
     trail = normalizeTrail(visits);
     message.textContent = '';
-    if (board.empty) stage.textContent = 'This board is empty.';
+    if (board.empty) {
+      stage.textContent = 'This board is empty.';
+      stage.style.backgroundColor = '';
+    }
     else {
       const doc = new DOMParser().parseFromString(board.svg, 'image/svg+xml');
       const svg = document.importNode(doc.documentElement, true);
+      svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
       svg.querySelectorAll('script, foreignObject').forEach((node) => node.remove());
       for (const node of [svg, ...svg.querySelectorAll('*')]) {
         for (const attr of [...node.attributes]) {
@@ -124,6 +128,8 @@ function offlineViewer(restoreLinks: typeof restoreMissingLinks, normalizeTrail:
         } else { link.removeAttribute('href'); link.removeAttribute('xlink:href'); }
       }
       stage.replaceChildren(svg);
+      const background = svg.querySelector('svg > rect');
+      stage.style.backgroundColor = background ? getComputedStyle(background).fill : '';
     }
     stage.dataset.board = board.id;
     renderContext(context, board.parentContext ?? []);
