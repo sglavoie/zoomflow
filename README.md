@@ -7,8 +7,11 @@ flowchart basics, service architecture, sequence diagrams, SQL schemas, layers /
 scenarios / steps, state transitions with boundary ports, and a guided lint repair.
 Every example includes source comments and compiles without imports or remote
 assets. The lint repair intentionally reports one error and one warning until fixed.
-Switching examples starts at the root board and retains your source edits and
-opened files in the dropdown for the current page session; reloading clears them.
+Switching examples starts at the root board. Source edits and opened files remain
+in the dropdown and are backed up in browser storage for reload recovery. The
+header marks source changes not saved to a `.d2` file. Use **Save D2 source** to
+download the current text; browser storage can be cleared, so download source
+you want to keep.
 The source lives in `apps/web/src/examples/`, with the catalog in `examples.ts`.
 
 Use pnpm 12.6.0 and Node 26 (verified with Node 26.10.0):
@@ -24,6 +27,10 @@ Esc or Backspace goes to the tree parent, and browser back/forward retraces your
 navigation. Deep links such as `#/checkout/charge` open a board directly in the
 loaded diagram. Open a file or drop one onto the page; files are compiled locally
 with D2's WASM worker. Light, dark and system themes use D2's generated palettes.
+Use the preview's +, − and Fit controls or the mouse wheel to zoom. Drag a zoomed
+diagram to pan; touch dragging works after zooming. Each board opens fitted to
+the preview. Keyboard navigation moves focus to the new board or breadcrumb and
+announces its name.
 
 Drill-down navigation needs no boundary ports or library import. Inside a child
 layer, the viewer shows its parent connections (for example, **From Browse** and
@@ -43,8 +50,9 @@ return an answer without changing the diagram. Invalid D2 and CLI errors appear
 beside the form, leaving your source untouched. If you edit or switch diagrams
 while a request is running, its replacement is discarded. The AI endpoint is
 available only on a local Vite dev or preview server, not in exported HTML or a
-static build.
-For Claude Code, the visible `CLAUDE_CONFIG_DIR` field defaults to `~/.claude`;
+static build. Provider environment fields are under **AI settings** so the source
+editor stays visible on small screens.
+For Claude Code, the `CLAUDE_CONFIG_DIR` field defaults to `~/.claude`;
 `~` expands to your home directory, and relative paths resolve from the server's
 working directory. Both providers accept environment overrides in the shared
 field, one literal `NAME=value` per line (blank lines and `#` comment lines are
@@ -56,7 +64,9 @@ source formatting, including nested indentation. Formatting is one undoable edit
 and refreshes the preview. Invalid diagrams leave the source unchanged and show
 a formatting error; edits made while formatting is running are preserved.
 Compile errors appear in a banner and inline diagnostics while the last good
-diagram stays available. Successful edits preserve the current board, falling
+diagram stays available. Export is disabled until the current source compiles;
+an export already running is canceled if the source changes. Successful edits
+preserve the current board, falling
 back to its nearest existing ancestor if it was removed. Click a shape to select
 its source identifier; selecting an identifier in the editor highlights its shape
 and opens its board when needed. Linked shapes still navigate; Alt+click selects

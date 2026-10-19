@@ -32,4 +32,5 @@ export function setupFullscreen(stage: HTMLElement) {
       event.stopImmediatePropagation();
     }
   }, { capture: true });
+  return area;
 }

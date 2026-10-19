@@ -1,6 +1,7 @@
 import type { ExportBoard } from '@zoomflow/core';
 import { restoreMissingLinks } from './missing-links';
 import { renderParentContext, simplifyTrail } from './navigation';
+import { setupViewport } from './viewport';
 
 const placeholder = 'data:image/svg+xml;base64,' + btoa('<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64"><rect width="64" height="64" fill="#eee"/><path d="M8 8L56 56M56 8L8 56" stroke="#999" stroke-width="3"/></svg>');
 
@@ -85,19 +86,28 @@ export async function rasterizeSvg(svg: string): Promise<Blob> {
 
 // Keep this runtime self-contained: its compiled function body is embedded in HTML.
 // It consumes the same board IDs, hashes, parent and visited-trail model as Viewer.
-function offlineViewer(restoreLinks: typeof restoreMissingLinks, normalizeTrail: typeof simplifyTrail, renderContext: typeof renderParentContext) {
+function offlineViewer(restoreLinks: typeof restoreMissingLinks, normalizeTrail: typeof simplifyTrail,
+  renderContext: typeof renderParentContext, makeViewport: typeof setupViewport) {
   const boards: ExportBoard[] = JSON.parse(document.getElementById('zoomflow-data')!.textContent!);
   const byId = new Map(boards.map((board) => [board.id, board]));
   const stage = document.querySelector<HTMLElement>('.zf-stage')!;
   const crumbs = document.querySelector<HTMLElement>('.zf-breadcrumbs')!;
   const context = document.querySelector<HTMLElement>('.zf-context')!;
   const message = document.querySelector<HTMLElement>('.zf-message')!;
+  const announcement = document.querySelector<HTMLElement>('.zf-visually-hidden')!;
+  const area = document.createElement('div');
+  area.className = 'zf-stage-area';
+  stage.before(area);
+  area.append(stage);
+  makeViewport(stage, area);
   let current = boards[0];
   let trail: string[] = [];
   function ancestors(board: ExportBoard): string[] {
     return board.parent ? [...ancestors(byId.get(board.parent)!), board.id] : [board.id];
   }
   function show(board: ExportBoard, visits: string[], replace = false) {
+    const focusStage = stage.contains(document.activeElement);
+    const focusCrumb = crumbs.contains(document.activeElement);
     current = board;
     trail = normalizeTrail(visits);
     message.textContent = '';
@@ -132,6 +142,9 @@ function offlineViewer(restoreLinks: typeof restoreMissingLinks, normalizeTrail:
       stage.style.backgroundColor = background ? getComputedStyle(background).fill : '';
     }
     stage.dataset.board = board.id;
+    stage.dispatchEvent(new Event('zf-boardchange'));
+    stage.setAttribute('aria-label', `${board.name} diagram`);
+    announcement.textContent = `${board.name} board`;
     renderContext(context, board.parentContext ?? []);
     crumbs.replaceChildren();
     trail.forEach((id, index) => {
@@ -142,6 +155,8 @@ function offlineViewer(restoreLinks: typeof restoreMissingLinks, normalizeTrail:
       if (index) crumbs.append(document.createTextNode(' / '));
       crumbs.append(button);
     });
+    if (focusStage) stage.focus({ preventScroll: true });
+    else if (focusCrumb) crumbs.querySelector<HTMLButtonElement>('button[aria-current]')?.focus({ preventScroll: true });
     history[replace ? 'replaceState' : 'pushState']({ zoomflowTrail: trail }, '', board.hash);
   }
   function restore() {
@@ -180,5 +195,5 @@ function offlineViewer(restoreLinks: typeof restoreMissingLinks, normalizeTrail:
 }
 
 export function offlineViewerScript(): string {
-  return `(${offlineViewer.toString()})(${restoreMissingLinks.toString()}, ${simplifyTrail.toString()}, ${renderParentContext.toString()});`;
+  return `(${offlineViewer.toString()})(${restoreMissingLinks.toString()}, ${simplifyTrail.toString()}, ${renderParentContext.toString()}, ${setupViewport.toString()});`;
 }

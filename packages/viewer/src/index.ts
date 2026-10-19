@@ -4,6 +4,7 @@ import { renderParentContext, simplifyTrail } from './navigation';
 
 export type RenderBoard = (target: string) => Promise<string>;
 export { prepareExportSvg, rasterizeSvg, offlineViewerScript } from './export';
+export { setupViewport } from './viewport';
 
 /** DOM viewer with an injected renderer so callers can reuse compiled documents. */
 export class Viewer {
@@ -11,6 +12,7 @@ export class Viewer {
   private readonly crumbs = document.createElement('nav');
   private readonly context = document.createElement('div');
   private readonly message = document.createElement('div');
+  private readonly announcement = document.createElement('div');
   private boards = new Map<string, Board>();
   private diagnostics: readonly LintDiagnostic[] = [];
   private render: RenderBoard = async () => '';
@@ -32,9 +34,13 @@ export class Viewer {
     this.context.hidden = true;
     this.message.className = 'zf-message';
     this.message.setAttribute('role', 'status');
+    this.announcement.className = 'zf-visually-hidden';
+    this.announcement.setAttribute('aria-live', 'polite');
     this.stage.className = 'zf-stage';
+    this.stage.setAttribute('role', 'region');
+    this.stage.tabIndex = -1;
     this.stage.setAttribute('aria-label', 'Diagram');
-    host.replaceChildren(this.crumbs, this.context, this.message, this.stage);
+    host.replaceChildren(this.crumbs, this.context, this.message, this.announcement, this.stage);
     const options = { signal: this.events.signal };
     this.stage.addEventListener('click', (event) => this.follow(event), options);
     this.stage.addEventListener('keydown', (event) => {
@@ -190,6 +196,9 @@ export class Viewer {
     const board = this.boards.get(id);
     if (!board) return;
     const revision = ++this.revision;
+    const active = document.activeElement;
+    const focusStage = this.stage.contains(active);
+    const focusCrumb = this.crumbs.contains(active);
     this.cancelTransition();
     this.setBusy(true);
     try {
@@ -206,10 +215,13 @@ export class Viewer {
       if (!board.diagram.shapes.length) content.textContent = 'This board is empty.';
       const fade = this.stage.hasChildNodes() && id !== this.current &&
         !matchMedia('(prefers-reduced-motion: reduce)').matches;
+      const keepFocus = document.activeElement === active;
       this.stage.replaceChildren(content);
       this.syncBackground(this.stage);
       if (fade) void this.fadeIn(content);
       this.current = id;
+      this.stage.setAttribute('aria-label', `${board.name} diagram`);
+      this.announcement.textContent = `${board.name} board`;
       this.trail = simplifyTrail(trail ?? [...this.trail, id]);
       this.stage.dataset.board = id;
       this.stage.dispatchEvent(new Event('zf-boardchange'));
@@ -217,6 +229,8 @@ export class Viewer {
       if (mode === 'replace' || location.hash === board.hash) history.replaceState(state, '', board.hash);
       else history.pushState(state, '', board.hash);
       this.updateCrumbs();
+      if (keepFocus && focusStage) this.stage.focus({ preventScroll: true });
+      else if (keepFocus && focusCrumb) this.crumbs.querySelector<HTMLButtonElement>('button[aria-current]')?.focus({ preventScroll: true });
       renderParentContext(this.context, parentContext(board, this.boards));
       this.setMessage('');
     } catch (error) {

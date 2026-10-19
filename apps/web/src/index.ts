@@ -1,5 +1,5 @@
 import { exportBoardsHtml, exportBoardsZip, renderExportBoards, indexShapeSources, lint, type CompileResponse, type ShapeSource, type Diagram, type LintDiagnostic } from '@zoomflow/core';
-import { Viewer, prepareExportSvg, rasterizeSvg, offlineViewerScript, type RenderBoard } from '@zoomflow/viewer';
+import { Viewer, prepareExportSvg, rasterizeSvg, offlineViewerScript, setupViewport, type RenderBoard } from '@zoomflow/viewer';
 import { examples } from './examples';
 import { setupExamplePicker } from './example-picker';
 import standardLibrary from '../../../stdlib/zoomflow.d2?raw';
@@ -13,7 +13,7 @@ import { setupFullscreen } from './fullscreen';
 import { setupAiAssistant } from './ai-assistant';
 
 const viewer = new Viewer(document.querySelector<HTMLElement>('#viewer')!);
-setupFullscreen(viewer.stage);
+setupViewport(viewer.stage, setupFullscreen(viewer.stage));
 setupReference();
 setupSourceSplit();
 const theme = document.querySelector<HTMLSelectElement>('#theme')!;
@@ -37,6 +37,8 @@ let mappedSource: string | undefined;
 let debounce: ReturnType<typeof setTimeout> | undefined;
 const errorBanner = document.querySelector<HTMLElement>('#compile-error')!;
 const lintSummary = document.querySelector<HTMLElement>('#lint-summary')!;
+const draftStatus = document.querySelector<HTMLElement>('#draft-status')!;
+const previewStatus = document.querySelector<HTMLElement>('#preview-status')!;
 const missingBacklink = document.querySelector<HTMLInputElement>('#missing-backlink')!;
 const boundaryPorts = document.querySelector<HTMLInputElement>('#boundary-ports')!;
 const formatButton = document.querySelector<HTMLButtonElement>('#format-source')!;
@@ -51,6 +53,10 @@ const editor = new SourceEditor(document.querySelector<HTMLElement>('#editor')!,
   lintDocument = undefined;
   lintSummary.textContent = 'Lint pending…';
   viewer.highlightShapes([]);
+  documentExport = undefined;
+  exportButton.disabled = true;
+  previewStatus.textContent = 'Updating preview…';
+  examplePicker.updateCurrent(editor.source);
   clearTimeout(debounce);
   debounce = setTimeout(() => void load(editor.source, documentName), 350);
 }, () => void highlightSelection(true), () => void formatSource());
@@ -59,6 +65,25 @@ const examplePicker = setupExamplePicker(() => editor.source, (source, name) => 
   // Example changes start at their overview; live edits still preserve the route.
   history.replaceState(null, '', `${location.pathname}${location.search}#/`);
   void replaceDocument(source, name);
+}, (dirty, recoveryAvailable, savePending) => {
+  draftStatus.textContent = dirty ? !recoveryAvailable ? 'Unsaved changes · download your source'
+    : savePending ? 'Unsaved changes · backing up draft…' : 'Unsaved changes · draft backed up locally' : '';
+});
+
+function download(blob: Blob, name: string) {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = name;
+  document.body.append(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+document.querySelector<HTMLButtonElement>('#save-source')!.addEventListener('click', () => {
+  const name = documentName.replace(/[/\\]/g, '_').replace(/\.d2$/i, '') + '.d2';
+  download(new Blob([editor.source], { type: 'text/plain;charset=utf-8' }), name);
+  examplePicker.markSaved();
 });
 
 async function replaceDocument(source: string, name: string) {
@@ -167,6 +192,7 @@ async function load(source: string, name: string) {
       void highlightSelection(false);
       documentExport = { diagram: compiled.diagram, render, name, diagnostics };
       exportButton.disabled = false;
+      previewStatus.textContent = '';
     }
   } catch (error) {
     if (request === generation) {
@@ -177,6 +203,7 @@ async function load(source: string, name: string) {
       errorBanner.textContent = `Error: ${diagnostics.map((item) => item.message).join('\n')} — Showing the last good preview.`;
       errorBanner.hidden = false;
       viewer.setMessage('');
+      previewStatus.textContent = 'Preview out of date · fix source errors before exporting';
     }
   } finally {
     if (request === generation) viewer.setBusy(false);
@@ -187,6 +214,7 @@ exportButton.addEventListener('click', async () => {
   const loaded = documentExport;
   const board = viewer.currentBoard;
   if (!loaded || !board) return;
+  const exportRevision = generation;
   exportButton.disabled = true;
   const format = document.querySelector<HTMLSelectElement>('#export-format')!.value;
   const dark = document.documentElement.dataset.theme === 'dark';
@@ -210,17 +238,14 @@ exportButton.addEventListener('click', async () => {
           style: exportStyle + (dark ? ':root{color-scheme:dark;color:#e4eaf2;background:#111722}.zf-stage{background:#0a0f25}' : '') })], { type: 'text/html' });
       name += `.${format}`;
     }
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = name;
-    document.body.append(link);
-    link.click();
-    link.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    if (exportRevision !== generation || documentExport !== loaded) {
+      viewer.setMessage('Export canceled because the source changed.');
+      return;
+    }
+    download(blob, name);
     viewer.setMessage(warnings.length ? [...new Set(warnings)].join(' ') : `Exported ${name}`, warnings.length > 0);
   } catch (error) { viewer.setMessage(`Export failed: ${String(error)}`, true); }
-  finally { exportButton.disabled = false; }
+  finally { exportButton.disabled = !documentExport || mappedSource !== editor.source; }
 });
 async function openFile(file: File) {
   try {
@@ -240,5 +265,8 @@ document.addEventListener('drop', (event) => {
   const file = event.dataTransfer?.files[0];
   if (file) void openFile(file);
 });
-window.addEventListener('pagehide', () => { clearTimeout(debounce); ++generation; editor.destroy(); viewer.destroy(); void compiler.then((d2) => d2.dispose()); });
-void load(examples[0].source, examples[0].name);
+window.addEventListener('pagehide', () => { clearTimeout(debounce); examplePicker.flush(); ++generation; editor.destroy(); viewer.destroy(); void compiler.then((d2) => d2.dispose()); });
+documentName = examplePicker.initial.name;
+if (editor.source !== examplePicker.initial.source) editor.replace(examplePicker.initial.source);
+clearTimeout(debounce);
+void load(editor.source, documentName);

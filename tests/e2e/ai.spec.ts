@@ -13,6 +13,7 @@ test('AI updates the current diagram and keeps the edit undoable', async ({ page
   await expect(page.locator('#viewer')).toHaveAttribute('aria-busy', 'false');
   await page.getByLabel('AI', { exact: true }).selectOption('codex');
   await expect(page.locator('#ai-claude-config')).toBeHidden();
+  await page.locator('.ai-settings summary').click();
   await page.locator('#ai-environment').fill('TEST_VALUE=codex');
   await page.getByRole('textbox', { name: 'Ask AI about this diagram' }).fill('Replace it with a note');
   await page.getByRole('button', { name: 'Send' }).click();
@@ -34,6 +35,7 @@ test('Claude config directory is visible and sent with shared environment', asyn
       body: JSON.stringify({ reply: 'No change needed.', source: null }) });
   });
   await page.goto('/');
+  await page.locator('.ai-settings summary').click();
   await expect(page.locator('#ai-claude-config-dir')).toHaveValue('~/.claude');
   await page.locator('#ai-claude-config-dir').fill('~/work-claude');
   await page.locator('#ai-environment').fill('TEST_VALUE=claude');

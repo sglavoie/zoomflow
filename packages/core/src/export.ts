@@ -64,7 +64,7 @@ export function exportBoardsHtml(boards: readonly ExportBoard[], options: { titl
   return `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>${title}</title><style>${options.style}</style></head><body>
-<header><strong>${title}</strong></header><main id="viewer"><nav class="zf-breadcrumbs" aria-label="Breadcrumb"></nav><div class="zf-context" role="group" aria-label="Parent connections" hidden></div><div class="zf-message" role="status"></div><div class="zf-stage" aria-label="Diagram"></div></main>
+<header><strong>${title}</strong></header><main id="viewer"><nav class="zf-breadcrumbs" aria-label="Breadcrumb"></nav><div class="zf-context" role="group" aria-label="Parent connections" hidden></div><div class="zf-message" role="status"></div><div class="zf-visually-hidden" aria-live="polite"></div><div class="zf-stage" role="region" aria-label="Diagram" tabindex="-1"></div></main>
 <footer>Click a linked shape to explore · Esc or Backspace goes up</footer>
 <script id="zoomflow-data" type="application/json">${data}</script><script>${options.script}</script></body></html>`;
 }

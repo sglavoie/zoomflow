@@ -21,8 +21,11 @@
             <p class="example-menu-footer">Edits are kept while this page is open.</p>
           </section>
         </details>
+        <button id="save-source" type="button">Save D2 source</button>
+        <span id="draft-status" role="status"></span>
         <label>Export <select id="export-format"><option value="svg">Current board SVG</option><option value="png">Current board PNG</option><option value="zip">All boards ZIP (SVG)</option><option value="html">Single-file HTML</option></select></label>
         <button id="export" disabled>Download</button>
+        <span id="preview-status" role="status"></span>
         <label>Theme <select id="theme"><option value="system">System</option><option value="light">Light</option><option value="dark">Dark</option></select></label>
       </div>
       <button id="toggle-reference" aria-expanded="false" aria-controls="d2-reference" title="D2 reference (⌘/ or Ctrl+/)">D2 reference</button>
@@ -55,12 +58,14 @@
             <label for="ai-provider">AI</label>
             <select id="ai-provider"><option value="claude">Claude Code</option><option value="codex">Codex</option></select>
           </div>
-          <label id="ai-claude-config" class="ai-field" for="ai-claude-config-dir">CLAUDE_CONFIG_DIR <span>Overrides the same name below</span>
-            <input id="ai-claude-config-dir" type="text" value="~/.claude" spellcheck="false" required />
-          </label>
-          <label class="ai-field" for="ai-environment">Environment <span>One NAME=value per line; values are literal</span>
-            <textarea id="ai-environment" rows="2" spellcheck="false" placeholder="EXAMPLE_KEY=value"></textarea>
-          </label>
+          <details class="ai-settings"><summary>AI settings</summary>
+            <label id="ai-claude-config" class="ai-field" for="ai-claude-config-dir">CLAUDE_CONFIG_DIR <span>Overrides the same name below</span>
+              <input id="ai-claude-config-dir" type="text" value="~/.claude" spellcheck="false" required />
+            </label>
+            <label class="ai-field" for="ai-environment">Environment <span>One NAME=value per line; values are literal</span>
+              <textarea id="ai-environment" rows="2" spellcheck="false" placeholder="EXAMPLE_KEY=value"></textarea>
+            </label>
+          </details>
           <textarea id="ai-prompt" aria-label="Ask AI about this diagram" placeholder="Describe a change or ask about this diagram…" rows="2" required></textarea>
           <button id="ai-send" type="submit">Send</button>
         </form>
