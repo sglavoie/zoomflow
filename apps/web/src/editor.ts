@@ -19,7 +19,6 @@ export class SourceEditor {
   private readonly diagnosticList = document.createElement('ul');
   private readonly extensions: Extension[];
   private currentKey = '';
-  private highlightTimer: ReturnType<typeof setTimeout> | undefined;
   private readonly documents = new Map<string, { state: EditorState; scroll: ReturnType<EditorView['scrollSnapshot']> }>();
   constructor(parent: HTMLElement, source: string, changed: () => void, selected: () => void, format: () => void, reveal: () => void) {
     this.extensions = [
@@ -118,8 +117,14 @@ export class SourceEditor {
   }
   undo() { return undo(this.view); }
   clearAiHighlights() {
-    clearTimeout(this.highlightTimer);
     if (this.view.state.field(aiHighlights).size) this.view.dispatch({ effects: highlightAiLines.of([]) });
+  }
+  revealAiChange() {
+    const first = this.view.state.field(aiHighlights).iter();
+    if (!first.value) return;
+    const line = this.view.state.doc.lineAt(first.from);
+    this.view.dispatch({ selection: { anchor: line.from, head: line.to }, scrollIntoView: true });
+    this.view.focus();
   }
   applyAi(source: string) {
     this.clearAiHighlights();
@@ -137,7 +142,6 @@ export class SourceEditor {
     const scroll = this.view.scrollSnapshot().map(changes);
     this.view.dispatch({ changes, effects: [...(scroll ? [scroll] : []), highlightAiLines.of([...lines].sort((a, b) => a - b))],
       userEvent: 'input.ai', annotations: isolateHistory.of('full') });
-    this.highlightTimer = setTimeout(() => this.clearAiHighlights(), 15_000);
     return `Changes at ${lines.size} source line${lines.size === 1 ? '' : 's'}${deleted ? ' (including deletions)' : ''}.`;
   }
   format(source: string) {
@@ -181,5 +185,5 @@ export class SourceEditor {
     this.panel.hidden = false;
     (this.diagnosticList.querySelector('button') ?? this.panel.querySelector('button'))?.focus();
   }
-  destroy() { clearTimeout(this.highlightTimer); this.view.destroy(); }
+  destroy() { this.view.destroy(); }
 }

@@ -19,12 +19,14 @@ source editor stays visible. The prompt and Send/Cancel share a compact row abov
 availability and settings, including on phones. Additional settings scroll below
 the composer; a bottom shadow indicates more content.
 
-Applied edits briefly highlight the affected source lines and show a change count
+Applied edits highlight the affected source lines and show a clickable change count
 beside **Undo AI change**. This feedback scrolls into view within the tools on
 short screens without moving the editor or keyboard focus. Deletions highlight
 their location in the resulting source.
-Highlights clear after 15 seconds, another source edit, or switching documents;
-the Undo action remains available after the highlight expires. Separate edits keep
+Click the count to focus the first changed line, opening Source on narrow screens.
+Highlights remain until **Dismiss highlights**, another source edit, or switching documents;
+the Undo action remains available after dismissal. Asking another question keeps
+the previous review controls until a new edit supersedes them. Separate edits keep
 unchanged lines, selection, and the editor's scroll anchor intact. Large rewrites
 may be grouped into a single highlighted region.
 

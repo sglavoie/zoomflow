@@ -14,6 +14,17 @@ async function choose(page: Page, name: RegExp) {
 async function saved(page: Page) {
   await expect(page.locator('#draft-status')).toHaveAttribute('data-recovery', 'saved');
 }
+async function expectView(page: Page, expected: string) {
+  const actual = await page.locator('.zf-stage > svg').evaluate((node) => {
+    const svg = node as SVGSVGElement;
+    const matrix = svg.getScreenCTM()!;
+    return { box: svg.getAttribute('viewBox')!.split(' ').map(Number), xScale: Math.abs(matrix.a), yScale: Math.abs(matrix.d) };
+  });
+  const prior = expected.split(' ').map(Number);
+  // SVG matrix round trips differ by tiny fractions between engines. Assert
+  // the restored position and size in screen pixels, not arbitrary SVG units.
+  actual.box.forEach((value, i) => expect(Math.abs(value - prior[i]) * (i % 2 ? actual.yScale : actual.xScale)).toBeLessThan(0.25));
+}
 
 test('concurrent tabs keep both versions and unrelated drafts after reload', async ({ page, context }) => {
   await page.goto('/'); await ready(page);
@@ -71,12 +82,12 @@ test('documents restore boards, breadcrumbs, zoom and pan; returning to a board 
   await choose(page, /Order flow/);
   await expect(stage).toHaveAttribute('data-board', 'root.layers.checkout');
   await expect(page.locator('.zf-zoom-controls span')).toHaveText('225%');
-  (await stage.locator(':scope > svg').getAttribute('viewBox'))!.split(' ').map(Number).forEach((value, i) => expect(value).toBeCloseTo(Number(childBox!.split(' ')[i]), 5));
+  await expectView(page, childBox!);
   await expect(page.locator('.zf-breadcrumbs button')).toHaveText(['Root', 'checkout']);
   await page.locator('.zf-breadcrumbs').getByRole('button', { name: 'Root', exact: true }).click();
   await expect(stage).toHaveAttribute('data-board', 'root');
   await expect(page.locator('.zf-zoom-controls span')).toHaveText('150%');
-  (await stage.locator(':scope > svg').getAttribute('viewBox'))!.split(' ').map(Number).forEach((value, i) => expect(value).toBeCloseTo(Number(rootBox!.split(' ')[i]), 5));
+  await expectView(page, rootBox!);
   await page.goBack();
   await expect(stage).toHaveAttribute('data-board', 'root.layers.checkout');
   await expect(page.locator('.zf-zoom-controls span')).toHaveText('225%');
@@ -107,7 +118,7 @@ test('workspace is compact and stable, zoom explains its baseline, export descri
   const editor = (await page.locator('#editor').boundingBox())!;
   expect(editor.y - pane.y).toBeLessThan(145);
   await expect(page.locator('.zf-zoom-controls span')).toHaveText('Fit');
-  await expect(page.locator('.zf-pan-hint')).toBeHidden();
+  await expect(page.locator('.zf-pan-hint')).toHaveText('Click Checkout to explore');
   await page.getByRole('button', { name: 'Zoom in', exact: true }).click();
   await expect(page.locator('.zf-pan-hint')).toBeVisible();
   await expect(page.locator('.zf-zoom-controls span')).toHaveAttribute('aria-label', '150% of fitted size');

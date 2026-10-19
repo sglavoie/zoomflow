@@ -32,6 +32,8 @@ export function setupViewport(stage: HTMLElement, host: HTMLElement) {
   hint.className = 'zf-pan-hint';
   hint.textContent = touch ? 'Pinch to zoom · Drag to pan' : 'Space + drag to pan · Scroll to zoom';
   hint.hidden = true;
+  let guidance = '';
+  let preferGuidance = false;
   stage.after(controls);
   host.append(hint);
 
@@ -78,7 +80,10 @@ export function setupViewport(stage: HTMLElement, host: HTMLElement) {
     amount.textContent = zoomed ? `${Math.round(currentScale * 100)}%` : 'Fit';
     amount.title = zoomed ? `${Math.round(currentScale * 100)}% of fitted size` : 'Diagram fitted to the available space';
     amount.setAttribute('aria-label', amount.title);
-    hint.hidden = !svg || !touch && currentScale <= 1 + zoomEpsilon;
+    const panHint = touch ? 'Pinch to zoom · Drag to pan' : 'Space + drag to pan · Scroll to zoom';
+    hint.textContent = guidance && (preferGuidance || currentScale <= 1 + zoomEpsilon) ? guidance : panHint;
+    hint.title = hint.textContent;
+    hint.hidden = !svg || !guidance && !touch && currentScale <= 1 + zoomEpsilon;
     out.disabled = !svg || currentScale <= minZoom + zoomEpsilon;
     inside.disabled = !svg || currentScale >= maxZoom - zoomEpsilon;
     fit.disabled = !svg || !zoomed;
@@ -317,6 +322,7 @@ export function setupViewport(stage: HTMLElement, host: HTMLElement) {
   }, { capture: true });
   return {
     reveal,
+    setGuidance(text: string, priority = false) { guidance = text; preferGuidance = priority; updateControls(); },
     refresh() { if (activeKey) reset(); },
     checkpoint(key: string) {
       remember();

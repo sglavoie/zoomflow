@@ -3,13 +3,14 @@ export function setupSourceSplit() {
   const workspace = document.querySelector<HTMLElement>('#workspace')!;
   const divider = document.querySelector<HTMLElement>('#source-divider')!;
   const storageKey = 'zoomflow.source.preview-share';
-  const defaultShare = 62;
-  let requestedShare = defaultShare;
+  const defaultShare = () => 50 + 12 * Math.max(0, Math.min(1, (workspace.clientWidth - 1100) / 340));
+  let requestedShare = defaultShare();
+  let customized = false;
   let previewShare = requestedShare;
   let drag: { pointer: number; offset: number } | undefined;
   try {
     const stored = Number(localStorage.getItem(storageKey));
-    if (Number.isFinite(stored) && stored >= 25 && stored <= 75) requestedShare = stored;
+    if (Number.isFinite(stored) && stored >= 25 && stored <= 75) { requestedShare = stored; customized = true; }
   } catch { /* The split works when storage is unavailable. */ }
 
   function setShare(value: number) {
@@ -26,11 +27,12 @@ export function setupSourceSplit() {
     divider.setAttribute('aria-valuetext', `Diagram ${Math.round(previewShare)}%, D2 source ${Math.round(100 - previewShare)}%`);
   }
   function saveShare() {
+    customized = true;
     try { localStorage.setItem(storageKey, String(requestedShare)); }
     catch { /* Resizing does not depend on storage. */ }
   }
   setShare(requestedShare);
-  new ResizeObserver(() => setShare(requestedShare)).observe(workspace);
+  new ResizeObserver(() => setShare(customized ? requestedShare : defaultShare())).observe(workspace);
 
   divider.addEventListener('keydown', (event) => {
     const next = event.key === 'ArrowLeft' ? previewShare - 5
@@ -68,7 +70,8 @@ export function setupSourceSplit() {
   divider.addEventListener('pointercancel', finishDrag);
   divider.addEventListener('lostpointercapture', finishDrag);
   divider.addEventListener('dblclick', () => {
-    setShare(defaultShare);
-    saveShare();
+    customized = false;
+    setShare(defaultShare());
+    try { localStorage.removeItem(storageKey); } catch { /* Reset works without storage. */ }
   });
 }

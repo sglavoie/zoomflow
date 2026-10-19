@@ -80,14 +80,14 @@ test('uploaded drafts can be removed without affecting other diagrams', async ({
 
 test('D2 syntax tokens remain visible in light and dark themes', async ({ page }) => {
   await page.goto('/');
-  await expect(page.locator('.zf-token-comment').first()).toBeVisible();
-  await expect(page.locator('.zf-token-keyword').first()).toBeVisible();
-  await expect(page.locator('.zf-token-property').first()).toBeVisible();
-  await expect(page.locator('.zf-token-url').first()).toBeVisible();
-  await expect(page.locator('.zf-token-operator').first()).toBeVisible();
-  const light = await page.locator('.zf-token-comment').first().evaluate((node) => getComputedStyle(node).color);
+  await expect(page.locator('#editor .zf-token-comment').first()).toBeVisible();
+  await expect(page.locator('#editor .zf-token-keyword').first()).toBeVisible();
+  await expect(page.locator('#editor .zf-token-property').first()).toBeVisible();
+  await expect(page.locator('#editor .zf-token-url').first()).toBeVisible();
+  await expect(page.locator('#editor .zf-token-operator').first()).toBeVisible();
+  const light = await page.locator('#editor .zf-token-comment').first().evaluate((node) => getComputedStyle(node).color);
   await selectMenuOption(page, '#theme', 'dark');
-  const dark = await page.locator('.zf-token-comment').first().evaluate((node) => getComputedStyle(node).color);
+  const dark = await page.locator('#editor .zf-token-comment').first().evaluate((node) => getComputedStyle(node).color);
   expect(dark).not.toBe(light);
 });
 

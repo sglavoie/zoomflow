@@ -2,7 +2,8 @@ import { AiError, aiFailure, readAiResponse } from './ai-errors';
 type Snapshot = { source: string; name: string; board: string; revision: number };
 
 export function setupAiAssistant(read: () => Snapshot, validate: (source: string) => Promise<void>, apply: (source: string) => string,
-  onStatus: (message: string, kind: 'info' | 'error') => void = () => {}, undo: () => boolean = () => false) {
+  onStatus: (message: string, kind: 'info' | 'error') => void = () => {}, undo: () => boolean = () => false,
+  revealChange: () => void = () => {}, dismissHighlights: () => void = () => {}) {
   const form = document.querySelector<HTMLFormElement>('#ai-form')!;
   const provider = document.querySelector<HTMLSelectElement>('#ai-provider')!;
   const claudeConfig = document.querySelector<HTMLElement>('#ai-claude-config')!;
@@ -18,7 +19,15 @@ export function setupAiAssistant(read: () => Snapshot, validate: (source: string
   const undoButton = document.querySelector<HTMLButtonElement>('#ai-undo')!;
   const elapsed = document.querySelector<HTMLElement>('#ai-elapsed')!;
   const changeFeedback = document.querySelector<HTMLElement>('.ai-change-feedback')!;
-  const changeSummary = document.querySelector<HTMLElement>('#ai-change-summary')!;
+  const changeSummary = document.querySelector<HTMLButtonElement>('#ai-change-summary')!;
+  const dismiss = document.querySelector<HTMLButtonElement>('#ai-dismiss-highlights')!;
+  changeSummary.addEventListener('click', revealChange);
+  dismiss.addEventListener('click', () => {
+    dismissHighlights();
+    changeSummary.disabled = true;
+    dismiss.hidden = true;
+    undoButton.focus();
+  });
   const tools = document.querySelector<HTMLElement>('.source-tools')!;
   const updateOverflow = () => { tools.dataset.overflow = String(tools.scrollHeight > tools.clientHeight + 1 && tools.scrollTop + tools.clientHeight < tools.scrollHeight - 1); };
   const resize = new ResizeObserver(updateOverflow);
@@ -120,9 +129,6 @@ export function setupAiAssistant(read: () => Snapshot, validate: (source: string
     const unchanged = () => read().revision === snapshot.revision;
     const controller = active = new AbortController();
     responseDetails();
-    undoRevision = undefined;
-    undoButton.hidden = true;
-    changeFeedback.hidden = true;
     updateControls();
     const started = Date.now();
     elapsed.textContent = '0s elapsed';
@@ -153,6 +159,8 @@ export function setupAiAssistant(read: () => Snapshot, validate: (source: string
         }
         if (data.source !== snapshot.source) {
           changeSummary.textContent = apply(data.source);
+          changeSummary.disabled = false;
+          dismiss.hidden = false;
           undoRevision = read().revision;
           undoButton.hidden = false;
           changeFeedback.hidden = false;

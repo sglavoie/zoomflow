@@ -27,7 +27,8 @@ for (const viewport of [{ width: 1280, height: 900 }, { width: 390, height: 844 
     {
       const canvas = (await stage.boundingBox())!;
       expect(canvas.width).toBe(viewport.width - 16);
-      expect(canvas.height).toBeGreaterThan(viewport.height - 80);
+      // Contextual guidance occupies a bounded row above the bottom toolbar.
+      expect(canvas.height).toBeGreaterThan(viewport.height - 120);
       expect((await exit.boundingBox())!.y).toBeGreaterThanOrEqual(canvas.y + canvas.height);
     }
     const buttonBox = (await exit.boundingBox())!;

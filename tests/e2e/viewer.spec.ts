@@ -227,7 +227,7 @@ test('handles external links, theme changes, invalid files and missing deep link
   await expect(page).toHaveURL(/#\/checkout$/);
   await page.keyboard.press('Escape');
   await board(page, 'root');
-  const external = page.locator('.zf-stage a[href="https://example.com/docs"]');
+  const external = page.locator('.zf-stage a[href="https://d2lang.com/tour/intro/"]');
   await expect(external).toHaveAttribute('target', '_blank');
   await expect(external).toHaveAttribute('rel', 'noopener noreferrer');
   const background = () => page.locator('.zf-stage svg').first().evaluate((svg) => {
@@ -265,5 +265,5 @@ layers: {empty: {}}`) });
   await page.keyboard.press('Escape');
   await board(page, 'root');
   await drill(page, 'root.layers.empty');
-  await expect(page.locator('.zf-stage')).toHaveText('This board is empty.');
+  await expect(page.locator('.zf-stage')).toContainText('This board is empty.');
 });

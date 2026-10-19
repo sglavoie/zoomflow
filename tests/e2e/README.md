@@ -109,3 +109,8 @@ bundled D2 engine, alongside indentation and fold-range assertions.
 
 `viewport-polish.spec.ts` adds a touch-device visual baseline, checks that enlarged
 link hit areas do not overlap, and verifies reveal while the mobile preview is hidden.
+
+`experience-polish.spec.ts` checks formatting feedback lifetimes, adaptive source
+widths and remembered overrides, syntax-colored reference search and copy feedback,
+contextual pointer/keyboard/touch guidance, actionable empty boards, and persistent
+AI review with jump-to-change, dismissal, and undo after a failed follow-up request.

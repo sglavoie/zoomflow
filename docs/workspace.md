@@ -75,6 +75,10 @@ not yet loaded with folder projects.
 
 Click a linked shape to drill into a board. Breadcrumbs record the visited path,
 trimming back to an earlier board whenever you revisit it so cycles do not repeat.
+Guidance below the canvas names a detail board to explore, explains source selection
+on hover or keyboard focus, and gives panning instructions after zooming. Touch
+guidance uses tap and pinch controls. Empty boards show a small connection example
+and **Edit source**, which focuses the editor without changing any source.
 Esc or Backspace goes to the tree parent, and browser back/forward retraces your
 navigation. Deep links such as `#/checkout/charge` open a board directly in the
 loaded diagram. Child-board links show a downward arrow badge, links to ancestors show
@@ -132,6 +136,8 @@ a formatting error; edits made while formatting is running are preserved.
 The compact, fixed-height status strip above the editor shares space between file
 state, delayed progress, and diagnostic counts. Longer compiler messages remain
 available in Diagnostics.
+Formatting success messages return to the file status after four seconds; formatting
+failures remain visible until another attempt or source change.
 Healthy preview and lint checks stay quiet, leaving one stable file-status message.
 Use **Diagnostics** to open the detailed list; the toolbar and editor stay in place
 through compilation failures and recovery.
@@ -161,10 +167,16 @@ The diagram is on the left and the source editor is on the right. Click **D2
 reference** or press **⌘⇧/** on macOS, or **Ctrl+Shift+/** on Windows/Linux,
 to toggle a syntax reference below the diagram. This shortcut also works while editing;
 **⌘/** or **Ctrl+/** toggles D2 line comments in the editor.
+The default desktop split gives each pane equal space near 1,100px, gradually
+increasing the diagram share to 62% at 1,440px. Resizing the divider remembers your
+chosen share; double-clicking restores the adaptive default. Phone source controls
+use tighter spacing to leave more room for editing.
 On phones and tablets, opening the reference reveals Preview and closing it returns focus to the source when opened from the editor.
 The bundled reference works without a network connection once
 the app is loaded, with searchable examples, copy buttons and links to the full D2
 documentation. Each example is tested against the bundled compiler.
+Reference snippets use the editor's syntax colors. Search highlights matching text,
+and Copy briefly changes to **Copied** beside the snippet.
 
 Drag the horizontal divider to resize the diagram/reference split, or focus it
 and use Up/Down (5% steps) and Home/End (25%/75%). The split starts at 60% diagram

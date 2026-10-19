@@ -1,4 +1,34 @@
 import { referenceTopics } from './reference-data';
+import { d2HighlightRanges } from './d2-language';
+
+/** Build text nodes only, preserving exact copy text and syntax colors under matches. */
+function renderMatches(element: HTMLElement, source: string, terms: string[], syntax = false) {
+  const tokens = syntax ? d2HighlightRanges(source) : [];
+  const matches: { from: number; to: number }[] = [];
+  const lower = source.toLowerCase();
+  for (const term of terms) {
+    for (let from = lower.indexOf(term); from !== -1; from = lower.indexOf(term, from + term.length)) {
+      matches.push({ from, to: from + term.length });
+    }
+  }
+  const boundaries = [...new Set([0, source.length, ...tokens.flatMap(({ from, to }) => [from, to]),
+    ...matches.flatMap(({ from, to }) => [from, to])])].sort((a, b) => a - b);
+  const fragment = document.createDocumentFragment();
+  for (let i = 1; i < boundaries.length; i++) {
+    const from = boundaries[i - 1], to = boundaries[i];
+    const token = tokens.find((token) => token.from <= from && token.to >= to);
+    const matched = matches.some((match) => match.from <= from && match.to >= to);
+    const text = source.slice(from, to);
+    if (!token && !matched) fragment.append(text);
+    else {
+      const node = document.createElement(matched ? 'mark' : 'span');
+      if (token) node.className = token.className;
+      node.textContent = text;
+      fragment.append(node);
+    }
+  }
+  element.replaceChildren(fragment);
+}
 
 /** App-only reference UI; the viewer and exported diagrams remain independent. */
 export function setupReference() {
@@ -49,6 +79,7 @@ export function setupReference() {
     const copy = document.createElement('button');
     copy.textContent = 'Copy';
     copy.setAttribute('aria-label', `Copy ${topic.title} example`);
+    let copyTimer: ReturnType<typeof setTimeout> | undefined;
     const description = document.createElement('p');
     description.textContent = topic.description;
     const pre = document.createElement('pre');
@@ -63,8 +94,13 @@ export function setupReference() {
     copy.addEventListener('click', async () => {
       try {
         await navigator.clipboard.writeText(topic.source);
+        clearTimeout(copyTimer);
+        copy.textContent = 'Copied';
+        copyTimer = setTimeout(() => { copy.textContent = 'Copy'; }, 2000);
         status.textContent = `Copied ${topic.title} example.`;
       } catch {
+        clearTimeout(copyTimer);
+        copy.textContent = 'Copy';
         const selection = window.getSelection();
         const range = document.createRange();
         range.selectNodeContents(code);
@@ -76,7 +112,8 @@ export function setupReference() {
     titleRow.append(title, copy);
     card.append(titleRow, description, pre, docs);
     content.append(card);
-    return { card, text: `${topic.title} ${topic.description} ${topic.keywords} ${topic.source}`.toLowerCase() };
+    return { card, title, description, code, topic,
+      text: `${topic.title} ${topic.description} ${topic.keywords} ${topic.source}`.toLowerCase() };
   });
   const empty = document.createElement('p');
   empty.textContent = 'No matching syntax. Try “arrows”, “style”, or “layers”.';
@@ -84,9 +121,14 @@ export function setupReference() {
   function filter() {
     const terms = search.value.toLowerCase().trim().split(/\s+/).filter(Boolean);
     let matches = 0;
-    for (const { card, text } of cards) {
+    for (const { card, text, title, description, code, topic } of cards) {
       card.hidden = !terms.every((term) => text.includes(term));
-      if (!card.hidden) ++matches;
+      if (!card.hidden) {
+        ++matches;
+        renderMatches(title, topic.title, terms);
+        renderMatches(description, topic.description, terms);
+        renderMatches(code, topic.source, terms, true);
+      }
     }
     empty.hidden = matches > 0;
     count.textContent = `${matches} topic${matches === 1 ? '' : 's'}`;

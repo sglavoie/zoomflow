@@ -174,7 +174,7 @@ for (const offline of [false, true]) test(`link badges keep their screen size th
   await expect(page.locator('.zf-stage')).toHaveAttribute('data-board', 'root.layers.checkout');
 });
 
-test('AI edits highlight only changed lines, preserve selection and undo, and clear after expiry or switching', async ({ page }) => {
+test('AI edits highlight only changed lines, preserve selection and undo, and remain until dismissed or switching', async ({ page }) => {
   const before = 'a: First\nb: Kept\nc: Last';
   const after = 'a: Updated\nb: Kept\nc: Changed';
   await page.route('**/api/ai', route => route.fulfill({ json: { source: after, reply: 'Updated the outer nodes.' } }));
@@ -208,6 +208,8 @@ test('AI edits highlight only changed lines, preserve selection and undo, and cl
   await expect(page.locator('.zf-ai-changed')).toHaveCount(0);
   await send();
   await page.clock.fastForward(16_000);
+  await expect(page.locator('.zf-ai-changed')).toHaveText(['a: Updated', 'c: Changed']);
+  await page.locator('#ai-dismiss-highlights').click();
   await expect(page.locator('.zf-ai-changed')).toHaveCount(0);
   await expect(page.locator('#ai-undo')).toBeVisible();
   await page.locator('#ai-undo').click(); await send();

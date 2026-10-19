@@ -175,13 +175,12 @@
         </details>
         <div class="ai-feedback">
           <div id="ai-status" role="status" aria-live="polite"></div>
-          <div class="ai-change-feedback" hidden><span id="ai-change-summary"></span><button id="ai-undo" type="button" aria-describedby="ai-change-summary" hidden>Undo AI change</button></div>
+          <div class="ai-change-feedback" hidden><button id="ai-change-summary" class="button-quiet" type="button" title="Go to the first changed line"></button><button id="ai-dismiss-highlights" class="button-quiet" type="button">Dismiss highlights</button><button id="ai-undo" type="button" aria-describedby="ai-change-summary" hidden>Undo AI change</button></div>
         </div>
         </div>
         <div id="editor"></div>
       </section>
     </div>
-    <footer>Click a shape to select its source · Linked shapes open boards (Alt+click selects source only) · Esc or Backspace in the diagram goes up</footer>
     <script type="module" src="/src/index.ts"></script>
   </body>
 </html>

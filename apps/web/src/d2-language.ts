@@ -1,6 +1,6 @@
 import { HighlightStyle, StreamLanguage, StringStream, foldService, syntaxHighlighting, type StreamParser } from '@codemirror/language';
 import type { Text } from '@codemirror/state';
-import { tags } from '@lezer/highlight';
+import { highlightTree, tags } from '@lezer/highlight';
 
 type State = { block: string | null; blockIndent: number; depth: number };
 /** Shared lexical rules keep folding and indentation out of comments and labels. */
@@ -99,3 +99,10 @@ const folding = foldService.of((editor, lineStart) => {
 });
 
 export const d2Language = [language, syntaxHighlighting(style), folding];
+
+/** Reference snippets use exactly the editor's parser and token classes. */
+export function d2HighlightRanges(source: string) {
+  const ranges: { from: number; to: number; className: string }[] = [];
+  highlightTree(language.parser.parse(source), style, (from, to, className) => ranges.push({ from, to, className }));
+  return ranges;
+}

@@ -9,7 +9,7 @@ test.use({ hasTouch: true, viewport: { width: 390, height: 844 }, colorScheme: '
 
 test('the touch canvas exposes readable cues and a zoom hint before any gesture', async ({ page, browserName }) => {
   await page.goto('/'); await ready(page);
-  await expect(page.locator('.zf-pan-hint')).toHaveText('Pinch to zoom · Drag to pan');
+  await expect(page.locator('.zf-pan-hint')).toHaveText('Tap Checkout to explore · Pinch to zoom');
   if (browserName === 'chromium') await expect(page).toHaveScreenshot('touch-canvas.png', { maxDiffPixelRatio: 0.005 });
   await page.setViewportSize({ width: 844, height: 390 });
   for (const badge of await page.locator('.appendix-icon circle').all()) {

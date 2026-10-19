@@ -96,7 +96,7 @@ test('opens a single HTML file offline and drills every level with history and b
   await drill(page, 'root.layers.checkout.layers.charge');
   await page.getByRole('button', { name: 'Root', exact: true }).first().click();
   await board(page, 'root');
-  await expect(page.locator('a[href="https://example.com/docs"]')).toHaveAttribute('target', '_blank');
+  await expect(page.locator('a[href="https://d2lang.com/tour/intro/"]')).toHaveAttribute('target', '_blank');
   expect(network).toEqual([]);
   expect(errors).toEqual([]);
 });

@@ -14,6 +14,7 @@ import { setupAiAssistant } from './ai-assistant';
 import { setupMobileView } from './mobile-view';
 import { projectFileSystem, readDirectoryHandle, readFolderInput } from './project-files';
 import { setupShortcuts } from './shortcuts';
+import { setupCanvasGuidance } from './canvas-guidance';
 
 const canvasStyle = document.createElement('style');
 canvasStyle.textContent = viewerStyle;
@@ -115,6 +116,7 @@ const diagnosticsButton = document.querySelector<HTMLButtonElement>('#show-diagn
 const revealButton = document.querySelector<HTMLButtonElement>('#reveal-source')!;
 let activeDiagnostics: SourceDiagnostic[] = [];
 let activityTimer: ReturnType<typeof setTimeout> | undefined;
+let formatTimer: ReturnType<typeof setTimeout> | undefined;
 let previewTimer: ReturnType<typeof setTimeout> | undefined;
 function setPreviewState(state: 'loading' | 'updating' | 'ready' | 'error' | 'unavailable') {
   if (state === 'updating') {
@@ -135,6 +137,7 @@ function setPreviewState(state: 'loading' | 'updating' | 'ready' | 'error' | 'un
     ready: 'Preview ready', error: 'Preview out of date', unavailable: 'Preview unavailable' }[state];
   if (state === 'error') viewer.stage.dataset.previewState = 'stale';
   else delete viewer.stage.dataset.previewState;
+  viewer.stage.dispatchEvent(new Event('zf-sourcechange'));
 }
 function setActivity(message: string, kind: 'info' | 'error' = 'info') {
   clearTimeout(activityTimer);
@@ -144,6 +147,15 @@ function setActivity(message: string, kind: 'info' | 'error' = 'info') {
   activityStatus.setAttribute('role', kind === 'error' ? 'alert' : 'status');
   activityStatus.hidden = !message;
   if (message && kind === 'info' && !message.endsWith('…')) activityTimer = setTimeout(() => { activityStatus.hidden = true; }, 4000);
+}
+function setFormatStatus(message: string, kind: 'info' | 'error' = 'info') {
+  clearTimeout(formatTimer);
+  formatStatus.textContent = message;
+  formatStatus.title = message;
+  formatStatus.dataset.kind = kind;
+  formatStatus.setAttribute('role', kind === 'error' ? 'alert' : 'status');
+  formatStatus.hidden = !message;
+  if (message && kind === 'info' && !message.endsWith('…')) formatTimer = setTimeout(() => { formatStatus.hidden = true; }, 4000);
 }
 function setExportStatus(message: string, kind: 'info' | 'error' = 'info') {
   exportStatus.textContent = message;
@@ -174,7 +186,7 @@ function invalidateSource() {
   ++documentRevision;
   ai?.sourceChanged();
   viewer.setBusy(true);
-  formatStatus.hidden = true;
+  setFormatStatus('');
   viewer.cancelPendingRender();
   sourceMap = [];
   revealButton.disabled = true;
@@ -190,6 +202,7 @@ function invalidateSource() {
   setFileError('');
   setExportStatus('');
   document.querySelector<HTMLButtonElement>('#go-to-error')!.disabled = true;
+  viewer.stage.dispatchEvent(new Event('zf-sourcechange'));
 }
 const editor = new SourceEditor(document.querySelector<HTMLElement>('#editor')!, examples[0].source, () => {
   invalidateSource();
@@ -346,21 +359,18 @@ async function formatSource() {
   const document = editor.view.state.doc;
   const source = editor.source;
   formatButton.disabled = true;
-  formatStatus.textContent = 'Formatting…';
-  formatStatus.hidden = false;
+  setFormatStatus('Formatting…');
   try {
     const compiled = mappedSource === source && lintDocument ? lintDocument : await compileSource(source);
     // Edits or opening another file invalidate this request, even after undo.
     if (editor.view.state.doc !== document || documentRevision !== revision) return;
     const formatted = compiled.fs[compiled.inputPath];
     if (typeof formatted !== 'string') throw new Error('D2 did not return formatted source.');
-    formatStatus.textContent = editor.format(formatted) ? 'Source formatted.' : 'Source is already formatted.';
-    formatStatus.hidden = false;
+    setFormatStatus(editor.format(formatted) ? 'Source formatted.' : 'Source is already formatted.');
   } catch (error) {
     if (editor.view.state.doc !== document || documentRevision !== revision) return;
-    formatStatus.textContent = `Formatting failed: ${compilerDiagnostics(error, source, examplePicker.compilation().inputPath).map((item) => item.message).join('\n')}`;
-    formatStatus.hidden = false;
-  } finally { formatStatus.title = formatStatus.textContent ?? ''; formatButton.disabled = false; }
+    setFormatStatus(`Formatting failed: ${compilerDiagnostics(error, source, examplePicker.compilation().inputPath).map((item) => item.message).join('\n')}`, 'error');
+  } finally { formatButton.disabled = false; }
 }
 formatButton.addEventListener('click', () => void formatSource());
 ai = setupAiAssistant(
@@ -369,6 +379,8 @@ ai = setupAiAssistant(
   (source) => editor.applyAi(source),
   (message, kind) => setActivity(message, kind),
   () => editor.undo(),
+  () => { showMobileView('source'); editor.revealAiChange(); },
+  () => editor.clearAiHighlights(),
 );
 
 function updateLint() {
@@ -460,6 +472,11 @@ function selectShape(event: MouseEvent | KeyboardEvent) {
 }
 viewer.stage.addEventListener('click', selectShape, { capture: true });
 viewer.stage.addEventListener('keydown', selectShape, { capture: true });
+setupCanvasGuidance(viewer.stage, viewport.setGuidance, () => sourceMap.length > 0 && mappedSource === editor.source,
+  () => {
+    if (document.body.classList.contains('diagram-fullscreen')) document.querySelector<HTMLButtonElement>('.zf-fullscreen-toggle')!.click();
+    showMobileView('source'); editor.view.focus();
+  });
 let documentExport: { diagram: Diagram; render: RenderBoard; name: string; diagnostics: LintDiagnostic[] } | undefined;
 const exportButton = document.querySelector<HTMLButtonElement>('#export')!;
 const exportChoices = document.querySelector<HTMLFieldSetElement>('#export-format')!;
