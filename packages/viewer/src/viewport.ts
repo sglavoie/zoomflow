@@ -18,7 +18,7 @@ export function setupViewport(stage: HTMLElement, host: HTMLElement) {
   amount.setAttribute('aria-live', 'off');
   const fit = document.createElement('button');
   fit.type = 'button';
-  fit.textContent = 'Fit';
+  fit.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5"/><rect x="7" y="7" width="10" height="10" rx="1"/></svg>';
   fit.title = 'Fit diagram';
   fit.setAttribute('aria-label', 'Fit diagram');
   const inside = document.createElement('button');
@@ -27,11 +27,24 @@ export function setupViewport(stage: HTMLElement, host: HTMLElement) {
   inside.title = 'Zoom in';
   inside.setAttribute('aria-label', 'Zoom in');
   controls.append(out, amount, fit, inside);
-  host.append(controls);
+  const hint = document.createElement('div');
+  hint.className = 'zf-pan-hint';
+  hint.textContent = matchMedia('(pointer: coarse)').matches ? 'Drag to pan · Pinch to zoom' : 'Space + drag to pan · Scroll to zoom';
+  hint.hidden = true;
+  host.append(controls, hint);
 
   let svg: SVGSVGElement | null = null;
   let base: Box | null = null;
   let box: Box | null = null;
+  type View = { scale: number; centerX: number; centerY: number };
+  const views = new Map<string, View>();
+  let documentKey = '';
+  let activeKey: string | undefined;
+  function remember() {
+    if (activeKey && base && box) views.set(activeKey, { scale: scale(),
+      centerX: (box.x + box.width / 2 - base.x) / base.width,
+      centerY: (box.y + box.height / 2 - base.y) / base.height });
+  }
   const pointers = new Map<number, { x: number; y: number; startX: number; startY: number }>();
   let moved = false;
   let suppressClick = false;
@@ -60,7 +73,10 @@ export function setupViewport(stage: HTMLElement, host: HTMLElement) {
   function updateControls() {
     const currentScale = scale();
     const zoomed = Math.abs(currentScale - 1) > zoomEpsilon;
-    amount.textContent = `${Math.round(currentScale * 100)}%`;
+    amount.textContent = zoomed ? `${Math.round(currentScale * 100)}%` : 'Fit';
+    amount.title = zoomed ? `${Math.round(currentScale * 100)}% of fitted size` : 'Diagram fitted to the available space';
+    amount.setAttribute('aria-label', amount.title);
+    hint.hidden = !svg || currentScale <= 1 + zoomEpsilon;
     out.disabled = !svg || currentScale <= minZoom + zoomEpsilon;
     inside.disabled = !svg || currentScale >= maxZoom - zoomEpsilon;
     fit.disabled = !svg || !zoomed;
@@ -131,12 +147,10 @@ export function setupViewport(stage: HTMLElement, host: HTMLElement) {
     const margin = Math.max(16, Math.min(32, Math.min(right - left, bottom - top) * 0.12));
     return { x: left - margin, y: top - margin, width: right - left + margin * 2, height: bottom - top + margin * 2 };
   }
-  function reset(preserveViewport = false) {
-    const previous = base && box && preserveViewport ? {
-      scale: scale(),
-      centerX: (box.x + box.width / 2 - base.x) / base.width,
-      centerY: (box.y + box.height / 2 - base.y) / base.height,
-    } : null;
+  function reset() {
+    remember();
+    activeKey = `${documentKey}\n${stage.dataset.board ?? 'root'}`;
+    const previous = views.get(activeKey);
     svg = stage.querySelector<SVGSVGElement>(':scope > svg');
     const values = svg?.getAttribute('viewBox')?.trim().split(/[\s,]+/).map(Number);
     const original = values?.length === 4 && values.every(Number.isFinite) && values[2] > 0 && values[3] > 0
@@ -155,7 +169,7 @@ export function setupViewport(stage: HTMLElement, host: HTMLElement) {
     stage.classList.remove('zf-panning');
     updateControls();
   }
-  stage.addEventListener('zf-boardchange', (event) => reset((event as CustomEvent<{ preserveViewport?: boolean }>).detail?.preserveViewport));
+  stage.addEventListener('zf-boardchange', reset);
   reset();
   out.addEventListener('click', () => zoom(1 / 1.5));
   inside.addEventListener('click', () => zoom(1.5));
@@ -217,4 +231,18 @@ export function setupViewport(stage: HTMLElement, host: HTMLElement) {
     event.stopImmediatePropagation();
     suppressClick = false;
   }, { capture: true });
+  return {
+    refresh() { if (activeKey) reset(); },
+    setDocument(key: string, reset = false) {
+      remember();
+      activeKey = undefined;
+      documentKey = key;
+      if (reset) this.forget(key);
+    },
+    forget(key: string) {
+      for (const id of views.keys()) if (id.startsWith(`${key}\n`)) views.delete(id);
+      if (documentKey === key) activeKey = undefined;
+    },
+  };
+
 }

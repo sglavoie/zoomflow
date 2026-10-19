@@ -1,8 +1,5 @@
 import { examples } from './examples';
-
-type Draft = { key: string; name: string; title: string; description: string; source: string; baseline: string;
-  updatedAt?: number; projectId?: string; path?: string };
-type SavedDrafts = { current: string; fileNumber: number; drafts: Draft[] };
+import { DraftStore, type Draft } from './draft-store';
 
 /** Keep drafts across visits, including distinct uploads with the same filename. */
 export function setupExamplePicker(
@@ -16,7 +13,8 @@ export function setupExamplePicker(
   const menu = picker.querySelector<HTMLElement>('.example-menu')!;
   const filename = document.querySelector<HTMLElement>('#filename')!;
   const options = document.querySelector<HTMLElement>('#example-options')!;
-  const storageKey = 'zoomflow.drafts.v1';
+  let store: DraftStore | undefined;
+  const conflictNotice = document.querySelector<HTMLElement>('#draft-conflict')!;
   const drafts = new Map<string, Draft>(examples.map((example) => [example.name, {
     key: example.name, name: example.name, title: example.title, description: example.description,
     source: example.source, baseline: example.source,
@@ -39,27 +37,30 @@ export function setupExamplePicker(
   let saveTimer: ReturnType<typeof setTimeout> | undefined;
 
   try {
-    const saved: SavedDrafts | null = JSON.parse(localStorage.getItem(storageKey) ?? 'null');
-    if (saved && Array.isArray(saved.drafts)) {
-      for (const item of saved.drafts) {
-        if (!item || typeof item.key !== 'string' || typeof item.name !== 'string' ||
-          typeof item.title !== 'string' || typeof item.description !== 'string' ||
-          typeof item.source !== 'string' || typeof item.baseline !== 'string') continue;
-        if (drafts.has(item.key) || /^file:\d+$/.test(item.key) ||
-          (item.key.startsWith('project:') && typeof item.projectId === 'string' &&
-            typeof item.path === 'string' && item.key === `project:${item.projectId}:${item.path}`)) drafts.set(item.key, {
-          ...item, updatedAt: typeof item.updatedAt === 'number' && Number.isFinite(item.updatedAt) && item.updatedAt > 0
-            && item.updatedAt <= 8.64e15 ? item.updatedAt : undefined,
-        });
-      }
-      if (typeof saved.current === 'string' && drafts.has(saved.current)) current = saved.current;
-      if (Number.isSafeInteger(saved.fileNumber) && saved.fileNumber >= 0) fileNumber = saved.fileNumber;
-      for (const key of drafts.keys()) {
-        const match = /^file:(\d+)$/.exec(key);
-        if (match) fileNumber = Math.max(fileNumber, Number(match[1]));
-      }
+    store = new DraftStore(localStorage);
+    const saved = store.load();
+    recoveryAvailable = saved.recoveryAvailable;
+    for (const item of saved.drafts) {
+      drafts.set(item.key, item);
+      fileNumber = Math.max(fileNumber, item.number ?? (/^file:\d+$/.test(item.key) ? Number(item.key.slice(5)) : 0));
     }
+    const numbers = new Set<number>();
+    for (const item of drafts.values()) {
+      if (!item.key.startsWith('file:') || item.recoveredFrom) continue;
+      let number = item.number ?? Number(item.key.slice(5));
+      if (!Number.isSafeInteger(number) || number < 1 || numbers.has(number)) number = ++fileNumber;
+      item.number = number;
+      numbers.add(number);
+    }
+    if (saved.current && drafts.has(saved.current)) current = saved.current;
   } catch { recoveryAvailable = false; }
+  function checkConflicts() {
+    try { conflictNotice.hidden = !store?.hasConcurrentChanges(); }
+    catch { /* Saving reports storage failures beside the save control. */ }
+  }
+  window.addEventListener('storage', (event) => {
+    if (DraftStore.isDraftEvent(event.key)) checkConflicts();
+  });
 
   function currentDraft() { return drafts.get(current)!; }
   function announce() {
@@ -74,10 +75,11 @@ export function setupExamplePicker(
     clearTimeout(saveTimer);
     savePending = false;
     try {
-      const saved: SavedDrafts = { current, fileNumber, drafts: [...drafts.values()].filter((item) =>
-        item.key.startsWith('file:') || Boolean(item.projectId) || item.source !== examples.find((example) => example.name === item.key)?.source ||
-        item.baseline !== examples.find((example) => example.name === item.key)?.source) };
-      localStorage.setItem(storageKey, JSON.stringify(saved));
+      if (!store) store = new DraftStore(localStorage);
+      store.save([...drafts.values()].filter((item) => item.key.startsWith('file:') || Boolean(item.projectId) ||
+        item.source !== examples.find((example) => example.name === item.key)?.source ||
+        item.baseline !== examples.find((example) => example.name === item.key)?.source), current);
+      checkConflicts();
       recoveryAvailable = true;
     } catch { recoveryAvailable = false; }
     announce();
@@ -100,13 +102,14 @@ export function setupExamplePicker(
     announce();
   }
 
-  function removeDrafts(item: Draft) {
-    const message = item.projectId
+  function removeDrafts(item: Draft, wholeProject = Boolean(item.projectId && !item.recoveredFrom)) {
+    const projectId = wholeProject ? item.projectId : undefined;
+    const message = projectId
       ? `Remove all browser drafts for ${item.title.split('/')[0]}? Files on disk are kept. Save any edits first.`
       : `Remove the local draft for ${item.name}? Download a copy first if you want to keep it.`;
     if (!window.confirm(message)) return;
     currentDraft().source = readSource();
-    const removed = [...drafts.values()].filter((draft) => item.projectId ? draft.projectId === item.projectId : draft.key === item.key);
+    const removed = [...drafts.values()].filter((draft) => projectId ? draft.projectId === projectId : draft.key === item.key);
     for (const draft of removed) {
       drafts.delete(draft.key);
       buttons.delete(draft.key);
@@ -115,9 +118,9 @@ export function setupExamplePicker(
       rows.delete(draft.key);
       forget(draft.key);
     }
-    if (item.projectId) {
-      projectGroups.get(item.projectId)?.section.remove();
-      projectGroups.delete(item.projectId);
+    if (projectId) {
+      projectGroups.get(projectId)?.section.remove();
+      projectGroups.delete(projectId);
     }
     summary.focus();
     if (removed.some((draft) => draft.key === current)) {
@@ -145,7 +148,7 @@ export function setupExamplePicker(
     remove.className = 'example-remove button-quiet';
     remove.textContent = 'Remove project';
     remove.setAttribute('aria-label', `Remove ${name} project drafts`);
-    remove.addEventListener('click', () => removeDrafts(item));
+    remove.addEventListener('click', () => removeDrafts(item, true));
     heading.append(title, remove);
     const files = document.createElement('div');
     section.append(heading, files);
@@ -180,7 +183,7 @@ export function setupExamplePicker(
     button.className = 'example-option';
     const label = document.createElement('span');
     label.className = 'example-title';
-    label.textContent = item.projectId ? item.path! : item.title;
+    label.textContent = item.projectId ? `${item.path}${item.recoveredFrom ? ' (recovered)' : ''}` : item.title;
     if (item.projectId) button.title = item.title;
     const detail = document.createElement('span');
     detail.className = 'example-description';
@@ -246,7 +249,8 @@ export function setupExamplePicker(
       if (restore) restore.hidden = !changed;
       timestamp.hidden = !item.updatedAt;
       timestamp.textContent = item.updatedAt ? `Edited ${new Date(item.updatedAt).toLocaleString()}` : '';
-      if (item.key.startsWith('file:')) detail.textContent = `Your file · Draft ${item.key.slice(5)}`;
+      if (item.recoveredFrom) detail.textContent = 'Recovered copy · Edits from another tab';
+      else if (item.key.startsWith('file:')) detail.textContent = `Your file · Draft ${item.number ?? item.key.slice(5)}`;
       else if (item.projectId) detail.textContent = `Project file · ${item.path}`;
     });
     refreshRows.get(item.key)!();
@@ -289,7 +293,8 @@ export function setupExamplePicker(
       const draft = currentDraft();
       if (!draft.projectId || !draft.path) return { inputPath: 'index', fs: { index: draft.source } };
       const fs: Record<string, string> = Object.create(null);
-      for (const item of drafts.values()) if (item.projectId === draft.projectId && item.path) fs[item.path] = item.source;
+      for (const item of drafts.values()) if (item.projectId === draft.projectId && item.path && !item.recoveredFrom) fs[item.path] = item.source;
+      fs[draft.path] = draft.source;
       return { inputPath: draft.path, fs };
     },
     hasProjectPath(path: string) {
@@ -298,7 +303,7 @@ export function setupExamplePicker(
     },
     selectProjectPath(path: string) {
       const projectId = currentDraft().projectId;
-      const target = [...drafts.values()].find((item) => item.projectId === projectId && item.path === path);
+      const target = [...drafts.values()].find((item) => item.projectId === projectId && item.path === path && !item.recoveredFrom);
       if (!target) return;
       currentDraft().source = readSource();
       activate(target.key);
@@ -326,8 +331,9 @@ export function setupExamplePicker(
     },
     rememberFile(name: string, source: string) {
       currentDraft().source = readSource();
-      const key = `file:${++fileNumber}`;
-      const item: Draft = { key, name, title: name, description: 'Your file · return to your edits', source, baseline: source, updatedAt: Date.now() };
+      const key = `file:${crypto.randomUUID()}`;
+      const number = ++fileNumber;
+      const item: Draft = { key, number, name, title: name, description: 'Your file · return to your edits', source, baseline: source, updatedAt: Date.now() };
       drafts.set(key, item);
       addOption(item);
       activate(key);

@@ -28,7 +28,10 @@ button:focus-visible,.zf-stage:focus-visible,.zf-stage a:focus-visible{outline:2
 .zf-stage.zf-panning *,.zf-stage.zf-panning{cursor:grabbing!important}
 .zf-zoom-controls{align-self:flex-start;display:flex;align-items:center;gap:2px;padding:2px;border:1px solid var(--zf-border);border-radius:8px;background:var(--zf-surface)}
 .zf-zoom-controls button{border:0;min-width:36px;min-height:32px;padding:5px;background:transparent}
+.zf-zoom-controls button svg{display:block;margin:auto}
 .zf-zoom-controls span{min-width:44px;text-align:center;font-size:12px}
+.zf-pan-hint{font-size:12px;color:var(--zf-muted)}
+.zf-pan-hint[hidden]{display:none}
 footer{padding:10px 24px;color:var(--zf-muted);font-size:12px}
 @media(max-width:600px){header{padding:10px 16px}main{padding:8px 16px}.zf-stage-area{min-height:320px;display:flex;flex-direction:column;gap:6px}.zf-zoom-controls{position:static;align-self:flex-start;box-shadow:none}footer{padding:10px 16px}}
 `;

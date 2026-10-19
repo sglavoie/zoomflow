@@ -7,15 +7,23 @@ flowchart basics, service architecture, sequence diagrams, SQL schemas, layers /
 scenarios / steps, state transitions with boundary ports, and a guided lint repair.
 Every example includes source comments and compiles without imports or remote
 assets. The lint repair intentionally reports one error and one warning until fixed.
-Switching examples starts at the root board. Source edits and opened files remain
-in the dropdown and are backed up in browser storage for reload recovery. The
+First-time opens start at the root board. Returning to an open document restores its
+last board and breadcrumb trail, with zoom and pan remembered separately for each board
+during the page session. Restoring an example resets its saved view. Source edits and
+opened files remain in the dropdown and are backed up in browser storage for reload recovery. The
 source toolbar reserves space for save status so saving does not move the editor.
 Use **Save .d2** above the editor or **⌘S / Ctrl+S** to save a disk copy.
 Browsers with file-system access can write back to a file you opened or a destination
 you choose. Other browsers download the source and label the button **Download .d2**.
 **Export → Download .d2 source** always starts a separate download.
 The status beside the save controls distinguishes browser recovery from a disk save.
-Browser storage can be cleared. The picker puts the active project or draft first,
+Browser storage can be cleared. Drafts are stored independently per document and tab;
+simultaneous edits are preserved as **(recovered)** copies in the diagram menu after
+reload. A notice appears when another tab changes a draft. Recovered project files
+retain their imports and can be exported as a project ZIP without replacing the
+canonical file. Superseded revisions are reclaimed after their replacements are
+saved, while concurrent versions are retained. Existing browser backups migrate automatically. The picker puts the
+active project or draft first,
 followed by other drafts ordered by edit time, then built-in examples. It marks
 modified examples and shows edit timestamps and distinct draft numbers for same-name uploads.
 **Restore** resets an example after confirmation; opened file drafts
@@ -57,11 +65,17 @@ selector is in the header, separate from **Export**, which closes on Escape and 
 Use the preview's +, − and Fit controls or the mouse wheel to zoom. Drag empty
 space to pan, or hold Space and drag a shape or link; middle-button dragging also
 pans. Touch dragging works after zooming. Each board opens fitted around its
-rendered content. Edits on the same board preserve zoom and pan; switching boards
-or diagrams starts with a fresh fit. Keyboard navigation moves focus to the new board or breadcrumb and
+rendered content. Edits on the same board preserve zoom and pan; returning to a board
+restores its view.
+The zoom readout says **Fit** at the fitted baseline; percentages describe magnification
+relative to that fit. A hint below the canvas explains panning after zooming in.
+Keyboard navigation moves focus to the new board or breadcrumb and
 announces its name.
 On phones and tablets narrower than 1,000px, use the **Preview** and **Source** buttons to give each pane the full
-workspace. Selecting an unlinked shape opens its source in the Source pane.
+workspace. The Source button includes diagnostic counts. When compilation fails,
+Preview keeps the last good diagram and shows the error with a **Go to error** action
+that opens and focuses the relevant source location. Selecting an unlinked shape
+opens its source in the Source pane.
 
 Drill-down navigation needs no boundary ports or library import. Inside a child
 layer, the viewer shows its parent connections (for example, **From Browse** and
@@ -99,11 +113,13 @@ Click **Format** or press **Shift+Alt+F** in the editor to apply D2's automatic
 source formatting, including nested indentation. Formatting is one undoable edit
 and refreshes the preview. Invalid diagrams leave the source unchanged and show
 a formatting error; edits made while formatting is running are preserved.
-The status row above the editor reports preview freshness and diagnostic counts.
+The compact status strip above the editor reports preview freshness and diagnostic counts.
+Use **Diagnostics** to open the detailed list; the toolbar and editor stay in place
+through compilation failures and recovery.
 Transient progress appears only after 700 ms so quick edits do not flash indicators;
 source mapping and exports are invalidated immediately. Compiler errors replace the normal status with one summary emphasizing the
 first issue's line and column, with **Go to error** focusing its source location,
-and **Review diagnostics** opens the list at the first issue. The summary reserves its space
+and **Diagnostics** opens the list at the first issue. The summary reserves its space
 to keep the editor still, with inline diagnostics while the last good diagram is marked as the
 previous preview. Export is disabled until the current source compiles;
 an export already running is canceled if the source changes. Successful edits
@@ -133,7 +149,7 @@ screens, the diagram and reference share the Preview pane. Zoom and fullscreen
 controls sit in a toolbar below the canvas so they do not cover diagram content, including
 in fullscreen. Export controls stay in their menu so the editor remains visible.
 
-Successful compilations also run Zoomflow lint. **Review diagnostics** opens the
+Successful compilations also run Zoomflow lint. **Diagnostics** opens the
 editor's diagnostic list. Missing board links are errors; unlinked layers are
 warnings. **Check boundary ports** opts into explicit `zf-in`/`zf-out` validation;
 boundary mismatches in layers that declare ports are errors only when this is
@@ -145,6 +161,8 @@ theme; see [stdlib conventions and examples](stdlib/README.md).
 Use Export → Download SVG/PNG/ZIP/HTML for the current board as SVG or PNG, all boards as a ZIP
 of SVGs, or one navigable HTML file. The HTML opens directly from disk without a
 server or network connection and includes every board, including cyclic links.
+The export menu names the current board for SVG/PNG, or shows the total board count
+for ZIP/HTML, and explains that HTML preserves offline drill-down navigation.
 Exports preserve the selected theme. Remote images are embedded when accessible;
 failed fetches produce a placeholder and a visible warning. ZIP paths follow the
 board tree (`root.svg`, `checkout.svg`, `checkout/charge.svg`); scenarios and steps
@@ -253,3 +271,10 @@ and uploads them as artifacts. Replace the fixture paths with your own entry
 files. The example demonstrates CLI use; the full root browser suite also needs
 the browser installations and deliberately reviewed platform-specific PNG
 baselines described above.
+
+The [application workflow](.github/workflows/application.yml) runs typechecking,
+unit and CLI integration tests, the production build, and the browser suite on a
+pinned macOS runner. Chromium workspace screenshots cover desktop and phone layouts
+in both themes, compilation errors, expanded tools, and the reference panel.
+Failures upload screenshots, diffs, and traces. See [browser test guidance](tests/e2e/README.md)
+for deliberate baseline updates.

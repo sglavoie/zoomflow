@@ -1,4 +1,4 @@
-import { exportBoardsHtml, exportBoardsZip, exportSourcesZip, renderExportBoards, indexShapeSources, parseSourceRange, lint, type CompileResponse, type ShapeSource, type Diagram, type LintDiagnostic } from '@zoomflow/core';
+import { exportBoardsHtml, exportBoardsZip, exportSourcesZip, renderExportBoards, indexBoards, indexShapeSources, parseSourceRange, lint, type CompileResponse, type ShapeSource, type Diagram, type LintDiagnostic } from '@zoomflow/core';
 import { Viewer, prepareExportSvg, rasterizeSvg, offlineViewerScript, offlineViewerStyle, setupViewport, type RenderBoard } from '@zoomflow/viewer';
 import { examples } from './examples';
 import { setupExamplePicker } from './example-picker';
@@ -16,11 +16,17 @@ import { setupShortcuts } from './shortcuts';
 
 setupShortcuts();
 const viewer = new Viewer(document.querySelector<HTMLElement>('#viewer')!);
-setupViewport(viewer.stage, setupFullscreen(viewer.stage));
+const viewport = setupViewport(viewer.stage, setupFullscreen(viewer.stage));
+const mobileError = document.createElement('div');
+mobileError.id = 'mobile-error';
+mobileError.hidden = true;
+mobileError.innerHTML = '<span role="status"></span><button type="button">Go to error</button>';
+viewer.stage.parentElement!.before(mobileError);
+const mobileErrorText = mobileError.querySelector('span')!;
+const mobileErrorButton = mobileError.querySelector('button')!;
 setupReference();
 setupSourceSplit();
-const showMobileView = setupMobileView(() => viewer.stage.dispatchEvent(new CustomEvent('zf-boardchange',
-  { detail: { preserveViewport: true } })));
+const showMobileView = setupMobileView(() => viewport.refresh());
 document.querySelector('#toggle-reference')!.addEventListener('click', () => showMobileView('preview'));
 const moreToggle = document.querySelector<HTMLButtonElement>('#header-more-toggle')!;
 const moreContent = document.querySelector<HTMLElement>('#header-more-content')!;
@@ -64,6 +70,7 @@ let documentRevision = 0;
 let ai: ReturnType<typeof setupAiAssistant> | undefined;
 let documentName = examples[0].name;
 let currentDocumentKey = examples[0].name;
+const documentRoutes = new Map<string, { hash: string; trail: unknown }>();
 const fileHandles = new Map<string, FileSystemFileHandle>();
 let sourceMap: ShapeSource[] = [];
 let mappedSource: string | undefined;
@@ -129,9 +136,14 @@ function setFileError(message: string) {
 }
 function setEditorDiagnostics(diagnostics: Diagnostic[]) {
   activeDiagnostics = diagnostics;
+  const errors = diagnostics.filter((item) => item.severity === 'error').length;
+  const warnings = diagnostics.length - errors;
+  document.querySelector('#mobile-source')!.textContent = errors ? `Source · ${errors} error${errors === 1 ? '' : 's'}`
+    : warnings ? `Source · ${warnings} warning${warnings === 1 ? '' : 's'}` : 'Source';
   editor.diagnostics(diagnostics);
   diagnosticsButton.disabled = diagnostics.length === 0;
-  diagnosticsButton.textContent = diagnostics.length ? `Review ${diagnostics.length} diagnostic${diagnostics.length === 1 ? '' : 's'}` : 'Review diagnostics';
+  diagnosticsButton.textContent = diagnostics.length ? `Diagnostics (${diagnostics.length})` : 'Diagnostics';
+  diagnosticsButton.setAttribute('aria-label', `Review ${diagnostics.length} diagnostic${diagnostics.length === 1 ? '' : 's'}`);
 }
 let lintDocument: CompileResponse | undefined;
 function invalidateSource() {
@@ -146,9 +158,11 @@ function invalidateSource() {
   lintDocument = undefined;
   setEditorDiagnostics([]);
   externalCompilerError = undefined;
+  mobileError.hidden = true;
   viewer.highlightShapes([]);
   documentExport = undefined;
   exportButton.disabled = true;
+  updateExportLabel();
   setPreviewState('updating');
   setActivity('');
   setFileError('');
@@ -163,8 +177,6 @@ const editor = new SourceEditor(document.querySelector<HTMLElement>('#editor')!,
 }, () => void highlightSelection(true), () => void formatSource());
 
 const examplePicker = setupExamplePicker(() => editor.source, (source, name, key, reset) => {
-  // Example changes start at their overview; live edits still preserve the route.
-  history.replaceState(null, '', `${location.pathname}${location.search}#/`);
   void replaceDocument(source, name, key, reset);
 }, (dirty, recoveryAvailable, savePending, hasDraft, downloadRequested) => {
   const handle = fileHandles.get(currentDocumentKey);
@@ -177,7 +189,7 @@ const examplePicker = setupExamplePicker(() => editor.source, (source, name, key
   draftStatus.textContent = !hasDraft && !dirty && !handle && recoveryAvailable && !downloadRequested
     ? file : `${recovery} · ${file}`;
   draftStatus.title = `${draftStatus.textContent}. ${canSave ? 'Save keeps a copy on disk.' : 'Download keeps a separate file copy.'} Browser drafts can be cleared.`;
-}, (key) => { editor.forget(key); fileHandles.delete(key); });
+}, (key) => { editor.forget(key); fileHandles.delete(key); documentRoutes.delete(key); viewport.forget(key); });
 
 function download(blob: Blob, name: string) {
   const url = URL.createObjectURL(blob);
@@ -240,9 +252,12 @@ window.addEventListener('keydown', (event) => {
 });
 
 async function replaceDocument(source: string, name: string, key: string, reset = false) {
+  const route = reset ? undefined : documentRoutes.get(key);
+  history.replaceState({ zoomflowTrail: route?.trail }, '', `${location.pathname}${location.search}${route?.hash ?? '#/'}`);
+  viewport.setDocument(key, reset);
   documentName = name;
   currentDocumentKey = key;
-  projectDownloadButton.hidden = !key.startsWith('project:');
+  projectDownloadButton.hidden = !examplePicker.projectName;
   examplePicker.refresh();
   showMobileView('preview');
   editor.open(key, source, reset);
@@ -310,10 +325,13 @@ boundaryPorts.addEventListener('change', updateLint);
 diagnosticsButton.addEventListener('click', () => {
   const first = activeDiagnostics[0];
   if (!first) return;
+  showMobileView('source');
   editor.select(first, true);
   editor.showDiagnostics();
 });
+mobileErrorButton.addEventListener('click', () => document.querySelector<HTMLButtonElement>('#go-to-error')!.click());
 document.querySelector('#go-to-error')!.addEventListener('click', async () => {
+  showMobileView('source');
   const foreign = externalCompilerError;
   if (foreign?.filename && foreign.rawRange) {
     const target = examplePicker.selectProjectPath(foreign.filename);
@@ -338,7 +356,14 @@ async function highlightSelection(navigate: boolean) {
   if (navigate && target && target.board !== current) await viewer.navigate(target.board);
   viewer.highlightShapes(matches.filter((entry) => entry.board === viewer.currentBoard?.id).map((entry) => entry.shape));
 }
-viewer.stage.addEventListener('zf-boardchange', () => void highlightSelection(false));
+viewer.stage.addEventListener('zf-boardchange', () => {
+  // Viewer commits its URL and trail immediately after dispatching this event.
+  queueMicrotask(() => {
+    documentRoutes.set(currentDocumentKey, { hash: location.hash, trail: history.state?.zoomflowTrail });
+    updateExportLabel();
+  });
+  void highlightSelection(false);
+});
 viewer.stage.addEventListener('click', (event) => {
   if (mappedSource !== editor.source) return;
   const shape = event.target instanceof Element ? event.target.closest<SVGElement>('[data-shape-id]')
@@ -356,6 +381,15 @@ const exportButton = document.querySelector<HTMLButtonElement>('#export')!;
 const exportFormat = document.querySelector<HTMLSelectElement>('#export-format')!;
 restorePreference(exportFormat, 'zoomflow.export-format');
 function updateExportLabel() {
+  const allBoards = exportFormat.value === 'zip' || exportFormat.value === 'html';
+  const count = documentExport ? indexBoards(documentExport.diagram).size : 0;
+  const formatName = ({ svg: 'SVG', png: 'PNG', zip: 'SVG ZIP', html: 'Interactive HTML' } as Record<string, string>)[exportFormat.value];
+  document.querySelector('#export-scope')!.textContent = documentExport
+    ? allBoards ? `Entire diagram · ${count} board${count === 1 ? '' : 's'} · ${formatName}`
+      : `${viewer.currentBoard?.name ?? 'Root'} · ${formatName}` : 'Compile the current source to export a diagram.';
+  document.querySelector('#export-help')!.textContent = exportFormat.value === 'html'
+    ? 'Preserves drill-down navigation. Opens offline in any browser.'
+    : exportFormat.value === 'zip' ? 'One SVG per board, organized in folders.' : 'Exports only the board currently shown.';
   exportButton.textContent = ({ svg: 'Download SVG', png: 'Download PNG', zip: 'Download SVG ZIP',
     html: 'Download HTML' } as Record<string, string>)[exportFormat.value] ?? 'Download export';
 }
@@ -388,6 +422,8 @@ async function load(source: string, name: string, preserveViewport = false) {
       void highlightSelection(false);
       documentExport = { diagram: compiled.diagram, render, name, diagnostics };
       exportButton.disabled = false;
+      updateExportLabel();
+      mobileError.hidden = true;
       setPreviewState('ready');
     }
   } catch (error) {
@@ -408,6 +444,11 @@ async function load(source: string, name: string, preserveViewport = false) {
       goToError.title = goToError.textContent;
       goToError.hidden = false;
       goToError.disabled = Boolean(externalCompilerError && !examplePicker.hasProjectPath(externalCompilerError.filename!));
+      errorBanner.title = document.querySelector('#compile-error-message')!.textContent!;
+      mobileErrorText.textContent = errorBanner.title;
+      mobileErrorButton.textContent = goToError.textContent;
+      mobileErrorButton.disabled = goToError.disabled;
+      mobileError.hidden = false;
       errorBanner.hidden = false;
       viewer.setMessage('');
       setPreviewState('error');
@@ -534,7 +575,8 @@ document.addEventListener('drop', (event) => {
 window.addEventListener('pagehide', () => { clearTimeout(debounce); clearTimeout(previewTimer); ai?.dispose(); examplePicker.flush(); ++generation; editor.destroy(); viewer.destroy(); void compiler.then((d2) => d2.dispose()); });
 documentName = examplePicker.initial.name;
 currentDocumentKey = examplePicker.initial.key;
-projectDownloadButton.hidden = !currentDocumentKey.startsWith('project:');
+projectDownloadButton.hidden = !examplePicker.projectName;
+viewport.setDocument(currentDocumentKey);
 editor.open(examplePicker.initial.key, examplePicker.initial.source);
 examplePicker.refresh();
 clearTimeout(debounce);

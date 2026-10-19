@@ -1,0 +1,52 @@
+name: Application checks
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: application-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  application:
+    # Checked-in PNG and workspace baselines are macOS captures. Keep the runner
+    # pinned and review baseline changes when upgrading Playwright or the OS.
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '26'
+      - name: Install workspace
+        run: |
+          npm install --global pnpm@12.6.0
+          pnpm install --frozen-lockfile
+      - name: Install browsers and native D2
+        run: |
+          pnpm exec playwright install chromium firefox webkit
+          curl --fail --silent --show-error --location https://d2lang.com/install.sh -o "$RUNNER_TEMP/install-d2.sh"
+          sh "$RUNNER_TEMP/install-d2.sh" --version v0.9.0 --method standalone --prefix "$RUNNER_TEMP/d2"
+          echo "$RUNNER_TEMP/d2/bin" >> "$GITHUB_PATH"
+      - name: Typecheck
+        run: pnpm typecheck
+      - name: Unit and CLI integration tests
+        run: pnpm test:unit
+      - name: Production build
+        run: pnpm build
+      - name: Browser and visual regression tests
+        run: pnpm exec playwright test --reporter=github,html
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: browser-failures
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 14

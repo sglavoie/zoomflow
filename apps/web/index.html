@@ -31,8 +31,10 @@
           <div id="header-more-content" class="header-more-content" hidden>
             <button id="save-source" type="button" aria-label="Download source (.d2)">Download .d2 source</button>
             <button id="save-project" type="button" hidden>Download project .zip</button>
-            <label>Export <select id="export-format"><option value="svg">Current board SVG</option><option value="png">Current board PNG</option><option value="zip">All boards ZIP (SVG)</option><option value="html">Single-file HTML</option></select></label>
-            <button id="export" class="button-primary" disabled>Download SVG</button>
+            <label>Format <select id="export-format"><option value="svg">Current board SVG</option><option value="png">Current board PNG</option><option value="zip">All boards ZIP (SVG)</option><option value="html">Single-file HTML</option></select></label>
+            <p id="export-scope" role="status"></p>
+            <p id="export-help"></p>
+            <button id="export" class="button-primary" aria-describedby="export-scope export-help" disabled>Download SVG</button>
             <span id="export-status" role="status" aria-live="polite" hidden></span>
           </div>
         </div>
@@ -86,6 +88,7 @@
         </dl>
       </section>
     </dialog>
+    <div id="draft-conflict" role="status" hidden>Drafts changed in another tab. Your open source is unchanged. Reload to review saved versions; conflicting edits appear as recovered copies.</div>
     <div id="file-status" role="alert" hidden></div>
     <div id="workspace">
       <div id="mobile-view-switch" role="group" aria-label="Workspace view">

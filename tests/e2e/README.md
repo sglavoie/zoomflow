@@ -45,3 +45,27 @@ opt-in boundary checking (name mismatches and the zero-pairs guard), optional ba
 links, orphan layers, and recovery after both lint and compiler errors.
 `viewer.spec.ts` also checks port-free nested navigation, ancestor-link suggestions,
 and inferred parent connections in the live viewer and offline HTML.
+
+`continuity.spec.ts` verifies concurrent-tab recovery (including project imports),
+per-document and per-board view restoration, mobile error repair, compact stable
+source chrome, zoom hints, and explicit export scope. Draft-store unit tests cover
+revision conflicts, migration, deletion, and edits to recovered copies.
+
+`visual.spec.ts` captures 18 Chromium workspace baselines at 1440×900 and 390×844:
+light/dark healthy views, source errors, mobile preview errors, expanded AI/lint
+panels, and the reference panel. It fixes locale, timezone, reduced motion, and the
+local AI availability response; it uses the real editor and D2 renderer.
+
+The application workflow runs all checks on `macos-15`, matching the macOS baseline
+family. Browser versions come from the pinned Playwright dependency. To review a
+layout change, run on macOS:
+
+```sh
+pnpm exec playwright test tests/e2e/visual.spec.ts --project=chromium --update-snapshots
+pnpm exec playwright test tests/e2e/visual.spec.ts --project=chromium
+```
+
+Inspect changed PNGs before committing them. CI never updates baselines; failures
+upload `playwright-report` and `test-results` for inspection. Changes to the runner
+OS or Playwright version may require reviewed baseline updates. Do not run separate
+Playwright invocations concurrently: they share a server and output directory.

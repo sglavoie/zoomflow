@@ -53,10 +53,10 @@ for (const offline of [false, true]) {
       await page.evaluate(() => history.replaceState(null, ''));
       await page.reload();
     } else {
-      // Reloading the app resets an uploaded document; simulate a direct route on load.
+      // Reload the saved document without a navigation trail to exercise a true deep link.
       await page.evaluate(() => history.replaceState(null, '', '#/checkout/charge/capture'));
-      await page.locator('#file').setInputFiles({ name: 'reopened.d2', mimeType: 'text/plain', buffer: Buffer.from(repaired) });
-      await expect(page.locator('#filename')).toHaveText('reopened.d2');
+      await page.reload();
+      await expect(page.locator('#filename')).toHaveText('repaired.d2');
       await board(page, 'root.layers.checkout.layers.charge.layers.capture');
     }
     await expect(parentContext).toHaveText('Capture · From Authorize · To Receipt');

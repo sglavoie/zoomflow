@@ -212,7 +212,7 @@ test('zoom out reaches 10% with the diagram centered, then fits again', async ({
   expect(zoomedOut[1] + zoomedOut[3] / 2).toBeCloseTo(original[1] + original[3] / 2);
 
   await fit.click();
-  await expect(page.locator('.zf-zoom-controls span')).toHaveText('100%');
+  await expect(page.locator('.zf-zoom-controls span')).toHaveText('Fit');
   expect(await box()).toEqual(original);
 });
 
@@ -229,7 +229,7 @@ test('live edits keep the current view, while opening another diagram fits it', 
   await expect(page.locator('.zf-zoom-controls span')).toHaveText('150%');
   await page.locator('#file').setInputFiles({ name: 'fresh.d2', mimeType: 'text/plain', buffer: Buffer.from('fresh: Fits again') });
   await expect(page.locator('.zf-stage')).toContainText('Fits again');
-  await expect(page.locator('.zf-zoom-controls span')).toHaveText('100%');
+  await expect(page.locator('.zf-zoom-controls span')).toHaveText('Fit');
 });
 
 test('mobile first fit fills the canvas and diagnostics lead to the source', async ({ page }) => {
