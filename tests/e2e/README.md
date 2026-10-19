@@ -15,7 +15,7 @@ and OS; review the images before deliberately updating them with
 
 `editor.spec.ts` exercises real CodeMirror input, retained previews and inline
 diagnostics on syntax errors, recovery, startup edits, exact source selections
-(including Unicode and container names), selection-driven board navigation,
+(including Unicode and container names), explicit source reveal,
 preview highlights, editor keyboard isolation and file replacement.
 
 `polish.spec.ts` checks draft recovery and removal, copy downloads, syntax
@@ -76,3 +76,11 @@ and unavailable locations, normalized wheel units, expanded-tool scrolling,
 larger text, and module/worker/font startup recovery. Chromium also exercises
 real multi-touch events through CDP. Software-keyboard layout is simulated with
 short viewports and a `visualViewport` resize; it is not a physical-device keyboard test.
+
+`final-polish.spec.ts` covers passive source selection versus explicit reveal, quiet
+status copy, saved-example identity and undo, and directional link badges in live and
+offline viewers. `preview-queue.spec.ts` holds a real compilation to verify that
+intermediate edits are skipped; queue unit tests cover invalidation and failure recovery.
+`export-visual.spec.ts` checks offline HTML at phone, short, landscape, and enlarged-text
+sizes in all three browsers, with eight light/dark Chromium visual baselines. It verifies
+that the diagram remains usable and its controls stay inside the viewport.

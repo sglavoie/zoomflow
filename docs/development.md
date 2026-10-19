@@ -12,6 +12,24 @@ Firefox and WebKit; install them with `pnpm exec playwright install` if needed.
 The app build is written to `apps/web/dist`. D2 is loaded lazily, but its bundled
 compiler is still a large download (roughly 8.5 MB gzip).
 
+Preview requests run serially with one replaceable pending request. Source changes
+invalidate pending requests immediately, including during debounce; an already-running
+compilation finishes but cannot publish stale output. Formatting and AI validation
+retain their independent revision checks.
+
+To compare sustained editing with and without preview coalescing, start `pnpm dev`
+and run `node spike/preview-throughput.mjs http://127.0.0.1:5173 600` (use the actual
+Vite URL). This sends six edits 400 ms apart to a generated diagram and reports
+compilation count and milliseconds from the final edit to the correct preview. The
+baseline bypasses only the queue in the browser response. Run without other tests
+competing for CPU; results depend on the machine and diagram size.
+
+A local Chromium run on 2026-10-19 with 1,801 nodes and six edits compiled six
+revisions without coalescing versus three with it. Time from the final edit to the
+correct preview fell from 5,893 ms to 3,229 ms. At 601 nodes, both runs compiled all
+six revisions and took about 1,040 ms: coalescing helps when work falls behind, not
+when the compiler already keeps up. These are observations, not timing test gates.
+
 ## Packages and compiler
 
 `@zoomflow/core` provides board indexing, shape source ranges, lint, href classification, ZIP generation and

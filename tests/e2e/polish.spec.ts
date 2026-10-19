@@ -37,7 +37,7 @@ test('draft recovers after reload and D2 source downloads', async ({ page }) => 
   await page.goto('/');
   await expect(page.locator('.zf-stage > svg')).toBeVisible();
   await page.getByRole('textbox', { name: 'D2 source' }).fill('draft: Recovered');
-  await expect(page.locator('#draft-status')).toContainText(/browser draft/i);
+  await expect(page.locator('#draft-status')).toHaveAttribute('data-recovery', 'saved');
   await page.reload();
   await expect(page.getByRole('textbox', { name: 'D2 source' })).toContainText('draft: Recovered');
   await expect(page.locator('.zf-stage')).toContainText('Recovered');
@@ -50,13 +50,13 @@ test('draft recovers after reload and D2 source downloads', async ({ page }) => 
   await expect(page.locator('#draft-status')).toContainText('Source download started');
   await page.reload();
   await expect(page.getByRole('textbox', { name: 'D2 source' })).toContainText('draft: Recovered');
-  await expect(page.locator('#draft-status')).toContainText(/browser draft saved/i);
+  await expect(page.locator('#draft-status')).toHaveAttribute('data-recovery', 'saved');
   await page.locator('#file').setInputFiles({ name: 'custom.d2', mimeType: 'text/plain', buffer: Buffer.from('uploaded: Original') });
   await page.getByRole('textbox', { name: 'D2 source' }).fill('uploaded: Edited');
   await page.reload();
   await expect(page.locator('#filename')).toHaveText('custom.d2');
   await expect(page.getByRole('textbox', { name: 'D2 source' })).toContainText('uploaded: Edited');
-  await expect(page.locator('#draft-status')).toContainText(/browser draft/i);
+  await expect(page.locator('#draft-status')).toHaveAttribute('data-recovery', 'saved');
 });
 
 test('uploaded drafts can be removed without affecting other diagrams', async ({ page }) => {

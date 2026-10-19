@@ -97,7 +97,7 @@ test('diagnostics use one summary and keep the editor in place through failure a
   await ready(page);
   await expect(page.locator('#go-to-error')).toBeHidden();
   await expect(page.locator('#compile-error')).toBeHidden();
-  await expect(page.locator('#ready-summary')).toBeVisible();
+  await expect(page.locator('#ready-summary')).toBeHidden();
   expect((await page.locator('#editor').boundingBox())!.y).toBe(before.y);
 });
 

@@ -7,6 +7,7 @@ export type RenderBoard = (target: string) => Promise<string>;
 export { prepareExportSvg, rasterizeSvg, offlineViewerScript } from './export';
 export { setupViewport } from './viewport';
 export { offlineViewerStyle } from './export-style';
+export { viewerStyle } from './viewer-style';
 
 /** DOM viewer with an injected renderer so callers can reuse compiled documents. */
 export class Viewer {
@@ -232,7 +233,7 @@ export class Viewer {
       const keepFocus = document.activeElement === active;
       const sameBoard = id === this.current;
       this.stage.replaceChildren(content);
-      decorateLinks(content, this.boards);
+      decorateLinks(content, this.boards, board.id);
       this.syncBackground(this.stage);
       if (fade) void this.fadeIn(content);
       this.current = id;

@@ -100,7 +100,7 @@ test('header stays stable while saving and preferences survive reload', async ({
   expect(status.y - save.y - save.height).toBeLessThan(12);
   await source(page).fill('a: Edited');
   expect(await page.locator('header').boundingBox()).toEqual(before);
-  await expect(page.locator('#draft-status')).toContainText(/browser draft saved/i);
+  await expect(page.locator('#draft-status')).toHaveAttribute('data-recovery', 'saved');
   expect(await page.locator('header').boundingBox()).toEqual(before);
   await selectMenuOption(page, '#theme', 'dark');
   await selectMenuOption(page, '#export-format', 'html');

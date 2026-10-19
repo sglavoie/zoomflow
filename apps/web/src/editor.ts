@@ -15,13 +15,14 @@ export class SourceEditor {
   private readonly extensions: Extension[];
   private currentKey = '';
   private readonly documents = new Map<string, { state: EditorState; scroll: ReturnType<EditorView['scrollSnapshot']> }>();
-  constructor(parent: HTMLElement, source: string, changed: () => void, selected: () => void, format: () => void) {
+  constructor(parent: HTMLElement, source: string, changed: () => void, selected: () => void, format: () => void, reveal: () => void) {
     this.extensions = [
         basicSetup, d2Language, lintGutter(), EditorView.lineWrapping,
         Prec.high(keymap.of([
           { key: 'Tab', run: insertTab },
           { key: 'Mod-Shift-m', run: () => { this.showDiagnostics(); return true; } },
           { key: 'Shift-Alt-f', run: () => { format(); return true; } },
+          { key: 'Mod-Shift-Enter', run: () => { reveal(); return true; } },
         ])),
         EditorView.contentAttributes.of({ 'aria-label': 'D2 source', 'aria-multiline': 'true' }),
         EditorView.domEventHandlers({ focus: (_event, view) => {
@@ -82,6 +83,10 @@ export class SourceEditor {
     else if (active?.isConnected && (active instanceof HTMLElement || active instanceof SVGElement)) active.focus({ preventScroll: true });
   }
   forget(key: string) { this.documents.delete(key); if (this.currentKey === key) this.currentKey = ''; }
+  copyDocument(key: string) {
+    this.documents.set(this.currentKey, { state: this.view.state, scroll: this.view.scrollSnapshot() });
+    this.currentKey = key;
+  }
   undo() { return undo(this.view); }
   format(source: string) {
     const current = this.source;

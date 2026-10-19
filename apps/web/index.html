@@ -64,6 +64,7 @@
       <section aria-labelledby="shortcuts-editor">
         <h3 id="shortcuts-editor">In the source editor</h3>
         <dl class="shortcut-list">
+          <div><dt>Reveal selected source in diagram</dt><dd><kbd>⌘ / Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>Enter</kbd></dd></div>
           <div><dt>Format D2 source</dt><dd><kbd>Shift</kbd> + <kbd>Alt</kbd> + <kbd>F</kbd></dd></div>
           <div><dt>Toggle line comments</dt><dd><kbd>⌘ / Ctrl</kbd> + <kbd>/</kbd></dd></div>
           <div><dt>Undo</dt><dd><kbd>⌘ / Ctrl</kbd> + <kbd>Z</kbd></dd></div>
@@ -119,8 +120,9 @@
       <section id="source-pane" aria-label="Source editor">
         <div class="pane-title">
           <div>D2 source</div>
-          <div class="pane-actions"><button id="format-source" class="button-quiet" title="Format D2 source (Shift+Alt+F)">Format</button><button id="save-file" class="button-primary" type="button" aria-describedby="draft-status" aria-keyshortcuts="Meta+s Control+s">Save .d2</button></div>
+          <div class="pane-actions"><button id="format-source" class="button-quiet" title="Format D2 source (Shift+Alt+F)">Format</button><button id="save-file" class="button-primary" type="button" aria-describedby="draft-status recovery-info" aria-keyshortcuts="Meta+s Control+s">Save .d2</button></div>
           <span id="draft-status" role="status"></span>
+          <span id="recovery-info" class="zf-visually-hidden"></span>
         </div>
         <div id="work-status" role="group" aria-label="Diagram status">
           <div class="status-copy">
@@ -130,6 +132,7 @@
             <span id="activity-status" role="status" hidden></span>
           </div>
           <div class="diagnostic-actions">
+            <button id="reveal-source" class="button-quiet" type="button" title="Reveal selected source in diagram (⌘⇧Enter or Ctrl+Shift+Enter)" aria-keyshortcuts="Meta+Shift+Enter Control+Shift+Enter" disabled>Reveal in diagram</button>
             <button id="go-to-error" class="button-primary" type="button" hidden>Go to error</button>
             <button id="show-diagnostics" class="button-quiet" type="button" disabled>Review diagnostics</button>
           </div>

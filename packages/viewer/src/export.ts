@@ -112,6 +112,7 @@ function offlineViewer(restoreLinks: typeof restoreMissingLinks, normalizeTrail:
     current = board;
     trail = normalizeTrail(visits);
     message.textContent = '';
+    message.setAttribute('role', 'status');
     if (board.empty) {
       stage.textContent = 'This board is empty.';
       stage.style.backgroundColor = '';
@@ -139,7 +140,7 @@ function offlineViewer(restoreLinks: typeof restoreMissingLinks, normalizeTrail:
         } else { link.removeAttribute('href'); link.removeAttribute('xlink:href'); }
       }
       stage.replaceChildren(svg);
-      decorate(svg, byId);
+      decorate(svg, byId, board.id);
       const background = svg.querySelector('svg > rect');
       stage.style.backgroundColor = background ? getComputedStyle(background).fill : '';
     }
@@ -181,7 +182,7 @@ function offlineViewer(restoreLinks: typeof restoreMissingLinks, normalizeTrail:
     event.preventDefault();
     const board = byId.get(href);
     if (board) show(board, [...trail, board.id]);
-    else if (href) message.textContent = `Missing board: ${href}`;
+    else if (href) { message.setAttribute('role', 'alert'); message.textContent = `Missing board: ${href}`; }
   }
   stage.addEventListener('click', follow);
   stage.addEventListener('keydown', (event) => { if (event.key === 'Enter') follow(event); });

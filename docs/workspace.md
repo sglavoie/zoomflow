@@ -16,7 +16,14 @@ Use **Save .d2** above the editor or **⌘S / Ctrl+S** to save a disk copy.
 Browsers with file-system access can write back to a file you opened or a destination
 you choose. Other browsers download the source and label the button **Download .d2**.
 **Export → Download .d2 source** always starts a separate download.
-The status beside the save controls distinguishes browser recovery from a disk save.
+The status beside the save controls reports file state; its tooltip describes browser
+recovery. Successful background backups stay quiet, while unavailable recovery is
+shown explicitly. A disk save that takes longer than 700 ms shows progress.
+Saving an example creates a separate named draft, labeled with its original template.
+Its undo history and diagram view stay intact; restoring the example leaves the saved
+copy alone. The filename, browser tab, and subsequent exports use the chosen disk name.
+An unsaved-change dot in the browser tab distinguishes edits from the last disk save.
+Project import paths remain stable even when a file copy is saved under another name.
 Browser storage can be cleared. Drafts are stored independently per document and tab;
 simultaneous edits are preserved as **(recovered)** copies in the diagram menu after
 reload. A notice appears when another tab changes a draft. Recovered project files
@@ -55,8 +62,9 @@ Click a linked shape to drill into a board. Breadcrumbs record the visited path,
 trimming back to an earlier board whenever you revisit it so cycles do not repeat.
 Esc or Backspace goes to the tree parent, and browser back/forward retraces your
 navigation. Deep links such as `#/checkout/charge` open a board directly in the
-loaded diagram. Board links show a downward arrow badge, while external links show an
-outward arrow. Hover or focus a link to identify its destination; hovering a shape
+loaded diagram. Child-board links show a downward arrow badge, links to ancestors show
+an upward arrow, and links to other boards show a sideways arrow. External links show
+an outward arrow. Hover or focus a link to identify its destination; hovering a shape
 highlights its selectable boundary. These link cues also appear in exported HTML.
 Open a `.d2` file or drop one onto the page; files are compiled locally
 with D2's WASM worker. Light, dark and system themes use D2's generated palettes.
@@ -89,11 +97,14 @@ child link that matches an ancestor's name suggests the corresponding `_` path.
 ## Edit and repair source
 
 Edit the syntax-highlighted D2 source in the CodeMirror pane for a live preview (350 ms debounce).
+If compilation is already running, intermediate preview requests are replaced by the
+newest edit. The running compilation finishes, and only a current result is displayed.
 Click **Format** or press **Shift+Alt+F** in the editor to apply D2's automatic
 source formatting, including nested indentation. Formatting is one undoable edit
 and refreshes the preview. Invalid diagrams leave the source unchanged and show
 a formatting error; edits made while formatting is running are preserved.
-The compact status strip above the editor reports preview freshness and diagnostic counts.
+The compact status strip above the editor reports delayed progress and diagnostic counts.
+Healthy preview and lint checks stay quiet, leaving one stable file-status message.
 Use **Diagnostics** to open the detailed list; the toolbar and editor stay in place
 through compilation failures and recovery.
 Transient progress appears only after 700 ms so quick edits do not flash indicators;
@@ -107,7 +118,9 @@ an export already running is canceled if the source changes. Successful edits
 preserve the current board, falling
 back to its nearest existing ancestor if it was removed. Click a shape to select
 its source identifier; selecting an identifier in the editor highlights its shape
-and opens its board when needed. Linked shapes still navigate; Alt+click selects
+on the current board without navigating. Use **Reveal in diagram** or **⌘⇧Enter /
+Ctrl+Shift+Enter** to open the selected identifier's board. On phones, this also opens
+Preview. Linked shapes still navigate; Alt+click selects
 their source without navigating. Source links pause while edits are uncompiled,
 so an old diagram cannot select an outdated text range. Editor keyboard shortcuts,
 including undo, search, Escape and Backspace, stay in the editor.

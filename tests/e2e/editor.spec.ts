@@ -28,8 +28,6 @@ test('live edits retain the last good render on syntax errors and recover with d
   await page.locator('.zf-stage a[href="root.layers.checkout"]').click();
   await ready(page, 'root.layers.checkout');
   const before = await page.locator('.zf-stage').innerHTML();
-  // Focus without moving the cursor onto an arbitrary (possibly nested) shape.
-  // A click in the editor intentionally navigates to that identifier's board.
   await sourceInput(page).focus();
   await sourceInput(page).press('ControlOrMeta+End');
   // Appending by keyboard exercises CodeMirror input and the debounce path.
@@ -70,12 +68,15 @@ test('clicking shapes selects exact source and selecting source highlights the m
   await expect.poll(() => page.evaluate(() => window.getSelection()?.toString())).toBe('😀');
 });
 
-test('source selection opens its board, linked shapes still drill, and file loading replaces editor text', async ({ page }) => {
+test('explicit reveal opens the selected source board, linked shapes still drill, and file loading replaces editor text', async ({ page }) => {
   await page.goto('/');
   await ready(page);
   await findSource(page, 'Capture');
+  await ready(page);
+  await sourceInput(page).press('ControlOrMeta+Shift+Enter');
   await ready(page, 'root.layers.checkout.layers.charge');
   await expect(page.locator('.zf-stage [data-shape-id="Capture"]')).toHaveClass(/zf-source-selected/);
+  await sourceInput(page).focus();
   await page.keyboard.insertText('Captured');
   await expect(page.locator('.zf-stage [data-shape-id="Captured"]')).toBeVisible();
   await ready(page, 'root.layers.checkout.layers.charge');

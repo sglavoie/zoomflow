@@ -1,11 +1,12 @@
 import { exportBoardsHtml, exportBoardsZip, exportSourcesZip, renderExportBoards, indexBoards, indexShapeSources, parseSourceRange, lint, type CompileResponse, type ShapeSource, type Diagram, type LintDiagnostic } from '@zoomflow/core';
-import { Viewer, prepareExportSvg, rasterizeSvg, offlineViewerScript, offlineViewerStyle, setupViewport, type RenderBoard } from '@zoomflow/viewer';
+import { Viewer, prepareExportSvg, rasterizeSvg, offlineViewerScript, offlineViewerStyle, viewerStyle, setupViewport, type RenderBoard } from '@zoomflow/viewer';
 import { examples } from './examples';
 import { setupExamplePicker } from './example-picker';
 import './style.css';
 import { SourceEditor } from './editor';
 import { compilerDiagnostics, lintDiagnostics, type SourceDiagnostic } from './diagnostics';
 import { createCompiler, CompilerStartupError } from './compiler';
+import { createPreviewQueue } from './preview-queue';
 import { setupReference } from './reference';
 import { setupSourceSplit } from './source-split';
 import { setupFullscreen } from './fullscreen';
@@ -14,6 +15,9 @@ import { setupMobileView } from './mobile-view';
 import { projectFileSystem, readDirectoryHandle, readFolderInput } from './project-files';
 import { setupShortcuts } from './shortcuts';
 
+const canvasStyle = document.createElement('style');
+canvasStyle.textContent = viewerStyle;
+document.head.prepend(canvasStyle);
 setupShortcuts();
 const viewer = new Viewer(document.querySelector<HTMLElement>('#viewer')!);
 const viewport = setupViewport(viewer.stage, setupFullscreen(viewer.stage));
@@ -65,6 +69,7 @@ updateTheme();
 // The pinned browser entry creates and owns D2's WASM worker. Import it lazily
 // so the shell and loading state paint before the compiler is downloaded.
 const compiler = createCompiler();
+const previewQueue = createPreviewQueue();
 const engineNotice = document.querySelector<HTMLElement>('#engine-notice')!;
 const engineMessage = document.querySelector<HTMLElement>('#engine-message')!;
 const retryEngine = document.querySelector<HTMLButtonElement>('#retry-engine')!;
@@ -103,7 +108,9 @@ const activityStatus = document.querySelector<HTMLElement>('#activity-status')!;
 const exportStatus = document.querySelector<HTMLElement>('#export-status')!;
 const projectDownloadButton = document.querySelector<HTMLButtonElement>('#save-project')!;
 const diagnosticsButton = document.querySelector<HTMLButtonElement>('#show-diagnostics')!;
+const revealButton = document.querySelector<HTMLButtonElement>('#reveal-source')!;
 let activeDiagnostics: SourceDiagnostic[] = [];
+let activityTimer: ReturnType<typeof setTimeout> | undefined;
 let previewTimer: ReturnType<typeof setTimeout> | undefined;
 function setPreviewState(state: 'loading' | 'updating' | 'ready' | 'error' | 'unavailable') {
   if (state === 'updating') {
@@ -126,10 +133,12 @@ function setPreviewState(state: 'loading' | 'updating' | 'ready' | 'error' | 'un
   else delete viewer.stage.dataset.previewState;
 }
 function setActivity(message: string, kind: 'info' | 'error' = 'info') {
+  clearTimeout(activityTimer);
   activityStatus.textContent = message;
   activityStatus.dataset.kind = kind;
   activityStatus.setAttribute('role', kind === 'error' ? 'alert' : 'status');
   activityStatus.hidden = !message;
+  if (message && kind === 'info' && !message.endsWith('…')) activityTimer = setTimeout(() => { activityStatus.hidden = true; }, 4000);
 }
 function setExportStatus(message: string, kind: 'info' | 'error' = 'info') {
   exportStatus.textContent = message;
@@ -156,12 +165,14 @@ let lintDocument: CompileResponse | undefined;
 function invalidateSource() {
   // Invalidate immediately, including requests still awaiting WASM/render startup.
   ++generation;
+  previewQueue.invalidate();
   ++documentRevision;
   ai?.sourceChanged();
   viewer.setBusy(true);
   formatStatus.hidden = true;
   viewer.cancelPendingRender();
   sourceMap = [];
+  revealButton.disabled = true;
   lintDocument = undefined;
   setEditorDiagnostics([]);
   mobileError.hidden = true;
@@ -180,21 +191,28 @@ const editor = new SourceEditor(document.querySelector<HTMLElement>('#editor')!,
   examplePicker.updateCurrent(editor.source);
   clearTimeout(debounce);
   debounce = setTimeout(() => void load(editor.source, documentName, true), 350);
-}, () => void highlightSelection(true), () => void formatSource());
+}, () => void highlightSelection(false), () => void formatSource(), () => void revealSelection());
 
 const examplePicker = setupExamplePicker(() => editor.source, (source, name, key, reset) => {
   void replaceDocument(source, name, key, reset);
-}, (dirty, recoveryAvailable, savePending, hasDraft, downloadRequested) => {
-  const handle = fileHandles.get(currentDocumentKey);
+}, (dirty, recoveryAvailable, savePending, hasDraft, downloadRequested, identity) => {
+  const handle = fileHandles.get(identity.key);
   const canSave = Boolean(handle || pickerWindow.showSaveFilePicker);
   saveFileButton.textContent = canSave ? 'Save .d2' : 'Download .d2';
   saveFileButton.title = `${canSave ? 'Save source to a file' : 'Download a source copy; this browser cannot write back to your file'} (⌘S or Ctrl+S)`;
   const recovery = !recoveryAvailable ? 'Browser draft unavailable' : savePending ? 'Saving browser draft…' : 'Browser draft saved';
   const file = downloadRequested ? 'Source download started' : handle && !dirty ? 'Saved to file'
     : dirty ? 'File has unsaved changes' : hasDraft ? 'Save a file copy to keep' : 'Edit to update the preview';
-  draftStatus.textContent = !hasDraft && !dirty && !handle && recoveryAvailable && !downloadRequested
-    ? file : `${recovery} · ${file}`;
-  draftStatus.title = `${draftStatus.textContent}. ${canSave ? 'Save keeps a copy on disk.' : 'Download keeps a separate file copy.'} Browser drafts can be cleared.`;
+  const status = recoveryAvailable ? file : `${file} · Browser draft unavailable`;
+  // Do not repeatedly announce unchanged file state during background backups.
+  if (draftStatus.textContent !== status) draftStatus.textContent = status;
+  draftStatus.dataset.kind = recoveryAvailable ? 'info' : 'error';
+  draftStatus.dataset.recovery = !recoveryAvailable ? 'unavailable' : savePending ? 'pending' : 'saved';
+  draftStatus.title = `${recovery}. ${canSave ? 'Save keeps a copy on disk.' : 'Download keeps a separate file copy.'} Browser drafts can be cleared.`;
+  document.querySelector('#recovery-info')!.textContent = recoveryAvailable
+    ? 'Edits are backed up in this browser. Save a disk copy to keep them; browser storage can be cleared.'
+    : 'Browser recovery is unavailable. Save or download a disk copy to keep your edits.';
+  document.title = `${dirty ? '• ' : ''}${identity.name} — Zoomflow`;
 }, (key) => { editor.forget(key); fileHandles.delete(key); documentRoutes.delete(key); viewport.forget(key); });
 
 function download(blob: Blob, name: string) {
@@ -231,6 +249,7 @@ saveFileButton.addEventListener('click', async () => {
   const key = currentDocumentKey;
   const source = editor.source;
   const name = documentName;
+  let saving: ReturnType<typeof setTimeout> | undefined;
   try {
     let handle = fileHandles.get(key);
     if (!handle && pickerWindow.showSaveFilePicker) {
@@ -241,15 +260,33 @@ saveFileButton.addEventListener('click', async () => {
       document.querySelector<HTMLButtonElement>('#save-source')!.click();
       return;
     }
+    saving = setTimeout(() => { if (currentDocumentKey === key) setActivity('Saving file…'); }, 700);
     const writable = await handle.createWritable();
     try { await writable.write(source); await writable.close(); }
     catch (error) { await writable.abort(); throw error; }
-    fileHandles.set(key, handle);
-    examplePicker.markDiskSaved(key, source);
-    if (currentDocumentKey === key) setActivity(`Saved ${handle.name} to disk.`);
+    const saved = examplePicker.markDiskSaved(key, source, handle.name);
+    if (!saved) return; // The draft may have been removed while the file dialog was open.
+    fileHandles.set(saved.key, handle);
+    if (currentDocumentKey === key) {
+      if (saved.key !== key) {
+        editor.copyDocument(saved.key);
+        viewport.copyDocument(saved.key);
+        const route = documentRoutes.get(key);
+        if (route) documentRoutes.set(saved.key, route);
+      }
+      currentDocumentKey = saved.key;
+      documentName = saved.name;
+      // Save identity changes do not invalidate compiled geometry or editor history.
+      examplePicker.refresh();
+      setActivity('');
+    }
   } catch (error) {
     if (currentDocumentKey === key && !(error instanceof DOMException && error.name === 'AbortError')) setActivity(`Could not save file: ${String(error)}`, 'error');
-  } finally { saveFileButton.disabled = false; }
+  } finally {
+    clearTimeout(saving);
+    if (currentDocumentKey === key && activityStatus.textContent === 'Saving file…') setActivity('');
+    saveFileButton.disabled = false;
+  }
 });
 window.addEventListener('keydown', (event) => {
   if (event.isComposing || event.altKey || event.shiftKey || !(event.metaKey || event.ctrlKey) || event.key.toLowerCase() !== 's') return;
@@ -324,6 +361,7 @@ function updateLint() {
   const errors = result.diagnostics.filter((item) => item.severity === 'error').length;
   const warnings = result.diagnostics.length - errors;
   lintSummary.textContent = errors || warnings ? `${errors} lint error(s), ${warnings} warning(s)` : 'No lint issues';
+  lintSummary.dataset.empty = String(!errors && !warnings);
 }
 missingBacklink.addEventListener('change', updateLint);
 boundaryPorts.addEventListener('change', updateLint);
@@ -364,9 +402,19 @@ async function highlightSelection(navigate: boolean) {
     ? from >= entry.from && from < entry.to : from < entry.to && to > entry.from);
   const current = viewer.currentBoard?.id;
   const target = matches.find((entry) => entry.board === current) ?? matches[0];
+  revealButton.disabled = !target;
   if (navigate && target && target.board !== current) await viewer.navigate(target.board);
   viewer.highlightShapes(matches.filter((entry) => entry.board === viewer.currentBoard?.id).map((entry) => entry.shape));
 }
+async function revealSelection() {
+  if (revealButton.disabled) return;
+  const revision = documentRevision;
+  await highlightSelection(true);
+  if (revision !== documentRevision) return;
+  showMobileView('preview');
+  viewer.stage.focus({ preventScroll: true });
+}
+revealButton.addEventListener('click', () => void revealSelection());
 viewer.stage.addEventListener('zf-boardchange', () => {
   // Viewer commits its URL and trail immediately after dispatching this event.
   queueMicrotask(() => {
@@ -413,7 +461,10 @@ function updateExportLabel() {
 }
 exportFormat.addEventListener('change', updateExportLabel);
 updateExportLabel();
-async function load(source: string, name: string, preserveViewport = false) {
+function load(source: string, name: string, preserveViewport = false) {
+  return previewQueue.run(() => loadPreview(source, name, preserveViewport));
+}
+async function loadPreview(source: string, name: string, preserveViewport: boolean) {
   const request = ++generation;
   viewer.setBusy(true);
   viewer.setMessage('');
@@ -512,6 +563,7 @@ exportButton.addEventListener('click', async () => {
   setActivity(`Preparing ${format.toUpperCase()} download…`);
   setExportStatus(`Preparing ${format.toUpperCase()} download…`);
   const dark = document.documentElement.dataset.theme === 'dark';
+  const exportName = documentName;
   const warnings: string[] = [];
   const prepare = async (target: string) => {
     const result = await prepareExportSvg(await loaded.render(target), dark);
@@ -520,7 +572,7 @@ exportButton.addEventListener('click', async () => {
   };
   try {
     let blob: Blob;
-    let name = loaded.name.replace(/\.d2$/i, '');
+    let name = exportName.replace(/\.d2$/i, '');
     if (format === 'svg' || format === 'png') {
       const svg = await prepare(board.target);
       blob = format === 'png' ? await rasterizeSvg(svg) : new Blob([svg], { type: 'image/svg+xml' });
@@ -528,7 +580,7 @@ exportButton.addEventListener('click', async () => {
     } else {
       const boards = await renderExportBoards(loaded.diagram, prepare, loaded.diagnostics);
       blob = format === 'zip' ? new Blob([exportBoardsZip(boards)], { type: 'application/zip' })
-        : new Blob([exportBoardsHtml(boards, { title: loaded.name, script: offlineViewerScript(),
+        : new Blob([exportBoardsHtml(boards, { title: exportName, script: offlineViewerScript(),
           style: offlineViewerStyle + (dark ? ':root{color-scheme:dark;--zf-page:#111722;--zf-text:#e4eaf2;--zf-surface:#182231;--zf-border:#8192a466;--zf-muted:#adbbcd}.zf-stage{background:#0a0f25}' : '') })], { type: 'text/html' });
       name += `.${format}`;
     }
@@ -616,7 +668,7 @@ document.addEventListener('drop', (event) => {
   const file = event.dataTransfer?.files[0];
   if (file) void openFile(file);
 });
-window.addEventListener('pagehide', () => { clearTimeout(debounce); clearTimeout(previewTimer); ai?.dispose(); examplePicker.flush(); ++generation; editor.destroy(); viewer.destroy(); compiler.dispose(); });
+window.addEventListener('pagehide', () => { clearTimeout(debounce); clearTimeout(previewTimer); clearTimeout(activityTimer); previewQueue.invalidate(); ai?.dispose(); examplePicker.flush(); ++generation; editor.destroy(); viewer.destroy(); compiler.dispose(); });
 documentName = examplePicker.initial.name;
 currentDocumentKey = examplePicker.initial.key;
 projectDownloadButton.hidden = !examplePicker.projectName;

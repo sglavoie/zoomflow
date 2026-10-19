@@ -5,7 +5,7 @@ import { DraftStore, type Draft } from './draft-store';
 export function setupExamplePicker(
   readSource: () => string,
   open: (source: string, name: string, key: string, reset?: boolean) => void,
-  onState: (dirty: boolean, recoveryAvailable: boolean, savePending: boolean, hasDraft: boolean, downloadRequested: boolean) => void,
+  onState: (dirty: boolean, recoveryAvailable: boolean, savePending: boolean, hasDraft: boolean, downloadRequested: boolean, identity: { key: string; name: string }) => void,
   forget: (key: string) => void,
 ) {
   const picker = document.querySelector<HTMLDetailsElement>('#example-picker')!;
@@ -67,7 +67,7 @@ export function setupExamplePicker(
     const draft = currentDraft();
     const original = examples.find((example) => example.name === draft.key)?.source;
     onState(draft.source !== draft.baseline, recoveryAvailable, savePending,
-      draft.key.startsWith('file:') || Boolean(draft.projectId) || draft.source !== original || draft.baseline !== original, downloadRequested);
+      draft.key.startsWith('file:') || Boolean(draft.projectId) || draft.source !== original || draft.baseline !== original, downloadRequested, draft);
     refreshRows.get(current)?.();
     fileHeading.hidden = fileOptions.childElementCount === 0;
   }
@@ -242,6 +242,9 @@ export function setupExamplePicker(
     timestamp.className = 'example-description';
     button.append(timestamp);
     refreshRows.set(item.key, () => {
+      label.firstChild!.textContent = item.projectId
+        ? `${item.path}${item.name !== item.path!.split('/').at(-1) ? ` → ${item.name}` : ''}${item.recoveredFrom ? ' (recovered)' : ''}` : item.title;
+      row.querySelector('.example-remove')?.setAttribute('aria-label', `Remove ${item.name} draft`);
       const original = examples.find((example) => example.name === item.key)?.source;
       const changed = original !== undefined && item.source !== original;
       modified.hidden = !changed;
@@ -250,7 +253,7 @@ export function setupExamplePicker(
       timestamp.hidden = !item.updatedAt;
       timestamp.textContent = item.updatedAt ? `Edited ${new Date(item.updatedAt).toLocaleString()}` : '';
       if (item.recoveredFrom) detail.textContent = 'Recovered copy · Edits from another tab';
-      else if (item.key.startsWith('file:')) detail.textContent = `Your file · Draft ${item.number ?? item.key.slice(5)}`;
+      else if (item.key.startsWith('file:')) detail.textContent = item.template ? `Saved copy of ${item.template} · Draft ${item.number}` : `Your file · Draft ${item.number ?? item.key.slice(5)}`;
       else if (item.projectId) detail.textContent = `Project file · ${item.path}`;
     });
     refreshRows.get(item.key)!();
@@ -322,12 +325,26 @@ export function setupExamplePicker(
       downloadRequested = true;
       persist();
     },
-    markDiskSaved(key: string, source: string) {
-      const draft = drafts.get(key);
+    markDiskSaved(key: string, source: string, name: string) {
+      let draft = drafts.get(key);
       if (!draft) return;
       if (current === key) { draft.source = readSource(); downloadRequested = false; }
+      // Saving a built-in example creates a named file without taking over the template.
+      const template = examples.find((example) => example.name === key);
+      if (template) {
+        draft = { ...draft, key: `file:${crypto.randomUUID()}`, number: ++fileNumber, template: template.title,
+          name, title: name, updatedAt: Date.now() };
+        drafts.set(draft.key, draft);
+        addOption(draft);
+      } else {
+        draft.name = name;
+        if (!draft.projectId) draft.title = name;
+      }
       draft.baseline = source;
+      refreshRows.get(draft.key)?.();
+      if (current === key) activate(draft.key);
       persist();
+      return { key: draft.key, name: draft.name };
     },
     rememberFile(name: string, source: string) {
       currentDraft().source = readSource();

@@ -12,7 +12,7 @@ async function choose(page: Page, name: RegExp) {
   await ready(page);
 }
 async function saved(page: Page) {
-  await expect(page.locator('#draft-status')).toContainText('Browser draft saved');
+  await expect(page.locator('#draft-status')).toHaveAttribute('data-recovery', 'saved');
 }
 
 test('concurrent tabs keep both versions and unrelated drafts after reload', async ({ page, context }) => {

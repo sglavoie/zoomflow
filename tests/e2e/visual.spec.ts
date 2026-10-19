@@ -19,7 +19,7 @@ for (const mobile of [false, true]) for (const theme of ['light', 'dark'] as con
     const source = page.getByRole('textbox', { name: 'D2 source', exact: true });
     await source.fill('a: Good\nbroken: {');
     await expect(page.locator('#compile-error')).toBeVisible();
-    await expect(page.locator('#draft-status')).toContainText('Browser draft saved');
+    await expect(page.locator('#draft-status')).toHaveAttribute('data-recovery', 'saved');
     await source.blur();
     await screenshot('error-source');
     if (mobile) {
@@ -30,7 +30,7 @@ for (const mobile of [false, true]) for (const theme of ['light', 'dark'] as con
     }
     await source.fill('a: Good');
     await expect(page.locator('#preview-status')).toHaveText('Preview ready');
-    await expect(page.locator('#draft-status')).toContainText('Browser draft saved');
+    await expect(page.locator('#draft-status')).toHaveAttribute('data-recovery', 'saved');
     await page.locator('#ai-assistant summary').first().click();
     await page.locator('#lint-details summary').click();
     await expect(page.locator('#ai-availability')).toContainText('ready on this computer');

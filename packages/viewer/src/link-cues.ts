@@ -1,15 +1,21 @@
 /** Shared by the live viewer and serialized offline runtime. Call after mounting the SVG. */
-export function decorateLinks(svg: Element, boards: Map<string, { name: string }>) {
+export function decorateLinks(svg: Element, boards: Map<string, { name: string; parent?: string }>, current: string) {
   const ns = 'http://www.w3.org/2000/svg';
+  function ancestor(parent: string, child: string): boolean {
+    for (let id = boards.get(child)?.parent; id; id = boards.get(id)?.parent) if (id === parent) return true;
+    return false;
+  }
   for (const link of svg.querySelectorAll<SVGAElement>('a')) {
     const href = link.getAttribute('href') ?? link.getAttribute('xlink:href') ?? '';
     const external = /^(https?:|mailto:)/i.test(href);
     const target = boards.get(href);
     if (!external && !target && !link.hasAttribute('data-missing')) continue;
     const name = link.querySelector('text')?.textContent?.trim() || href;
+    const direction = target ? ancestor(href, current) ? 'parent' : ancestor(current, href) ? 'child' : 'peer' : undefined;
     const label = external ? `Open external link: ${name}${href.startsWith('mailto:') ? ' (email)' : ' (new tab)'}`
-      : target ? `Open ${target.name} board` : `Missing board: ${href}`;
+      : target ? direction === 'parent' ? `Return to ${target.name}` : direction === 'child' ? `Open ${target.name} board` : `Visit ${target.name} board` : `Missing board: ${href}`;
     link.dataset.linkKind = external ? 'external' : 'board';
+    if (direction) link.dataset.linkDirection = direction;
     link.setAttribute('aria-label', label);
     const title = document.createElementNS(ns, 'title');
     title.textContent = label;
@@ -36,7 +42,10 @@ export function decorateLinks(svg: Element, boards: Map<string, { name: string }
     circle.setAttribute('stroke', `var(--zf-badge-ink, ${ink})`);
     circle.setAttribute('stroke-opacity', '0.5');
     const arrow = document.createElementNS(ns, 'path');
-    arrow.setAttribute('d', external ? 'M10 22 L22 10 M12 10 H22 V20' : 'M9 10 H16 V22 M10 16 L16 22 L22 16');
+    arrow.setAttribute('d', external ? 'M10 22 L22 10 M12 10 H22 V20'
+      : direction === 'parent' ? 'M23 22 H16 V10 M10 16 L16 10 L22 16'
+      : direction === 'peer' ? 'M8 16 H24 M18 10 L24 16 L18 22'
+      : 'M9 10 H16 V22 M10 16 L16 22 L22 16');
     arrow.setAttribute('fill', 'none'); arrow.setAttribute('stroke', `var(--zf-badge-ink, ${ink})`);
     arrow.setAttribute('transform', 'translate(4 4) scale(0.75)');
     arrow.setAttribute('stroke-width', '2'); arrow.setAttribute('stroke-linecap', 'round'); arrow.setAttribute('stroke-linejoin', 'round');
@@ -53,14 +62,16 @@ export function decorateLinks(svg: Element, boards: Map<string, { name: string }
   svg.parentElement?.append(hint);
   let hovered: Element | null = null;
   let focused: Element | null = null;
+  let focusLast = false;
   const anchor = (target: EventTarget | null) => target instanceof Element ? target.closest('a[data-link-kind]') : null;
   const update = () => {
-    const label = (hovered ?? focused)?.getAttribute('aria-label');
-    hint.textContent = label ?? '';
+    const label = (focusLast ? focused ?? hovered : hovered ?? focused)?.getAttribute('aria-label');
+    if (hint.textContent !== (label ?? '')) hint.textContent = label ?? '';
     hint.hidden = !label;
   };
-  svg.addEventListener('pointerover', (event) => { hovered = anchor(event.target); update(); });
+  svg.addEventListener('pointerover', (event) => { hovered = anchor(event.target); focusLast = false; update(); });
+  svg.addEventListener('pointermove', (event) => { hovered = anchor(event.target); focusLast = false; update(); });
   svg.addEventListener('pointerout', (event) => { hovered = anchor((event as PointerEvent).relatedTarget); update(); });
-  svg.addEventListener('focusin', (event) => { focused = anchor(event.target); update(); });
+  svg.addEventListener('focusin', (event) => { focused = anchor(event.target); focusLast = true; update(); });
   svg.addEventListener('focusout', (event) => { focused = anchor((event as FocusEvent).relatedTarget); update(); });
 }
