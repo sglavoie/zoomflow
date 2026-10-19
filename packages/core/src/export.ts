@@ -56,6 +56,20 @@ export function exportBoardsZip(boards: readonly ExportBoard[]): Uint8Array<Arra
   return new Uint8Array(zipSync(files));
 }
 
+/** Keep the relative D2 tree intact when a browser project has no writable folder handle. */
+export function exportSourcesZip(sources: Record<string, string>): Uint8Array<ArrayBuffer> {
+  const files: Record<string, Uint8Array> = Object.create(null);
+  for (const [path, source] of Object.entries(sources)) {
+    const parts = path.split('/');
+    if (!path.endsWith('.d2') || parts.some((part) => !part || part === '.' || part === '..') ||
+      path.includes('\\') || path.includes('\0') || /^[A-Za-z]:/.test(path))
+      throw new Error(`Invalid project source path: ${path}`);
+    files[path] = strToU8(source);
+  }
+  if (!Object.keys(files).length) throw new Error('Project has no D2 source files.');
+  return new Uint8Array(zipSync(files));
+}
+
 /** The caller supplies its DOM runtime; core stays usable in Node without a DOM. */
 export function exportBoardsHtml(boards: readonly ExportBoard[], options: { title: string; script: string; style: string }): string {
   const title = options.title.replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char]!);

@@ -1,6 +1,7 @@
 import { examples } from './examples';
 
-type Draft = { key: string; name: string; title: string; description: string; source: string; baseline: string; updatedAt?: number };
+type Draft = { key: string; name: string; title: string; description: string; source: string; baseline: string;
+  updatedAt?: number; projectId?: string; path?: string };
 type SavedDrafts = { current: string; fileNumber: number; drafts: Draft[] };
 
 /** Keep drafts across visits, including distinct uploads with the same filename. */
@@ -21,6 +22,7 @@ export function setupExamplePicker(
     source: example.source, baseline: example.source,
   }]));
   const buttons = new Map<string, HTMLButtonElement>();
+  const rows = new Map<string, HTMLElement>();
   const refreshRows = new Map<string, () => void>();
   const fileHeading = document.createElement('h3');
   fileHeading.className = 'example-menu-heading';
@@ -42,7 +44,9 @@ export function setupExamplePicker(
         if (!item || typeof item.key !== 'string' || typeof item.name !== 'string' ||
           typeof item.title !== 'string' || typeof item.description !== 'string' ||
           typeof item.source !== 'string' || typeof item.baseline !== 'string') continue;
-        if (drafts.has(item.key) || /^file:\d+$/.test(item.key)) drafts.set(item.key, {
+        if (drafts.has(item.key) || /^file:\d+$/.test(item.key) ||
+          (item.key.startsWith('project:') && typeof item.projectId === 'string' &&
+            typeof item.path === 'string' && item.key === `project:${item.projectId}:${item.path}`)) drafts.set(item.key, {
           ...item, updatedAt: typeof item.updatedAt === 'number' && Number.isFinite(item.updatedAt) && item.updatedAt > 0
             && item.updatedAt <= 8.64e15 ? item.updatedAt : undefined,
         });
@@ -61,7 +65,7 @@ export function setupExamplePicker(
     const draft = currentDraft();
     const original = examples.find((example) => example.name === draft.key)?.source;
     onState(draft.source !== draft.baseline, recoveryAvailable, savePending,
-      draft.key.startsWith('file:') || draft.source !== original || draft.baseline !== original, downloadRequested);
+      draft.key.startsWith('file:') || Boolean(draft.projectId) || draft.source !== original || draft.baseline !== original, downloadRequested);
     refreshRows.get(current)?.();
     fileHeading.hidden = fileOptions.childElementCount === 0;
   }
@@ -70,7 +74,7 @@ export function setupExamplePicker(
     savePending = false;
     try {
       const saved: SavedDrafts = { current, fileNumber, drafts: [...drafts.values()].filter((item) =>
-        item.key.startsWith('file:') || item.source !== examples.find((example) => example.name === item.key)?.source ||
+        item.key.startsWith('file:') || Boolean(item.projectId) || item.source !== examples.find((example) => example.name === item.key)?.source ||
         item.baseline !== examples.find((example) => example.name === item.key)?.source) };
       localStorage.setItem(storageKey, JSON.stringify(saved));
       recoveryAvailable = true;
@@ -97,6 +101,7 @@ export function setupExamplePicker(
   function addOption(item: Draft) {
     const row = document.createElement('div');
     row.className = 'example-row';
+    rows.set(item.key, row);
     const button = document.createElement('button');
     button.type = 'button';
     button.className = 'example-option';
@@ -117,23 +122,29 @@ export function setupExamplePicker(
       open(item.source, item.name, item.key);
     });
     row.append(button);
-    if (item.key.startsWith('file:')) {
+    if (item.key.startsWith('file:') || item.projectId) {
       const remove = document.createElement('button');
       remove.type = 'button';
       remove.className = 'example-remove';
       remove.textContent = 'Remove';
-      remove.setAttribute('aria-label', `Remove ${item.name} draft`);
+      remove.setAttribute('aria-label', item.projectId ? `Remove ${item.title} project` : `Remove ${item.name} draft`);
       remove.addEventListener('click', (event) => {
         event.stopPropagation();
-        if (!window.confirm(`Remove the local draft for ${item.name}? Download a copy first if you want to keep it.`)) return;
+        const message = item.projectId ? `Remove all browser drafts for ${item.title.split('/')[0]}? Keep a disk copy first if needed.`
+          : `Remove the local draft for ${item.name}? Download a copy first if you want to keep it.`;
+        if (!window.confirm(message)) return;
         currentDraft().source = readSource();
-        drafts.delete(item.key);
-        buttons.delete(item.key);
-        refreshRows.delete(item.key);
-        forget(item.key);
-        row.remove();
+        const removed = [...drafts.values()].filter((draft) => item.projectId ? draft.projectId === item.projectId : draft.key === item.key);
+        for (const draft of removed) {
+          drafts.delete(draft.key);
+          buttons.delete(draft.key);
+          refreshRows.delete(draft.key);
+          rows.get(draft.key)?.remove();
+          rows.delete(draft.key);
+          forget(draft.key);
+        }
         summary.focus();
-        if (current === item.key) {
+        if (removed.some((draft) => draft.key === current)) {
           const fallback = examples[0].name;
           activate(fallback);
           picker.open = false;
@@ -182,10 +193,11 @@ export function setupExamplePicker(
       timestamp.hidden = !item.updatedAt;
       timestamp.textContent = item.updatedAt ? `Edited ${new Date(item.updatedAt).toLocaleString()}` : '';
       if (item.key.startsWith('file:')) detail.textContent = `Your file · Draft ${item.key.slice(5)}`;
+      else if (item.projectId) detail.textContent = `Project file · ${item.path}`;
     });
     refreshRows.get(item.key)!();
     buttons.set(item.key, button);
-    (item.key.startsWith('file:') ? fileOptions : options).append(row);
+    (item.key.startsWith('file:') || item.projectId ? fileOptions : options).append(row);
   }
 
   for (const item of drafts.values()) addOption(item);
@@ -217,6 +229,29 @@ export function setupExamplePicker(
 
   return {
     initial: { source: currentDraft().source, name: currentDraft().name, key: current },
+    get currentKey() { return current; },
+    get projectName() { return currentDraft().projectId ? currentDraft().title.split('/')[0] : undefined; },
+    compilation() {
+      const draft = currentDraft();
+      if (!draft.projectId || !draft.path) return { inputPath: 'index', fs: { index: draft.source } };
+      const fs: Record<string, string> = Object.create(null);
+      for (const item of drafts.values()) if (item.projectId === draft.projectId && item.path) fs[item.path] = item.source;
+      return { inputPath: draft.path, fs };
+    },
+    hasProjectPath(path: string) {
+      const projectId = currentDraft().projectId;
+      return Boolean(projectId && [...drafts.values()].some((item) => item.projectId === projectId && item.path === path));
+    },
+    selectProjectPath(path: string) {
+      const projectId = currentDraft().projectId;
+      const target = [...drafts.values()].find((item) => item.projectId === projectId && item.path === path);
+      if (!target) return;
+      currentDraft().source = readSource();
+      activate(target.key);
+      schedulePersist();
+      return { source: target.source, name: target.name, key: target.key };
+    },
+    refresh() { announce(); },
     updateCurrent(source: string) {
       if (source !== currentDraft().source) currentDraft().updatedAt = Date.now();
       currentDraft().source = source;
@@ -225,8 +260,14 @@ export function setupExamplePicker(
     },
     markDownloadRequested() {
       currentDraft().source = readSource();
-      currentDraft().baseline = currentDraft().source;
       downloadRequested = true;
+      persist();
+    },
+    markDiskSaved(key: string, source: string) {
+      const draft = drafts.get(key);
+      if (!draft) return;
+      if (current === key) { draft.source = readSource(); downloadRequested = false; }
+      draft.baseline = source;
       persist();
     },
     rememberFile(name: string, source: string) {
@@ -239,6 +280,26 @@ export function setupExamplePicker(
       picker.open = false;
       persist();
       return key;
+    },
+    rememberFolder(folderName: string, files: { path: string; source: string }[]) {
+      currentDraft().source = readSource();
+      const projectId = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+      const keys: Record<string, string> = Object.create(null);
+      for (const file of files) {
+        const key = `project:${projectId}:${file.path}`;
+        const name = file.path.split('/').at(-1)!;
+        const item: Draft = { key, name, title: `${folderName}/${file.path}`, description: 'Project file',
+          source: file.source, baseline: file.source, projectId, path: file.path, updatedAt: Date.now() };
+        keys[file.path] = key;
+        drafts.set(key, item);
+        addOption(item);
+      }
+      const first = files.find((file) => /^(index|main)\.d2$/i.test(file.path)) ??
+        files.find((file) => !file.path.includes('/')) ?? files[0];
+      activate(keys[first.path]);
+      picker.open = false;
+      persist();
+      return { key: keys[first.path], name: first.path.split('/').at(-1)!, source: first.source, keys };
     },
     flush() {
       currentDraft().source = readSource();

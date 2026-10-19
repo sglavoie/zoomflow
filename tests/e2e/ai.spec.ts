@@ -1,5 +1,10 @@
 import { expect, test } from '@playwright/test';
 
+test.beforeEach(async ({ page }) => {
+  await page.route('**/api/ai/status', (route) => route.fulfill({ status: 200,
+    contentType: 'application/json', body: JSON.stringify({ available: true }) }));
+});
+
 test('AI updates the current diagram and keeps the edit undoable', async ({ page }) => {
   await page.route('**/api/ai', async (route) => {
     const request = route.request().postDataJSON();
@@ -107,7 +112,25 @@ test('AI availability is checked before composing a prompt and can be retried', 
   available = true;
   await page.getByRole('button', { name: 'Check again' }).click();
   await expect(page.locator('#ai-prompt')).toBeEnabled();
-  await expect(page.locator('#ai-availability')).toContainText('local CLI');
+  await expect(page.locator('#ai-availability')).toContainText('ready on this computer');
+});
+
+test('provider readiness follows the selected CLI and explains sign-in failures', async ({ page }) => {
+  await page.route('**/api/ai/status', (route) => {
+    const provider = route.request().postDataJSON().provider;
+    return route.fulfill({ status: 200, contentType: 'application/json',
+      body: JSON.stringify(provider === 'codex'
+        ? { available: false, reason: 'Codex is installed. Sign in with codex login.' }
+        : { available: true }) });
+  });
+  await page.goto('/');
+  await page.locator('#ai-assistant > summary').click();
+  await expect(page.locator('#ai-prompt')).toBeEnabled();
+  await page.getByLabel('AI', { exact: true }).selectOption('codex');
+  await expect(page.locator('#ai-availability')).toContainText('Sign in with codex login');
+  await expect(page.locator('#ai-send')).toBeDisabled();
+  await page.getByLabel('AI', { exact: true }).selectOption('claude');
+  await expect(page.locator('#ai-prompt')).toBeEnabled();
 });
 
 test('cancel keeps the prompt and ignores a late AI response', async ({ page }) => {

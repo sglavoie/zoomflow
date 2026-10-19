@@ -6,9 +6,9 @@ import { lintGutter, openLintPanel, closeLintPanel, setDiagnostics, type Diagnos
 import { parseSourceRange, type SourceRange, type LintDiagnostic, type ShapeSource } from '@zoomflow/core';
 import { d2Language } from './d2-language';
 
-export function lintDiagnostics(items: LintDiagnostic[], source: string, sources: ShapeSource[]): Diagnostic[] {
+export function lintDiagnostics(items: LintDiagnostic[], source: string, sources: ShapeSource[], filename = 'index'): Diagnostic[] {
   return items.map((item) => {
-    const range = (item.range && parseSourceRange(item.range, source)) ||
+    const range = (item.range && parseSourceRange(item.range, source, filename)) ||
       sources.find((entry) => entry.board === item.board && entry.shape === item.shape) ||
       { from: 0, to: Math.min(1, source.length) };
     return { from: range.from, to: range.to, severity: item.severity, source: `Zoomflow ${item.rule}`,
@@ -16,15 +16,17 @@ export function lintDiagnostics(items: LintDiagnostic[], source: string, sources
   });
 }
 
-export function compilerDiagnostics(error: unknown, source: string): Diagnostic[] {
+export type CompilerDiagnostic = Diagnostic & { filename?: string; rawRange?: string };
+export function compilerDiagnostics(error: unknown, source: string, filename = 'index'): CompilerDiagnostic[] {
   const message = String(error);
   try {
     const entries: unknown = JSON.parse(message.slice(message.indexOf('[')));
     if (Array.isArray(entries)) {
       const diagnostics = entries.flatMap((entry) => {
         if (typeof entry?.range !== 'string' || typeof entry?.errmsg !== 'string') return [];
-        const range = parseSourceRange(entry.range, source);
-        return range ? [{ ...range, severity: 'error' as const, message: entry.errmsg }] : [];
+        const range = parseSourceRange(entry.range, source, filename) ?? { from: 0, to: Math.min(1, source.length) };
+        return [{ ...range, severity: 'error' as const, message: entry.errmsg,
+          filename: entry.range.split(',')[0], rawRange: entry.range }];
       });
       if (diagnostics.length) return diagnostics;
     }

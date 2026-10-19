@@ -16,7 +16,7 @@ export interface DiagramExample {
 
 export const examples: readonly DiagramExample[] = [
   { name: 'order.d2', title: 'Order flow', description: 'Nested drill-down, breadcrumbs and parent connections.',
-    source: '# Click Checkout, then Charge to explore nested boards.\n# Try breadcrumbs, Escape, browser Back, or Alt+click to select source.\n# Parent connection hints are inferred from the outer board.\n# Export Single-file HTML to share the whole navigable diagram offline.\n' + order },
+    source: '# Click Checkout to open its detail board.\n' + order },
   { name: 'flowchart.d2', title: 'Flowchart basics', description: 'Shapes, decisions, edge labels and Markdown notes.', source: flowchart },
   { name: 'architecture.d2', title: 'Service architecture', description: 'Containers, variables, reusable classes and styled connections.', source: architecture },
   { name: 'sequence.d2', title: 'Sequence diagram', description: 'Participants, ordered messages, groups and replies.', source: sequence },

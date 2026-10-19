@@ -3,10 +3,12 @@ import { readFile } from 'node:fs/promises';
 import { pathToFileURL } from 'node:url';
 import { expect, test } from '@playwright/test';
 
-test('mobile source editor is visible with secondary controls collapsed', async ({ page }) => {
+test('mobile source view gives the editor room with secondary controls collapsed', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/');
   await expect(page.locator('.zf-stage > svg')).toBeVisible();
+  await page.locator('#mobile-source').click();
+  await expect(page.locator('#preview-pane')).toBeHidden();
   const editor = page.locator('#editor');
   expect((await editor.boundingBox())!.height).toBeGreaterThanOrEqual(320);
   expect((await editor.boundingBox())!.y).toBeLessThan(700);
@@ -18,6 +20,17 @@ test('mobile source editor is visible with secondary controls collapsed', async 
   expect((await editor.boundingBox())!.height).toBeGreaterThanOrEqual(320);
   await page.getByRole('textbox', { name: 'D2 source' }).fill('mobile: Editable');
   await expect(page.locator('.zf-stage')).toContainText('Editable');
+});
+
+test('selecting a shape on a phone reveals its source', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/');
+  await expect(page.locator('.zf-stage [data-shape-id="Browse"]')).toBeVisible();
+  await page.locator('.zf-stage [data-shape-id="Browse"]').click();
+  await expect(page.locator('#mobile-source')).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByRole('textbox', { name: 'D2 source' })).toBeFocused();
+  await page.locator('#mobile-preview').click();
+  await expect(page.locator('.zf-stage > svg')).toBeVisible();
 });
 
 test('draft recovers after reload and D2 source downloads', async ({ page }) => {
@@ -37,7 +50,7 @@ test('draft recovers after reload and D2 source downloads', async ({ page }) => 
   await expect(page.locator('#draft-status')).toContainText('Source download started');
   await page.reload();
   await expect(page.getByRole('textbox', { name: 'D2 source' })).toContainText('draft: Recovered');
-  await expect(page.locator('#draft-status')).toContainText('Browser draft saved');
+  await expect(page.locator('#draft-status')).toContainText(/browser draft saved/i);
   await page.locator('#file').setInputFiles({ name: 'custom.d2', mimeType: 'text/plain', buffer: Buffer.from('uploaded: Original') });
   await page.getByRole('textbox', { name: 'D2 source' }).fill('uploaded: Edited');
   await page.reload();
@@ -89,6 +102,35 @@ test('invalid current file cannot export the previous diagram', async ({ page })
   const [download] = await Promise.all([page.waitForEvent('download'), downloadExport(page)]);
   expect(download.suggestedFilename()).toBe('bad-root.svg');
   expect(await readFile(await download.path(), 'utf8')).toContain('Current file');
+});
+
+test('export progress and completion appear beside the export action', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/');
+  await expect(page.locator('#export')).toBeEnabled();
+  await page.locator('#header-more-toggle').click();
+  const [download] = await Promise.all([page.waitForEvent('download'), page.locator('#export').click()]);
+  expect(download.suggestedFilename()).toBe('order-root.svg');
+  await expect(page.locator('#export-status')).toContainText('Download started');
+  await expect(page.locator('#export-status')).toBeVisible();
+});
+
+test('file drops reject other formats and leave ordinary text drops alone', async ({ page }) => {
+  await page.goto('/');
+  const textPrevented = await page.evaluate(() => {
+    const event = new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: new DataTransfer() });
+    document.dispatchEvent(event);
+    return event.defaultPrevented;
+  });
+  expect(textPrevented).toBe(false);
+  await page.evaluate(() => {
+    const transfer = new DataTransfer();
+    transfer.items.add(new File(['not D2'], 'notes.txt', { type: 'text/plain' }));
+    document.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: transfer }));
+  });
+  await expect(page.locator('#activity-status')).toContainText('Choose a .d2 file');
+  await expect(page.locator('#file-status')).toBeVisible();
+  await expect(page.locator('#filename')).toHaveText('order.d2');
 });
 
 test('source changes cancel an export already embedding images', async ({ page }) => {
@@ -200,9 +242,12 @@ test('mobile first fit fills the canvas and diagnostics lead to the source', asy
       stage.getBoundingClientRect().width;
   });
   expect(coverage).toBeGreaterThan(0.8);
+  await page.locator('#mobile-source').click();
   await page.getByRole('textbox', { name: 'D2 source' }).fill('broken: {');
   await expect(page.locator('#preview-status')).toHaveText('Preview out of date');
+  await page.locator('#mobile-preview').click();
   await expect(page.locator('.zf-stage')).toHaveAttribute('data-preview-state', 'stale');
+  await page.locator('#mobile-source').click();
   await page.locator('#show-diagnostics').click();
   await expect(page.locator('.cm-panel-lint')).toBeVisible();
   await expect(page.locator('.cm-panel-lint .cm-diagnostic').first()).toBeVisible();

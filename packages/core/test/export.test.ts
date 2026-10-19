@@ -2,10 +2,17 @@ import { readFileSync } from 'node:fs';
 import { D2, type Diagram } from '@d2lang/d2';
 import { strFromU8, unzipSync } from 'fflate';
 import { afterAll, describe, expect, it } from 'vitest';
-import { exportBoardsHtml, exportBoardsZip, renderExportBoards } from '../src/index';
+import { exportBoardsHtml, exportBoardsZip, exportSourcesZip, renderExportBoards } from '../src/index';
 
 const d2 = new D2();
 afterAll(() => d2.dispose());
+
+it('downloads the edited D2 project tree without adding bundled library files', () => {
+  const files = unzipSync(exportSourcesZip({ 'main.d2': '...@lib/nodes', 'lib/nodes.d2': 'Node: Edited' }));
+  expect(Object.keys(files)).toEqual(['main.d2', 'lib/nodes.d2']);
+  expect(strFromU8(files['lib/nodes.d2'])).toBe('Node: Edited');
+  expect(() => exportSourcesZip({ '../escape.d2': 'Bad' })).toThrow('Invalid project source path');
+});
 
 describe('board tree exports', () => {
   it.each([

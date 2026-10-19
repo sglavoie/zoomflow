@@ -18,11 +18,12 @@ export function setupAiAssistant(read: () => Snapshot, validate: (source: string
   const undoButton = document.querySelector<HTMLButtonElement>('#ai-undo')!;
   const elapsed = document.querySelector<HTMLElement>('#ai-elapsed')!;
   let available = false;
+  let checking = false;
   let active: AbortController | undefined;
   let health: AbortController | undefined;
   let undoRevision: number | undefined;
   function updateControls() {
-    button.disabled = !available || Boolean(active);
+    button.disabled = checking || !available || Boolean(active);
     prompt.disabled = !available || Boolean(active);
     provider.disabled = Boolean(active);
     cancel.hidden = !active;
@@ -31,24 +32,31 @@ export function setupAiAssistant(read: () => Snapshot, validate: (source: string
     health?.abort();
     const controller = health = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 5000);
-    available = false;
+    checking = true;
     retry.hidden = true;
     availability.textContent = 'Checking local AI availability…';
     updateControls();
     try {
-      const response = await fetch('/api/ai/status', { signal: controller.signal });
+      const response = await fetch('/api/ai/status', { method: 'POST', signal: controller.signal,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ provider: provider.value, environment: environment.value,
+          claudeConfigDir: claudeConfigDir.value }) });
       const data = await response.json();
-      if (!response.ok || data.available !== true) throw new Error('Unavailable');
+      if (!response.ok) throw new Error(data.error || 'AI needs the local Zoomflow server. Start it with pnpm dev, then check again.');
       if (health !== controller) return;
-      available = true;
-      availability.textContent = 'Uses your local CLI. Install and sign in to the selected provider before sending.';
-    } catch {
+      available = data.available === true;
+      availability.textContent = available ? `${provider.selectedOptions[0]?.textContent ?? 'AI'} is ready on this computer.`
+        : data.reason || 'The selected provider is unavailable. Check its installation and sign-in.';
+      retry.hidden = available;
+    } catch (error) {
       if (health !== controller) return;
-      availability.textContent = 'AI needs the local Zoomflow server. Start it with pnpm dev, then check again.';
+      available = false;
+      availability.textContent = error instanceof Error && error.message !== 'Failed to fetch'
+        ? error.message : 'AI needs the local Zoomflow server. Start it with pnpm dev, then check again.';
       retry.hidden = false;
     } finally {
       clearTimeout(timeout);
-      if (health === controller) { health = undefined; updateControls(); }
+      if (health === controller) { health = undefined; checking = false; updateControls(); }
     }
   }
   retry.addEventListener('click', () => void checkAvailability());
@@ -72,7 +80,9 @@ export function setupAiAssistant(read: () => Snapshot, validate: (source: string
     claudeConfig.hidden = !isClaude;
     claudeConfigDir.disabled = !isClaude;
   }
-  provider.addEventListener('change', showProviderSettings);
+  provider.addEventListener('change', () => { showProviderSettings(); void checkAvailability(); });
+  environment.addEventListener('change', () => void checkAvailability());
+  claudeConfigDir.addEventListener('change', () => void checkAvailability());
   showProviderSettings();
 
   form.addEventListener('submit', async (event) => {

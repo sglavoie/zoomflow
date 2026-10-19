@@ -1,7 +1,7 @@
 # Zoomflow
 
 Navigable, drill-down diagrams built on D2. The framework-free Vite app opens
-local `.d2` files and starts with `fixtures/order.d2` as an example.
+local `.d2` files or a folder of related D2 files and starts with `fixtures/order.d2` as an example.
 Click the filename dropdown to explore eight built-in templates: order drill-down,
 flowchart basics, service architecture, sequence diagrams, SQL schemas, layers /
 scenarios / steps, state transitions with boundary ports, and a guided lint repair.
@@ -10,14 +10,27 @@ assets. The lint repair intentionally reports one error and one warning until fi
 Switching examples starts at the root board. Source edits and opened files remain
 in the dropdown and are backed up in browser storage for reload recovery. The
 header reserves space for browser draft status so saving does not move the workspace.
-Use **Export & theme → Download .d2 source** to keep the current text outside browser
-storage, which can be cleared. The picker separates built-in examples from your drafts,
+Use **Save .d2** above the editor to save a disk copy. Browsers with file-system access
+can write back to a file you opened or a destination you choose; other browsers download
+the source. **Export & theme → Download .d2 source** always starts a separate download.
+The status below the filename distinguishes browser recovery from a disk save.
+Browser storage can be cleared. The picker separates built-in examples from your drafts,
 marks modified examples, and shows edit timestamps and distinct draft numbers for
 same-name uploads. **Restore** resets an example after confirmation; opened file drafts
 can be removed from the dropdown. Each document keeps its own undo history, selection,
 and editor scroll position while switching within the page. Restoring an example starts
 a fresh history. Browser reload recovery saves source, not undo history.
 The source lives in `apps/web/src/examples/`, with the catalog in `examples.ts`.
+
+Open a project with **Open folder** (also in the filename menu on narrow screens).
+Zoomflow loads its `.d2` files into a shared virtual filesystem, so relative imports
+resolve from each file's folder. Pick another project file from the filename menu to
+edit it; changes to imported files appear when you return to the main diagram.
+Project drafts survive reload in browser storage. In browsers that support directory
+access, **Save .d2** writes the active project file to its original folder. Other
+browsers offer a Save dialog or source download. **Export & theme → Download project .zip**
+keeps all project sources and their relative paths together. Local image assets are
+not yet loaded with folder projects.
 
 Use pnpm 12.6.0 and Node 26 (verified with Node 26.10.0):
 
@@ -33,7 +46,7 @@ navigation. Deep links such as `#/checkout/charge` open a board directly in the
 loaded diagram. Board links show a downward arrow badge, while external links show an
 outward arrow. Hover or focus a link to identify its destination; hovering a shape
 highlights its selectable boundary. These link cues also appear in exported HTML.
-Open a file or drop one onto the page; files are compiled locally
+Open a `.d2` file or drop one onto the page; files are compiled locally
 with D2's WASM worker. Light, dark and system themes use D2's generated palettes.
 Theme and export format are remembered when browser storage is available. Both live
 under **Export & theme**, which closes on Escape and restores focus to its button.
@@ -43,6 +56,8 @@ pans. Touch dragging works after zooming. Each board opens fitted around its
 rendered content. Edits on the same board preserve zoom and pan; switching boards
 or diagrams starts with a fresh fit. Keyboard navigation moves focus to the new board or breadcrumb and
 announces its name.
+On phones, use the **Preview** and **Source** buttons to give each pane the full
+workspace. Selecting an unlinked shape opens its source in the Source pane.
 
 Drill-down navigation needs no boundary ports or library import. Inside a child
 layer, the viewer shows its parent connections (for example, **From Browse** and
@@ -62,9 +77,9 @@ return an answer without changing the diagram. Invalid D2 and CLI errors appear
 beside the form, leaving your source untouched. If you edit or switch diagrams
 while a request is running, its replacement is discarded. The AI endpoint is
 available only on a local Vite dev or preview server, not in exported HTML or a
-static build. The panel checks endpoint availability before enabling the prompt and
-offers **Check again** if unavailable. This check does not verify CLI installation or
-sign-in. Running requests show elapsed time and a **Cancel** button; cancellation
+static build. The panel checks the selected CLI's installation and sign-in before
+enabling **Send** and offers **Check again** if unavailable. Running requests show
+elapsed time and a **Cancel** button; cancellation
 stops the local CLI request and keeps the prompt for retry. **Undo AI change** restores
 the previous source after an applied change and disappears when you edit or switch
 documents; the normal editor undo history remains available. The AI panel and optional lint controls start collapsed so the
@@ -154,8 +169,10 @@ D2 is pinned to the local `0.1.34-zoomflow.1` compatibility build, which fixes a
 Goldmark regex initialization overflow in WebKit. [Build provenance and licenses](vendor/d2/README.md)
 include the exact source, patch, tool versions and checksums. Upgrades must
 deliberately review the compiler contract.
-The browser opens individual files with the bundled `zoomflow.d2` import; resolving other filesystem imports and saving edited
-D2 source directly back to its original disk file are not yet provided in the browser. The CLI resolves local D2 imports within its project root. Rich HTML labels (`foreignObject`) remain unsupported.
+The browser resolves local D2 imports when a folder is opened. A single opened file
+can use the bundled `zoomflow.d2` import. Browser file handles are kept for the current
+page session; after reload, choose a destination again to save to disk. The CLI resolves
+local D2 imports within its project root. Rich HTML labels (`foreignObject`) remain unsupported.
 
 The core API `lint(compiled, { missingBacklink: false, boundaryPorts: false })` accepts the D2 compile
 response and returns `diagnostics`, `boundaries` (per-node expected/evaluated

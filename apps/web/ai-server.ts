@@ -2,6 +2,8 @@ import { spawn } from 'node:child_process';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { homedir, tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
+import { promisify } from 'node:util';
+import { execFile } from 'node:child_process';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { Plugin } from 'vite';
 
@@ -18,6 +20,7 @@ const schema = {
 const MAX_REQUEST = 200_000;
 const MAX_OUTPUT = 500_000;
 const TIMEOUT_MS = 180_000;
+const exec = promisify(execFile);
 
 function isRequest(value: unknown): value is AiRequest {
   if (!value || typeof value !== 'object') return false;
@@ -45,7 +48,7 @@ function parseEnvironment(text: string): Record<string, string> {
   return Object.fromEntries(entries);
 }
 
-function processEnvironment(request: AiRequest): NodeJS.ProcessEnv {
+function processEnvironment(request: StatusRequest): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = { ...process.env, ...parseEnvironment(request.environment ?? '') };
   if (request.provider === 'claude') {
     const setting = request.claudeConfigDir ?? '~/.claude';
@@ -58,6 +61,36 @@ function processEnvironment(request: AiRequest): NodeJS.ProcessEnv {
       : path.startsWith('~/') ? resolve(homedir(), path.slice(2)) : resolve(process.cwd(), path);
   }
   return env;
+}
+
+type StatusRequest = Pick<AiRequest, 'provider' | 'environment' | 'claudeConfigDir'>;
+function isStatusRequest(value: unknown): value is StatusRequest {
+  if (!value || typeof value !== 'object') return false;
+  const item = value as Partial<StatusRequest>;
+  return (item.provider === 'claude' || item.provider === 'codex') &&
+    (item.environment === undefined || typeof item.environment === 'string' && item.environment.length <= 8_000) &&
+    (item.claudeConfigDir === undefined || typeof item.claudeConfigDir === 'string' && item.claudeConfigDir.length <= 4_000);
+}
+
+export async function providerStatus(request: StatusRequest): Promise<{ available: boolean; reason?: string }> {
+  const env = processEnvironment(request);
+  const command = request.provider === 'claude' ? 'claude' : 'codex';
+  const args = request.provider === 'claude' ? ['auth', 'status'] : ['login', 'status'];
+  try {
+    const { stdout } = await exec(command, args, { env, timeout: 5_000, maxBuffer: 64_000 });
+    if (request.provider === 'claude') {
+      const status = JSON.parse(stdout) as { loggedIn?: boolean };
+      if (status.loggedIn === true || env.ANTHROPIC_API_KEY) return { available: true };
+      return { available: false, reason: 'Claude Code is installed. Sign in with claude auth login.' };
+    }
+    if (/^Logged in\b/im.test(stdout) || env.OPENAI_API_KEY) return { available: true };
+    return { available: false, reason: 'Codex is installed. Sign in with codex login.' };
+  } catch (error) {
+    const failure = error as NodeJS.ErrnoException;
+    if (failure.code === 'ENOENT') return { available: false, reason: `Install ${command} and add it to the local server PATH.` };
+    if (failure.code === 'ETIMEDOUT') return { available: false, reason: `${command} did not respond. Check again.` };
+    return { available: false, reason: `Sign in to ${command}, then check again.` };
+  }
 }
 
 function instructions(request: AiRequest): string {
@@ -160,7 +193,18 @@ async function handle(request: IncomingMessage, response: ServerResponse) {
   }
   if (request.url?.split('?')[0] === '/api/ai/status') {
     if (request.method === 'GET') send(response, 200, { available: true });
-    else send(response, 405, { error: 'Use GET to check AI availability.' });
+    else if (request.method === 'POST' && request.headers['content-type']?.startsWith('application/json')) {
+      try {
+        let body = '';
+        for await (const chunk of request) {
+          body += chunk;
+          if (body.length > 16_000) { send(response, 413, { error: 'Status request is too large.' }); return; }
+        }
+        const payload: unknown = JSON.parse(body);
+        if (!isStatusRequest(payload)) { send(response, 400, { error: 'Invalid provider status request.' }); return; }
+        send(response, 200, await providerStatus(payload));
+      } catch (error) { send(response, 400, { error: error instanceof Error ? error.message : String(error) }); }
+    } else send(response, 405, { error: 'Use POST to check a provider.' });
     return;
   }
   if (request.method !== 'POST' || !request.headers['content-type']?.startsWith('application/json')) {

@@ -45,7 +45,13 @@ for (const viewport of [{ width: 1280, height: 900 }, { width: 390, height: 844 
     await expect(toggle).toHaveAttribute('aria-pressed', 'false');
     expect(await stage.boundingBox()).toEqual(before);
     expect(await page.locator('#workspace').evaluate((node) => node.scrollTop)).toBe(workspaceScroll);
-    await expect(page.locator('#source-pane')).toBeVisible();
+    if (viewport.width > 600) await expect(page.locator('#source-pane')).toBeVisible();
+    else {
+      await expect(page.locator('#mobile-preview')).toHaveAttribute('aria-pressed', 'true');
+      await page.locator('#mobile-source').click();
+      await expect(page.locator('#source-pane')).toBeVisible();
+      await page.locator('#mobile-preview').click();
+    }
     await expect(page.locator('#d2-reference')).toBeVisible();
     await expect(page.getByRole('searchbox', { name: 'Search D2 reference' })).toHaveValue('style');
     await expect(divider).toHaveAttribute('aria-valuenow', split!);

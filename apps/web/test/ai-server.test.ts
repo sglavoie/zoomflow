@@ -2,7 +2,7 @@ import { afterEach, expect, it, vi } from 'vitest';
 import { chmod, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { runAi } from '../ai-server';
+import { providerStatus, runAi } from '../ai-server';
 
 const originalPath = process.env.PATH;
 let fakeBin: string | undefined;
@@ -34,6 +34,26 @@ process.stdin.on('end', () => {
 }
 
 const request = { prompt: 'Rename the box', source: 'old: Old', name: 'example.d2', board: 'root.layers.checkout' };
+
+async function fakeStatus(name: string, output: object | string, exit = 0) {
+  fakeBin ??= await mkdtemp(join(tmpdir(), 'zoomflow-ai-test-'));
+  const path = join(fakeBin, name);
+  const stdout = typeof output === 'string' ? output : JSON.stringify(output);
+  await writeFile(path, `#!/usr/bin/env node\nprocess.stdout.write(${JSON.stringify(stdout)}); process.exit(${exit});\n`);
+  await chmod(path, 0o755);
+  process.env.PATH = `${fakeBin}:${originalPath}`;
+}
+
+it('checks installed provider sign-in before allowing a request', async () => {
+  await fakeStatus('codex', 'Not logged in');
+  await expect(providerStatus({ provider: 'codex', environment: 'OPENAI_API_KEY=' })).resolves.toMatchObject({ available: false });
+  await fakeStatus('codex', 'Logged in using ChatGPT');
+  await expect(providerStatus({ provider: 'codex' })).resolves.toEqual({ available: true });
+  await fakeStatus('claude', { loggedIn: false });
+  await expect(providerStatus({ provider: 'claude', environment: 'ANTHROPIC_API_KEY=' })).resolves.toMatchObject({ available: false });
+  await fakeStatus('claude', { loggedIn: true });
+  await expect(providerStatus({ provider: 'claude' })).resolves.toEqual({ available: true });
+});
 
 it('runs Claude Code and reads structured output', async () => {
   await fakeCommand('claude', { is_error: false, structured_output: { reply: 'Renamed.', source: 'new: New' } }, 0,
