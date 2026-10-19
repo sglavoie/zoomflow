@@ -1,4 +1,4 @@
-type AiReply = { reply: string; source: string | null };
+import { AiError, aiFailure, readAiResponse } from './ai-errors';
 type Snapshot = { source: string; name: string; board: string; revision: number };
 
 export function setupAiAssistant(read: () => Snapshot, validate: (source: string) => Promise<void>, apply: (source: string) => void,
@@ -17,6 +17,19 @@ export function setupAiAssistant(read: () => Snapshot, validate: (source: string
   const cancel = document.querySelector<HTMLButtonElement>('#ai-cancel')!;
   const undoButton = document.querySelector<HTMLButtonElement>('#ai-undo')!;
   const elapsed = document.querySelector<HTMLElement>('#ai-elapsed')!;
+  function detailPanel(after: HTMLElement) {
+    const panel = document.createElement('details');
+    panel.className = 'ai-error-details';
+    panel.hidden = true;
+    const summary = document.createElement('summary');
+    summary.textContent = 'Technical details';
+    const text = document.createElement('pre');
+    panel.append(summary, text);
+    after.after(panel);
+    return (value = '') => { panel.hidden = !value; panel.open = false; text.textContent = value; };
+  }
+  const healthDetails = detailPanel(availability);
+  const responseDetails = detailPanel(status);
   let available = false;
   let checking = false;
   let active: AbortController | undefined;
@@ -33,6 +46,7 @@ export function setupAiAssistant(read: () => Snapshot, validate: (source: string
     const controller = health = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 5000);
     checking = true;
+    healthDetails();
     retry.hidden = true;
     availability.textContent = 'Checking local AI availability…';
     updateControls();
@@ -41,18 +55,21 @@ export function setupAiAssistant(read: () => Snapshot, validate: (source: string
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ provider: provider.value, environment: environment.value,
           claudeConfigDir: claudeConfigDir.value }) });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || 'AI needs the local Zoomflow server. Start it with pnpm dev, then check again.');
+      const data = await readAiResponse(response);
+      if (typeof data.available !== 'boolean') throw new AiError('The AI server returned an incomplete availability check. Restart the local server and check again.', 'Missing boolean available field.');
       if (health !== controller) return;
       available = data.available === true;
       availability.textContent = available ? `${provider.selectedOptions[0]?.textContent ?? 'AI'} is ready on this computer.`
-        : data.reason || 'The selected provider is unavailable. Check its installation and sign-in.';
+        : typeof data.reason === 'string' ? data.reason : 'The selected provider is unavailable. Check its installation and sign-in.';
       retry.hidden = available;
     } catch (error) {
       if (health !== controller) return;
       available = false;
-      availability.textContent = error instanceof Error && error.message !== 'Failed to fetch'
-        ? error.message : 'AI needs the local Zoomflow server. Start it with pnpm dev, then check again.';
+      const failure = controller.signal.aborted
+        ? { message: 'The AI availability check timed out. Check that the local server and selected provider are running, then check again.', details: 'No availability response within 5 seconds.' }
+        : aiFailure(error);
+      availability.textContent = failure.message;
+      healthDetails(failure.details);
       retry.hidden = false;
     } finally {
       clearTimeout(timeout);
@@ -92,6 +109,7 @@ export function setupAiAssistant(read: () => Snapshot, validate: (source: string
     const snapshot = read();
     const unchanged = () => read().revision === snapshot.revision;
     const controller = active = new AbortController();
+    responseDetails();
     undoRevision = undefined;
     undoButton.hidden = true;
     updateControls();
@@ -106,13 +124,10 @@ export function setupAiAssistant(read: () => Snapshot, validate: (source: string
       const response = await fetch('/api/ai', { method: 'POST', signal: controller.signal, headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ provider: provider.value, prompt: question, source: snapshot.source, name: snapshot.name,
           board: snapshot.board, environment: environment.value, claudeConfigDir: claudeConfigDir.value }) });
-      const data: AiReply & { error?: string } = await response.json().catch(() => {
-        throw new Error('AI needs the local Zoomflow Vite server. Start the app with pnpm dev.');
-      });
+      const data = await readAiResponse(response);
       controller.signal.throwIfAborted();
-      if (!response.ok) throw new Error(data.error || `Server returned ${response.status}.`);
       if (typeof data.reply !== 'string' || (data.source !== null && typeof data.source !== 'string')) {
-        throw new Error('AI returned an invalid response.');
+        throw new AiError('The AI server returned an incomplete response. Try again; your source is unchanged.', 'Expected reply text and source text or null.');
       }
       if (data.source !== null) {
         controller.signal.throwIfAborted();
@@ -120,7 +135,7 @@ export function setupAiAssistant(read: () => Snapshot, validate: (source: string
           throw new Error('The diagram changed while AI was working. Your edits were kept; send the prompt again.');
         }
         try { await validate(data.source); }
-        catch (error) { throw new Error(`AI returned invalid D2: ${String(error)}`); }
+        catch (error) { throw new AiError('AI returned invalid D2. Your source is unchanged; try a smaller change or rephrase the request.', String(error)); }
         controller.signal.throwIfAborted();
         if (!unchanged()) {
           throw new Error('The diagram changed while AI was working. Your edits were kept; send the prompt again.');
@@ -144,7 +159,9 @@ export function setupAiAssistant(read: () => Snapshot, validate: (source: string
       }
       status.setAttribute('role', 'alert');
       status.dataset.kind = 'error';
-      status.textContent = error instanceof Error ? error.message : String(error);
+      const failure = aiFailure(error);
+      status.textContent = failure.message;
+      responseDetails(failure.details);
       onStatus('AI request failed. See the assistant response.', 'error');
     } finally {
       clearInterval(timer);

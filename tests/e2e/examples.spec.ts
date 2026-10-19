@@ -79,7 +79,7 @@ test('picker supports keyboard, Escape without navigating, outside dismissal, an
   await expect(page.locator('.example-menu')).toBeHidden();
   await ready(page, 'root.layers.checkout');
   await summary.click();
-  await page.locator('header strong').click();
+  await page.locator('header > strong').click();
   await expect(page.locator('.example-menu')).toBeHidden();
   await page.setViewportSize({ width: 601, height: 720 });
   await summary.click();

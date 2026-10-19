@@ -64,12 +64,13 @@ test('uploaded drafts can be removed without affecting other diagrams', async ({
   await page.locator('#file').setInputFiles({ name: 'old.d2', mimeType: 'text/plain', buffer: Buffer.from('old: Draft') });
   await page.locator('#file').setInputFiles({ name: 'active.d2', mimeType: 'text/plain', buffer: Buffer.from('active: Keep') });
   await page.locator('#example-picker summary').click();
-  page.once('dialog', (dialog) => dialog.accept());
   await page.getByRole('button', { name: 'Remove old.d2 draft' }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Remove draft', exact: true }).click();
   await expect(page.locator('#filename')).toHaveText('active.d2');
   await expect(page.locator('.zf-stage')).toContainText('Keep');
-  page.once('dialog', (dialog) => dialog.accept());
+  await page.locator('#example-picker summary').click();
   await page.getByRole('button', { name: 'Remove active.d2 draft' }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Remove draft', exact: true }).click();
   await expect(page.locator('#filename')).toHaveText('order.d2');
   await page.reload();
   await page.locator('#example-picker summary').click();

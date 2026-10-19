@@ -1,5 +1,13 @@
 # Browser tests
 
+`quality-pass.spec.ts` covers formatting selection and scroll, compact breadcrumb
+overflow in both live and offline viewers, export choices on short screens,
+project filtering and collapsed groups, AI transport feedback, and undoable
+document restoration/removal with recovery after reload. It also checks undo expiry,
+retained file handles and board views, and availability timeouts. The companion
+`quality-pass-visual.spec.ts` captures the export choices, filtered picker, confirmation
+dialog and breadcrumb overflow in light and dark themes.
+
 Playwright starts the Vite app and runs viewer navigation and animation tests in
 Chromium, Firefox and WebKit. Install browsers with `pnpm exec playwright install`
 and run `pnpm test:e2e` from the workspace root.

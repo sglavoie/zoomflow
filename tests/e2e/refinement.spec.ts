@@ -63,13 +63,13 @@ test('picker groups drafts, marks modified examples and restores the original', 
   await page.locator('#example-picker summary').click();
   const order = page.locator('#example-options').getByRole('button', { name: /Order flow.*Modified/ });
   await expect(order).toContainText('Edited');
-  page.once('dialog', (dialog) => dialog.dismiss());
   await page.getByRole('button', { name: 'Restore original example: Order flow', exact: true }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Cancel', exact: true }).click();
   await expect(source(page)).toHaveText('changed: My draft');
-  page.once('dialog', (dialog) => dialog.accept());
   await page.getByRole('button', { name: 'Restore original example: Order flow', exact: true }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Restore example', exact: true }).click();
   await ready(page);
-  expect(await source(page).textContent()).toBe(original);
+  await expect(source(page)).toHaveText(original!);
   await source(page).press('ControlOrMeta+z');
   expect(await source(page).textContent()).toBe(original);
   await page.locator('#file').setInputFiles({ name: 'local.d2', mimeType: 'text/plain', buffer: Buffer.from('local: Draft') });
@@ -88,7 +88,7 @@ test('header stays stable while saving and preferences survive reload', async ({
   await page.goto('/');
   await ready(page);
   const before = await page.locator('header').boundingBox();
-  const title = (await page.locator('header strong').boundingBox())!;
+  const title = (await page.locator('header > strong').boundingBox())!;
   const open = (await page.locator('.file-button').boundingBox())!;
   const picker = (await page.locator('#example-picker summary').boundingBox())!;
   const center = (box: { y: number; height: number }) => box.y + box.height / 2;
@@ -112,8 +112,8 @@ test('header stays stable while saving and preferences survive reload', async ({
   await ready(page);
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
   await openDownloads(page);
-  await expect(page.locator('#export-format')).toHaveValue('html');
-  await page.locator('#export-format').press('Escape');
+  await expect(page.locator('#export-format input[value="html"]')).toBeChecked();
+  await page.locator('#export-format input[value="html"]').press('Escape');
   await expect(page.locator('#header-more-toggle')).toBeFocused();
   await expect(page.locator('#header-more-content')).toBeHidden();
 });

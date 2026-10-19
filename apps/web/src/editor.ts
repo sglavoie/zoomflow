@@ -7,6 +7,7 @@ import { lintGutter, setDiagnostics } from '@codemirror/lint';
 import type { SourceRange } from '@zoomflow/core';
 import { diagnosticLocation, type SourceDiagnostic } from './diagnostics';
 import { d2Language } from './d2-language';
+import { formatChanges } from './format-changes';
 
 export class SourceEditor {
   readonly view: EditorView;
@@ -99,6 +100,13 @@ export class SourceEditor {
     else if (active?.isConnected && (active instanceof HTMLElement || active instanceof SVGElement)) active.focus({ preventScroll: true });
   }
   forget(key: string) { this.documents.delete(key); if (this.currentKey === key) this.currentKey = ''; }
+  checkpoint(key: string) {
+    const saved = key === this.currentKey ? { state: this.view.state, scroll: this.view.scrollSnapshot() } : this.documents.get(key);
+    return () => {
+      if (saved) this.documents.set(key, saved);
+      if (this.currentKey === key) this.currentKey = '';
+    };
+  }
   copyDocument(key: string) {
     this.documents.set(this.currentKey, { state: this.view.state, scroll: this.view.scrollSnapshot() });
     this.currentKey = key;
@@ -107,16 +115,8 @@ export class SourceEditor {
   format(source: string) {
     const current = this.source;
     if (source === current) return false;
-    // Keep unchanged text outside the transaction so selections there stay put.
-    let from = 0;
-    let oldEnd = current.length;
-    let newEnd = source.length;
-    while (from < oldEnd && from < newEnd && current[from] === source[from]) ++from;
-    while (oldEnd > from && newEnd > from && current[oldEnd - 1] === source[newEnd - 1]) {
-      --oldEnd;
-      --newEnd;
-    }
-    this.view.dispatch({ changes: { from, to: oldEnd, insert: source.slice(from, newEnd) },
+    const changes = this.view.state.changes(formatChanges(current, source));
+    this.view.dispatch({ changes, effects: this.view.scrollSnapshot().map(changes),
       userEvent: 'input.format', annotations: isolateHistory.of('full') });
     return true;
   }

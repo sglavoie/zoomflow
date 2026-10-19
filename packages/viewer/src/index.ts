@@ -2,6 +2,7 @@ import { classifyHref, indexBoards, parentContext, type Board, type Diagram, typ
 import { restoreMissingLinks } from './missing-links';
 import { decorateLinks } from './link-cues';
 import { renderParentContext, simplifyTrail } from './navigation';
+import { setupBreadcrumbs } from './breadcrumbs';
 
 export type RenderBoard = (target: string) => Promise<string>;
 export { prepareExportSvg, rasterizeSvg, offlineViewerScript } from './export';
@@ -13,6 +14,7 @@ export { viewerStyle } from './viewer-style';
 export class Viewer {
   readonly stage = document.createElement('div');
   private readonly crumbs = document.createElement('nav');
+  private readonly breadcrumbs = setupBreadcrumbs(this.crumbs);
   private readonly context = document.createElement('div');
   private readonly message = document.createElement('div');
   private readonly announcement = document.createElement('div');
@@ -263,16 +265,10 @@ export class Viewer {
   }
 
   private updateCrumbs() {
-    this.crumbs.replaceChildren();
-    this.trail.forEach((id, index) => {
-      const button = document.createElement('button');
-      button.textContent = this.boards.get(id)!.name;
-      if (index === this.trail.length - 1) button.setAttribute('aria-current', 'page');
-      button.addEventListener('click', () => void this.navigate(id, 'push', this.trail.slice(0, index + 1)));
-      if (index) this.crumbs.append(document.createTextNode(' / '));
-      this.crumbs.append(button);
-    });
+    const trail = this.trail;
+    this.breadcrumbs.render(trail.map((id, index) => ({ name: this.boards.get(id)!.name,
+      activate: () => { void this.navigate(id, 'push', trail.slice(0, index + 1)); } })));
   }
 
-  destroy() { ++this.revision; this.events.abort(); this.cancelTransition(); }
+  destroy() { ++this.revision; this.events.abort(); this.breadcrumbs.destroy(); this.cancelTransition(); }
 }

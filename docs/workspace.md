@@ -34,10 +34,20 @@ active project or draft first,
 followed by other drafts ordered by edit time, then built-in examples. It marks
 modified examples and shows edit timestamps and distinct draft numbers for same-name uploads.
 **Restore** resets an example after confirmation; opened file drafts
-can be removed from the dropdown. Project files are grouped under their folder name;
+can be removed from the dropdown. Confirmation dialogs name the affected document
+or project and report unsaved changes. A 30-second **Undo** notice restores removed
+drafts or the previous example, including its editor history and view. The timer pauses
+while the notice has keyboard focus or the pointer is over it. Editing a restored
+example retires its Restore undo, so undoing cannot overwrite new work. Removing
+drafts and then undoing also restores their file handles within the page session.
+Project files are grouped under their folder name;
 unsaved files carry a dot and each project shows its unsaved-file count. These compare
 source with the last file-save baseline, independently of browser recovery.
 **Remove project** removes that project's browser drafts after confirmation and leaves disk files intact.
+Inactive projects start collapsed when the picker opens; click their names to expand
+them. With more than ten diagrams, a search field filters by filename, project,
+path, or description and expands matching projects. Clearing the search restores
+the active project's expanded view.
 Each document keeps its own undo history, selection, and editor scroll position
 while switching within the page. Restoring an example starts
 a fresh history. Browser reload recovery saves source, not undo history.
@@ -79,6 +89,11 @@ rendered content. Edits on the same board preserve zoom and pan; returning to a 
 restores its view.
 The zoom readout says **Fit** at the fitted baseline; percentages describe magnification
 relative to that fit. A hint below the canvas explains panning after zooming in.
+Deep breadcrumb trails keep the first board, parent and current board visible on
+one row. **Earlier boards** opens the intermediate visits; use arrows or Tab to
+choose one, or Escape to close it without changing boards. Long names are truncated
+visually but retain their full accessible names and tooltips. This also works in
+exported HTML.
 Keyboard navigation moves focus to the new board or breadcrumb and
 announces its name.
 Switching documents preserves the active Preview or Source pane.
@@ -106,7 +121,8 @@ If compilation is already running, intermediate preview requests are replaced by
 newest edit. The running compilation finishes, and only a current result is displayed.
 Click **Format** or press **Shift+Alt+F** in the editor to apply D2's automatic
 source formatting, including nested indentation. Formatting is one undoable edit
-and refreshes the preview. Invalid diagrams leave the source unchanged and show
+and refreshes the preview. Whitespace formatting preserves the cursor's logical
+position, selection and editor scroll. Invalid diagrams leave the source unchanged and show
 a formatting error; edits made while formatting is running are preserved.
 The compact, fixed-height status strip above the editor shares space between file
 state, delayed progress, and diagnostic counts. Longer compiler messages remain
@@ -167,7 +183,9 @@ theme; see [stdlib conventions and examples](../stdlib/README.md).
 
 ## Export
 
-Use Export → Download SVG/PNG/ZIP/HTML for the current board as SVG or PNG, all boards as a ZIP
+Export presents choices by outcome: **Interactive diagram (HTML)**, **Current board
+image (SVG or PNG)**, and **All boards as SVG (ZIP)**, with an explanation beside
+each choice. The last selection is remembered. Use Download SVG/PNG/ZIP/HTML for the current board as SVG or PNG, all boards as a ZIP
 of SVGs, or one navigable HTML file. The HTML opens directly from disk without a
 server or network connection and includes every board, including cyclic links.
 The export menu names the current board for SVG/PNG, or shows the total board count

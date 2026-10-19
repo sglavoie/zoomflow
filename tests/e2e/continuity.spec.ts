@@ -115,10 +115,10 @@ test('workspace is compact and stable, zoom explains its baseline, export descri
   await page.getByRole('link', { name: 'Open checkout board', exact: true }).click();
   await openDownloads(page);
   await expect(page.locator('#export-scope')).toHaveText('checkout · SVG');
-  await page.locator('#export-format').selectOption('html');
+  await page.locator('#export-format input[value="html"]').check();
   await expect(page.locator('#export-scope')).toHaveText('Entire diagram · 3 boards · Interactive HTML');
   await expect(page.locator('#export-help')).toContainText('drill-down navigation');
-  await page.locator('#export-format').selectOption('zip');
+  await page.locator('#export-format input[value="zip"]').check();
   await expect(page.locator('#export-scope')).toHaveText('Entire diagram · 3 boards · SVG ZIP');
   await page.locator('#header-more-toggle').click();
   await source(page).fill('broken: {');
@@ -133,7 +133,7 @@ test('workspace is compact and stable, zoom explains its baseline, export descri
 test('offline HTML restores each board view and explains zoom', async ({ page, context }, info) => {
   await page.goto('/'); await ready(page);
   await openDownloads(page);
-  await page.locator('#export-format').selectOption('html');
+  await page.locator('#export-format input[value="html"]').check();
   const pending = page.waitForEvent('download');
   await page.locator('#export').click();
   const file = info.outputPath('views.html');

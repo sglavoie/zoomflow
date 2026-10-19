@@ -1,5 +1,6 @@
 import { examples } from './examples';
 import { DraftStore, type Draft } from './draft-store';
+import { setupDocumentActions } from './document-actions';
 
 /** Keep drafts across visits, including distinct uploads with the same filename. */
 export function setupExamplePicker(
@@ -7,12 +8,15 @@ export function setupExamplePicker(
   open: (source: string, name: string, key: string, reset?: boolean) => void,
   onState: (dirty: boolean, recoveryAvailable: boolean, savePending: boolean, hasDraft: boolean, downloadRequested: boolean, identity: { key: string; name: string }) => void,
   forget: (key: string) => void,
+  checkpoint: (key: string) => () => void,
 ) {
   const picker = document.querySelector<HTMLDetailsElement>('#example-picker')!;
   const summary = picker.querySelector('summary')!;
   const menu = picker.querySelector<HTMLElement>('.example-menu')!;
   const filename = document.querySelector<HTMLElement>('#filename')!;
   const options = document.querySelector<HTMLElement>('#example-options')!;
+  const actions = setupDocumentActions(() => summary.focus({ preventScroll: true }));
+  let restoredKey: string | undefined;
   let store: DraftStore | undefined;
   const conflictNotice = document.querySelector<HTMLElement>('#draft-conflict')!;
   const drafts = new Map<string, Draft>(examples.map((example) => [example.name, {
@@ -22,13 +26,27 @@ export function setupExamplePicker(
   const buttons = new Map<string, HTMLButtonElement>();
   const rows = new Map<string, HTMLElement>();
   const refreshRows = new Map<string, () => void>();
-  const projectGroups = new Map<string, { section: HTMLElement; files: HTMLElement }>();
+  const projectGroups = new Map<string, { section: HTMLElement; files: HTMLElement; toggle: HTMLButtonElement }>();
   const fileHeading = document.createElement('h3');
   fileHeading.className = 'example-menu-heading';
   fileHeading.textContent = 'Your drafts';
   const fileOptions = document.createElement('div');
   fileOptions.id = 'draft-options';
   menu.prepend(fileHeading, fileOptions);
+  const search = document.createElement('input');
+  search.type = 'search';
+  search.id = 'diagram-search';
+  search.placeholder = 'Find a diagram or project…';
+  search.setAttribute('aria-label', 'Find a diagram or project');
+  search.hidden = true;
+  const empty = document.createElement('p');
+  empty.className = 'example-menu-hint';
+  empty.setAttribute('role', 'status');
+  empty.hidden = true;
+  empty.textContent = 'No matching diagrams. Try a filename or project name.';
+  menu.prepend(search);
+  fileOptions.after(empty);
+  search.addEventListener('input', filterRows);
   let current = examples[0].name;
   let fileNumber = 0;
   let recoveryAvailable = true;
@@ -108,14 +126,41 @@ export function setupExamplePicker(
     announce();
   }
 
-  function removeDrafts(item: Draft, wholeProject = Boolean(item.projectId && !item.recoveredFrom)) {
+  function filterRows() {
+    const query = search.value.trim().toLocaleLowerCase();
+    search.hidden = drafts.size <= 10 && !query;
+    let matches = 0;
+    for (const item of drafts.values()) {
+      const visible = !query || `${item.name} ${item.title} ${item.path ?? ''} ${item.description}`.toLocaleLowerCase().includes(query);
+      rows.get(item.key)!.hidden = !visible;
+      if (visible) matches++;
+    }
+    for (const [id, group] of projectGroups) {
+      const visible = [...drafts.values()].some(item => item.projectId === id && !rows.get(item.key)!.hidden);
+      group.section.hidden = !visible;
+      if (query) group.files.hidden = false;
+      else group.files.hidden = currentDraft().projectId !== id;
+      group.toggle.setAttribute('aria-expanded', String(!group.files.hidden));
+    }
+    fileHeading.hidden = ![...fileOptions.children].some(node => !(node as HTMLElement).hidden);
+    options.hidden = ![...options.children].some(node => !(node as HTMLElement).hidden);
+    const heading = menu.querySelector<HTMLElement>('.example-menu-heading:not(h3)');
+    if (heading) heading.hidden = options.hidden;
+    menu.querySelector<HTMLElement>('.example-menu-hint:not([role])')!.hidden = Boolean(query);
+    empty.hidden = matches !== 0;
+  }
+
+  async function removeDrafts(item: Draft, wholeProject = Boolean(item.projectId && !item.recoveredFrom)) {
     const projectId = wholeProject ? item.projectId : undefined;
-    const message = projectId
-      ? `Remove all browser drafts for ${item.title.split('/')[0]}? Files on disk are kept. Save any edits first.`
-      : `Remove the local draft for ${item.name}? Download a copy first if you want to keep it.`;
-    if (!window.confirm(message)) return;
     currentDraft().source = readSource();
     const removed = [...drafts.values()].filter((draft) => projectId ? draft.projectId === projectId : draft.key === item.key);
+    const unsaved = removed.filter(draft => draft.source !== draft.baseline).length;
+    const name = projectId ? item.title.split('/')[0] : item.name;
+    if (!await actions.confirm(`Remove ${name}?`,
+      `This removes ${removed.length === 1 ? 'this browser draft' : `all ${removed.length} browser drafts in this project`}. ${unsaved ? `${unsaved} ${unsaved === 1 ? 'file has' : 'files have'} unsaved changes. ` : ''}Files on disk are kept. You can undo for 30 seconds.`,
+      projectId ? 'Remove project' : 'Remove draft')) { picker.open = true; return; }
+    const previous = current;
+    const restore = removed.map(draft => checkpoint(draft.key));
     for (const draft of removed) {
       drafts.delete(draft.key);
       buttons.delete(draft.key);
@@ -135,6 +180,17 @@ export function setupExamplePicker(
       open(currentDraft().source, currentDraft().name, current);
     }
     persist();
+    restoredKey = undefined;
+    actions.offerUndo(`${name} removed.`, () => {
+      currentDraft().source = readSource();
+      removed.forEach((draft, index) => { drafts.set(draft.key, draft); restore[index](); addOption(draft); });
+      if (removed.some(draft => draft.key === previous)) {
+        activate(previous);
+        open(currentDraft().source, currentDraft().name, current);
+      }
+      orderDrafts();
+      persist();
+    });
   }
 
   function projectFiles(item: Draft) {
@@ -147,8 +203,12 @@ export function setupExamplePicker(
     section.setAttribute('aria-label', `${name} project`);
     const heading = document.createElement('div');
     heading.className = 'project-heading';
-    const title = document.createElement('h4');
+    const title = document.createElement('button');
+    title.type = 'button';
+    title.className = 'project-toggle button-quiet';
     title.textContent = name;
+    title.setAttribute('aria-label', name);
+    title.setAttribute('aria-expanded', 'true');
     const remove = document.createElement('button');
     remove.type = 'button';
     remove.className = 'example-remove button-quiet';
@@ -160,9 +220,15 @@ export function setupExamplePicker(
     unsaved.setAttribute('role', 'status');
     heading.append(title, unsaved, remove);
     const files = document.createElement('div');
+    files.id = `project-files-${id}`;
+    title.setAttribute('aria-controls', files.id);
+    title.addEventListener('click', () => {
+      files.hidden = !files.hidden;
+      title.setAttribute('aria-expanded', String(!files.hidden));
+    });
     section.append(heading, files);
     fileOptions.append(section);
-    projectGroups.set(id, { section, files });
+    projectGroups.set(id, { section, files, toggle: title });
     return files;
   }
 
@@ -181,6 +247,7 @@ export function setupExamplePicker(
     for (const [id, group] of projectGroups) {
       for (const item of entries.filter((draft) => draft.projectId === id).sort((a, b) => a.path!.localeCompare(b.path!))) group.files.append(rows.get(item.key)!);
     }
+    filterRows();
   }
 
   function addOption(item: Draft) {
@@ -225,8 +292,12 @@ export function setupExamplePicker(
       restore.className = 'example-restore';
       restore.textContent = 'Restore';
       restore.setAttribute('aria-label', `Restore original example: ${item.title}`);
-      restore.addEventListener('click', () => {
-        if (!window.confirm(`Restore the original ${item.title} example? This replaces your edits to this example.`)) return;
+      restore.addEventListener('click', async () => {
+        currentDraft().source = readSource();
+        if (!await actions.confirm(`Restore ${item.title}?`,
+          `Replace your edits to ${item.name} with the original example. ${item.source !== item.baseline ? 'This example has unsaved changes. ' : ''}Saved file copies are kept. You can undo for 30 seconds, until you edit this example again.`, 'Restore example')) { picker.open = true; return; }
+        const previous = { ...item };
+        const restoreState = checkpoint(item.key);
         const original = examples.find((example) => example.name === item.key)!;
         item.source = original.source;
         item.baseline = original.source;
@@ -240,6 +311,16 @@ export function setupExamplePicker(
         summary.focus();
         picker.open = false;
         persist();
+        restoredKey = item.key;
+        actions.offerUndo(`${item.name} restored to the original example.`, () => {
+          currentDraft().source = readSource();
+          Object.assign(item, previous);
+          restoreState();
+          restoredKey = undefined;
+          refreshRows.get(item.key)?.();
+          if (current === item.key) open(item.source, item.name, item.key);
+          persist();
+        });
       });
       row.append(restore);
     }
@@ -267,11 +348,12 @@ export function setupExamplePicker(
       unsaved.hidden = original !== undefined || item.source === item.baseline;
       const restore = row.querySelector<HTMLButtonElement>('.example-restore');
       if (restore) restore.hidden = !changed;
-      timestamp.hidden = !item.updatedAt;
-      timestamp.textContent = item.updatedAt ? `Edited ${new Date(item.updatedAt).toLocaleString()}` : '';
+      timestamp.hidden = !item.updatedAt || Boolean(item.projectId);
+      timestamp.textContent = item.updatedAt ? `Edited ${new Date(item.updatedAt).toLocaleDateString()}` : '';
+      button.title = item.projectId ? item.title : [item.title, item.updatedAt ? `Edited ${new Date(item.updatedAt).toLocaleString()}` : ''].filter(Boolean).join('\n');
       if (item.recoveredFrom) detail.textContent = 'Recovered copy · Edits from another tab';
       else if (item.key.startsWith('file:')) detail.textContent = item.template ? `Saved copy of ${item.template} · Draft ${item.number}` : `Your file · Draft ${item.number ?? item.key.slice(5)}`;
-      else if (item.projectId) detail.textContent = `Project file · ${item.path}`;
+      else if (item.projectId) { detail.textContent = ''; detail.hidden = true; }
     });
     refreshRows.get(item.key)!();
     buttons.set(item.key, button);
@@ -332,6 +414,7 @@ export function setupExamplePicker(
     },
     refresh() { announce(); },
     updateCurrent(source: string) {
+      if (restoredKey === current && source !== currentDraft().source) { actions.expire(); restoredKey = undefined; }
       if (source !== currentDraft().source) currentDraft().updatedAt = Date.now();
       currentDraft().source = source;
       downloadRequested = false;

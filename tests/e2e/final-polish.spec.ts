@@ -90,10 +90,8 @@ test('saving an example creates a named copy with its history, export names and 
   expect((await pending).suggestedFilename()).toBe('checkout-design-root.svg');
   await page.locator('#example-picker summary').click();
   await expect(page.locator('#draft-options')).toContainText('Saved copy of Order flow');
-  await page.getByRole('button', { name: 'Restore original example: Order flow' }).evaluate((el) => {
-    window.confirm = () => true;
-    (el as HTMLButtonElement).click();
-  });
+  await page.getByRole('button', { name: 'Restore original example: Order flow' }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Restore example', exact: true }).click();
   await expect(source(page)).toHaveText('saved: After');
   await page.reload(); await ready(page);
   await expect(page.locator('#filename')).toHaveText('checkout-design.d2');
@@ -132,6 +130,9 @@ layers: {
     await expect(peer).toHaveAttribute('data-link-direction', 'peer');
     const arrows = await Promise.all([parent, peer, deeper].map((link) => link.locator('.appendix-icon path').getAttribute('d')));
     expect(new Set(arrows).size).toBe(3);
+    // Move off the newly rendered shapes before switching to keyboard focus;
+    // a delayed pointerover from the preceding click must not become the last input.
+    await target.mouse.move(0, 0);
     await parent.focus();
     await expect(target.locator('.zf-link-hint')).toHaveText('Return to Root');
     await peer.hover();

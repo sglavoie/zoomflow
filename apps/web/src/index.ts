@@ -218,7 +218,17 @@ const examplePicker = setupExamplePicker(() => editor.source, (source, name, key
     ? 'Edits are backed up in this browser. Save a disk copy to keep them; browser storage can be cleared.'
     : 'Browser recovery is unavailable. Save or download a disk copy to keep your edits.';
   document.title = `${dirty ? '• ' : ''}${identity.name} — Zoomflow`;
-}, (key) => { editor.forget(key); fileHandles.delete(key); documentRoutes.delete(key); viewport.forget(key); });
+}, (key) => { editor.forget(key); fileHandles.delete(key); documentRoutes.delete(key); viewport.forget(key); }, (key) => {
+  const restoreEditor = editor.checkpoint(key);
+  const restoreViewport = viewport.checkpoint(key);
+  const handle = fileHandles.get(key);
+  const route = documentRoutes.get(key);
+  return () => {
+    restoreEditor(); restoreViewport();
+    if (handle) fileHandles.set(key, handle);
+    if (route) documentRoutes.set(key, route);
+  };
+});
 
 function download(blob: Blob, name: string) {
   const url = URL.createObjectURL(blob);
@@ -450,8 +460,13 @@ viewer.stage.addEventListener('click', selectShape, { capture: true });
 viewer.stage.addEventListener('keydown', selectShape, { capture: true });
 let documentExport: { diagram: Diagram; render: RenderBoard; name: string; diagnostics: LintDiagnostic[] } | undefined;
 const exportButton = document.querySelector<HTMLButtonElement>('#export')!;
-const exportFormat = document.querySelector<HTMLSelectElement>('#export-format')!;
-restorePreference(exportFormat, 'zoomflow.export-format');
+const exportChoices = document.querySelector<HTMLFieldSetElement>('#export-format')!;
+const exportFormat = { get value() { return exportChoices.querySelector<HTMLInputElement>('input:checked')!.value; } };
+try {
+  const saved = localStorage.getItem('zoomflow.export-format');
+  const choice = [...exportChoices.querySelectorAll<HTMLInputElement>('input')].find(input => input.value === saved);
+  if (choice) choice.checked = true;
+} catch { /* Exporting works without stored preferences. */ }
 function updateExportLabel() {
   const allBoards = exportFormat.value === 'zip' || exportFormat.value === 'html';
   const count = documentExport ? indexBoards(documentExport.diagram).size : 0;
@@ -465,7 +480,10 @@ function updateExportLabel() {
   exportButton.textContent = ({ svg: 'Download SVG', png: 'Download PNG', zip: 'Download SVG ZIP',
     html: 'Download HTML' } as Record<string, string>)[exportFormat.value] ?? 'Download export';
 }
-exportFormat.addEventListener('change', updateExportLabel);
+exportChoices.addEventListener('change', () => {
+  try { localStorage.setItem('zoomflow.export-format', exportFormat.value); } catch { /* Optional preference. */ }
+  updateExportLabel();
+});
 updateExportLabel();
 function load(source: string, name: string, preserveViewport = false) {
   return previewQueue.run(() => loadPreview(source, name, preserveViewport));

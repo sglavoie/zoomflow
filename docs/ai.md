@@ -24,4 +24,11 @@ ignored). Values may contain `=`. The Claude config field takes precedence over
 `CLAUDE_CONFIG_DIR` in the shared field. These values are passed only to the
 selected CLI process and are kept in the current page, not saved by Zoomflow.
 
+## Error feedback
+
+An unavailable server, timed-out availability check, or malformed response shows
+a recovery action beside the prompt. Technical diagnostics are kept in a collapsed
+**Technical details** section. **Check again** retries availability; successful
+checks clear the previous error details. Failed requests keep your prompt and source.
+
 [Back to the workspace guide](workspace.md)

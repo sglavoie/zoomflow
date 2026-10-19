@@ -116,11 +116,11 @@ test('projects group files above examples and removal only affects the chosen pr
   await page.locator('#example-picker summary').click();
   await expect(page.locator('#draft-options > :first-child')).toContainText('keep.d2');
   const remove = group.getByRole('button', { name: 'Remove browser-project project drafts' });
-  page.once('dialog', (dialog) => dialog.dismiss());
   await remove.click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Cancel', exact: true }).click();
   await expect(group).toBeVisible();
-  page.once('dialog', (dialog) => dialog.accept());
   await remove.click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Remove project', exact: true }).click();
   await expect(group).toHaveCount(0);
   await expect(source(page)).toHaveText('keep: My draft');
   await page.reload();

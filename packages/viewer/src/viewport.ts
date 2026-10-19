@@ -318,6 +318,14 @@ export function setupViewport(stage: HTMLElement, host: HTMLElement) {
   return {
     reveal,
     refresh() { if (activeKey) reset(); },
+    checkpoint(key: string) {
+      remember();
+      const saved = [...views].filter(([id]) => id.startsWith(`${key}\n`));
+      return () => {
+        if (documentKey === key) activeKey = undefined;
+        for (const [id, view] of saved) views.set(id, view);
+      };
+    },
     copyDocument(key: string) {
       remember();
       for (const [id, view] of [...views]) if (id.startsWith(`${documentKey}\n`)) views.set(`${key}${id.slice(documentKey.length)}`, { ...view });

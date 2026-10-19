@@ -1,6 +1,13 @@
 /** Canvas, navigation and controls shared by the workspace and standalone HTML. */
 export const viewerStyle = `
-.zf-breadcrumbs { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-2); min-height: 36px; }
+.zf-breadcrumbs { display: flex; align-items: center; flex-wrap: nowrap; gap: var(--space-2); min-height: 36px; flex-shrink: 0; min-width: 0; }
+.zf-breadcrumbs > button { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.zf-breadcrumbs > button:first-child { flex-shrink: 0; max-width: 22%; }
+.zf-breadcrumbs > .zf-ancestor-toggle { flex-shrink: 0; }
+.zf-crumb-separator { flex-shrink: 0; color: var(--muted); }
+.zf-ancestor-menu { position: fixed; z-index: 50; width: min(300px, calc(100vw - 16px)); overflow-y: auto; padding: 6px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); box-shadow: 0 8px 28px #20304426; }
+.zf-ancestor-menu[hidden] { display: none; }
+.zf-ancestor-menu button { display: block; width: 100%; text-align: left; overflow-wrap: anywhere; }
 .zf-breadcrumbs button[aria-current] { font-weight: bold; }
 .zf-breadcrumbs button { background: transparent; border-color: transparent; color: var(--muted); }
 .zf-breadcrumbs button[aria-current] { color: inherit; background: var(--hover); }

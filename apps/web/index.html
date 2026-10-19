@@ -29,13 +29,18 @@
         <div id="header-more">
           <button id="header-more-toggle" type="button" aria-expanded="false" aria-controls="header-more-content">Export</button>
           <div id="header-more-content" class="header-more-content" hidden>
-            <button id="save-source" type="button" aria-label="Download source (.d2)">Download .d2 source</button>
-            <button id="save-project" type="button" hidden>Download project .zip</button>
-            <label>Format <select id="export-format"><option value="svg">Current board SVG</option><option value="png">Current board PNG</option><option value="zip">All boards ZIP (SVG)</option><option value="html">Single-file HTML</option></select></label>
+            <fieldset id="export-format">
+              <legend>What would you like to share?</legend>
+              <label class="export-choice"><input type="radio" name="export-format" value="html" /><span><strong>Interactive diagram <small>HTML</small></strong><span>Every board, with drill-down navigation. Opens offline in a browser.</span></span></label>
+              <label class="export-choice"><input type="radio" name="export-format" value="svg" checked /><span><strong>Current board image <small>SVG</small></strong><span>Sharp at any size, for documents and further editing.</span></span></label>
+              <label class="export-choice"><input type="radio" name="export-format" value="png" /><span><strong>Current board image <small>PNG</small></strong><span>A ready-to-use image for slides and messages.</span></span></label>
+              <label class="export-choice"><input type="radio" name="export-format" value="zip" /><span><strong>All boards as SVG <small>ZIP</small></strong><span>Separate images organized in folders.</span></span></label>
+            </fieldset>
             <p id="export-scope" role="status"></p>
             <p id="export-help"></p>
             <button id="export" class="button-primary" aria-describedby="export-scope export-help" disabled>Download SVG</button>
             <span id="export-status" role="status" aria-live="polite" hidden></span>
+            <div class="export-sources"><button id="save-source" type="button" aria-label="Download source (.d2)">Download .d2 source</button><button id="save-project" type="button" hidden>Download project .zip</button></div>
           </div>
         </div>
       </div>

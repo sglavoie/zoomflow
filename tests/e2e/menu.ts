@@ -6,7 +6,8 @@ export async function openDownloads(page: Page) {
 
 export async function selectMenuOption(page: Page, selector: string, value: string) {
   if (selector !== '#theme') await openDownloads(page);
-  await page.selectOption(selector, value);
+  if (selector === '#export-format') await page.locator(`${selector} input[value="${value}"]`).check();
+  else await page.selectOption(selector, value);
 }
 
 export async function downloadExport(page: Page) {
