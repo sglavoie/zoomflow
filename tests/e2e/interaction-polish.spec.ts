@@ -95,7 +95,7 @@ test('project dirty indicators and counts follow edits, undo, saving and reload'
   await source(page).pressSequentially('extra: Added');
   await page.locator('#example-picker summary').click();
   await expect(page.locator('.project-unsaved')).toHaveText('2 unsaved');
-  await expect(page.locator('.draft-unsaved:visible')).toHaveCount(2);
+  await expect(page.locator('.project-group .draft-unsaved:visible')).toHaveCount(2);
   await page.locator('#example-picker summary').click();
   await page.reload(); await ready(page);
   await page.locator('#example-picker summary').click();

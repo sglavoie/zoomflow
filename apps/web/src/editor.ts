@@ -8,6 +8,9 @@ import type { SourceRange } from '@zoomflow/core';
 import { diagnosticLocation, type SourceDiagnostic } from './diagnostics';
 import { d2Language } from './d2-language';
 import { formatChanges } from './format-changes';
+import { hangingIndentation } from './editor-indentation';
+import { aiChanges } from './ai-changes';
+import { aiHighlights, highlightAiLines } from './editor-ai-highlights';
 
 export class SourceEditor {
   readonly view: EditorView;
@@ -16,10 +19,11 @@ export class SourceEditor {
   private readonly diagnosticList = document.createElement('ul');
   private readonly extensions: Extension[];
   private currentKey = '';
+  private highlightTimer: ReturnType<typeof setTimeout> | undefined;
   private readonly documents = new Map<string, { state: EditorState; scroll: ReturnType<EditorView['scrollSnapshot']> }>();
   constructor(parent: HTMLElement, source: string, changed: () => void, selected: () => void, format: () => void, reveal: () => void) {
     this.extensions = [
-        basicSetup, d2Language, lintGutter(), EditorView.lineWrapping,
+        basicSetup, d2Language, lintGutter(), EditorView.lineWrapping, hangingIndentation, aiHighlights,
         codeFolding({ placeholderDOM: (view, unfold) => {
           // Safari does not consistently dispatch clicks on non-editable spans.
           const button = document.createElement('button');
@@ -86,6 +90,7 @@ export class SourceEditor {
   get source() { return this.view.state.doc.toString(); }
   get selection() { return this.view.state.selection.main; }
   open(key: string, source: string, reset = false) {
+    this.clearAiHighlights();
     const active = document.activeElement;
     const editing = this.view.hasFocus;
     if (this.currentKey) this.documents.set(this.currentKey, { state: this.view.state, scroll: this.view.scrollSnapshot() });
@@ -93,7 +98,7 @@ export class SourceEditor {
     this.currentKey = key;
     const restore = saved?.state.doc.toString() === source ? saved : undefined;
     this.view.setState(restore?.state ?? EditorState.create({ doc: source, extensions: this.extensions }));
-    this.view.dispatch({ effects: restore?.scroll ?? EditorView.scrollIntoView(0, { y: 'start' }) });
+    this.view.dispatch({ effects: [restore?.scroll ?? EditorView.scrollIntoView(0, { y: 'start' }), highlightAiLines.of([])] });
     // Keep focus with the picker, diagram, or editor that initiated the switch.
     if (editing) this.view.focus();
     else if (active === document.body) (document.activeElement as HTMLElement | null)?.blur();
@@ -112,6 +117,29 @@ export class SourceEditor {
     this.currentKey = key;
   }
   undo() { return undo(this.view); }
+  clearAiHighlights() {
+    clearTimeout(this.highlightTimer);
+    if (this.view.state.field(aiHighlights).size) this.view.dispatch({ effects: highlightAiLines.of([]) });
+  }
+  applyAi(source: string) {
+    this.clearAiHighlights();
+    const changes = this.view.state.changes(aiChanges(this.source, source));
+    if (changes.empty) return '';
+    const next = changes.apply(this.view.state.doc);
+    const lines = new Set<number>();
+    let deleted = false;
+    changes.iterChanges((fromA, toA, fromB, toB) => {
+      if (fromB === toB && fromA !== toA) deleted = true;
+      const first = next.lineAt(fromB).number;
+      const last = next.lineAt(Math.max(fromB, toB - 1)).number;
+      for (let number = first; number <= last; number++) lines.add(next.line(number).from);
+    });
+    const scroll = this.view.scrollSnapshot().map(changes);
+    this.view.dispatch({ changes, effects: [...(scroll ? [scroll] : []), highlightAiLines.of([...lines].sort((a, b) => a - b))],
+      userEvent: 'input.ai', annotations: isolateHistory.of('full') });
+    this.highlightTimer = setTimeout(() => this.clearAiHighlights(), 15_000);
+    return `Changes at ${lines.size} source line${lines.size === 1 ? '' : 's'}${deleted ? ' (including deletions)' : ''}.`;
+  }
   format(source: string) {
     const current = this.source;
     if (source === current) return false;
@@ -153,5 +181,5 @@ export class SourceEditor {
     this.panel.hidden = false;
     (this.diagnosticList.querySelector('button') ?? this.panel.querySelector('button'))?.focus();
   }
-  destroy() { this.view.destroy(); }
+  destroy() { clearTimeout(this.highlightTimer); this.view.destroy(); }
 }

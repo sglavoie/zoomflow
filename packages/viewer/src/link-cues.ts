@@ -83,7 +83,7 @@ export function decorateLinks(svg: Element, boards: Map<string, { name: string; 
     for (const cue of cues) {
       const matrix = cue.link.getScreenCTM();
       if (!matrix || !matrix.a || !matrix.d) continue;
-      const scale = Math.max(1, 24 / (24 * Math.abs(matrix.a)));
+      const scale = 1 / Math.abs(matrix.a);
       cue.badge.setAttribute('transform', `translate(${cue.x - 16 * scale} ${cue.y - 16 * scale}) scale(${scale})`);
     }
     const rectangles = cues.map((cue) => {

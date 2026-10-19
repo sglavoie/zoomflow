@@ -15,7 +15,7 @@
         <div class="document-control">
         <details id="example-picker">
           <summary aria-label="Choose a diagram" title="Choose a built-in example or return to your file">
-            <span id="filename">order.d2</span><span class="picker-chevron" aria-hidden="true">⌄</span>
+            <span id="filename">order.d2</span><span id="document-unsaved" class="draft-unsaved" role="img" aria-label="Unsaved changes" title="Unsaved changes — save a disk copy" hidden>•</span><span class="picker-chevron" aria-hidden="true">⌄</span>
           </summary>
           <section class="example-menu" aria-label="Diagrams and projects">
             <div class="example-menu-heading">Built-in examples</div>
@@ -37,8 +37,7 @@
               <label class="export-choice"><input type="radio" name="export-format" value="zip" /><span><strong>All boards as SVG <small>ZIP</small></strong><span>Separate images organized in folders.</span></span></label>
             </fieldset>
             <p id="export-scope" role="status"></p>
-            <p id="export-help"></p>
-            <button id="export" class="button-primary" aria-describedby="export-scope export-help" disabled>Download SVG</button>
+            <button id="export" class="button-primary" aria-describedby="export-scope" disabled>Download SVG</button>
             <span id="export-status" role="status" aria-live="polite" hidden></span>
             <div class="export-sources"><button id="save-source" type="button" aria-label="Download source (.d2)">Download .d2 source</button><button id="save-project" type="button" hidden>Download project .zip</button></div>
           </div>
@@ -146,14 +145,18 @@
         <div class="source-tools">
         <details id="ai-assistant">
           <summary>Ask AI about this diagram</summary>
-          <p id="ai-availability" role="status">Checking local AI availability…</p>
-          <button id="ai-retry" type="button" hidden>Check again</button>
           <form id="ai-form" aria-label="AI diagram assistant">
-            <div class="ai-provider-row">
-              <label for="ai-provider">AI</label>
-              <select id="ai-provider"><option value="claude">Claude Code</option><option value="codex">Codex</option></select>
+            <div class="ai-composer">
+              <textarea id="ai-prompt" aria-label="Ask AI about this diagram" placeholder="Describe a change or ask about this diagram…" rows="2" required disabled></textarea>
+              <div class="ai-actions"><span id="ai-elapsed" aria-live="off"></span><button id="ai-cancel" type="button" hidden>Cancel</button><button id="ai-send" type="submit" disabled>Send</button></div>
             </div>
+            <p id="ai-availability" role="status">Checking local AI availability…</p>
+            <button id="ai-retry" type="button" hidden>Check again</button>
             <details class="ai-settings"><summary>AI settings</summary>
+              <div class="ai-provider-row">
+                <label for="ai-provider">AI</label>
+                <select id="ai-provider"><option value="claude">Claude Code</option><option value="codex">Codex</option></select>
+              </div>
               <label id="ai-claude-config" class="ai-field" for="ai-claude-config-dir">CLAUDE_CONFIG_DIR <span>Overrides the same name below</span>
                 <input id="ai-claude-config-dir" type="text" value="~/.claude" spellcheck="false" required />
               </label>
@@ -161,8 +164,6 @@
                 <textarea id="ai-environment" rows="2" spellcheck="false" placeholder="EXAMPLE_KEY=value"></textarea>
               </label>
             </details>
-            <textarea id="ai-prompt" aria-label="Ask AI about this diagram" placeholder="Describe a change or ask about this diagram…" rows="2" required disabled></textarea>
-            <div class="ai-actions"><span id="ai-elapsed" aria-live="off"></span><button id="ai-cancel" type="button" hidden>Cancel</button><button id="ai-send" type="submit" disabled>Send</button></div>
           </form>
         </details>
         <details id="lint-details">
@@ -172,8 +173,10 @@
             <label><input id="missing-backlink" type="checkbox" /> Check parent backlinks</label>
           </div>
         </details>
-        <div id="ai-status" role="status" aria-live="polite"></div>
-        <button id="ai-undo" type="button" hidden>Undo AI change</button>
+        <div class="ai-feedback">
+          <div id="ai-status" role="status" aria-live="polite"></div>
+          <div class="ai-change-feedback" hidden><span id="ai-change-summary"></span><button id="ai-undo" type="button" aria-describedby="ai-change-summary" hidden>Undo AI change</button></div>
+        </div>
         </div>
         <div id="editor"></div>
       </section>

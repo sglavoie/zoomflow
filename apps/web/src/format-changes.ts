@@ -17,7 +17,7 @@ export function formatChanges(before: string, after: string): ChangeSpec[] {
     }
     return changes;
   }
-  // AI edits can change the actual content as well. Retain unchanged edges.
+  // Retain unchanged edges when formatting also changes substantive content.
   let from = 0, end = before.length, nextEnd = after.length;
   while (from < end && from < nextEnd && before[from] === after[from]) from++;
   while (end > from && nextEnd > from && before[end - 1] === after[nextEnd - 1]) { end--; nextEnd--; }

@@ -111,7 +111,7 @@ test('export progress and completion appear beside the export action', async ({ 
   await expect(page.locator('#export')).toBeEnabled();
   await page.locator('#header-more-toggle').click();
   const [download] = await Promise.all([page.waitForEvent('download'), page.locator('#export').click()]);
-  expect(download.suggestedFilename()).toBe('order-root.svg');
+  expect(download.suggestedFilename()).toBe('order.html');
   await expect(page.locator('#export-status')).toContainText('Download started');
   await expect(page.locator('#export-status')).toBeVisible();
 });

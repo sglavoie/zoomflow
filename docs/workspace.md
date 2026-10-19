@@ -23,6 +23,9 @@ Saving an example creates a separate named draft, labeled with its original temp
 Its undo history and diagram view stay intact; restoring the example leaves the saved
 copy alone. The filename, browser tab, and subsequent exports use the chosen disk name.
 An unsaved-change dot in the browser tab distinguishes edits from the last disk save.
+The active filename also carries an unsaved dot, which stays visible during
+compilation, formatting, errors, and exports. Browser recovery and downloads do
+not clear it; saving to disk or undoing back to the saved source does.
 Project import paths remain stable even when a file copy is saved under another name.
 Browser storage can be cleared. Drafts are stored independently per document and tab;
 simultaneous edits are preserved as **(recovered)** copies in the diagram menu after
@@ -117,6 +120,8 @@ Edit the syntax-highlighted D2 source in the CodeMirror pane for a live preview
 (350 ms debounce). Nested maps indent automatically, closing braces dedent, and the
 gutter folds multiline maps, including layers, scenarios, and steps. Braces in
 comments and multiline labels do not create folds.
+Wrapped lines retain their leading indentation, with subtle guides for nesting.
+Very deep continuation indentation is capped to leave reading room on small screens.
 If compilation is already running, intermediate preview requests are replaced by the
 newest edit. The running compilation finishes, and only a current result is displayed.
 Click **Format** or press **Shift+Alt+F** in the editor to apply D2's automatic
@@ -190,6 +195,10 @@ of SVGs, or one navigable HTML file. The HTML opens directly from disk without a
 server or network connection and includes every board, including cyclic links.
 The export menu names the current board for SVG/PNG, or shows the total board count
 for ZIP/HTML, and explains that HTML preserves offline drill-down navigation.
+Until you choose a format, multi-board diagrams default to interactive HTML and
+single-board diagrams default to SVG. An explicit format choice takes precedence
+and is remembered when browser storage is available. One scope statement beside
+Download identifies the current board or the whole diagram.
 Exports preserve the selected theme. Remote images are embedded when accessible;
 failed fetches produce a placeholder and a visible warning. ZIP paths follow the
 board tree (`root.svg`, `checkout.svg`, `checkout/charge.svg`); scenarios and steps
@@ -213,7 +222,7 @@ keyboard-focusable: press Enter or Space
 to select their source. Alt+Enter selects a linked shape’s source without navigating.
 Recompiling the same board retains focus on a surviving shape. Wheel zoom normalizes
 pixel, line and page deltas; pinch zoom works from Fit. Touch devices show the pinch
-hint even at Fit. Link badges remain legible when zoomed out, and touch hit areas
+hint even at Fit. Link badges stay 24 screen pixels across zoom levels, and touch hit areas
 expand into available whitespace without covering neighboring shapes. The same
 controls and link treatment ship in offline HTML.
 

@@ -114,10 +114,11 @@ test('workspace is compact and stable, zoom explains its baseline, export descri
   await page.getByRole('button', { name: 'Fit diagram', exact: true }).click();
   await page.getByRole('link', { name: 'Open checkout board', exact: true }).click();
   await openDownloads(page);
-  await expect(page.locator('#export-scope')).toHaveText('checkout · SVG');
+  await page.locator('#export-format input[value="svg"]').check();
+  await expect(page.locator('#export-scope')).toHaveText('Current board: checkout · SVG');
   await page.locator('#export-format input[value="html"]').check();
   await expect(page.locator('#export-scope')).toHaveText('Entire diagram · 3 boards · Interactive HTML');
-  await expect(page.locator('#export-help')).toContainText('drill-down navigation');
+  await expect(page.getByRole('radio', { name: /Interactive diagram HTML/ })).toHaveAccessibleName(/drill-down navigation/);
   await page.locator('#export-format input[value="zip"]').check();
   await expect(page.locator('#export-scope')).toHaveText('Entire diagram · 3 boards · SVG ZIP');
   await page.locator('#header-more-toggle').click();

@@ -2,7 +2,7 @@
 
 The collapsed **Ask AI** panel above the editor can send the current source, active board, and
 your prompt to either Claude Code or Codex. Start the local app with `pnpm dev`,
-install and sign in to the chosen CLI, then select it and click **Send**. Zoomflow
+install and sign in to the chosen CLI, select it under **AI settings**, and click **Send**. Zoomflow
 runs `claude -p` or `codex exec` through a local Vite endpoint. A valid replacement
 source becomes one undoable editor edit and updates the preview; questions can
 return an answer without changing the diagram. Invalid D2 and CLI errors appear
@@ -15,7 +15,20 @@ elapsed time and a **Cancel** button; cancellation
 stops the local CLI request and keeps the prompt for retry. **Undo AI change** restores
 the previous source after an applied change and disappears when you edit or switch
 documents; the normal editor undo history remains available. The AI panel and optional lint controls start collapsed so the
-source editor stays visible. Provider environment fields are under **AI settings**.
+source editor stays visible. The prompt and Send/Cancel share a compact row above
+availability and settings, including on phones. Additional settings scroll below
+the composer; a bottom shadow indicates more content.
+
+Applied edits briefly highlight the affected source lines and show a change count
+beside **Undo AI change**. This feedback scrolls into view within the tools on
+short screens without moving the editor or keyboard focus. Deletions highlight
+their location in the resulting source.
+Highlights clear after 15 seconds, another source edit, or switching documents;
+the Undo action remains available after the highlight expires. Separate edits keep
+unchanged lines, selection, and the editor's scroll anchor intact. Large rewrites
+may be grouped into a single highlighted region.
+
+Provider and environment fields are under **AI settings**.
 For Claude Code, the `CLAUDE_CONFIG_DIR` field defaults to `~/.claude`;
 `~` expands to your home directory, and relative paths resolve from the server's
 working directory. Both providers accept environment overrides in the shared

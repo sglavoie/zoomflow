@@ -1,7 +1,7 @@
 import { AiError, aiFailure, readAiResponse } from './ai-errors';
 type Snapshot = { source: string; name: string; board: string; revision: number };
 
-export function setupAiAssistant(read: () => Snapshot, validate: (source: string) => Promise<void>, apply: (source: string) => void,
+export function setupAiAssistant(read: () => Snapshot, validate: (source: string) => Promise<void>, apply: (source: string) => string,
   onStatus: (message: string, kind: 'info' | 'error') => void = () => {}, undo: () => boolean = () => false) {
   const form = document.querySelector<HTMLFormElement>('#ai-form')!;
   const provider = document.querySelector<HTMLSelectElement>('#ai-provider')!;
@@ -17,6 +17,14 @@ export function setupAiAssistant(read: () => Snapshot, validate: (source: string
   const cancel = document.querySelector<HTMLButtonElement>('#ai-cancel')!;
   const undoButton = document.querySelector<HTMLButtonElement>('#ai-undo')!;
   const elapsed = document.querySelector<HTMLElement>('#ai-elapsed')!;
+  const changeFeedback = document.querySelector<HTMLElement>('.ai-change-feedback')!;
+  const changeSummary = document.querySelector<HTMLElement>('#ai-change-summary')!;
+  const tools = document.querySelector<HTMLElement>('.source-tools')!;
+  const updateOverflow = () => { tools.dataset.overflow = String(tools.scrollHeight > tools.clientHeight + 1 && tools.scrollTop + tools.clientHeight < tools.scrollHeight - 1); };
+  const resize = new ResizeObserver(updateOverflow);
+  resize.observe(tools);
+  for (const child of tools.children) resize.observe(child);
+  tools.addEventListener('scroll', updateOverflow);
   function detailPanel(after: HTMLElement) {
     const panel = document.createElement('details');
     panel.className = 'ai-error-details';
@@ -37,6 +45,7 @@ export function setupAiAssistant(read: () => Snapshot, validate: (source: string
   let undoRevision: number | undefined;
   function updateControls() {
     button.disabled = checking || !available || Boolean(active);
+    button.hidden = Boolean(active);
     prompt.disabled = !available || Boolean(active);
     provider.disabled = Boolean(active);
     cancel.hidden = !active;
@@ -86,6 +95,7 @@ export function setupAiAssistant(read: () => Snapshot, validate: (source: string
     }
     undoRevision = undefined;
     undoButton.hidden = true;
+    changeFeedback.hidden = true;
   });
   panel.addEventListener('toggle', () => {
     // WebKit can keep the native select hidden to visibility checks after a
@@ -112,6 +122,7 @@ export function setupAiAssistant(read: () => Snapshot, validate: (source: string
     responseDetails();
     undoRevision = undefined;
     undoButton.hidden = true;
+    changeFeedback.hidden = true;
     updateControls();
     const started = Date.now();
     elapsed.textContent = '0s elapsed';
@@ -141,13 +152,22 @@ export function setupAiAssistant(read: () => Snapshot, validate: (source: string
           throw new Error('The diagram changed while AI was working. Your edits were kept; send the prompt again.');
         }
         if (data.source !== snapshot.source) {
-          apply(data.source);
+          changeSummary.textContent = apply(data.source);
           undoRevision = read().revision;
           undoButton.hidden = false;
+          changeFeedback.hidden = false;
         }
       }
       status.dataset.kind = 'success';
       status.textContent = `${data.source !== null && data.source !== snapshot.source ? 'Diagram updated. ' : ''}${data.reply || 'Done.'}`;
+      if (!changeFeedback.hidden) requestAnimationFrame(() => {
+        if (changeFeedback.hidden || undoRevision !== read().revision) return;
+        // Reveal the change summary and Undo within the tools, leaving editor
+        // scroll and keyboard focus alone even on a short phone viewport.
+        const bottom = changeFeedback.getBoundingClientRect().bottom;
+        const visibleBottom = tools.getBoundingClientRect().bottom;
+        if (bottom > visibleBottom) tools.scrollTop += bottom - visibleBottom;
+      });
       onStatus(data.source !== null && data.source !== snapshot.source ? 'AI updated the source.' : 'AI response ready.', 'info');
       prompt.value = '';
     } catch (error) {
@@ -165,12 +185,13 @@ export function setupAiAssistant(read: () => Snapshot, validate: (source: string
       onStatus('AI request failed. See the assistant response.', 'error');
     } finally {
       clearInterval(timer);
+      elapsed.textContent = '';
       active = undefined;
       updateControls();
     }
   });
   return {
-    sourceChanged() { undoRevision = undefined; undoButton.hidden = true; },
-    dispose() { active?.abort(); health?.abort(); },
+    sourceChanged() { undoRevision = undefined; undoButton.hidden = true; changeFeedback.hidden = true; },
+    dispose() { active?.abort(); health?.abort(); resize.disconnect(); tools.removeEventListener('scroll', updateOverflow); },
   };
 }

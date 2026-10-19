@@ -1,5 +1,12 @@
 # Browser tests
 
+`editing-polish.spec.ts` checks phone composer visibility with Send/Cancel,
+persistent unsaved state during errors and activity, actual wrapped-text alignment,
+adaptive export defaults and remembered choices, fixed-size badges in live/offline
+viewers, and AI change highlights with selection, expiry, undo and document switching.
+The AI diff unit tests also cover deletions, repeated lines, Unicode, and bounded
+large rewrites.
+
 `quality-pass.spec.ts` covers formatting selection and scroll, compact breadcrumb
 overflow in both live and offline viewers, export choices on short screens,
 project filtering and collapsed groups, AI transport feedback, and undoable
@@ -59,9 +66,9 @@ per-document and per-board view restoration, mobile error repair, compact stable
 source chrome, zoom hints, and explicit export scope. Draft-store unit tests cover
 revision conflicts, migration, deletion, and edits to recovered copies.
 
-`visual.spec.ts` captures 24 Chromium workspace baselines at 1440×900 and 390×844:
+`visual.spec.ts` captures 28 Chromium workspace baselines at 1440×900 and 390×844:
 light/dark healthy views, source errors, mobile preview errors, expanded AI/lint
-panels, the reference panel, and expanded settings at short, landscape, and enlarged-text phone sizes. It fixes locale, timezone, reduced motion, and the
+panels, the reference panel, AI change highlights with Undo, and expanded settings at short, landscape, and enlarged-text phone sizes. It fixes locale, timezone, reduced motion, and the
 local AI availability response; it uses the real editor and D2 renderer.
 
 The application workflow runs all checks on `macos-15`, matching the macOS baseline

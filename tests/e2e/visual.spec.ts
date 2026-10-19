@@ -55,5 +55,14 @@ for (const mobile of [false, true]) for (const theme of ['light', 'dark'] as con
     await page.locator('#toggle-reference').click();
     await expect(page.locator('#d2-reference')).toBeVisible();
     await screenshot('reference');
+    await page.locator('#close-reference').click();
+    if (mobile) await page.locator('#mobile-source').click();
+    await page.route('**/api/ai', route => route.fulfill({ json: { source: 'a: Updated\nb: Added', reply: 'Updated the diagram.' } }));
+    await page.locator('#ai-assistant > summary').click();
+    await page.locator('#ai-prompt').fill('Add another step');
+    await page.locator('#ai-send').click();
+    await expect(page.locator('.zf-ai-changed')).toHaveCount(2);
+    await expect(page.locator('#viewer')).toHaveAttribute('aria-busy', 'false');
+    await screenshot('ai-changes');
   });
 }

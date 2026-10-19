@@ -218,6 +218,8 @@ const examplePicker = setupExamplePicker(() => editor.source, (source, name, key
     ? 'Edits are backed up in this browser. Save a disk copy to keep them; browser storage can be cleared.'
     : 'Browser recovery is unavailable. Save or download a disk copy to keep your edits.';
   document.title = `${dirty ? '• ' : ''}${identity.name} — Zoomflow`;
+  document.querySelector<HTMLElement>('#document-unsaved')!.hidden = !dirty;
+  document.querySelector('#example-picker > summary')!.setAttribute('aria-label', dirty ? 'Choose a diagram — unsaved changes' : 'Choose a diagram');
 }, (key) => { editor.forget(key); fileHandles.delete(key); documentRoutes.delete(key); viewport.forget(key); }, (key) => {
   const restoreEditor = editor.checkpoint(key);
   const restoreViewport = viewport.checkpoint(key);
@@ -364,7 +366,7 @@ formatButton.addEventListener('click', () => void formatSource());
 ai = setupAiAssistant(
   () => ({ source: editor.source, name: documentName, board: viewer.currentBoard?.id ?? 'root', revision: documentRevision }),
   async (source) => { await compileSource(source); },
-  (source) => { editor.format(source); },
+  (source) => editor.applyAi(source),
   (message, kind) => setActivity(message, kind),
   () => editor.undo(),
 );
@@ -462,27 +464,34 @@ let documentExport: { diagram: Diagram; render: RenderBoard; name: string; diagn
 const exportButton = document.querySelector<HTMLButtonElement>('#export')!;
 const exportChoices = document.querySelector<HTMLFieldSetElement>('#export-format')!;
 const exportFormat = { get value() { return exportChoices.querySelector<HTMLInputElement>('input:checked')!.value; } };
+let explicitExportFormat = false;
 try {
   const saved = localStorage.getItem('zoomflow.export-format');
   const choice = [...exportChoices.querySelectorAll<HTMLInputElement>('input')].find(input => input.value === saved);
-  if (choice) choice.checked = true;
+  if (choice) { choice.checked = true; explicitExportFormat = true; }
 } catch { /* Exporting works without stored preferences. */ }
 function updateExportLabel() {
-  const allBoards = exportFormat.value === 'zip' || exportFormat.value === 'html';
   const count = documentExport ? indexBoards(documentExport.diagram).size : 0;
+  if (documentExport && !explicitExportFormat) {
+    exportChoices.querySelector<HTMLInputElement>(`input[value="${count > 1 ? 'html' : 'svg'}"]`)!.checked = true;
+  }
+  const allBoards = exportFormat.value === 'zip' || exportFormat.value === 'html';
   const formatName = ({ svg: 'SVG', png: 'PNG', zip: 'SVG ZIP', html: 'Interactive HTML' } as Record<string, string>)[exportFormat.value];
   document.querySelector('#export-scope')!.textContent = documentExport
     ? allBoards ? `Entire diagram · ${count} board${count === 1 ? '' : 's'} · ${formatName}`
-      : `${viewer.currentBoard?.name ?? 'Root'} · ${formatName}` : 'Compile the current source to export a diagram.';
-  document.querySelector('#export-help')!.textContent = exportFormat.value === 'html'
-    ? 'Preserves drill-down navigation. Opens offline in any browser.'
-    : exportFormat.value === 'zip' ? 'One SVG per board, organized in folders.' : 'Exports only the board currently shown.';
+      : `Current board: ${viewer.currentBoard?.name ?? 'Root'} · ${formatName}` : 'Compile the current source to export a diagram.';
   exportButton.textContent = ({ svg: 'Download SVG', png: 'Download PNG', zip: 'Download SVG ZIP',
     html: 'Download HTML' } as Record<string, string>)[exportFormat.value] ?? 'Download export';
 }
-exportChoices.addEventListener('change', () => {
+function rememberExportFormat() {
+  explicitExportFormat = true;
   try { localStorage.setItem('zoomflow.export-format', exportFormat.value); } catch { /* Optional preference. */ }
   updateExportLabel();
+}
+exportChoices.addEventListener('change', rememberExportFormat);
+exportChoices.addEventListener('click', (event) => {
+  // Clicking the automatically selected format is still an explicit choice.
+  if (event.target instanceof HTMLInputElement && event.target.checked) rememberExportFormat();
 });
 updateExportLabel();
 function load(source: string, name: string, preserveViewport = false) {

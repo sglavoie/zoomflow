@@ -17,9 +17,9 @@ test('AI updates the current diagram and keeps the edit undoable', async ({ page
   await page.goto('/');
   await expect(page.locator('#viewer')).toHaveAttribute('aria-busy', 'false');
   await page.locator('#ai-assistant > summary').click();
+  await page.locator('.ai-settings summary').click();
   await page.getByLabel('AI', { exact: true }).selectOption('codex');
   await expect(page.locator('#ai-claude-config')).toBeHidden();
-  await page.locator('.ai-settings summary').click();
   await page.locator('#ai-environment').fill('TEST_VALUE=codex');
   await page.getByRole('textbox', { name: 'Ask AI about this diagram' }).fill('Replace it with a note');
   await page.getByRole('button', { name: 'Send' }).click();
@@ -91,6 +91,7 @@ test('CLI failures are shown beside the prompt', async ({ page }) => {
     body: JSON.stringify({ error: 'codex is not installed or is not on the server PATH.' }) }));
   await page.goto('/');
   await page.locator('#ai-assistant > summary').click();
+  await page.locator('.ai-settings summary').click();
   await page.getByLabel('AI', { exact: true }).selectOption('codex');
   await page.getByRole('textbox', { name: 'Ask AI about this diagram' }).fill('Add a node');
   await page.getByRole('button', { name: 'Send' }).click();
@@ -126,6 +127,7 @@ test('provider readiness follows the selected CLI and explains sign-in failures'
   await page.goto('/');
   await page.locator('#ai-assistant > summary').click();
   await expect(page.locator('#ai-prompt')).toBeEnabled();
+  await page.locator('.ai-settings summary').click();
   await page.getByLabel('AI', { exact: true }).selectOption('codex');
   await expect(page.locator('#ai-availability')).toContainText('Sign in with codex login');
   await expect(page.locator('#ai-send')).toBeDisabled();
@@ -173,4 +175,5 @@ test('explicit AI undo restores source and is retired after subsequent edits', a
   await page.getByRole('textbox', { name: 'D2 source', exact: true }).fill('mine: Later edit');
   await expect(page.getByRole('button', { name: 'Undo AI change' })).toBeHidden();
   await expect(page.locator('.zf-stage')).toContainText('Later edit');
+  await expect(page.locator('.zf-ai-changed')).toHaveCount(0);
 });
