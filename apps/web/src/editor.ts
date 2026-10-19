@@ -1,7 +1,7 @@
 import { basicSetup } from 'codemirror';
 import { EditorState, type Extension } from '@codemirror/state';
 import { EditorView, keymap } from '@codemirror/view';
-import { isolateHistory, undo } from '@codemirror/commands';
+import { insertTab, isolateHistory, undo } from '@codemirror/commands';
 import { lintGutter, openLintPanel, closeLintPanel, setDiagnostics, type Diagnostic } from '@codemirror/lint';
 import { parseSourceRange, type SourceRange, type LintDiagnostic, type ShapeSource } from '@zoomflow/core';
 import { d2Language } from './d2-language';
@@ -43,7 +43,10 @@ export class SourceEditor {
   constructor(parent: HTMLElement, source: string, changed: () => void, selected: () => void, format: () => void) {
     this.extensions = [
         basicSetup, d2Language, lintGutter(), EditorView.lineWrapping,
-        keymap.of([{ key: 'Shift-Alt-f', run: () => { format(); return true; } }]),
+        keymap.of([
+          { key: 'Tab', run: insertTab },
+          { key: 'Shift-Alt-f', run: () => { format(); return true; } },
+        ]),
         EditorView.contentAttributes.of({ 'aria-label': 'D2 source', 'aria-multiline': 'true' }),
         EditorView.domEventHandlers({ focus: (_event, view) => {
           const { scrollTop, scrollLeft } = view.scrollDOM;
