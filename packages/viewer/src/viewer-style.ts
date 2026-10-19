@@ -26,6 +26,9 @@ export const viewerStyle = `
 .zf-link-hint { position: absolute; top: 12px; left: 12px; max-width: calc(100% - 24px); padding: 6px 10px; border-radius: var(--radius); background: #203044; color: #fff; font-size: 12px; pointer-events: none; overflow-wrap: anywhere; }
 .zf-pan-hint { grid-row: 3; grid-column: 1 / -1; font-size: 12px; color: var(--muted); }
 .zf-zoom-controls button svg { display: block; margin: auto; }
+@media (pointer: coarse) {
+  .zf-zoom-controls button { min-width: 44px; min-height: 44px; }
+}
 .zf-link-hint[hidden], .zf-pan-hint[hidden], .zf-context[hidden] { display: none; }
 .zf-stage a:not([data-missing]):hover { outline: 2px solid var(--focus); outline-offset: 3px; }
 `;

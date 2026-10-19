@@ -69,6 +69,12 @@ export function setupExamplePicker(
     onState(draft.source !== draft.baseline, recoveryAvailable, savePending,
       draft.key.startsWith('file:') || Boolean(draft.projectId) || draft.source !== original || draft.baseline !== original, downloadRequested, draft);
     refreshRows.get(current)?.();
+    for (const [id, group] of projectGroups) {
+      const count = [...drafts.values()].filter((item) => item.projectId === id && item.source !== item.baseline).length;
+      const indicator = group.section.querySelector<HTMLElement>('.project-unsaved')!;
+      indicator.textContent = `${count} unsaved`;
+      indicator.hidden = count === 0;
+    }
     fileHeading.hidden = fileOptions.childElementCount === 0;
   }
   function persist() {
@@ -149,7 +155,10 @@ export function setupExamplePicker(
     remove.textContent = 'Remove project';
     remove.setAttribute('aria-label', `Remove ${name} project drafts`);
     remove.addEventListener('click', () => removeDrafts(item, true));
-    heading.append(title, remove);
+    const unsaved = document.createElement('span');
+    unsaved.className = 'project-unsaved';
+    unsaved.setAttribute('role', 'status');
+    heading.append(title, unsaved, remove);
     const files = document.createElement('div');
     section.append(heading, files);
     fileOptions.append(section);
@@ -238,6 +247,13 @@ export function setupExamplePicker(
     modified.className = 'example-modified';
     modified.textContent = 'Modified';
     label.append(modified);
+    const unsaved = document.createElement('span');
+    unsaved.className = 'draft-unsaved';
+    unsaved.textContent = '•';
+    unsaved.setAttribute('role', 'img');
+    unsaved.setAttribute('aria-label', 'Unsaved changes');
+    unsaved.title = 'Changes since the last file save';
+    label.append(unsaved);
     const timestamp = document.createElement('span');
     timestamp.className = 'example-description';
     button.append(timestamp);
@@ -248,6 +264,7 @@ export function setupExamplePicker(
       const original = examples.find((example) => example.name === item.key)?.source;
       const changed = original !== undefined && item.source !== original;
       modified.hidden = !changed;
+      unsaved.hidden = original !== undefined || item.source === item.baseline;
       const restore = row.querySelector<HTMLButtonElement>('.example-restore');
       if (restore) restore.hidden = !changed;
       timestamp.hidden = !item.updatedAt;

@@ -74,6 +74,10 @@ const engineNotice = document.querySelector<HTMLElement>('#engine-notice')!;
 const engineMessage = document.querySelector<HTMLElement>('#engine-message')!;
 const retryEngine = document.querySelector<HTMLButtonElement>('#retry-engine')!;
 retryEngine.addEventListener('click', () => {
+  if (retryEngine.dataset.restart === 'true') {
+    compiler.restart();
+    previewQueue.restart();
+  }
   clearTimeout(debounce);
   invalidateSource();
   void load(editor.source, documentName, true);
@@ -135,6 +139,7 @@ function setPreviewState(state: 'loading' | 'updating' | 'ready' | 'error' | 'un
 function setActivity(message: string, kind: 'info' | 'error' = 'info') {
   clearTimeout(activityTimer);
   activityStatus.textContent = message;
+  activityStatus.title = message;
   activityStatus.dataset.kind = kind;
   activityStatus.setAttribute('role', kind === 'error' ? 'alert' : 'status');
   activityStatus.hidden = !message;
@@ -343,7 +348,7 @@ async function formatSource() {
     if (editor.view.state.doc !== document || documentRevision !== revision) return;
     formatStatus.textContent = `Formatting failed: ${compilerDiagnostics(error, source, examplePicker.compilation().inputPath).map((item) => item.message).join('\n')}`;
     formatStatus.hidden = false;
-  } finally { formatButton.disabled = false; }
+  } finally { formatStatus.title = formatStatus.textContent ?? ''; formatButton.disabled = false; }
 }
 formatButton.addEventListener('click', () => void formatSource());
 ai = setupAiAssistant(
@@ -412,6 +417,7 @@ async function revealSelection() {
   await highlightSelection(true);
   if (revision !== documentRevision) return;
   showMobileView('preview');
+  viewport.reveal([...viewer.stage.querySelectorAll<SVGGraphicsElement>('.zf-source-selected')]);
   viewer.stage.focus({ preventScroll: true });
 }
 revealButton.addEventListener('click', () => void revealSelection());
@@ -464,13 +470,18 @@ updateExportLabel();
 function load(source: string, name: string, preserveViewport = false) {
   return previewQueue.run(() => loadPreview(source, name, preserveViewport));
 }
+let previewAttempt: symbol;
 async function loadPreview(source: string, name: string, preserveViewport: boolean) {
+  const attempt = previewAttempt = Symbol();
+  let slowTimer: ReturnType<typeof setTimeout> | undefined;
   const request = ++generation;
   viewer.setBusy(true);
   viewer.setMessage('');
   setPreviewState(viewer.stage.querySelector('svg') ? 'updating' : 'loading');
   engineNotice.hidden = true;
   retryEngine.hidden = true;
+  retryEngine.dataset.restart = 'false';
+  retryEngine.textContent = 'Retry preview';
   const startupTimer = !compiler.ready ? setTimeout(() => {
     if (request !== generation) return;
     engineNotice.setAttribute('role', 'status');
@@ -482,6 +493,15 @@ async function loadPreview(source: string, name: string, preserveViewport: boole
     clearTimeout(startupTimer);
     if (request !== generation) return;
     engineNotice.hidden = true;
+    slowTimer = setTimeout(() => {
+      if (attempt !== previewAttempt) return;
+      engineNotice.setAttribute('role', 'status');
+      engineMessage.textContent = 'The preview is taking longer than usual. You can keep editing, wait, or restart the engine to preview your latest source.';
+      engineNotice.hidden = false;
+      retryEngine.textContent = 'Restart preview';
+      retryEngine.dataset.restart = 'true';
+      retryEngine.hidden = false;
+    }, 15_000);
     const compiled = await compileSource(source);
     if (request !== generation) return;
     // D2 registers fonts at compile time for both text measurement and rendering.
@@ -549,6 +569,12 @@ async function loadPreview(source: string, name: string, preserveViewport: boole
     }
   } finally {
     clearTimeout(startupTimer);
+    clearTimeout(slowTimer);
+    if (attempt === previewAttempt && retryEngine.dataset.restart === 'true') {
+      engineNotice.hidden = true;
+      retryEngine.hidden = true;
+      retryEngine.dataset.restart = 'false';
+    }
     if (request === generation) viewer.setBusy(false);
   }
 }

@@ -78,6 +78,7 @@
           <div><dt>Select a focused shape’s source</dt><dd><kbd>Enter</kbd> or <kbd>Space</kbd></dd></div>
           <div><dt>Select a linked shape’s source</dt><dd><kbd>Alt</kbd> + <kbd>Enter</kbd></dd></div>
           <div><dt>Open a focused board link</dt><dd><kbd>Enter</kbd></dd></div>
+          <div><dt>Move between diagram shapes</dt><dd><kbd>←</kbd> <kbd>→</kbd> <kbd>↑</kbd> <kbd>↓</kbd></dd></div>
           <div><dt>Go to the parent board</dt><dd><kbd>Esc</kbd> or <kbd>Backspace</kbd></dd></div>
           <div><dt>Pan a zoomed diagram</dt><dd><kbd>Space</kbd> + drag</dd></div>
           <div><dt>Select source without opening a link</dt><dd><kbd>Alt</kbd> + click</dd></div>
@@ -121,11 +122,11 @@
         <div class="pane-title">
           <div>D2 source</div>
           <div class="pane-actions"><button id="format-source" class="button-quiet" title="Format D2 source (Shift+Alt+F)">Format</button><button id="save-file" class="button-primary" type="button" aria-describedby="draft-status recovery-info" aria-keyshortcuts="Meta+s Control+s">Save .d2</button></div>
-          <span id="draft-status" role="status"></span>
           <span id="recovery-info" class="zf-visually-hidden"></span>
         </div>
         <div id="work-status" role="group" aria-label="Diagram status">
           <div class="status-copy">
+            <span id="draft-status" role="status"></span>
             <div id="ready-summary"><span id="preview-status" role="status">Loading preview…</span><span id="lint-summary" role="status">Lint pending…</span></div>
             <div id="compile-error" role="alert" hidden><span id="compile-error-message"></span></div>
             <span id="format-status" role="status" hidden></span>

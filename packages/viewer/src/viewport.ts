@@ -2,6 +2,7 @@ type Box = { x: number; y: number; width: number; height: number };
 
 /** Zoom the rendered SVG itself so links and shape selection keep working. */
 export function setupViewport(stage: HTMLElement, host: HTMLElement) {
+  const touch = matchMedia('(pointer: coarse)').matches;
   const minZoom = 0.1;
   const maxZoom = 8;
   const zoomEpsilon = 0.001;
@@ -29,9 +30,10 @@ export function setupViewport(stage: HTMLElement, host: HTMLElement) {
   controls.append(out, amount, fit, inside);
   const hint = document.createElement('div');
   hint.className = 'zf-pan-hint';
-  hint.textContent = matchMedia('(pointer: coarse)').matches ? 'Drag to pan · Pinch to zoom' : 'Space + drag to pan · Scroll to zoom';
+  hint.textContent = touch ? 'Pinch to zoom · Drag to pan' : 'Space + drag to pan · Scroll to zoom';
   hint.hidden = true;
-  host.append(controls, hint);
+  stage.after(controls);
+  host.append(hint);
 
   let svg: SVGSVGElement | null = null;
   let base: Box | null = null;
@@ -76,7 +78,7 @@ export function setupViewport(stage: HTMLElement, host: HTMLElement) {
     amount.textContent = zoomed ? `${Math.round(currentScale * 100)}%` : 'Fit';
     amount.title = zoomed ? `${Math.round(currentScale * 100)}% of fitted size` : 'Diagram fitted to the available space';
     amount.setAttribute('aria-label', amount.title);
-    hint.hidden = !svg || currentScale <= 1 + zoomEpsilon;
+    hint.hidden = !svg || !touch && currentScale <= 1 + zoomEpsilon;
     out.disabled = !svg || currentScale <= minZoom + zoomEpsilon;
     inside.disabled = !svg || currentScale >= maxZoom - zoomEpsilon;
     fit.disabled = !svg || !zoomed;
@@ -93,6 +95,7 @@ export function setupViewport(stage: HTMLElement, host: HTMLElement) {
     box = { ...next, x, y };
     svg.setAttribute('viewBox', `${x} ${y} ${next.width} ${next.height}`);
     updateControls();
+    svg.dispatchEvent(new Event('zf-viewportchange'));
   }
   function svgPoint(clientX: number, clientY: number) {
     if (!svg) return null;
@@ -122,6 +125,80 @@ export function setupViewport(stage: HTMLElement, host: HTMLElement) {
     if (!matrix || !matrix.a || !matrix.d) return;
     setBox({ ...box, x: box.x - dx / matrix.a, y: box.y - dy / matrix.d });
   }
+  /** Frame targets with minimal movement; keep the current zoom whenever they fit. */
+  function reveal(targets: readonly SVGGraphicsElement[]) {
+    if (!svg || !base || !box || !targets.length || !stage.clientWidth || !stage.clientHeight) return;
+    const matrix = svg.getScreenCTM();
+    if (!matrix) return;
+    const inverse = matrix.inverse();
+    const bounds = targets.map((target) => target.getBoundingClientRect());
+    const start = new DOMPoint(Math.min(...bounds.map((b) => b.left)),
+      Math.min(...bounds.map((b) => b.top))).matrixTransform(inverse);
+    const end = new DOMPoint(Math.max(...bounds.map((b) => b.right)),
+      Math.max(...bounds.map((b) => b.bottom))).matrixTransform(inverse);
+    // The visible canvas includes letterboxing around a wide or tall viewBox.
+    // Frame against that actual viewport so keyboard navigation does not undo
+    // the user's zoom just to fit a shape inside the nominal viewBox height.
+    const viewport = svg.getBoundingClientRect();
+    const availableWidth = Math.max(1, viewport.width - 32) / Math.abs(matrix.a);
+    const availableHeight = Math.max(1, viewport.height - 32) / Math.abs(matrix.d);
+    const factor = Math.max(1, (end.x - start.x) / availableWidth, (end.y - start.y) / availableHeight);
+    const width = Math.min(base.width / minZoom, box.width * factor);
+    const height = width * base.height / base.width;
+    const centerX = Math.max(end.x - availableWidth * factor / 2,
+      Math.min(start.x + availableWidth * factor / 2, box.x + box.width / 2));
+    const centerY = Math.max(end.y - availableHeight * factor / 2,
+      Math.min(start.y + availableHeight * factor / 2, box.y + box.height / 2));
+    const x = centerX - width / 2;
+    const y = centerY - height / 2;
+    // Ignore subpixel measurement noise (notably SVG bounds in Firefox).
+    if (Math.max(Math.abs(x - box.x), Math.abs(width - box.width)) * Math.abs(matrix.a) > 0.25 ||
+      Math.abs(y - box.y) * Math.abs(matrix.d) > 0.25) setBox({ x, y, width, height });
+  }
+  function focusTargets() {
+    return [...stage.querySelectorAll<SVGGraphicsElement>('a[tabindex], [data-shape-id][tabindex]')]
+      .filter((node) => node.localName === 'a' || !node.closest('a'));
+  }
+  function resetFocus() {
+    const targets = focusTargets();
+    const focused = targets.find((node) => node === document.activeElement);
+    stage.tabIndex = focused ? -1 : 0;
+    stage.setAttribute('aria-description', 'Use arrow keys to move between shapes. Enter activates a shape. Tab leaves the diagram.');
+    for (const node of targets) node.setAttribute('tabindex', node === focused ? '0' : '-1');
+  }
+  stage.addEventListener('focusin', (event) => {
+    const targets = focusTargets();
+    const target = targets.find((node) => node === event.target || node.contains(event.target as Node));
+    stage.tabIndex = target ? -1 : 0;
+    for (const node of targets) node.setAttribute('tabindex', node === target ? '0' : '-1');
+    if (target) reveal([target]);
+  });
+  stage.addEventListener('keydown', (event) => {
+    if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey ||
+      !['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End'].includes(event.key)) return;
+    const targets = focusTargets();
+    if (!targets.length) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const active = targets.find((node) => node === document.activeElement);
+    let next = event.key === 'End' ? targets.at(-1) : targets[0];
+    if (active && event.key.startsWith('Arrow')) {
+      const origin = active.getBoundingClientRect();
+      const horizontal = event.key === 'ArrowLeft' || event.key === 'ArrowRight';
+      const sign = event.key === 'ArrowLeft' || event.key === 'ArrowUp' ? -1 : 1;
+      const candidates = targets.filter((node) => node !== active).map((node) => {
+        const bounds = node.getBoundingClientRect();
+        const dx = (bounds.left + bounds.right - origin.left - origin.right) / 2;
+        const dy = (bounds.top + bounds.bottom - origin.top - origin.bottom) / 2;
+        const forward = (horizontal ? dx : dy) * sign;
+        const across = Math.abs(horizontal ? dy : dx);
+        return { node, forward, score: Math.hypot(dx, dy) + across * 2 };
+      }).filter((item) => item.forward > 1).sort((a, b) => a.score - b.score);
+      next = candidates[0]?.node ?? active;
+    }
+    if (next) { reveal([next]); next.focus({ preventScroll: true }); }
+  });
+  new ResizeObserver(() => svg?.dispatchEvent(new Event('zf-viewportchange'))).observe(stage);
   function fittedBox(element: SVGSVGElement, fallback: Box): Box {
     const graph = element.querySelector<SVGSVGElement>(':scope > svg');
     const matrix = element.getScreenCTM();
@@ -169,6 +246,8 @@ export function setupViewport(stage: HTMLElement, host: HTMLElement) {
     pointers.clear();
     stage.classList.remove('zf-panning');
     updateControls();
+    resetFocus();
+    svg?.dispatchEvent(new Event('zf-viewportchange'));
   }
   stage.addEventListener('zf-boardchange', reset);
   reset();
@@ -237,6 +316,7 @@ export function setupViewport(stage: HTMLElement, host: HTMLElement) {
     suppressClick = false;
   }, { capture: true });
   return {
+    reveal,
     refresh() { if (activeKey) reset(); },
     copyDocument(key: string) {
       remember();

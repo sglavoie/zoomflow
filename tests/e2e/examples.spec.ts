@@ -6,7 +6,7 @@ async function ready(page: Page, id = 'root') {
   await expect(page.locator('#viewer')).toHaveAttribute('aria-busy', 'false');
 }
 
-async function choose(page: Page, title: string, name: string) {
+async function choose(page: Page, title: string | RegExp, name: string) {
   await page.locator('#example-picker summary').click();
   await page.locator('.example-menu').getByRole('button', { name: title }).and(page.locator('.example-option')).click();
   await expect(page.locator('#filename')).toHaveText(name);
@@ -53,7 +53,7 @@ test('keeps edited examples and uploaded files, including a file with an example
   await expect(page.locator('.zf-stage')).toContainText('Uploaded file');
   await source.fill('local: Edited upload');
   await choose(page, 'Service architecture', 'architecture.d2');
-  await choose(page, 'order.d2 Your file', 'order.d2');
+  await choose(page, /order\.d2.*Your file/, 'order.d2');
   await expect(page.locator('.zf-stage')).toContainText('Edited upload');
   await choose(page, 'Order flow', 'order.d2');
   await expect(page.locator('.zf-stage')).toContainText('My edited order');

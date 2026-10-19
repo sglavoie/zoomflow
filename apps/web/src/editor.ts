@@ -1,4 +1,5 @@
 import { basicSetup } from 'codemirror';
+import { codeFolding } from '@codemirror/language';
 import { EditorState, Prec, type Extension } from '@codemirror/state';
 import { EditorView, keymap } from '@codemirror/view';
 import { insertTab, isolateHistory, undo } from '@codemirror/commands';
@@ -18,6 +19,19 @@ export class SourceEditor {
   constructor(parent: HTMLElement, source: string, changed: () => void, selected: () => void, format: () => void, reveal: () => void) {
     this.extensions = [
         basicSetup, d2Language, lintGutter(), EditorView.lineWrapping,
+        codeFolding({ placeholderDOM: (view, unfold) => {
+          // Safari does not consistently dispatch clicks on non-editable spans.
+          const button = document.createElement('button');
+          button.type = 'button';
+          button.className = 'cm-foldPlaceholder';
+          button.textContent = '…';
+          button.title = 'Unfold code';
+          button.setAttribute('aria-label', 'Unfold code');
+          button.tabIndex = -1;
+          button.onmousedown = (event) => event.preventDefault();
+          button.onclick = (event) => { unfold(event); view.focus(); };
+          return button;
+        } }),
         Prec.high(keymap.of([
           { key: 'Tab', run: insertTab },
           { key: 'Mod-Shift-m', run: () => { this.showDiagnostics(); return true; } },
@@ -42,6 +56,8 @@ export class SourceEditor {
           '.cm-activeLine, .cm-activeLineGutter': { backgroundColor: '#8192a418' },
           '&.cm-focused .cm-selectionBackground, .cm-selectionBackground, ::selection': { backgroundColor: '#477de544' },
           '.cm-cursor': { borderLeftColor: 'currentColor' },
+          '.cm-foldPlaceholder': { minHeight: '0', padding: '0 4px', lineHeight: 'inherit',
+            fontFamily: 'inherit', fontSize: 'inherit', color: 'inherit', backgroundColor: '#8192a418' },
           '.cm-tooltip': { backgroundColor: 'Canvas', color: 'CanvasText' },
         }),
         EditorView.updateListener.of((update) => {

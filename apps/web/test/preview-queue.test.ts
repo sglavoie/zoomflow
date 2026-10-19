@@ -47,3 +47,23 @@ it('a failure settles its caller and does not strand the newest request', async 
   await Promise.all([failed, last]);
   expect(recovered).toBe(true);
 });
+
+it('restart releases blocked callers and late completion cannot drain or unlock the new queue', async () => {
+  const queue = createPreviewQueue();
+  const old = gate();
+  const fresh = gate();
+  const calls: string[] = [];
+  const first = queue.run(async () => { await old.promise; });
+  const pending = queue.run(async () => { calls.push('obsolete'); });
+  queue.restart();
+  await Promise.all([first, pending]);
+  const next = queue.run(async () => { calls.push('fresh'); await fresh.promise; });
+  old.resolve();
+  await Promise.resolve();
+  const last = queue.run(async () => { calls.push('last'); });
+  await Promise.resolve();
+  expect(calls).toEqual(['fresh']);
+  fresh.resolve();
+  await Promise.all([next, last]);
+  expect(calls).toEqual(['fresh', 'last']);
+});

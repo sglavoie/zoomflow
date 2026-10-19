@@ -84,3 +84,13 @@ intermediate edits are skipped; queue unit tests cover invalidation and failure 
 `export-visual.spec.ts` checks offline HTML at phone, short, landscape, and enlarged-text
 sizes in all three browsers, with eight light/dark Chromium visual baselines. It verifies
 that the diagram remains usable and its controls stay inside the viewport.
+
+`interaction-polish.spec.ts` checks minimal viewport framing on explicit reveal,
+spatial keyboard navigation and Tab exit on a large diagram, per-project unsaved
+indicators across undo/save/reload, actual D2 typing and folding, recovery from a
+stalled worker, and touch cues plus keyboard behavior in offline HTML. Language
+unit tests compile representative multiline labels and nested boards with the
+bundled D2 engine, alongside indentation and fold-range assertions.
+
+`viewport-polish.spec.ts` adds a touch-device visual baseline, checks that enlarged
+link hit areas do not overlap, and verifies reveal while the mobile preview is hidden.

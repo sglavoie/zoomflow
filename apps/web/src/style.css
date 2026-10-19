@@ -128,8 +128,8 @@ footer { color: var(--muted); padding: 8px 24px; font-size: 12px; }
 .pane-title { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 4px 12px; padding: 8px 16px 4px; font-weight: 600; }
 .pane-actions { display: flex; gap: 6px; }
 .pane-actions button { white-space: nowrap; }
-#work-status { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: var(--space-2); height: 44px; flex: 0 0 44px; padding: 0 16px 4px; font-size: 12px; color: var(--muted); }
-.status-copy { min-width: 0; max-height: 36px; overflow: auto; line-height: 18px; }
+#work-status { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: var(--space-2); height: 40px; flex: 0 0 40px; padding: 0 16px 4px; font-size: 12px; color: var(--muted); }
+.status-copy { min-width: 0; max-height: 36px; overflow: hidden; line-height: 18px; }
 #ready-summary { display: flex; flex-wrap: wrap; gap: 0 12px; }
 #work-status:has(#compile-error:not([hidden])) #ready-summary { display: none; }
 .diagnostic-actions { display: flex; max-width: 210px; gap: var(--space-2); align-items: center; }
@@ -276,3 +276,10 @@ footer { color: var(--muted); padding: 8px 24px; font-size: 12px; }
 #ready-summary:has(~ #activity-status:not([hidden])), #ready-summary:has(~ #format-status:not([hidden])) { display: none; }
 #draft-status[data-kind="error"] { color: var(--danger); }
 #reveal-source:disabled, #work-status:has(#compile-error:not([hidden])) #reveal-source { display: none; }
+
+/* One stable status row: routine file state yields to actionable feedback. */
+#draft-status { height: auto; line-height: 18px; }
+#work-status:has(#compile-error:not([hidden]), #activity-status:not([hidden]), #format-status:not([hidden]), #preview-status[data-state="loading"], #preview-status[data-state="updating"]) #draft-status { display: none; }
+#compile-error, #format-status, #activity-status { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.project-unsaved { color: var(--muted); font-size: 12px; white-space: nowrap; margin-left: auto; }
+.draft-unsaved { color: var(--accent); font-size: 18px; line-height: 1; flex-shrink: 0; }

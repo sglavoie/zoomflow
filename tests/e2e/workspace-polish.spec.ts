@@ -64,7 +64,7 @@ test('save shortcut writes to the chosen file and reports disk state beside Save
   expect(await page.evaluate(() => (window as typeof window & { savedSource?: string }).savedSource)).toBe('saved: Shortcut');
   await source(page).fill('saved: Changed again');
   await expect(page.locator('#draft-status')).toContainText('File has unsaved changes');
-  await expect(page.locator('.pane-title #draft-status')).toBeVisible();
+  await expect(page.locator('#work-status #draft-status')).toBeVisible();
 });
 
 test('download fallback is explicit and never claims a disk save or unavailable recovery', async ({ page }) => {

@@ -24,15 +24,25 @@ export function createCompiler(load = async (): Promise<Resources> => {
   let pending: Promise<Resources> | undefined;
   let resources: Resources | undefined;
   let disposed = false;
+  let revision = 0;
+  function reset() {
+    ++revision;
+    void resources?.d2.dispose();
+    resources = undefined;
+    pending = undefined;
+  }
   return {
     get ready() { return Boolean(resources); },
     get() {
+      if (disposed) return Promise.reject(new Error('Workspace closed'));
+      const request = revision;
       return pending ??= load().then((result) => {
-        if (disposed) { void result.d2.dispose(); throw new Error('Workspace closed'); }
+        if (disposed || request !== revision) { void result.d2.dispose(); throw new Error('Diagram engine restarted'); }
         resources = result;
         return result;
-      }).catch((error) => { pending = undefined; throw new CompilerStartupError(error); });
+      }).catch((error) => { if (request === revision) pending = undefined; throw new CompilerStartupError(error); });
     },
-    dispose() { disposed = true; void resources?.d2.dispose(); },
+    restart: reset,
+    dispose() { disposed = true; reset(); },
   };
 }

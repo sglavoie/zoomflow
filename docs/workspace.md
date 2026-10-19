@@ -35,6 +35,8 @@ followed by other drafts ordered by edit time, then built-in examples. It marks
 modified examples and shows edit timestamps and distinct draft numbers for same-name uploads.
 **Restore** resets an example after confirmation; opened file drafts
 can be removed from the dropdown. Project files are grouped under their folder name;
+unsaved files carry a dot and each project shows its unsaved-file count. These compare
+source with the last file-save baseline, independently of browser recovery.
 **Remove project** removes that project's browser drafts after confirmation and leaves disk files intact.
 Each document keeps its own undo history, selection, and editor scroll position
 while switching within the page. Restoring an example starts
@@ -96,14 +98,19 @@ child link that matches an ancestor's name suggests the corresponding `_` path.
 
 ## Edit and repair source
 
-Edit the syntax-highlighted D2 source in the CodeMirror pane for a live preview (350 ms debounce).
+Edit the syntax-highlighted D2 source in the CodeMirror pane for a live preview
+(350 ms debounce). Nested maps indent automatically, closing braces dedent, and the
+gutter folds multiline maps, including layers, scenarios, and steps. Braces in
+comments and multiline labels do not create folds.
 If compilation is already running, intermediate preview requests are replaced by the
 newest edit. The running compilation finishes, and only a current result is displayed.
 Click **Format** or press **Shift+Alt+F** in the editor to apply D2's automatic
 source formatting, including nested indentation. Formatting is one undoable edit
 and refreshes the preview. Invalid diagrams leave the source unchanged and show
 a formatting error; edits made while formatting is running are preserved.
-The compact status strip above the editor reports delayed progress and diagnostic counts.
+The compact, fixed-height status strip above the editor shares space between file
+state, delayed progress, and diagnostic counts. Longer compiler messages remain
+available in Diagnostics.
 Healthy preview and lint checks stay quiet, leaving one stable file-status message.
 Use **Diagnostics** to open the detailed list; the toolbar and editor stay in place
 through compilation failures and recovery.
@@ -119,7 +126,9 @@ preserve the current board, falling
 back to its nearest existing ancestor if it was removed. Click a shape to select
 its source identifier; selecting an identifier in the editor highlights its shape
 on the current board without navigating. Use **Reveal in diagram** or **⌘⇧Enter /
-Ctrl+Shift+Enter** to open the selected identifier's board. On phones, this also opens
+Ctrl+Shift+Enter** to open the selected identifier's board. Reveal brings the selected
+shape into view with minimal panning and zooms out only when needed to fit it. On
+phones, this also opens
 Preview. Linked shapes still navigate; Alt+click selects
 their source without navigating. Source links pause while edits are uncompiled,
 so an old diagram cannot select an outdated text range. Editor keyboard shortcuts,
@@ -179,12 +188,23 @@ See [font assets, license and renderer wiring](../fonts/README.md).
 Expanded tools scroll independently to leave room for the source editor. The mobile
 workspace follows the visible viewport when the software keyboard opens.
 
-Unlinked shapes with source locations are keyboard-focusable: press Enter or Space
+The diagram is one Tab stop. Use arrow keys to move spatially between shapes,
+Home/End for the first/last shape, and Tab to leave for the canvas controls. Focused
+shapes are brought into view. Unlinked shapes with source locations are
+keyboard-focusable: press Enter or Space
 to select their source. Alt+Enter selects a linked shape’s source without navigating.
 Recompiling the same board retains focus on a surviving shape. Wheel zoom normalizes
-pixel, line and page deltas; pinch zoom works from Fit.
+pixel, line and page deltas; pinch zoom works from Fit. Touch devices show the pinch
+hint even at Fit. Link badges remain legible when zoomed out, and touch hit areas
+expand into available whitespace without covering neighboring shapes. The same
+controls and link treatment ship in offline HTML.
 
 If the diagram engine fails to load, **Retry preview** starts it again without
 changing your source. Startup failures are separate from D2 diagnostics.
+
+If a running preview takes more than 15 seconds, **Restart preview** offers a fresh
+engine for the latest source. Waiting is also safe: there is no automatic restart.
+Restart preserves source, undo history, and the last good diagram while the new
+preview compiles.
 
 [Ask AI](ai.md) · [Back to the quick start](../README.md)

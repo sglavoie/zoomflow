@@ -15,7 +15,10 @@ compiler is still a large download (roughly 8.5 MB gzip).
 Preview requests run serially with one replaceable pending request. Source changes
 invalidate pending requests immediately, including during debounce; an already-running
 compilation finishes but cannot publish stale output. Formatting and AI validation
-retain their independent revision checks.
+retain their independent revision checks. After 15 seconds of compile/render work,
+the UI offers an explicit engine restart. Restart disposes the old D2 instance,
+releases queue callers, and invalidates old results before compiling the latest
+source. It does not restart slow work automatically.
 
 To compare sustained editing with and without preview coalescing, start `pnpm dev`
 and run `node spike/preview-throughput.mjs http://127.0.0.1:5173 600` (use the actual

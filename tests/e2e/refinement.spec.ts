@@ -97,7 +97,11 @@ test('header stays stable while saving and preferences survive reload', async ({
   const status = (await page.locator('#draft-status').boundingBox())!;
   const save = (await page.locator('#save-file').boundingBox())!;
   expect(status.y).toBeGreaterThanOrEqual(save.y + save.height);
-  expect(status.y - save.y - save.height).toBeLessThan(12);
+  const statusRow = (await page.locator('#work-status').boundingBox())!;
+  expect(statusRow.height).toBeLessThanOrEqual(40);
+  expect(status.y).toBeGreaterThanOrEqual(statusRow.y);
+  expect(status.y + status.height).toBeLessThanOrEqual(statusRow.y + statusRow.height);
+  expect(statusRow.y + statusRow.height).toBeLessThanOrEqual((await page.locator('#editor').boundingBox())!.y);
   await source(page).fill('a: Edited');
   expect(await page.locator('header').boundingBox()).toEqual(before);
   await expect(page.locator('#draft-status')).toHaveAttribute('data-recovery', 'saved');
