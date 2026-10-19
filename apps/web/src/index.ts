@@ -9,6 +9,7 @@ import { SourceEditor, compilerDiagnostics, lintDiagnostics } from './editor';
 import { diagramFonts } from './fonts';
 import { setupReference } from './reference';
 import { setupFullscreen } from './fullscreen';
+import { setupAiAssistant } from './ai-assistant';
 
 const viewer = new Viewer(document.querySelector<HTMLElement>('#viewer')!);
 setupFullscreen(viewer.stage);
@@ -98,6 +99,11 @@ async function formatSource() {
   } finally { formatButton.disabled = false; }
 }
 formatButton.addEventListener('click', () => void formatSource());
+setupAiAssistant(
+  () => ({ source: editor.source, name: documentName, board: viewer.currentBoard?.id ?? 'root', revision: generation }),
+  async (source) => { await compileSource(source); },
+  (source) => { editor.format(source); },
+);
 
 function updateLint() {
   if (!lintDocument || mappedSource !== editor.source) return;

@@ -49,6 +49,21 @@
         <div class="pane-title"><div>D2 source <span>Edit to update the preview</span></div><button id="format-source" title="Format D2 source (Shift+Alt+F)">Format</button></div>
         <div id="format-status" role="status" hidden></div>
         <div id="compile-error" role="alert" hidden></div>
+        <form id="ai-form" aria-label="AI diagram assistant">
+          <div class="ai-provider-row">
+            <label for="ai-provider">AI</label>
+            <select id="ai-provider"><option value="claude">Claude Code</option><option value="codex">Codex</option></select>
+          </div>
+          <label id="ai-claude-config" class="ai-field" for="ai-claude-config-dir">CLAUDE_CONFIG_DIR <span>Overrides the same name below</span>
+            <input id="ai-claude-config-dir" type="text" value="~/.claude" spellcheck="false" required />
+          </label>
+          <label class="ai-field" for="ai-environment">Environment <span>One NAME=value per line; values are literal</span>
+            <textarea id="ai-environment" rows="2" spellcheck="false" placeholder="EXAMPLE_KEY=value"></textarea>
+          </label>
+          <textarea id="ai-prompt" aria-label="Ask AI about this diagram" placeholder="Describe a change or ask about this diagram…" rows="2" required></textarea>
+          <button id="ai-send" type="submit">Send</button>
+        </form>
+        <div id="ai-status" role="status" aria-live="polite"></div>
         <div class="lint-controls">
           <span id="lint-summary" role="status">Lint pending…</span>
           <button id="show-diagnostics">Show diagnostics</button>
