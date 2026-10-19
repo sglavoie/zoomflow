@@ -1,3 +1,4 @@
+import { selectMenuOption } from './menu';
 import { expect, test } from '@playwright/test';
 
 for (const viewport of [{ width: 1280, height: 900 }, { width: 390, height: 844 }]) {
@@ -15,16 +16,24 @@ for (const viewport of [{ width: 1280, height: 900 }, { width: 390, height: 844 
     const split = await divider.getAttribute('aria-valuenow');
     const source = await page.locator('.cm-content').textContent();
     const toggle = page.getByRole('button', { name: 'Fullscreen', exact: true });
+    if (viewport.width <= 600) await page.locator('#workspace').evaluate((node) => { node.scrollTop = 120; });
     await toggle.scrollIntoViewIfNeeded();
     const before = await stage.boundingBox();
+    const workspaceScroll = await page.locator('#workspace').evaluate((node) => node.scrollTop);
     await toggle.click();
 
     const exit = page.getByRole('button', { name: 'Exit fullscreen', exact: true });
     await expect(exit).toHaveAttribute('aria-pressed', 'true');
-    expect(await stage.boundingBox()).toEqual({ x: 0, y: 0, ...viewport });
+    if (viewport.width > 600) expect(await stage.boundingBox()).toEqual({ x: 0, y: 0, ...viewport });
+    else {
+      const canvas = (await stage.boundingBox())!;
+      expect(canvas.width).toBe(viewport.width - 16);
+      expect(canvas.height).toBeGreaterThan(viewport.height - 80);
+      expect((await exit.boundingBox())!.y).toBeGreaterThanOrEqual(canvas.y + canvas.height);
+    }
     const buttonBox = (await exit.boundingBox())!;
-    expect(viewport.width - buttonBox.x - buttonBox.width).toBe(12);
-    expect(viewport.height - buttonBox.y - buttonBox.height).toBe(12);
+    expect(viewport.width - buttonBox.x - buttonBox.width).toBe(viewport.width > 600 ? 12 : 8);
+    expect(viewport.height - buttonBox.y - buttonBox.height).toBeLessThanOrEqual(16);
     for (const selector of ['header', 'footer', '#source-pane', '#d2-reference', '#reference-divider', '.zf-breadcrumbs', '.zf-message']) {
       await expect(page.locator(selector)).toBeHidden();
     }
@@ -35,6 +44,7 @@ for (const viewport of [{ width: 1280, height: 900 }, { width: 390, height: 844 
     await expect(toggle).toBeFocused();
     await expect(toggle).toHaveAttribute('aria-pressed', 'false');
     expect(await stage.boundingBox()).toEqual(before);
+    expect(await page.locator('#workspace').evaluate((node) => node.scrollTop)).toBe(workspaceScroll);
     await expect(page.locator('#source-pane')).toBeVisible();
     await expect(page.locator('#d2-reference')).toBeVisible();
     await expect(page.getByRole('searchbox', { name: 'Search D2 reference' })).toHaveValue('style');
@@ -65,7 +75,7 @@ test('nested board content stays centered with its own background', async ({ pag
   await page.goto('/');
   const stage = page.locator('.zf-stage');
   await expect(stage).toHaveAttribute('data-board', 'root');
-  await page.locator('#theme').selectOption('dark');
+  await selectMenuOption(page, '#theme', 'dark');
   await page.getByRole('button', { name: 'Fullscreen', exact: true }).click();
 
   const assertBoard = async () => {
@@ -95,7 +105,7 @@ test('nested board content stays centered with its own background', async ({ pag
   await expect(stage).toHaveAttribute('data-board', 'root.layers.checkout.layers.charge');
   await assertBoard();
   await page.getByRole('button', { name: 'Exit fullscreen', exact: true }).click();
-  await page.locator('#theme').selectOption('light');
+  await selectMenuOption(page, '#theme', 'light');
   await page.getByRole('button', { name: 'Fullscreen', exact: true }).click();
   await assertBoard();
 });

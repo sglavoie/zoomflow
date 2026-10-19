@@ -18,6 +18,9 @@ button:focus-visible,.zf-stage:focus-visible,.zf-stage a:focus-visible{outline:2
 .zf-stage>svg{display:block;width:100%;height:100%;max-width:100%;max-height:100%;touch-action:none}
 .zf-stage a,.zf-stage [data-shape-id]{cursor:pointer}
 .zf-stage a[data-missing]{outline:2px dashed #d64e52}
+.zf-link-hint{position:absolute;top:12px;left:12px;max-width:calc(100% - 24px);padding:6px 10px;border-radius:6px;background:#203044;color:#fff;font-size:12px;pointer-events:none;overflow-wrap:anywhere}
+.zf-link-hint[hidden]{display:none}
+.zf-stage a:not([data-missing]):hover{outline:2px solid var(--zf-focus);outline-offset:3px}
 .zf-stage.zf-panning{cursor:grabbing}
 .zf-stage.zf-pan-ready *,.zf-stage.zf-pan-ready{cursor:grab!important}
 .zf-stage.zf-panning *,.zf-stage.zf-panning{cursor:grabbing!important}
@@ -25,5 +28,5 @@ button:focus-visible,.zf-stage:focus-visible,.zf-stage a:focus-visible{outline:2
 .zf-zoom-controls button{border:0;min-width:32px;padding:5px}
 .zf-zoom-controls span{min-width:44px;text-align:center;font-size:12px}
 footer{padding:10px 24px;color:var(--zf-muted);font-size:12px}
-@media(max-width:600px){header{padding:10px 16px}main{padding:8px 16px}.zf-stage-area{min-height:320px}footer{padding:10px 16px}}
+@media(max-width:600px){header{padding:10px 16px}main{padding:8px 16px}.zf-stage-area{min-height:320px;display:flex;flex-direction:column;gap:6px}.zf-zoom-controls{position:static;align-self:flex-start;box-shadow:none}footer{padding:10px 16px}}
 `;

@@ -10,6 +10,7 @@
       <strong>Zoomflow</strong>
       <div class="header-controls">
         <label class="file-button">Open .d2<input id="file" type="file" accept=".d2,text/plain" /></label>
+        <div class="document-control">
         <details id="example-picker">
           <summary aria-label="Choose a diagram" title="Choose a built-in example or return to your file">
             <span id="filename">order.d2</span><span class="picker-chevron" aria-hidden="true">⌄</span>
@@ -22,10 +23,11 @@
           </section>
         </details>
         <span id="draft-status" role="status"></span>
-        <button id="save-source" type="button">Download source (.d2)</button>
+        </div>
         <div id="header-more">
-          <button id="header-more-toggle" type="button" aria-expanded="true" aria-controls="header-more-content">Export &amp; theme</button>
-          <div id="header-more-content" class="header-more-content">
+          <button id="header-more-toggle" type="button" aria-expanded="false" aria-controls="header-more-content">Export &amp; theme</button>
+          <div id="header-more-content" class="header-more-content" hidden>
+            <button id="save-source" type="button" aria-label="Download source (.d2)">Download .d2 source</button>
             <label>Export <select id="export-format"><option value="svg">Current board SVG</option><option value="png">Current board PNG</option><option value="zip">All boards ZIP (SVG)</option><option value="html">Single-file HTML</option></select></label>
             <button id="export" disabled>Download SVG</button>
             <label>Theme <select id="theme"><option value="system">System</option><option value="light">Light</option><option value="dark">Dark</option></select></label>
@@ -62,10 +64,12 @@
           <span id="format-status" role="status" hidden></span>
           <span id="activity-status" role="status" hidden></span>
         </div>
-        <div id="compile-error" role="alert" hidden></div>
+        <div id="compile-error" role="alert" hidden><span id="compile-error-message"></span> <button id="go-to-error" type="button">Go to error</button></div>
         <div class="source-tools">
         <details id="ai-assistant">
           <summary>Ask AI about this diagram</summary>
+          <p id="ai-availability" role="status">Checking local AI availability…</p>
+          <button id="ai-retry" type="button" hidden>Check again</button>
           <form id="ai-form" aria-label="AI diagram assistant">
             <div class="ai-provider-row">
               <label for="ai-provider">AI</label>
@@ -79,8 +83,8 @@
                 <textarea id="ai-environment" rows="2" spellcheck="false" placeholder="EXAMPLE_KEY=value"></textarea>
               </label>
             </details>
-            <textarea id="ai-prompt" aria-label="Ask AI about this diagram" placeholder="Describe a change or ask about this diagram…" rows="2" required></textarea>
-            <button id="ai-send" type="submit">Send</button>
+            <textarea id="ai-prompt" aria-label="Ask AI about this diagram" placeholder="Describe a change or ask about this diagram…" rows="2" required disabled></textarea>
+            <div class="ai-actions"><span id="ai-elapsed" aria-live="off"></span><button id="ai-cancel" type="button" hidden>Cancel</button><button id="ai-send" type="submit" disabled>Send</button></div>
           </form>
         </details>
         <details id="lint-details">
@@ -92,6 +96,7 @@
         </details>
         </div>
         <div id="ai-status" role="status" aria-live="polite"></div>
+        <button id="ai-undo" type="button" hidden>Undo AI change</button>
         <div id="editor"></div>
       </section>
     </div>

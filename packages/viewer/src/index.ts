@@ -1,5 +1,6 @@
 import { classifyHref, indexBoards, parentContext, type Board, type Diagram, type LintDiagnostic } from '@zoomflow/core';
 import { restoreMissingLinks } from './missing-links';
+import { decorateLinks } from './link-cues';
 import { renderParentContext, simplifyTrail } from './navigation';
 
 export type RenderBoard = (target: string) => Promise<string>;
@@ -219,6 +220,7 @@ export class Viewer {
       const keepFocus = document.activeElement === active;
       const sameBoard = id === this.current;
       this.stage.replaceChildren(content);
+      decorateLinks(content, this.boards);
       this.syncBackground(this.stage);
       if (fade) void this.fadeIn(content);
       this.current = id;

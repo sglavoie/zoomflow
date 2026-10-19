@@ -49,7 +49,7 @@ test('bundled stdlib and live lint diagnostics recover, with optional backlink w
   await expect(page.locator('.cm-panel-lint')).toContainText('orphan-board');
   await open('broken: {');
   await expect(page.locator('#compile-error')).toBeVisible();
-  await expect(page.locator('#lint-summary')).toContainText('Lint unavailable');
+  await expect(page.locator('#lint-summary')).toContainText('source error');
   await expect(page.locator('.cm-panel-lint')).not.toContainText('dangling-link');
   await open(fixture('labelled'));
   await expect(page.locator('#lint-summary')).toHaveText('No lint issues');

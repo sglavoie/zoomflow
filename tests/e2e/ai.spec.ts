@@ -93,3 +93,61 @@ test('CLI failures are shown beside the prompt', async ({ page }) => {
   await expect(page.locator('#ai-status')).toContainText('codex is not installed');
   await expect(page.getByRole('button', { name: 'Send' })).toBeEnabled();
 });
+
+test('AI availability is checked before composing a prompt and can be retried', async ({ page }) => {
+  let available = false;
+  await page.route('**/api/ai/status', (route) => route.fulfill({
+    status: available ? 200 : 404, contentType: 'application/json', body: JSON.stringify({ available }),
+  }));
+  await page.goto('/');
+  await page.locator('#ai-assistant > summary').click();
+  await expect(page.locator('#ai-availability')).toContainText('pnpm dev');
+  await expect(page.locator('#ai-prompt')).toBeDisabled();
+  await expect(page.locator('#ai-send')).toBeDisabled();
+  available = true;
+  await page.getByRole('button', { name: 'Check again' }).click();
+  await expect(page.locator('#ai-prompt')).toBeEnabled();
+  await expect(page.locator('#ai-availability')).toContainText('local CLI');
+});
+
+test('cancel keeps the prompt and ignores a late AI response', async ({ page }) => {
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => { release = resolve; });
+  await page.route('**/api/ai', async (route) => {
+    await gate;
+    await route.fulfill({ contentType: 'application/json', body: JSON.stringify({ reply: 'Changed.', source: 'late: Wrong' }) }).catch(() => {});
+  });
+  await page.goto('/');
+  await expect(page.locator('#preview-status')).toHaveText('Preview ready');
+  await page.locator('#ai-assistant > summary').click();
+  await page.locator('#ai-prompt').fill('Make a change');
+  await page.locator('#ai-send').click();
+  await expect(page.locator('#ai-elapsed')).toHaveText(/[1-9]\d*s elapsed/);
+  await page.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await expect(page.locator('#ai-status')).toContainText('canceled');
+  release();
+  await expect(page.locator('#ai-send')).toBeEnabled();
+  await expect(page.locator('#ai-prompt')).toHaveValue('Make a change');
+  await expect(page.locator('.zf-stage')).toContainText('Checkout');
+  await expect(page.getByRole('button', { name: 'Undo AI change' })).toBeHidden();
+});
+
+test('explicit AI undo restores source and is retired after subsequent edits', async ({ page }) => {
+  await page.route('**/api/ai', (route) => route.fulfill({ contentType: 'application/json',
+    body: JSON.stringify({ reply: 'Changed.', source: 'ai: Replacement' }) }));
+  await page.goto('/');
+  await expect(page.locator('#preview-status')).toHaveText('Preview ready');
+  await page.locator('#ai-assistant > summary').click();
+  const send = async () => {
+    await page.locator('#ai-prompt').fill('Replace the diagram');
+    await page.locator('#ai-send').click();
+    await expect(page.locator('.zf-stage')).toContainText('Replacement');
+  };
+  await send();
+  await page.getByRole('button', { name: 'Undo AI change' }).click();
+  await expect(page.locator('.zf-stage')).toContainText('Checkout');
+  await send();
+  await page.getByRole('textbox', { name: 'D2 source', exact: true }).fill('mine: Later edit');
+  await expect(page.getByRole('button', { name: 'Undo AI change' })).toBeHidden();
+  await expect(page.locator('.zf-stage')).toContainText('Later edit');
+});

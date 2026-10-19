@@ -1,3 +1,4 @@
+import { selectMenuOption, downloadExport } from './menu';
 import { expect, test, type Page } from '@playwright/test';
 
 async function ready(page: Page, id = 'root') {
@@ -7,7 +8,7 @@ async function ready(page: Page, id = 'root') {
 
 async function choose(page: Page, title: string, name: string) {
   await page.locator('#example-picker summary').click();
-  await page.locator('#example-options').getByRole('button', { name: title }).click();
+  await page.locator('.example-menu').getByRole('button', { name: title }).and(page.locator('.example-option')).click();
   await expect(page.locator('#filename')).toHaveText(name);
   await ready(page);
   await expect(page.locator('#compile-error')).toBeHidden();
@@ -24,7 +25,7 @@ test('examples switch source and preview, start at root and export under their o
   await expect(page.getByRole('navigation', { name: 'Breadcrumb' }).getByRole('button')).toHaveText(['Root']);
   await expect(page.locator('#lint-summary')).toHaveText('No lint issues');
   const pending = page.waitForEvent('download');
-  await page.locator('#export').click();
+  await downloadExport(page);
   expect((await pending).suggestedFilename()).toBe('schema-root.svg');
   await choose(page, 'Layers, scenarios & steps', 'boards.d2');
   await page.locator('.zf-stage a[href="root.scenarios.failure"]').click();
@@ -91,7 +92,7 @@ test('picker supports keyboard, Escape without navigating, outside dismissal, an
   await expect(page.locator('#header-more-toggle')).toHaveAttribute('aria-expanded', 'false');
   await page.locator('#header-more-toggle').click();
   await expect(page.locator('#theme')).toBeVisible();
-  await page.selectOption('#theme', 'dark');
+  await selectMenuOption(page, '#theme', 'dark');
   await summary.click();
   const menu = page.locator('.example-menu');
   await expect(menu).toBeVisible();

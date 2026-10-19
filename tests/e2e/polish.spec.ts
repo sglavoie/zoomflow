@@ -1,3 +1,4 @@
+import { selectMenuOption, downloadExport, downloadSource } from './menu';
 import { readFile } from 'node:fs/promises';
 import { pathToFileURL } from 'node:url';
 import { expect, test } from '@playwright/test';
@@ -29,7 +30,7 @@ test('draft recovers after reload and D2 source downloads', async ({ page }) => 
   await expect(page.locator('.zf-stage')).toContainText('Recovered');
   const [download] = await Promise.all([
     page.waitForEvent('download'),
-    page.getByRole('button', { name: 'Download source (.d2)' }).click(),
+    downloadSource(page),
   ]);
   expect(download.suggestedFilename()).toBe('order.d2');
   expect(await readFile(await download.path(), 'utf8')).toBe('draft: Recovered');
@@ -71,7 +72,7 @@ test('D2 syntax tokens remain visible in light and dark themes', async ({ page }
   await expect(page.locator('.zf-token-url').first()).toBeVisible();
   await expect(page.locator('.zf-token-operator').first()).toBeVisible();
   const light = await page.locator('.zf-token-comment').first().evaluate((node) => getComputedStyle(node).color);
-  await page.locator('#theme').selectOption('dark');
+  await selectMenuOption(page, '#theme', 'dark');
   const dark = await page.locator('.zf-token-comment').first().evaluate((node) => getComputedStyle(node).color);
   expect(dark).not.toBe(light);
 });
@@ -85,7 +86,7 @@ test('invalid current file cannot export the previous diagram', async ({ page })
   await expect(page.locator('#preview-status')).toContainText('Preview out of date');
   await page.getByRole('textbox', { name: 'D2 source' }).fill('fixed: Current file');
   await expect(page.locator('#export')).toBeEnabled();
-  const [download] = await Promise.all([page.waitForEvent('download'), page.locator('#export').click()]);
+  const [download] = await Promise.all([page.waitForEvent('download'), downloadExport(page)]);
   expect(download.suggestedFilename()).toBe('bad-root.svg');
   expect(await readFile(await download.path(), 'utf8')).toContain('Current file');
 });
@@ -108,7 +109,7 @@ test('source changes cancel an export already embedding images', async ({ page }
   });
   let downloads = 0;
   page.on('download', () => { ++downloads; });
-  await page.locator('#export').click();
+  await downloadExport(page);
   await requestSeen;
   await page.getByRole('textbox', { name: 'D2 source' }).fill('new: Current source');
   release();
@@ -199,8 +200,8 @@ test('keyboard board navigation retains focus and announces the new board', asyn
 test('exported HTML retains keyboard focus during drill-down', async ({ page, context }, info) => {
   await page.goto('/');
   await expect(page.locator('#export')).toBeEnabled();
-  await page.locator('#export-format').selectOption('html');
-  const [download] = await Promise.all([page.waitForEvent('download'), page.locator('#export').click()]);
+  await selectMenuOption(page, '#export-format', 'html');
+  const [download] = await Promise.all([page.waitForEvent('download'), downloadExport(page)]);
   const path = info.outputPath(download.suggestedFilename());
   await download.saveAs(path);
   const offline = await context.newPage();

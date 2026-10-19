@@ -1,5 +1,5 @@
-import { afterEach, expect, it } from 'vitest';
-import { chmod, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { afterEach, expect, it, vi } from 'vitest';
+import { chmod, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { runAi } from '../ai-server';
@@ -67,4 +67,23 @@ it('reports CLI failure and malformed output', async () => {
   await expect(runAi({ ...request, provider: 'codex' })).rejects.toThrow('codex failed: Authentication failed');
   await fakeCommand('codex', 'not JSON');
   await expect(runAi({ ...request, provider: 'codex' })).rejects.toThrow();
+});
+
+it('cancels a running CLI process when its request is aborted', async () => {
+  fakeBin = await mkdtemp(join(tmpdir(), 'zoomflow-ai-test-'));
+  const pidPath = join(fakeBin, 'pid');
+  const command = join(fakeBin, 'codex');
+  await writeFile(command, `#!/usr/bin/env node\nrequire('node:fs').writeFileSync(${JSON.stringify(pidPath)}, String(process.pid));\nsetInterval(() => {}, 1000);\n`);
+  await chmod(command, 0o755);
+  process.env.PATH = `${fakeBin}:${originalPath}`;
+  const controller = new AbortController();
+  const result = runAi({ ...request, provider: 'codex' }, controller.signal);
+  const rejected = expect(result).rejects.toThrow('canceled');
+  try {
+    let pid = 0;
+    await vi.waitFor(async () => { pid = Number(await readFile(pidPath, 'utf8')); expect(pid).toBeGreaterThan(0); });
+    controller.abort();
+    await rejected;
+    expect(() => process.kill(pid, 0)).toThrow();
+  } finally { controller.abort(); }
 });

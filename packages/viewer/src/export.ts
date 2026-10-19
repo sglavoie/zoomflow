@@ -2,6 +2,7 @@ import type { ExportBoard } from '@zoomflow/core';
 import { restoreMissingLinks } from './missing-links';
 import { renderParentContext, simplifyTrail } from './navigation';
 import { setupViewport } from './viewport';
+import { decorateLinks } from './link-cues';
 
 const placeholder = 'data:image/svg+xml;base64,' + btoa('<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64"><rect width="64" height="64" fill="#eee"/><path d="M8 8L56 56M56 8L8 56" stroke="#999" stroke-width="3"/></svg>');
 
@@ -87,7 +88,7 @@ export async function rasterizeSvg(svg: string): Promise<Blob> {
 // Keep this runtime self-contained: its compiled function body is embedded in HTML.
 // It consumes the same board IDs, hashes, parent and visited-trail model as Viewer.
 function offlineViewer(restoreLinks: typeof restoreMissingLinks, normalizeTrail: typeof simplifyTrail,
-  renderContext: typeof renderParentContext, makeViewport: typeof setupViewport) {
+  renderContext: typeof renderParentContext, makeViewport: typeof setupViewport, decorate: typeof decorateLinks) {
   const boards: ExportBoard[] = JSON.parse(document.getElementById('zoomflow-data')!.textContent!);
   const byId = new Map(boards.map((board) => [board.id, board]));
   const stage = document.querySelector<HTMLElement>('.zf-stage')!;
@@ -138,6 +139,7 @@ function offlineViewer(restoreLinks: typeof restoreMissingLinks, normalizeTrail:
         } else { link.removeAttribute('href'); link.removeAttribute('xlink:href'); }
       }
       stage.replaceChildren(svg);
+      decorate(svg, byId);
       const background = svg.querySelector('svg > rect');
       stage.style.backgroundColor = background ? getComputedStyle(background).fill : '';
     }
@@ -195,5 +197,5 @@ function offlineViewer(restoreLinks: typeof restoreMissingLinks, normalizeTrail:
 }
 
 export function offlineViewerScript(): string {
-  return `(${offlineViewer.toString()})(${restoreMissingLinks.toString()}, ${simplifyTrail.toString()}, ${renderParentContext.toString()}, ${setupViewport.toString()});`;
+  return `(${offlineViewer.toString()})(${restoreMissingLinks.toString()}, ${simplifyTrail.toString()}, ${renderParentContext.toString()}, ${setupViewport.toString()}, ${decorateLinks.toString()});`;
 }

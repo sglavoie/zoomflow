@@ -11,9 +11,13 @@ export function setupFullscreen(stage: HTMLElement) {
   area.append(stage, button);
 
   let fullscreen = false;
+  const workspace = document.querySelector<HTMLElement>('#workspace')!;
+  let workspaceScroll = 0;
   function setFullscreen(value: boolean) {
+    if (value && !fullscreen) workspaceScroll = workspace.scrollTop;
     fullscreen = value;
     document.body.classList.toggle('diagram-fullscreen', value);
+    if (!value) workspace.scrollTop = workspaceScroll;
     button.textContent = value ? 'Exit fullscreen' : 'Fullscreen';
     button.setAttribute('aria-pressed', String(value));
     button.focus({ preventScroll: true });

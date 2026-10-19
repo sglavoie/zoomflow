@@ -16,20 +16,30 @@ const viewer = new Viewer(document.querySelector<HTMLElement>('#viewer')!);
 setupViewport(viewer.stage, setupFullscreen(viewer.stage));
 setupReference();
 setupSourceSplit();
-const narrowLayout = matchMedia('(max-width: 600px)');
 const moreToggle = document.querySelector<HTMLButtonElement>('#header-more-toggle')!;
 const moreContent = document.querySelector<HTMLElement>('#header-more-content')!;
+const more = document.querySelector<HTMLElement>('#header-more')!;
 function setMoreOpen(open: boolean) {
   moreContent.hidden = !open;
   moreToggle.setAttribute('aria-expanded', String(open));
 }
 moreToggle.addEventListener('click', () => setMoreOpen(Boolean(moreContent.hidden)));
-function setCompactControls() {
-  setMoreOpen(!narrowLayout.matches);
+document.addEventListener('click', (event) => { if (event.target instanceof Node && !more.contains(event.target)) setMoreOpen(false); });
+more.addEventListener('focusout', (event) => { if (event.relatedTarget instanceof Node && !more.contains(event.relatedTarget)) setMoreOpen(false); });
+more.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape' && !moreContent.hidden) {
+    event.preventDefault(); event.stopPropagation(); setMoreOpen(false); moreToggle.focus();
+  }
+});
+function restorePreference(select: HTMLSelectElement, key: string) {
+  try {
+    const saved = localStorage.getItem(key);
+    if ([...select.options].some((option) => option.value === saved)) select.value = saved!;
+  } catch { /* Preferences are optional when storage is unavailable. */ }
+  select.addEventListener('change', () => { try { localStorage.setItem(key, select.value); } catch { /* Optional storage. */ } });
 }
-narrowLayout.addEventListener('change', setCompactControls);
-setCompactControls();
 const theme = document.querySelector<HTMLSelectElement>('#theme')!;
+restorePreference(theme, 'zoomflow.theme');
 const media = matchMedia('(prefers-color-scheme: dark)');
 function updateTheme() {
   document.documentElement.dataset.theme = theme.value === 'system'
@@ -44,6 +54,8 @@ updateTheme();
 // so the shell and loading state paint before the compiler is downloaded.
 const compiler = import('@d2lang/d2').then(({ D2 }) => new D2());
 let generation = 0;
+let documentRevision = 0;
+let ai: ReturnType<typeof setupAiAssistant> | undefined;
 let documentName = examples[0].name;
 let sourceMap: ShapeSource[] = [];
 let mappedSource: string | undefined;
@@ -59,11 +71,25 @@ const formatStatus = document.querySelector<HTMLElement>('#format-status')!;
 const activityStatus = document.querySelector<HTMLElement>('#activity-status')!;
 const diagnosticsButton = document.querySelector<HTMLButtonElement>('#show-diagnostics')!;
 let activeDiagnostics: Diagnostic[] = [];
+let previewTimer: ReturnType<typeof setTimeout> | undefined;
 function setPreviewState(state: 'loading' | 'updating' | 'ready' | 'error') {
+  if (state === 'updating') {
+    if (previewTimer || previewStatus.dataset.state === 'updating') return;
+    previewTimer = setTimeout(() => {
+      previewTimer = undefined;
+      previewStatus.dataset.state = 'updating';
+      previewStatus.textContent = 'Updating preview…';
+      lintSummary.textContent = 'Checking diagnostics…';
+      viewer.stage.dataset.previewState = 'updating';
+    }, 700);
+    return;
+  }
+  clearTimeout(previewTimer);
+  previewTimer = undefined;
   previewStatus.dataset.state = state;
-  previewStatus.textContent = { loading: 'Loading preview…', updating: 'Updating preview…',
+  previewStatus.textContent = { loading: 'Loading preview…',
     ready: 'Preview ready', error: 'Preview out of date' }[state];
-  if (state === 'updating' || state === 'error') viewer.stage.dataset.previewState = state === 'error' ? 'stale' : 'updating';
+  if (state === 'error') viewer.stage.dataset.previewState = 'stale';
   else delete viewer.stage.dataset.previewState;
 }
 function setActivity(message: string, kind: 'info' | 'error' = 'info') {
@@ -79,29 +105,35 @@ function setEditorDiagnostics(diagnostics: Diagnostic[]) {
   diagnosticsButton.textContent = diagnostics.length ? `Review ${diagnostics.length} diagnostic${diagnostics.length === 1 ? '' : 's'}` : 'Review diagnostics';
 }
 let lintDocument: CompileResponse | undefined;
-const editor = new SourceEditor(document.querySelector<HTMLElement>('#editor')!, examples[0].source, () => {
+function invalidateSource() {
   // Invalidate immediately, including requests still awaiting WASM/render startup.
   ++generation;
+  ++documentRevision;
+  ai?.sourceChanged();
+  viewer.setBusy(true);
   formatStatus.hidden = true;
   viewer.cancelPendingRender();
   sourceMap = [];
   lintDocument = undefined;
-  lintSummary.textContent = 'Lint pending…';
   setEditorDiagnostics([]);
   viewer.highlightShapes([]);
   documentExport = undefined;
   exportButton.disabled = true;
   setPreviewState('updating');
   setActivity('');
+  document.querySelector<HTMLButtonElement>('#go-to-error')!.disabled = true;
+}
+const editor = new SourceEditor(document.querySelector<HTMLElement>('#editor')!, examples[0].source, () => {
+  invalidateSource();
   examplePicker.updateCurrent(editor.source);
   clearTimeout(debounce);
   debounce = setTimeout(() => void load(editor.source, documentName, true), 350);
 }, () => void highlightSelection(true), () => void formatSource());
 
-const examplePicker = setupExamplePicker(() => editor.source, (source, name) => {
+const examplePicker = setupExamplePicker(() => editor.source, (source, name, key, reset) => {
   // Example changes start at their overview; live edits still preserve the route.
   history.replaceState(null, '', `${location.pathname}${location.search}#/`);
-  void replaceDocument(source, name);
+  void replaceDocument(source, name, key, reset);
 }, (dirty, recoveryAvailable, savePending, hasDraft, downloadRequested) => {
   draftStatus.textContent = downloadRequested ? 'Source download started'
     : !recoveryAvailable ? 'Browser storage unavailable · download source'
@@ -110,7 +142,7 @@ const examplePicker = setupExamplePicker(() => editor.source, (source, name) => 
   draftStatus.title = recoveryAvailable
     ? 'Browser drafts can be cleared. Download the source to keep a copy outside this browser.'
     : 'Browser draft recovery is unavailable. Download the source to keep your changes.';
-});
+}, (key) => editor.forget(key));
 
 function download(blob: Blob, name: string) {
   const url = URL.createObjectURL(blob);
@@ -129,9 +161,11 @@ document.querySelector<HTMLButtonElement>('#save-source')!.addEventListener('cli
   setActivity(`Source download started: ${name}`);
 });
 
-async function replaceDocument(source: string, name: string) {
+async function replaceDocument(source: string, name: string, key: string, reset = false) {
   documentName = name;
-  editor.replace(source);
+  editor.open(key, source, reset);
+  invalidateSource();
+  errorBanner.hidden = true;
   clearTimeout(debounce);
   await load(source, name);
 }
@@ -149,6 +183,7 @@ async function compileSource(source: string) {
 
 async function formatSource() {
   if (formatButton.disabled) return;
+  const revision = documentRevision;
   const document = editor.view.state.doc;
   const source = editor.source;
   formatButton.disabled = true;
@@ -157,23 +192,24 @@ async function formatSource() {
   try {
     const compiled = mappedSource === source && lintDocument ? lintDocument : await compileSource(source);
     // Edits or opening another file invalidate this request, even after undo.
-    if (editor.view.state.doc !== document) return;
+    if (editor.view.state.doc !== document || documentRevision !== revision) return;
     const formatted = compiled.fs[compiled.inputPath];
     if (typeof formatted !== 'string') throw new Error('D2 did not return formatted source.');
     formatStatus.textContent = editor.format(formatted) ? 'Source formatted.' : 'Source is already formatted.';
     formatStatus.hidden = false;
   } catch (error) {
-    if (editor.view.state.doc !== document) return;
+    if (editor.view.state.doc !== document || documentRevision !== revision) return;
     formatStatus.textContent = `Formatting failed: ${compilerDiagnostics(error, source).map((item) => item.message).join('\n')}`;
     formatStatus.hidden = false;
   } finally { formatButton.disabled = false; }
 }
 formatButton.addEventListener('click', () => void formatSource());
-setupAiAssistant(
-  () => ({ source: editor.source, name: documentName, board: viewer.currentBoard?.id ?? 'root', revision: generation }),
+ai = setupAiAssistant(
+  () => ({ source: editor.source, name: documentName, board: viewer.currentBoard?.id ?? 'root', revision: documentRevision }),
   async (source) => { await compileSource(source); },
   (source) => { editor.format(source); },
   (message, kind) => setActivity(message, kind),
+  () => editor.undo(),
 );
 
 function updateLint() {
@@ -192,6 +228,9 @@ diagnosticsButton.addEventListener('click', () => {
   editor.select(first, true);
   editor.showDiagnostics();
 });
+document.querySelector('#go-to-error')!.addEventListener('click', () => {
+  if (activeDiagnostics[0]) editor.select(activeDiagnostics[0], true);
+});
 
 async function highlightSelection(navigate: boolean) {
   if (mappedSource !== editor.source) return;
@@ -206,7 +245,8 @@ async function highlightSelection(navigate: boolean) {
 viewer.stage.addEventListener('zf-boardchange', () => void highlightSelection(false));
 viewer.stage.addEventListener('click', (event) => {
   if (mappedSource !== editor.source) return;
-  const shape = event.target instanceof Element ? event.target.closest<SVGElement>('[data-shape-id]') : null;
+  const shape = event.target instanceof Element ? event.target.closest<SVGElement>('[data-shape-id]')
+    ?? event.target.closest('a')?.querySelector<SVGElement>('[data-shape-id]') : null;
   const entry = shape && sourceMap.find((item) => item.board === viewer.currentBoard?.id && item.shape === shape.dataset.shapeId);
   if (!entry) return;
   const linked = Boolean(shape.closest('a'));
@@ -217,6 +257,7 @@ viewer.stage.addEventListener('click', (event) => {
 let documentExport: { diagram: Diagram; render: RenderBoard; name: string; diagnostics: LintDiagnostic[] } | undefined;
 const exportButton = document.querySelector<HTMLButtonElement>('#export')!;
 const exportFormat = document.querySelector<HTMLSelectElement>('#export-format')!;
+restorePreference(exportFormat, 'zoomflow.export-format');
 function updateExportLabel() {
   exportButton.textContent = ({ svg: 'Download SVG', png: 'Download PNG', zip: 'Download SVG ZIP',
     html: 'Download HTML' } as Record<string, string>)[exportFormat.value] ?? 'Download export';
@@ -245,7 +286,7 @@ async function load(source: string, name: string, preserveViewport = false) {
       lintDocument = compiled;
       updateLint();
       errorBanner.hidden = true;
-      errorBanner.textContent = '';
+      document.querySelector('#compile-error-message')!.textContent = '';
       void highlightSelection(false);
       documentExport = { diagram: compiled.diagram, render, name, diagnostics };
       exportButton.disabled = false;
@@ -256,8 +297,12 @@ async function load(source: string, name: string, preserveViewport = false) {
       const diagnostics = compilerDiagnostics(error, source);
       setEditorDiagnostics(diagnostics);
       lintDocument = undefined;
-      lintSummary.textContent = 'Lint unavailable until compilation succeeds';
-      errorBanner.textContent = `Error: ${diagnostics.map((item) => item.message).join('\n')}`;
+      lintSummary.textContent = `${diagnostics.length} source error${diagnostics.length === 1 ? '' : 's'}`;
+      const first = diagnostics[0];
+      const line = editor.view.state.doc.lineAt(first.from);
+      const message = first.message.replace(/^index:\d+:\d+:\s*/, '');
+      document.querySelector('#compile-error-message')!.textContent = `Error · Line ${line.number}, column ${first.from - line.from + 1}: ${message}`;
+      document.querySelector<HTMLButtonElement>('#go-to-error')!.disabled = false;
       errorBanner.hidden = false;
       viewer.setMessage('');
       setPreviewState('error');
@@ -312,8 +357,8 @@ exportButton.addEventListener('click', async () => {
 async function openFile(file: File) {
   try {
     const source = await file.text();
-    examplePicker.rememberFile(file.name, source);
-    await replaceDocument(source, file.name);
+    const key = examplePicker.rememberFile(file.name, source);
+    await replaceDocument(source, file.name, key);
   }
   catch (error) { setActivity(`Could not open file: ${String(error)}`, 'error'); }
 }
@@ -327,8 +372,8 @@ document.addEventListener('drop', (event) => {
   const file = event.dataTransfer?.files[0];
   if (file) void openFile(file);
 });
-window.addEventListener('pagehide', () => { clearTimeout(debounce); examplePicker.flush(); ++generation; editor.destroy(); viewer.destroy(); void compiler.then((d2) => d2.dispose()); });
+window.addEventListener('pagehide', () => { clearTimeout(debounce); clearTimeout(previewTimer); ai?.dispose(); examplePicker.flush(); ++generation; editor.destroy(); viewer.destroy(); void compiler.then((d2) => d2.dispose()); });
 documentName = examplePicker.initial.name;
-if (editor.source !== examplePicker.initial.source) editor.replace(examplePicker.initial.source);
+editor.open(examplePicker.initial.key, examplePicker.initial.source);
 clearTimeout(debounce);
 void load(editor.source, documentName);

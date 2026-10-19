@@ -109,7 +109,8 @@ export function setupViewport(stage: HTMLElement, host: HTMLElement) {
     let bottom = -Infinity;
     for (const child of graph.children) {
       if (!(child instanceof SVGGraphicsElement) || !['g', 'a'].includes(child.localName) || child.classList.contains('appendix-icon')) continue;
-      const bounds = child.getBoundingClientRect();
+      const graphic = child.localName === 'a' ? child.querySelector('g:not(.appendix-icon)') ?? child : child;
+      const bounds = graphic.getBoundingClientRect();
       if (!bounds.width && !bounds.height) continue;
       for (const [x, y] of [[bounds.left, bounds.top], [bounds.right, bounds.bottom]]) {
         const point = new DOMPoint(x, y).matrixTransform(inverse);

@@ -1,3 +1,4 @@
+import { selectMenuOption, downloadExport } from './menu';
 import { readFile } from 'node:fs/promises';
 import { pathToFileURL } from 'node:url';
 import { expect, test, type Page, type TestInfo } from '@playwright/test';
@@ -10,9 +11,9 @@ async function drill(page: Page, id: string) {
   await board(page, id);
 }
 async function download(page: Page, format: string, info: TestInfo) {
-  await page.selectOption('#export-format', format);
+  await selectMenuOption(page, '#export-format', format);
   const pending = page.waitForEvent('download');
-  await page.locator('#export').click();
+  await downloadExport(page);
   const result = await pending;
   const path = info.outputPath(result.suggestedFilename());
   await result.saveAs(path);
@@ -103,7 +104,7 @@ test('opens a single HTML file offline and drills every level with history and b
 test('HTML export keeps the selected dark theme and shared viewer controls', async ({ page, context }, info) => {
   await page.goto('/');
   await board(page, 'root');
-  await page.locator('#theme').selectOption('dark');
+  await selectMenuOption(page, '#theme', 'dark');
   const path = await download(page, 'html', info);
   const offline = await context.newPage();
   await offline.goto(pathToFileURL(path).href);

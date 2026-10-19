@@ -88,7 +88,8 @@ function parseReply(output: string, provider: Provider): AiReply {
   return { reply: answer.reply, source: answer.source };
 }
 
-export async function runAi(request: AiRequest): Promise<AiReply> {
+export async function runAi(request: AiRequest, signal?: AbortSignal): Promise<AiReply> {
+  signal?.throwIfAborted();
   const env = processEnvironment(request);
   const directory = await mkdtemp(join(tmpdir(), 'zoomflow-ai-'));
   try {
@@ -98,26 +99,42 @@ export async function runAi(request: AiRequest): Promise<AiReply> {
       ? ['-p', '--tools', '', '--strict-mcp-config', '--no-session-persistence', '--output-format', 'json', '--json-schema', JSON.stringify(schema)]
       : ['exec', '--sandbox', 'read-only', '--ephemeral', '--skip-git-repo-check', '--output-schema', schemaPath, '-'];
     const command = request.provider === 'claude' ? 'claude' : 'codex';
+    signal?.throwIfAborted();
     const output = await new Promise<string>((resolve, reject) => {
-      const child = spawn(command, args, { cwd: directory, env, stdio: ['pipe', 'pipe', 'pipe'], shell: false });
+      const child = spawn(command, args, { cwd: directory, env, stdio: ['pipe', 'pipe', 'pipe'], shell: false,
+        detached: process.platform !== 'win32' });
       let stdout = '';
       let stderr = '';
       let overflow = false;
-      const timer = setTimeout(() => { child.kill('SIGKILL'); reject(new Error(`${command} timed out after 3 minutes.`)); }, TIMEOUT_MS);
+      let timedOut = false;
+      const abort = () => {
+        // The CLI may have spawned subprocesses; cancel only this request's group.
+        try {
+          if (process.platform !== 'win32' && child.pid) process.kill(-child.pid, 'SIGKILL');
+          else child.kill('SIGKILL');
+        } catch { /* The process may already have exited. */ }
+      };
+      signal?.addEventListener('abort', abort, { once: true });
+      if (signal?.aborted) abort();
+      const timer = setTimeout(() => { timedOut = true; abort(); }, TIMEOUT_MS);
       child.stdout.setEncoding('utf8');
       child.stderr.setEncoding('utf8');
       child.stdout.on('data', (chunk: string) => {
         stdout += chunk;
-        if (stdout.length > MAX_OUTPUT) { overflow = true; child.kill(); }
+        if (stdout.length > MAX_OUTPUT) { overflow = true; abort(); }
       });
       child.stderr.on('data', (chunk: string) => { stderr = (stderr + chunk).slice(-8_000); });
       child.on('error', (error: NodeJS.ErrnoException) => {
         clearTimeout(timer);
+        signal?.removeEventListener('abort', abort);
         reject(error.code === 'ENOENT' ? new Error(`${command} is not installed or is not on the server PATH.`) : error);
       });
       child.on('close', (code) => {
         clearTimeout(timer);
-        if (overflow) reject(new Error(`${command} returned too much output.`));
+        signal?.removeEventListener('abort', abort);
+        if (signal?.aborted) reject(new Error('AI request canceled.'));
+        else if (timedOut) reject(new Error(`${command} timed out after 3 minutes.`));
+        else if (overflow) reject(new Error(`${command} returned too much output.`));
         else if (code !== 0) reject(new Error(`${command} failed: ${stderr.trim() || stdout.trim() || `exit code ${code}`}`));
         else resolve(stdout);
       });
@@ -129,6 +146,7 @@ export async function runAi(request: AiRequest): Promise<AiReply> {
 }
 
 function send(response: ServerResponse, status: number, data: object) {
+  if (response.destroyed || response.writableEnded) return;
   response.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
   response.end(JSON.stringify(data));
 }
@@ -138,6 +156,11 @@ async function handle(request: IncomingMessage, response: ServerResponse) {
   const origin = request.headers.origin;
   if (!/^(localhost|127\.0\.0\.1|\[::1\])(?::\d+)?$/.test(host) || (origin && origin !== `http://${host}`)) {
     send(response, 403, { error: 'AI is available only from the local Zoomflow server.' });
+    return;
+  }
+  if (request.url?.split('?')[0] === '/api/ai/status') {
+    if (request.method === 'GET') send(response, 200, { available: true });
+    else send(response, 405, { error: 'Use GET to check AI availability.' });
     return;
   }
   if (request.method !== 'POST' || !request.headers['content-type']?.startsWith('application/json')) {
@@ -156,7 +179,12 @@ async function handle(request: IncomingMessage, response: ServerResponse) {
     if (!isRequest(payload)) { send(response, 400, { error: 'Invalid AI request.' }); return; }
     try { processEnvironment(payload); }
     catch (error) { send(response, 400, { error: error instanceof Error ? error.message : String(error) }); return; }
-    send(response, 200, await runAi(payload));
+    const controller = new AbortController();
+    const disconnect = () => controller.abort();
+    response.on('close', disconnect);
+    if (response.destroyed) controller.abort();
+    try { send(response, 200, await runAi(payload, controller.signal)); }
+    finally { response.off('close', disconnect); }
   } catch (error) {
     send(response, 500, { error: error instanceof Error ? error.message : String(error) });
   }
@@ -165,7 +193,7 @@ async function handle(request: IncomingMessage, response: ServerResponse) {
 /** Local-only Vite endpoint; the static build never receives process access. */
 export function aiPlugin(): Plugin {
   const middleware = (request: IncomingMessage, response: ServerResponse, next: () => void) => {
-    if (request.url?.split('?')[0] !== '/api/ai') return next();
+    if (!['/api/ai', '/api/ai/status'].includes(request.url?.split('?')[0] ?? '')) return next();
     void handle(request, response);
   };
   return { name: 'zoomflow-local-ai', configureServer(server) { server.middlewares.use(middleware); },

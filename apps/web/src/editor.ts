@@ -1,8 +1,8 @@
 import { basicSetup } from 'codemirror';
-import { EditorState, Transaction } from '@codemirror/state';
+import { EditorState, type Extension } from '@codemirror/state';
 import { EditorView, keymap } from '@codemirror/view';
-import { isolateHistory } from '@codemirror/commands';
-import { lintGutter, openLintPanel, setDiagnostics, type Diagnostic } from '@codemirror/lint';
+import { isolateHistory, undo } from '@codemirror/commands';
+import { lintGutter, openLintPanel, closeLintPanel, setDiagnostics, type Diagnostic } from '@codemirror/lint';
 import { parseSourceRange, type SourceRange, type LintDiagnostic, type ShapeSource } from '@zoomflow/core';
 import { d2Language } from './d2-language';
 
@@ -35,13 +35,24 @@ export function compilerDiagnostics(error: unknown, source: string): Diagnostic[
 export class SourceEditor {
   readonly view: EditorView;
   private selectingShape = false;
+  private readonly extensions: Extension[];
+  private currentKey = '';
+  private readonly documents = new Map<string, { state: EditorState; scroll: ReturnType<EditorView['scrollSnapshot']> }>();
   constructor(parent: HTMLElement, source: string, changed: () => void, selected: () => void, format: () => void) {
-    this.view = new EditorView({
-      parent,
-      state: EditorState.create({ doc: source, extensions: [
+    this.extensions = [
         basicSetup, d2Language, lintGutter(), EditorView.lineWrapping,
         keymap.of([{ key: 'Shift-Alt-f', run: () => { format(); return true; } }]),
         EditorView.contentAttributes.of({ 'aria-label': 'D2 source', 'aria-multiline': 'true' }),
+        EditorView.domEventHandlers({ focus: (_event, view) => {
+          const { scrollTop, scrollLeft } = view.scrollDOM;
+          const document = view.state.doc;
+          // WebKit scrolls contenteditable back to its start after native focus.
+          // Preserve the viewport; explicit CodeMirror scroll effects still run
+          // during its next layout pass (for example, selecting a diagram shape).
+          queueMicrotask(() => {
+            if (view.hasFocus && view.state.doc === document) view.scrollDOM.scrollTo(scrollLeft, scrollTop);
+          });
+        } }),
         EditorView.theme({
           '&': { height: '100%', backgroundColor: 'transparent', color: 'inherit' },
           '.cm-scroller': { overflow: 'auto', fontFamily: 'monospace' },
@@ -55,15 +66,30 @@ export class SourceEditor {
           if (update.docChanged) changed();
           else if (update.selectionSet && !this.selectingShape) selected();
         }),
-      ] }),
-    });
+      ];
+    this.view = new EditorView({ parent, state: EditorState.create({ doc: source, extensions: this.extensions }) });
   }
   get source() { return this.view.state.doc.toString(); }
   get selection() { return this.view.state.selection.main; }
-  replace(source: string) {
-    this.view.dispatch({ changes: { from: 0, to: this.view.state.doc.length, insert: source },
-      selection: { anchor: 0 }, annotations: Transaction.addToHistory.of(false) });
+  open(key: string, source: string, reset = false) {
+    const active = document.activeElement;
+    const editing = this.view.hasFocus;
+    const diagnosticsOpen = Boolean(this.view.dom.querySelector('.cm-panel-lint'));
+    if (this.currentKey) this.documents.set(this.currentKey, { state: this.view.state, scroll: this.view.scrollSnapshot() });
+    const saved = reset ? undefined : this.documents.get(key);
+    this.currentKey = key;
+    const restore = saved?.state.doc.toString() === source ? saved : undefined;
+    this.view.setState(restore?.state ?? EditorState.create({ doc: source, extensions: this.extensions }));
+    (diagnosticsOpen ? openLintPanel : closeLintPanel)(this.view);
+    this.view.dispatch({ effects: restore?.scroll ?? EditorView.scrollIntoView(0, { y: 'start' }) });
+    // Opening the diagnostics panel focuses its list. Document switches must keep
+    // focus with the picker, diagram, or editor that initiated them instead.
+    if (editing) this.view.focus();
+    else if (active === document.body) (document.activeElement as HTMLElement | null)?.blur();
+    else if (active?.isConnected && (active instanceof HTMLElement || active instanceof SVGElement)) active.focus({ preventScroll: true });
   }
+  forget(key: string) { this.documents.delete(key); if (this.currentKey === key) this.currentKey = ''; }
+  undo() { return undo(this.view); }
   format(source: string) {
     const current = this.source;
     if (source === current) return false;

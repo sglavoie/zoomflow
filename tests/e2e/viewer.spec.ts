@@ -1,3 +1,4 @@
+import { selectMenuOption, downloadExport } from './menu';
 import { expect, test, type Page } from '@playwright/test';
 import { pathToFileURL } from 'node:url';
 import { readFileSync } from 'node:fs';
@@ -27,9 +28,9 @@ for (const offline of [false, true]) {
     await expect(page.locator('#lint-summary')).toHaveText('No lint issues');
     await board(page, 'root');
     if (offline) {
-      await page.selectOption('#export-format', 'html');
+      await selectMenuOption(page, '#export-format', 'html');
       const pending = page.waitForEvent('download');
-      await page.locator('#export').click();
+      await downloadExport(page);
       const download = await pending;
       const path = info.outputPath('parent-context.html');
       await download.saveAs(path);
@@ -72,9 +73,9 @@ for (const offline of [false, true]) {
     await page.goto('/');
     await board(page, 'root');
     if (offline) {
-      await page.selectOption('#export-format', 'html');
+      await selectMenuOption(page, '#export-format', 'html');
       const pending = page.waitForEvent('download');
-      await page.locator('#export').click();
+      await downloadExport(page);
       const download = await pending;
       const path = info.outputPath('breadcrumbs.html');
       await download.saveAs(path);
@@ -164,9 +165,9 @@ test('missing board link has a dashed outline and names its target in the viewer
   }
   await checkLinks();
   await board(page, 'root');
-  await page.selectOption('#export-format', 'html');
+  await selectMenuOption(page, '#export-format', 'html');
   const pending = page.waitForEvent('download');
-  await page.locator('#export').click();
+  await downloadExport(page);
   const download = await pending;
   const path = info.outputPath('missing-links.html');
   await download.saveAs(path);
@@ -233,11 +234,11 @@ test('handles external links, theme changes, invalid files and missing deep link
     const rect = svg.querySelector('rect');
     return rect ? getComputedStyle(rect).fill : '';
   });
-  await page.selectOption('#theme', 'light');
+  await selectMenuOption(page, '#theme', 'light');
   const light = await background();
-  await page.selectOption('#theme', 'dark');
+  await selectMenuOption(page, '#theme', 'dark');
   await expect.poll(background).not.toBe(light);
-  await page.selectOption('#theme', 'light');
+  await selectMenuOption(page, '#theme', 'light');
   await expect.poll(background).toBe(light);
   await page.locator('#file').setInputFiles({ name: 'bad.d2', mimeType: 'text/plain', buffer: Buffer.from('broken: {') });
   await expect(page.getByRole('alert')).toContainText('Error');

@@ -21,6 +21,13 @@ preview highlights, editor keyboard isolation and file replacement.
 `polish.spec.ts` checks draft recovery and removal, copy downloads, syntax
 highlighting, mobile editor visibility, and Space+drag panning on linked shapes.
 
+`refinement.spec.ts` covers isolated undo histories for same-name documents, restored
+selection and scroll, draft grouping and example restoration, stable header geometry,
+remembered preferences, unobscured mobile controls, delayed progress feedback, error
+navigation, and distinct link cues in both live and offline viewers. `ai.spec.ts` also
+covers availability checks, cancellation, elapsed time, and the explicit undo action;
+the server unit tests verify that aborting a request terminates its CLI process.
+
 `reference.spec.ts` checks reference shortcuts from the editor and reference,
 source/selection preservation, focus restoration, search and scroll retention,
 pointer and keyboard resizing, stored split size, offline search and clipboard

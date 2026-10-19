@@ -9,9 +9,14 @@ Every example includes source comments and compiles without imports or remote
 assets. The lint repair intentionally reports one error and one warning until fixed.
 Switching examples starts at the root board. Source edits and opened files remain
 in the dropdown and are backed up in browser storage for reload recovery. The
-header shows when a browser draft is being saved or has been saved. Use
-**Download source (.d2)** to keep the current text outside browser storage, which can
-be cleared. Opened file drafts can be removed from the dropdown.
+header reserves space for browser draft status so saving does not move the workspace.
+Use **Export & theme → Download .d2 source** to keep the current text outside browser
+storage, which can be cleared. The picker separates built-in examples from your drafts,
+marks modified examples, and shows edit timestamps and distinct draft numbers for
+same-name uploads. **Restore** resets an example after confirmation; opened file drafts
+can be removed from the dropdown. Each document keeps its own undo history, selection,
+and editor scroll position while switching within the page. Restoring an example starts
+a fresh history. Browser reload recovery saves source, not undo history.
 The source lives in `apps/web/src/examples/`, with the catalog in `examples.ts`.
 
 Use pnpm 12.6.0 and Node 26 (verified with Node 26.10.0):
@@ -25,8 +30,13 @@ Click a linked shape to drill into a board. Breadcrumbs record the visited path,
 trimming back to an earlier board whenever you revisit it so cycles do not repeat.
 Esc or Backspace goes to the tree parent, and browser back/forward retraces your
 navigation. Deep links such as `#/checkout/charge` open a board directly in the
-loaded diagram. Open a file or drop one onto the page; files are compiled locally
+loaded diagram. Board links show a downward arrow badge, while external links show an
+outward arrow. Hover or focus a link to identify its destination; hovering a shape
+highlights its selectable boundary. These link cues also appear in exported HTML.
+Open a file or drop one onto the page; files are compiled locally
 with D2's WASM worker. Light, dark and system themes use D2's generated palettes.
+Theme and export format are remembered when browser storage is available. Both live
+under **Export & theme**, which closes on Escape and restores focus to its button.
 Use the preview's +, − and Fit controls or the mouse wheel to zoom. Drag empty
 space to pan, or hold Space and drag a shape or link; middle-button dragging also
 pans. Touch dragging works after zooming. Each board opens fitted around its
@@ -52,7 +62,12 @@ return an answer without changing the diagram. Invalid D2 and CLI errors appear
 beside the form, leaving your source untouched. If you edit or switch diagrams
 while a request is running, its replacement is discarded. The AI endpoint is
 available only on a local Vite dev or preview server, not in exported HTML or a
-static build. The AI panel and optional lint controls start collapsed so the
+static build. The panel checks endpoint availability before enabling the prompt and
+offers **Check again** if unavailable. This check does not verify CLI installation or
+sign-in. Running requests show elapsed time and a **Cancel** button; cancellation
+stops the local CLI request and keeps the prompt for retry. **Undo AI change** restores
+the previous source after an applied change and disappears when you edit or switch
+documents; the normal editor undo history remains available. The AI panel and optional lint controls start collapsed so the
 source editor stays visible. Provider environment fields are under **AI settings**.
 For Claude Code, the `CLAUDE_CONFIG_DIR` field defaults to `~/.claude`;
 `~` expands to your home directory, and relative paths resolve from the server's
@@ -65,7 +80,10 @@ Click **Format** or press **Shift+Alt+F** in the editor to apply D2's automatic
 source formatting, including nested indentation. Formatting is one undoable edit
 and refreshes the preview. Invalid diagrams leave the source unchanged and show
 a formatting error; edits made while formatting is running are preserved.
-The status row above the editor reports preview freshness and diagnostic counts,
+The status row above the editor reports preview freshness and diagnostic counts.
+Transient progress appears only after 700 ms so quick edits do not flash indicators;
+source mapping and exports are invalidated immediately. Compiler errors emphasize the
+first issue's line and column, with **Go to error** focusing its source location,
 and **Review diagnostics** opens the list at the first issue. Compile errors appear
 in a banner and inline diagnostics while the last good diagram is marked as the
 previous preview. Export is disabled until the current source compiles;
@@ -91,8 +109,9 @@ and use Up/Down (5% steps) and Home/End (25%/75%). The split starts at 60% diagr
 and 40% reference and remembers your size when browser storage is available.
 Closing and reopening preserves the search and scroll position. Escape inside the
 reference closes it and restores focus without navigating the diagram. On narrow
-screens, the diagram and reference appear above the source editor; export controls
-start collapsed so the editor remains visible.
+screens, the diagram and reference appear above the source editor. Zoom and fullscreen
+controls sit in a toolbar below the canvas so they do not cover diagram content, including
+in fullscreen. Export controls stay in their menu so the editor remains visible.
 
 Successful compilations also run Zoomflow lint. **Review diagnostics** opens the
 editor's diagnostic list. Missing board links are errors; unlinked layers are
