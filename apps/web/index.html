@@ -40,8 +40,52 @@
       <div class="header-actions">
         <label class="theme-control"><span class="zf-visually-hidden">Theme</span><select id="theme" aria-label="Theme" title="Appearance"><option value="system">System</option><option value="light">Light</option><option value="dark">Dark</option></select></label>
         <button id="toggle-reference" class="button-quiet" aria-expanded="false" aria-controls="d2-reference" title="D2 reference (⌘⇧/ or Ctrl+Shift+/)">D2 reference</button>
+        <button id="show-shortcuts" class="button-quiet" type="button" aria-label="Keyboard shortcuts" aria-haspopup="dialog" aria-controls="keyboard-shortcuts" title="Keyboard shortcuts">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="2" y="5" width="20" height="14" rx="3" /><path stroke-linecap="round" d="M6 9h.01M10 9h.01M14 9h.01M18 9h.01M6 12h.01M10 12h.01M14 12h.01M18 12h.01M8 15h8" /></svg>
+        </button>
       </div>
     </header>
+    <dialog id="keyboard-shortcuts" aria-labelledby="shortcuts-title" aria-describedby="shortcuts-hint">
+      <div class="shortcuts-heading">
+        <h2 id="shortcuts-title">Keyboard shortcuts</h2>
+        <button id="close-shortcuts" class="button-quiet" type="button" aria-label="Close keyboard shortcuts" autofocus>Close</button>
+      </div>
+      <p id="shortcuts-hint">Use ⌘ on Mac or Ctrl on Windows and Linux.</p>
+      <section aria-labelledby="shortcuts-workspace">
+        <h3 id="shortcuts-workspace">Workspace</h3>
+        <dl class="shortcut-list">
+          <div><dt>Save or download source</dt><dd><kbd>⌘ / Ctrl</kbd> + <kbd>S</kbd></dd></div>
+          <div><dt>Toggle D2 reference</dt><dd><kbd>⌘ / Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>/</kbd></dd></div>
+          <div><dt>Close shortcuts, reference, or fullscreen</dt><dd><kbd>Esc</kbd></dd></div>
+        </dl>
+      </section>
+      <section aria-labelledby="shortcuts-editor">
+        <h3 id="shortcuts-editor">In the source editor</h3>
+        <dl class="shortcut-list">
+          <div><dt>Format D2 source</dt><dd><kbd>Shift</kbd> + <kbd>Alt</kbd> + <kbd>F</kbd></dd></div>
+          <div><dt>Toggle line comments</dt><dd><kbd>⌘ / Ctrl</kbd> + <kbd>/</kbd></dd></div>
+          <div><dt>Undo</dt><dd><kbd>⌘ / Ctrl</kbd> + <kbd>Z</kbd></dd></div>
+          <div><dt>Redo</dt><dd><kbd>⌘ / Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>Z</kbd></dd></div>
+          <div><dt>Find in source</dt><dd><kbd>⌘ / Ctrl</kbd> + <kbd>F</kbd></dd></div>
+        </dl>
+      </section>
+      <section aria-labelledby="shortcuts-diagram">
+        <h3 id="shortcuts-diagram">In the diagram</h3>
+        <dl class="shortcut-list">
+          <div><dt>Open a focused board link</dt><dd><kbd>Enter</kbd></dd></div>
+          <div><dt>Go to the parent board</dt><dd><kbd>Esc</kbd> or <kbd>Backspace</kbd></dd></div>
+          <div><dt>Pan a zoomed diagram</dt><dd><kbd>Space</kbd> + drag</dd></div>
+          <div><dt>Select source without opening a link</dt><dd><kbd>Alt</kbd> + click</dd></div>
+        </dl>
+      </section>
+      <section aria-labelledby="shortcuts-resize">
+        <h3 id="shortcuts-resize">With a resize divider focused</h3>
+        <dl class="shortcut-list">
+          <div><dt>Resize source / reference panels</dt><dd><kbd>←</kbd> <kbd>→</kbd> / <kbd>↑</kbd> <kbd>↓</kbd></dd></div>
+          <div><dt>Smallest / largest diagram share</dt><dd><kbd>Home</kbd> / <kbd>End</kbd></dd></div>
+        </dl>
+      </section>
+    </dialog>
     <div id="file-status" role="alert" hidden></div>
     <div id="workspace">
       <div id="mobile-view-switch" role="group" aria-label="Workspace view">

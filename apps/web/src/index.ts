@@ -12,7 +12,9 @@ import { setupAiAssistant } from './ai-assistant';
 import { setupMobileView } from './mobile-view';
 import { projectFileSystem, readDirectoryHandle, readFolderInput } from './project-files';
 import type { Diagnostic } from '@codemirror/lint';
+import { setupShortcuts } from './shortcuts';
 
+setupShortcuts();
 const viewer = new Viewer(document.querySelector<HTMLElement>('#viewer')!);
 setupViewport(viewer.stage, setupFullscreen(viewer.stage));
 setupReference();
