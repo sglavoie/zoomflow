@@ -88,6 +88,15 @@ test('header stays stable while saving and preferences survive reload', async ({
   await page.goto('/');
   await ready(page);
   const before = await page.locator('header').boundingBox();
+  const title = (await page.locator('header strong').boundingBox())!;
+  const open = (await page.locator('.file-button').boundingBox())!;
+  const picker = (await page.locator('#example-picker summary').boundingBox())!;
+  const center = (box: { y: number; height: number }) => box.y + box.height / 2;
+  expect(Math.abs(center(title) - center(picker))).toBeLessThan(1);
+  expect(Math.abs(center(open) - center(picker))).toBeLessThan(1);
+  const status = (await page.locator('#draft-status').boundingBox())!;
+  expect(status.y).toBeGreaterThanOrEqual(picker.y + picker.height - 1);
+  expect(status.y + status.height).toBeLessThanOrEqual(before!.y + before!.height);
   await source(page).fill('a: Edited');
   expect(await page.locator('header').boundingBox()).toEqual(before);
   await expect(page.locator('#draft-status')).toHaveText('Browser draft saved');
