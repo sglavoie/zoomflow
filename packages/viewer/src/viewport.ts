@@ -2,6 +2,9 @@ type Box = { x: number; y: number; width: number; height: number };
 
 /** Zoom the rendered SVG itself so links and shape selection keep working. */
 export function setupViewport(stage: HTMLElement, host: HTMLElement) {
+  const minZoom = 0.1;
+  const maxZoom = 8;
+  const zoomEpsilon = 0.001;
   const controls = document.createElement('div');
   controls.className = 'zf-zoom-controls';
   controls.setAttribute('role', 'group');
@@ -41,7 +44,7 @@ export function setupViewport(stage: HTMLElement, host: HTMLElement) {
   window.addEventListener('keydown', (event) => {
     if (event.code !== 'Space' || event.repeat || event.target instanceof Element &&
       event.target.closest('button, input, textarea, select, [contenteditable="true"]')) return;
-    if (scale() <= 1.001 || !hovered && !stage.contains(document.activeElement)) return;
+    if (Math.abs(scale() - 1) <= zoomEpsilon || !hovered && !stage.contains(document.activeElement)) return;
     event.preventDefault();
     spaceHeld = true;
     stage.classList.add('zf-pan-ready');
@@ -55,17 +58,21 @@ export function setupViewport(stage: HTMLElement, host: HTMLElement) {
 
   function scale() { return base && box ? base.width / box.width : 1; }
   function updateControls() {
-    amount.textContent = `${Math.round(scale() * 100)}%`;
-    out.disabled = !svg || scale() <= 1.001;
-    inside.disabled = !svg || scale() >= 7.999;
-    fit.disabled = !svg || scale() <= 1.001;
-    if (svg) svg.style.touchAction = scale() > 1.001 ? 'none' : 'pan-y';
-    stage.classList.toggle('zf-pan-ready', spaceHeld && scale() > 1.001);
+    const currentScale = scale();
+    const zoomed = Math.abs(currentScale - 1) > zoomEpsilon;
+    amount.textContent = `${Math.round(currentScale * 100)}%`;
+    out.disabled = !svg || currentScale <= minZoom + zoomEpsilon;
+    inside.disabled = !svg || currentScale >= maxZoom - zoomEpsilon;
+    fit.disabled = !svg || !zoomed;
+    if (svg) svg.style.touchAction = zoomed ? 'none' : 'pan-y';
+    stage.classList.toggle('zf-pan-ready', spaceHeld && zoomed);
   }
   function setBox(next: Box) {
     if (!base || !svg) return;
-    const x = Math.max(base.x, Math.min(base.x + base.width - next.width, next.x));
-    const y = Math.max(base.y, Math.min(base.y + base.height - next.height, next.y));
+    const xLimit = base.x + base.width - next.width;
+    const yLimit = base.y + base.height - next.height;
+    const x = Math.max(Math.min(base.x, xLimit), Math.min(Math.max(base.x, xLimit), next.x));
+    const y = Math.max(Math.min(base.y, yLimit), Math.min(Math.max(base.y, yLimit), next.y));
     box = { ...next, x, y };
     svg.setAttribute('viewBox', `${x} ${y} ${next.width} ${next.height}`);
     updateControls();
@@ -82,7 +89,7 @@ export function setupViewport(stage: HTMLElement, host: HTMLElement) {
   function zoom(factor: number, clientX?: number, clientY?: number) {
     if (!base || !box) return;
     const old = box;
-    const nextScale = Math.max(1, Math.min(8, scale() * factor));
+    const nextScale = Math.max(minZoom, Math.min(maxZoom, scale() * factor));
     const width = base.width / nextScale;
     const height = base.height / nextScale;
     const point = clientX === undefined || clientY === undefined ?
@@ -156,12 +163,12 @@ export function setupViewport(stage: HTMLElement, host: HTMLElement) {
   stage.addEventListener('wheel', (event) => {
     if (!svg || !(event.target instanceof Node) || !svg.contains(event.target)) return;
     const factor = Math.exp(-event.deltaY * 0.0015);
-    if (Math.max(1, Math.min(8, scale() * factor)) === scale()) return;
+    if (Math.max(minZoom, Math.min(maxZoom, scale() * factor)) === scale()) return;
     event.preventDefault();
     zoom(factor, event.clientX, event.clientY);
   }, { passive: false });
   stage.addEventListener('pointerdown', (event) => {
-    const forcePan = event.pointerType === 'mouse' && scale() > 1.001 && (spaceHeld || event.button === 1);
+    const forcePan = event.pointerType === 'mouse' && Math.abs(scale() - 1) > zoomEpsilon && (spaceHeld || event.button === 1);
     if (!svg || !(event.target instanceof Element) || !svg.contains(event.target) ||
       (event.pointerType === 'mouse' && !forcePan && (event.button !== 0 || event.target.closest('a, [data-shape-id]')))) return;
     if (!pointers.size) { moved = false; panGesture = forcePan; }

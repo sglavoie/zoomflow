@@ -149,6 +149,31 @@ test('preview zooms and pans, then fits again', async ({ page }) => {
   expect(await box()).toEqual(original);
 });
 
+test('zoom out reaches 10% with the diagram centered, then fits again', async ({ page }) => {
+  await page.goto('/');
+  const svg = page.locator('.zf-stage > svg');
+  await expect(svg).toBeVisible();
+  const box = async () => (await svg.getAttribute('viewBox'))!.split(/\s+/).map(Number);
+  const original = await box();
+  const out = page.getByRole('button', { name: 'Zoom out' });
+  const fit = page.getByRole('button', { name: 'Fit diagram' });
+
+  await out.click();
+  await expect(page.locator('.zf-zoom-controls span')).toHaveText('67%');
+  await expect(fit).toBeEnabled();
+  for (let i = 0; i < 5; i++) await out.click();
+  await expect(page.locator('.zf-zoom-controls span')).toHaveText('10%');
+  await expect(out).toBeDisabled();
+  const zoomedOut = await box();
+  expect(zoomedOut[2]).toBeCloseTo(original[2] * 10);
+  expect(zoomedOut[0] + zoomedOut[2] / 2).toBeCloseTo(original[0] + original[2] / 2);
+  expect(zoomedOut[1] + zoomedOut[3] / 2).toBeCloseTo(original[1] + original[3] / 2);
+
+  await fit.click();
+  await expect(page.locator('.zf-zoom-controls span')).toHaveText('100%');
+  expect(await box()).toEqual(original);
+});
+
 test('live edits keep the current view, while opening another diagram fits it', async ({ page }) => {
   await page.goto('/');
   await expect(page.locator('.zf-stage > svg')).toBeVisible();
@@ -210,6 +235,10 @@ test('exported HTML retains keyboard focus during drill-down', async ({ page, co
   const initialWidth = Number((await svg.getAttribute('viewBox'))!.split(/\s+/)[2]);
   await offline.getByRole('button', { name: 'Zoom in' }).click();
   expect(Number((await svg.getAttribute('viewBox'))!.split(/\s+/)[2])).toBeLessThan(initialWidth);
+  await offline.getByRole('button', { name: 'Zoom out' }).click();
+  await offline.getByRole('button', { name: 'Zoom out' }).click();
+  await expect(offline.locator('.zf-zoom-controls span')).toHaveText('67%');
+  await offline.getByRole('button', { name: 'Fit diagram' }).click();
   const link = offline.locator('.zf-stage a[href="root.layers.checkout"]');
   await link.focus();
   await link.press('Enter');
