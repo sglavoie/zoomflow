@@ -13,7 +13,8 @@ export function setupReference() {
   const status = document.querySelector<HTMLElement>('#reference-status')!;
   let returnFocus: HTMLElement | SVGElement | undefined;
   let scrollTop = 0;
-  let diagramShare = 60;
+  const defaultShare = 60;
+  let diagramShare = defaultShare;
   let drag: { pointer: number; offset: number } | undefined;
   const storageKey = 'zoomflow.reference.diagram-share';
   try {
@@ -182,4 +183,8 @@ export function setupReference() {
   divider.addEventListener('pointerup', finishDrag);
   divider.addEventListener('pointercancel', finishDrag);
   divider.addEventListener('lostpointercapture', finishDrag);
+  divider.addEventListener('dblclick', () => {
+    setShare(defaultShare);
+    saveShare();
+  });
 }

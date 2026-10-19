@@ -101,6 +101,18 @@ test('divider supports dragging, keyboard bounds, and remembers its size after r
   await expect(divider(page)).toHaveAttribute('aria-valuenow', '70');
 });
 
+test('double-clicking the reference divider resets and saves its default size', async ({ page }) => {
+  await ready(page);
+  await toggle(page).click();
+  await divider(page).press('End');
+  await expect(divider(page)).toHaveAttribute('aria-valuenow', '75');
+  await divider(page).dblclick();
+  await expect(divider(page)).toHaveAttribute('aria-valuenow', '60');
+  await page.reload();
+  await toggle(page).click();
+  await expect(divider(page)).toHaveAttribute('aria-valuenow', '60');
+});
+
 test('offline reference searches examples, copies exact source, and links to full documentation', async ({ page, context }) => {
   await ready(page);
   await context.setOffline(true);

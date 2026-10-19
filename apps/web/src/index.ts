@@ -8,12 +8,14 @@ import './style.css';
 import { SourceEditor, compilerDiagnostics, lintDiagnostics } from './editor';
 import { diagramFonts } from './fonts';
 import { setupReference } from './reference';
+import { setupSourceSplit } from './source-split';
 import { setupFullscreen } from './fullscreen';
 import { setupAiAssistant } from './ai-assistant';
 
 const viewer = new Viewer(document.querySelector<HTMLElement>('#viewer')!);
 setupFullscreen(viewer.stage);
 setupReference();
+setupSourceSplit();
 const theme = document.querySelector<HTMLSelectElement>('#theme')!;
 const media = matchMedia('(prefers-color-scheme: dark)');
 function updateTheme() {

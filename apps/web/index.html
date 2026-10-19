@@ -30,7 +30,7 @@
     <div id="workspace">
       <section id="preview-pane" aria-label="Diagram and reference">
         <main id="viewer" aria-label="Live preview"></main>
-        <div id="reference-divider" role="separator" aria-label="Resize diagram and reference" aria-orientation="horizontal" aria-controls="viewer d2-reference" title="Drag to resize, or use Up/Down and Home/End when focused" tabindex="0" hidden></div>
+        <div id="reference-divider" role="separator" aria-label="Resize diagram and reference" aria-orientation="horizontal" aria-controls="viewer d2-reference" title="Drag to resize, double-click to reset, or use Up/Down and Home/End when focused" tabindex="0" hidden></div>
         <aside id="d2-reference" aria-labelledby="reference-title" hidden>
           <div class="reference-toolbar">
             <h2 id="reference-title">D2 reference</h2>
@@ -45,6 +45,7 @@
           <div id="reference-status" role="status"></div>
         </aside>
       </section>
+      <div id="source-divider" role="separator" aria-label="Resize diagram and D2 source" aria-orientation="vertical" aria-controls="preview-pane source-pane" title="Drag to resize, double-click to reset, or use Left/Right and Home/End when focused" tabindex="0"></div>
       <section id="source-pane" aria-label="Source editor">
         <div class="pane-title"><div>D2 source <span>Edit to update the preview</span></div><button id="format-source" title="Format D2 source (Shift+Alt+F)">Format</button></div>
         <div id="format-status" role="status" hidden></div>
