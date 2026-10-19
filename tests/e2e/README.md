@@ -18,6 +18,9 @@ diagnostics on syntax errors, recovery, startup edits, exact source selections
 (including Unicode and container names), selection-driven board navigation,
 preview highlights, editor keyboard isolation and file replacement.
 
+`polish.spec.ts` checks draft recovery and removal, copy downloads, syntax
+highlighting, mobile editor visibility, and Space+drag panning on linked shapes.
+
 `reference.spec.ts` checks reference shortcuts from the editor and reference,
 source/selection preservation, focus restoration, search and scroll retention,
 pointer and keyboard resizing, stored split size, offline search and clipboard

@@ -7,7 +7,7 @@ type SavedDrafts = { current: string; fileNumber: number; drafts: Draft[] };
 export function setupExamplePicker(
   readSource: () => string,
   open: (source: string, name: string) => void,
-  onState: (dirty: boolean, recoveryAvailable: boolean, savePending: boolean) => void,
+  onState: (dirty: boolean, recoveryAvailable: boolean, savePending: boolean, hasDraft: boolean, downloadRequested: boolean) => void,
 ) {
   const picker = document.querySelector<HTMLDetailsElement>('#example-picker')!;
   const summary = picker.querySelector('summary')!;
@@ -24,6 +24,7 @@ export function setupExamplePicker(
   let fileNumber = 0;
   let recoveryAvailable = true;
   let savePending = false;
+  let downloadRequested = false;
   let saveTimer: ReturnType<typeof setTimeout> | undefined;
 
   try {
@@ -45,7 +46,12 @@ export function setupExamplePicker(
   } catch { recoveryAvailable = false; }
 
   function currentDraft() { return drafts.get(current)!; }
-  function announce() { onState(currentDraft().source !== currentDraft().baseline, recoveryAvailable, savePending); }
+  function announce() {
+    const draft = currentDraft();
+    const original = examples.find((example) => example.name === draft.key)?.source;
+    onState(draft.source !== draft.baseline, recoveryAvailable, savePending,
+      draft.key.startsWith('file:') || draft.source !== original || draft.baseline !== original, downloadRequested);
+  }
   function persist() {
     clearTimeout(saveTimer);
     savePending = false;
@@ -66,6 +72,7 @@ export function setupExamplePicker(
   }
   function activate(key: string) {
     current = key;
+    downloadRequested = false;
     filename.textContent = currentDraft().name;
     for (const [id, button] of buttons) {
       if (id === current) button.setAttribute('aria-current', 'true');
@@ -75,6 +82,8 @@ export function setupExamplePicker(
   }
 
   function addOption(item: Draft) {
+    const row = document.createElement('div');
+    row.className = 'example-row';
     const button = document.createElement('button');
     button.type = 'button';
     button.className = 'example-option';
@@ -94,8 +103,33 @@ export function setupExamplePicker(
       schedulePersist();
       open(item.source, item.name);
     });
+    row.append(button);
+    if (item.key.startsWith('file:')) {
+      const remove = document.createElement('button');
+      remove.type = 'button';
+      remove.className = 'example-remove';
+      remove.textContent = 'Remove';
+      remove.setAttribute('aria-label', `Remove ${item.name} draft`);
+      remove.addEventListener('click', (event) => {
+        event.stopPropagation();
+        if (!window.confirm(`Remove the local draft for ${item.name}? Download a copy first if you want to keep it.`)) return;
+        currentDraft().source = readSource();
+        drafts.delete(item.key);
+        buttons.delete(item.key);
+        row.remove();
+        summary.focus();
+        if (current === item.key) {
+          const fallback = examples[0].name;
+          activate(fallback);
+          picker.open = false;
+          open(currentDraft().source, currentDraft().name);
+        }
+        persist();
+      });
+      row.append(remove);
+    }
     buttons.set(item.key, button);
-    options.append(button);
+    options.append(row);
   }
 
   for (const item of drafts.values()) addOption(item);
@@ -129,11 +163,13 @@ export function setupExamplePicker(
     initial: { source: currentDraft().source, name: currentDraft().name },
     updateCurrent(source: string) {
       currentDraft().source = source;
+      downloadRequested = false;
       schedulePersist();
     },
-    markSaved() {
+    markDownloadRequested() {
       currentDraft().source = readSource();
       currentDraft().baseline = currentDraft().source;
+      downloadRequested = true;
       persist();
     },
     rememberFile(name: string, source: string) {

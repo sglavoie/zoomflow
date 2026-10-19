@@ -100,6 +100,22 @@ test('opens a single HTML file offline and drills every level with history and b
   expect(errors).toEqual([]);
 });
 
+test('HTML export keeps the selected dark theme and shared viewer controls', async ({ page, context }, info) => {
+  await page.goto('/');
+  await board(page, 'root');
+  await page.locator('#theme').selectOption('dark');
+  const path = await download(page, 'html', info);
+  const offline = await context.newPage();
+  await offline.goto(pathToFileURL(path).href);
+  await board(offline, 'root');
+  expect(await offline.locator('body').evaluate((node) => getComputedStyle(node).backgroundColor)).toBe('rgb(17, 23, 34)');
+  expect(await offline.locator('.zf-zoom-controls').evaluate((node) => getComputedStyle(node).position)).toBe('absolute');
+  expect(await offline.locator('.zf-visually-hidden').evaluate((node) => ({
+    width: getComputedStyle(node).width, height: getComputedStyle(node).height,
+    overflow: getComputedStyle(node).overflow,
+  }))).toEqual({ width: '1px', height: '1px', overflow: 'hidden' });
+});
+
 test('exports cyclic links and collapses breadcrumb loops offline', async ({ page, context }, info) => {
   await page.goto('/');
   await board(page, 'root');

@@ -9,9 +9,9 @@ Every example includes source comments and compiles without imports or remote
 assets. The lint repair intentionally reports one error and one warning until fixed.
 Switching examples starts at the root board. Source edits and opened files remain
 in the dropdown and are backed up in browser storage for reload recovery. The
-header marks source changes not saved to a `.d2` file. Use **Save D2 source** to
-download the current text; browser storage can be cleared, so download source
-you want to keep.
+header distinguishes changes in the browser from a requested download. Use
+**Download D2 copy** to keep the current text outside browser storage, which can
+be cleared. Opened file drafts can be removed from the dropdown.
 The source lives in `apps/web/src/examples/`, with the catalog in `examples.ts`.
 
 Use pnpm 12.6.0 and Node 26 (verified with Node 26.10.0):
@@ -27,8 +27,9 @@ Esc or Backspace goes to the tree parent, and browser back/forward retraces your
 navigation. Deep links such as `#/checkout/charge` open a board directly in the
 loaded diagram. Open a file or drop one onto the page; files are compiled locally
 with D2's WASM worker. Light, dark and system themes use D2's generated palettes.
-Use the preview's +, − and Fit controls or the mouse wheel to zoom. Drag a zoomed
-diagram to pan; touch dragging works after zooming. Each board opens fitted to
+Use the preview's +, − and Fit controls or the mouse wheel to zoom. Drag empty
+space to pan, or hold Space and drag a shape or link; middle-button dragging also
+pans. Touch dragging works after zooming. Each board opens fitted to
 the preview. Keyboard navigation moves focus to the new board or breadcrumb and
 announces its name.
 
@@ -40,7 +41,7 @@ is listed separately. These hints do not add nodes or guess internal connections
 `layers.name` targets a child of the current board; `_` targets its parent. A missing
 child link that matches an ancestor's name suggests the corresponding `_` path.
 
-Edit the D2 source in the CodeMirror pane for a live preview (350 ms debounce).
+Edit the syntax-highlighted D2 source in the CodeMirror pane for a live preview (350 ms debounce).
 The **AI** form above the editor can send the current source, active board, and
 your prompt to either Claude Code or Codex. Start the local app with `pnpm dev`,
 install and sign in to the chosen CLI, then select it and click **Send**. Zoomflow
@@ -87,7 +88,8 @@ and use Up/Down (5% steps) and Home/End (25%/75%). The split starts at 60% diagr
 and 40% reference and remembers your size when browser storage is available.
 Closing and reopening preserves the search and scroll position. Escape inside the
 reference closes it and restores focus without navigating the diagram. On narrow
-screens, the diagram and reference appear above the source editor.
+screens, the diagram and reference appear above the source editor; export, AI and
+diagnostic controls start collapsed so the editor remains visible.
 
 Successful compilations also run Zoomflow lint. **Show diagnostics** opens the
 editor's diagnostic list. Missing board links are errors; unlinked layers are
@@ -131,7 +133,7 @@ Goldmark regex initialization overflow in WebKit. [Build provenance and licenses
 include the exact source, patch, tool versions and checksums. Upgrades must
 deliberately review the compiler contract.
 The browser opens individual files with the bundled `zoomflow.d2` import; resolving other filesystem imports and saving edited
-D2 source to disk are not yet provided in the browser. The CLI resolves local D2 imports within its project root. Rich HTML labels (`foreignObject`) remain unsupported.
+D2 source directly back to its original disk file are not yet provided in the browser. The CLI resolves local D2 imports within its project root. Rich HTML labels (`foreignObject`) remain unsupported.
 
 The core API `lint(compiled, { missingBacklink: false, boundaryPorts: false })` accepts the D2 compile
 response and returns `diagnostics`, `boundaries` (per-node expected/evaluated

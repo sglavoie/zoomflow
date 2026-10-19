@@ -2,12 +2,17 @@ import { readFile } from 'node:fs/promises';
 import { pathToFileURL } from 'node:url';
 import { expect, test } from '@playwright/test';
 
-test('mobile source editor stays usable with AI settings open', async ({ page }) => {
+test('mobile source editor is visible with secondary controls collapsed', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/');
   await expect(page.locator('.zf-stage > svg')).toBeVisible();
   const editor = page.locator('#editor');
   expect((await editor.boundingBox())!.height).toBeGreaterThanOrEqual(320);
+  expect((await editor.boundingBox())!.y).toBeLessThan(700);
+  await expect(page.locator('#header-more-toggle')).toHaveAttribute('aria-expanded', 'false');
+  await expect(page.locator('#ai-assistant')).not.toHaveAttribute('open');
+  await expect(page.locator('#lint-details')).not.toHaveAttribute('open');
+  await page.locator('#ai-assistant > summary').click();
   await page.locator('.ai-settings summary').click();
   expect((await editor.boundingBox())!.height).toBeGreaterThanOrEqual(320);
   await page.getByRole('textbox', { name: 'D2 source' }).fill('mobile: Editable');
@@ -18,26 +23,57 @@ test('draft recovers after reload and D2 source downloads', async ({ page }) => 
   await page.goto('/');
   await expect(page.locator('.zf-stage > svg')).toBeVisible();
   await page.getByRole('textbox', { name: 'D2 source' }).fill('draft: Recovered');
-  await expect(page.locator('#draft-status')).toContainText('Unsaved changes');
+  await expect(page.locator('#draft-status')).toContainText('Changes in browser');
   await page.reload();
   await expect(page.getByRole('textbox', { name: 'D2 source' })).toContainText('draft: Recovered');
   await expect(page.locator('.zf-stage')).toContainText('Recovered');
   const [download] = await Promise.all([
     page.waitForEvent('download'),
-    page.getByRole('button', { name: 'Save D2 source' }).click(),
+    page.getByRole('button', { name: 'Download D2 copy' }).click(),
   ]);
   expect(download.suggestedFilename()).toBe('order.d2');
   expect(await readFile(await download.path(), 'utf8')).toBe('draft: Recovered');
-  await expect(page.locator('#draft-status')).toBeEmpty();
+  await expect(page.locator('#draft-status')).toContainText('Download requested');
   await page.reload();
   await expect(page.getByRole('textbox', { name: 'D2 source' })).toContainText('draft: Recovered');
-  await expect(page.locator('#draft-status')).toBeEmpty();
+  await expect(page.locator('#draft-status')).toContainText('Local draft backed up');
   await page.locator('#file').setInputFiles({ name: 'custom.d2', mimeType: 'text/plain', buffer: Buffer.from('uploaded: Original') });
   await page.getByRole('textbox', { name: 'D2 source' }).fill('uploaded: Edited');
   await page.reload();
   await expect(page.locator('#filename')).toHaveText('custom.d2');
   await expect(page.getByRole('textbox', { name: 'D2 source' })).toContainText('uploaded: Edited');
-  await expect(page.locator('#draft-status')).toContainText('Unsaved changes');
+  await expect(page.locator('#draft-status')).toContainText('Changes in browser');
+});
+
+test('uploaded drafts can be removed without affecting other diagrams', async ({ page }) => {
+  await page.goto('/');
+  await page.locator('#file').setInputFiles({ name: 'old.d2', mimeType: 'text/plain', buffer: Buffer.from('old: Draft') });
+  await page.locator('#file').setInputFiles({ name: 'active.d2', mimeType: 'text/plain', buffer: Buffer.from('active: Keep') });
+  await page.locator('#example-picker summary').click();
+  page.once('dialog', (dialog) => dialog.accept());
+  await page.getByRole('button', { name: 'Remove old.d2 draft' }).click();
+  await expect(page.locator('#filename')).toHaveText('active.d2');
+  await expect(page.locator('.zf-stage')).toContainText('Keep');
+  page.once('dialog', (dialog) => dialog.accept());
+  await page.getByRole('button', { name: 'Remove active.d2 draft' }).click();
+  await expect(page.locator('#filename')).toHaveText('order.d2');
+  await page.reload();
+  await page.locator('#example-picker summary').click();
+  await expect(page.getByRole('button', { name: 'Remove old.d2 draft' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Remove active.d2 draft' })).toHaveCount(0);
+});
+
+test('D2 syntax tokens remain visible in light and dark themes', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.locator('.zf-token-comment').first()).toBeVisible();
+  await expect(page.locator('.zf-token-keyword').first()).toBeVisible();
+  await expect(page.locator('.zf-token-property').first()).toBeVisible();
+  await expect(page.locator('.zf-token-url').first()).toBeVisible();
+  await expect(page.locator('.zf-token-operator').first()).toBeVisible();
+  const light = await page.locator('.zf-token-comment').first().evaluate((node) => getComputedStyle(node).color);
+  await page.locator('#theme').selectOption('dark');
+  const dark = await page.locator('.zf-token-comment').first().evaluate((node) => getComputedStyle(node).color);
+  expect(dark).not.toBe(light);
 });
 
 test('invalid current file cannot export the previous diagram', async ({ page }) => {
@@ -97,6 +133,17 @@ test('preview zooms and pans, then fits again', async ({ page }) => {
   await page.mouse.up();
   const panned = await box();
   expect(panned.slice(0, 2)).not.toEqual(zoomed.slice(0, 2));
+  const linked = page.locator('.zf-stage a[href="root.layers.checkout"]');
+  const target = (await linked.boundingBox())!;
+  const beforeLinkedPan = await box();
+  await page.mouse.move(target.x + target.width / 2, target.y + target.height / 2);
+  await page.keyboard.down('Space');
+  await page.mouse.down();
+  await page.mouse.move(target.x + target.width / 2 - 35, target.y + target.height / 2 - 25, { steps: 5 });
+  await page.mouse.up();
+  await page.keyboard.up('Space');
+  expect((await box()).slice(0, 2)).not.toEqual(beforeLinkedPan.slice(0, 2));
+  await expect(page.locator('.zf-stage')).toHaveAttribute('data-board', 'root');
   await page.getByRole('button', { name: 'Fit diagram' }).click();
   expect(await box()).toEqual(original);
 });

@@ -93,6 +93,12 @@ it('exports cyclic boards into HTML that navigates offline from file://', async 
     const errors: string[] = [];
     page.on('pageerror', (error) => errors.push(error.message));
     await page.goto(pathToFileURL(output).href);
+    expect(await page.locator('.zf-visually-hidden').evaluate((node) => getComputedStyle(node).position)).toBe('absolute');
+    expect(await page.locator('.zf-zoom-controls').evaluate((node) => getComputedStyle(node).position)).toBe('absolute');
+    const controls = (await page.locator('.zf-zoom-controls').boundingBox())!;
+    const stage = (await page.locator('.zf-stage').boundingBox())!;
+    expect(controls.y + controls.height).toBeLessThanOrEqual(stage.y + stage.height);
+    expect(await page.evaluate(() => document.body.scrollHeight)).toBeLessThanOrEqual(page.viewportSize()!.height);
     for (const target of ['A', 'B', 'A']) {
       await page.locator(`.zf-stage a[href="root.layers.${target}"]`).click();
       expect(await page.locator('.zf-stage').getAttribute('data-board')).toBe(`root.layers.${target}`);

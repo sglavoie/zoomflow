@@ -18,15 +18,20 @@
             <div class="example-menu-heading">Built-in examples</div>
             <p class="example-menu-hint">Explore a diagram, then make it your own.</p>
             <div id="example-options"></div>
-            <p class="example-menu-footer">Edits are kept while this page is open.</p>
+            <p class="example-menu-footer">Local drafts survive reloads when browser storage is available. Download a copy to keep.</p>
           </section>
         </details>
-        <button id="save-source" type="button">Save D2 source</button>
+        <button id="save-source" type="button">Download D2 copy</button>
         <span id="draft-status" role="status"></span>
-        <label>Export <select id="export-format"><option value="svg">Current board SVG</option><option value="png">Current board PNG</option><option value="zip">All boards ZIP (SVG)</option><option value="html">Single-file HTML</option></select></label>
-        <button id="export" disabled>Download</button>
+        <div id="header-more">
+          <button id="header-more-toggle" type="button" aria-expanded="true" aria-controls="header-more-content">Export &amp; theme</button>
+          <div id="header-more-content" class="header-more-content">
+            <label>Export <select id="export-format"><option value="svg">Current board SVG</option><option value="png">Current board PNG</option><option value="zip">All boards ZIP (SVG)</option><option value="html">Single-file HTML</option></select></label>
+            <button id="export" disabled>Download</button>
+            <label>Theme <select id="theme"><option value="system">System</option><option value="light">Light</option><option value="dark">Dark</option></select></label>
+          </div>
+        </div>
         <span id="preview-status" role="status"></span>
-        <label>Theme <select id="theme"><option value="system">System</option><option value="light">Light</option><option value="dark">Dark</option></select></label>
       </div>
       <button id="toggle-reference" aria-expanded="false" aria-controls="d2-reference" title="D2 reference (⌘/ or Ctrl+/)">D2 reference</button>
     </header>
@@ -53,29 +58,34 @@
         <div class="pane-title"><div>D2 source <span>Edit to update the preview</span></div><button id="format-source" title="Format D2 source (Shift+Alt+F)">Format</button></div>
         <div id="format-status" role="status" hidden></div>
         <div id="compile-error" role="alert" hidden></div>
-        <form id="ai-form" aria-label="AI diagram assistant">
-          <div class="ai-provider-row">
-            <label for="ai-provider">AI</label>
-            <select id="ai-provider"><option value="claude">Claude Code</option><option value="codex">Codex</option></select>
-          </div>
-          <details class="ai-settings"><summary>AI settings</summary>
-            <label id="ai-claude-config" class="ai-field" for="ai-claude-config-dir">CLAUDE_CONFIG_DIR <span>Overrides the same name below</span>
-              <input id="ai-claude-config-dir" type="text" value="~/.claude" spellcheck="false" required />
-            </label>
-            <label class="ai-field" for="ai-environment">Environment <span>One NAME=value per line; values are literal</span>
-              <textarea id="ai-environment" rows="2" spellcheck="false" placeholder="EXAMPLE_KEY=value"></textarea>
-            </label>
-          </details>
-          <textarea id="ai-prompt" aria-label="Ask AI about this diagram" placeholder="Describe a change or ask about this diagram…" rows="2" required></textarea>
-          <button id="ai-send" type="submit">Send</button>
-        </form>
+        <details id="ai-assistant" open>
+          <summary>Ask AI about this diagram</summary>
+          <form id="ai-form" aria-label="AI diagram assistant">
+            <div class="ai-provider-row">
+              <label for="ai-provider">AI</label>
+              <select id="ai-provider"><option value="claude">Claude Code</option><option value="codex">Codex</option></select>
+            </div>
+            <details class="ai-settings"><summary>AI settings</summary>
+              <label id="ai-claude-config" class="ai-field" for="ai-claude-config-dir">CLAUDE_CONFIG_DIR <span>Overrides the same name below</span>
+                <input id="ai-claude-config-dir" type="text" value="~/.claude" spellcheck="false" required />
+              </label>
+              <label class="ai-field" for="ai-environment">Environment <span>One NAME=value per line; values are literal</span>
+                <textarea id="ai-environment" rows="2" spellcheck="false" placeholder="EXAMPLE_KEY=value"></textarea>
+              </label>
+            </details>
+            <textarea id="ai-prompt" aria-label="Ask AI about this diagram" placeholder="Describe a change or ask about this diagram…" rows="2" required></textarea>
+            <button id="ai-send" type="submit">Send</button>
+          </form>
+        </details>
         <div id="ai-status" role="status" aria-live="polite"></div>
-        <div class="lint-controls">
-          <span id="lint-summary" role="status">Lint pending…</span>
-          <button id="show-diagnostics">Show diagnostics</button>
-          <label><input id="boundary-ports" type="checkbox" /> Check boundary ports</label>
-          <label><input id="missing-backlink" type="checkbox" /> Check parent backlinks</label>
-        </div>
+        <details id="lint-details" open>
+          <summary><span id="lint-summary" role="status">Lint pending…</span></summary>
+          <div class="lint-controls">
+            <button id="show-diagnostics">Show diagnostics</button>
+            <label><input id="boundary-ports" type="checkbox" /> Check boundary ports</label>
+            <label><input id="missing-backlink" type="checkbox" /> Check parent backlinks</label>
+          </div>
+        </details>
         <div id="editor"></div>
       </section>
     </div>

@@ -32,6 +32,26 @@ export function setupViewport(stage: HTMLElement, host: HTMLElement) {
   const pointers = new Map<number, { x: number; y: number; startX: number; startY: number }>();
   let moved = false;
   let suppressClick = false;
+  let panGesture = false;
+  let spaceHeld = false;
+  let hovered = false;
+
+  stage.addEventListener('pointerenter', () => { hovered = true; });
+  stage.addEventListener('pointerleave', () => { hovered = false; });
+  window.addEventListener('keydown', (event) => {
+    if (event.code !== 'Space' || event.repeat || event.target instanceof Element &&
+      event.target.closest('button, input, textarea, select, [contenteditable="true"]')) return;
+    if (scale() <= 1.001 || !hovered && !stage.contains(document.activeElement)) return;
+    event.preventDefault();
+    spaceHeld = true;
+    stage.classList.add('zf-pan-ready');
+  });
+  window.addEventListener('keyup', (event) => {
+    if (event.code !== 'Space') return;
+    spaceHeld = false;
+    stage.classList.remove('zf-pan-ready');
+  });
+  window.addEventListener('blur', () => { spaceHeld = false; stage.classList.remove('zf-pan-ready'); });
 
   function scale() { return base && box ? base.width / box.width : 1; }
   function updateControls() {
@@ -40,6 +60,7 @@ export function setupViewport(stage: HTMLElement, host: HTMLElement) {
     inside.disabled = !svg || scale() >= 7.999;
     fit.disabled = !svg || scale() <= 1.001;
     if (svg) svg.style.touchAction = scale() > 1.001 ? 'none' : 'pan-y';
+    stage.classList.toggle('zf-pan-ready', spaceHeld && scale() > 1.001);
   }
   function setBox(next: Box) {
     if (!base || !svg) return;
@@ -100,9 +121,11 @@ export function setupViewport(stage: HTMLElement, host: HTMLElement) {
     zoom(factor, event.clientX, event.clientY);
   }, { passive: false });
   stage.addEventListener('pointerdown', (event) => {
+    const forcePan = event.pointerType === 'mouse' && scale() > 1.001 && (spaceHeld || event.button === 1);
     if (!svg || !(event.target instanceof Element) || !svg.contains(event.target) ||
-      (event.pointerType === 'mouse' && (event.button !== 0 || event.target.closest('a, [data-shape-id]')))) return;
-    if (!pointers.size) moved = false;
+      (event.pointerType === 'mouse' && !forcePan && (event.button !== 0 || event.target.closest('a, [data-shape-id]')))) return;
+    if (!pointers.size) { moved = false; panGesture = forcePan; }
+    if (forcePan) event.preventDefault();
     pointers.set(event.pointerId, { x: event.clientX, y: event.clientY, startX: event.clientX, startY: event.clientY });
     stage.setPointerCapture(event.pointerId);
   });
@@ -132,10 +155,11 @@ export function setupViewport(stage: HTMLElement, host: HTMLElement) {
     if (stage.hasPointerCapture(event.pointerId)) stage.releasePointerCapture(event.pointerId);
     if (!pointers.size) {
       stage.classList.remove('zf-panning');
-      if (moved) {
+      if (moved || panGesture) {
         suppressClick = true;
         setTimeout(() => { suppressClick = false; }, 150);
       }
+      panGesture = false;
     }
   }
   stage.addEventListener('pointerup', finish);

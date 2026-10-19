@@ -1,9 +1,8 @@
 import { exportBoardsHtml, exportBoardsZip, renderExportBoards, indexShapeSources, lint, type CompileResponse, type ShapeSource, type Diagram, type LintDiagnostic } from '@zoomflow/core';
-import { Viewer, prepareExportSvg, rasterizeSvg, offlineViewerScript, setupViewport, type RenderBoard } from '@zoomflow/viewer';
+import { Viewer, prepareExportSvg, rasterizeSvg, offlineViewerScript, offlineViewerStyle, setupViewport, type RenderBoard } from '@zoomflow/viewer';
 import { examples } from './examples';
 import { setupExamplePicker } from './example-picker';
 import standardLibrary from '../../../stdlib/zoomflow.d2?raw';
-import exportStyle from './style.css?raw';
 import './style.css';
 import { SourceEditor, compilerDiagnostics, lintDiagnostics } from './editor';
 import { diagramFonts } from './fonts';
@@ -16,6 +15,22 @@ const viewer = new Viewer(document.querySelector<HTMLElement>('#viewer')!);
 setupViewport(viewer.stage, setupFullscreen(viewer.stage));
 setupReference();
 setupSourceSplit();
+const narrowLayout = matchMedia('(max-width: 600px)');
+const moreToggle = document.querySelector<HTMLButtonElement>('#header-more-toggle')!;
+const moreContent = document.querySelector<HTMLElement>('#header-more-content')!;
+function setMoreOpen(open: boolean) {
+  moreContent.hidden = !open;
+  moreToggle.setAttribute('aria-expanded', String(open));
+}
+moreToggle.addEventListener('click', () => setMoreOpen(Boolean(moreContent.hidden)));
+function setCompactControls() {
+  setMoreOpen(!narrowLayout.matches);
+  for (const selector of ['#ai-assistant', '#lint-details']) {
+    document.querySelector<HTMLDetailsElement>(selector)!.open = !narrowLayout.matches;
+  }
+}
+narrowLayout.addEventListener('change', setCompactControls);
+setCompactControls();
 const theme = document.querySelector<HTMLSelectElement>('#theme')!;
 const media = matchMedia('(prefers-color-scheme: dark)');
 function updateTheme() {
@@ -65,9 +80,13 @@ const examplePicker = setupExamplePicker(() => editor.source, (source, name) => 
   // Example changes start at their overview; live edits still preserve the route.
   history.replaceState(null, '', `${location.pathname}${location.search}#/`);
   void replaceDocument(source, name);
-}, (dirty, recoveryAvailable, savePending) => {
-  draftStatus.textContent = dirty ? !recoveryAvailable ? 'Unsaved changes · download your source'
-    : savePending ? 'Unsaved changes · backing up draft…' : 'Unsaved changes · draft backed up locally' : '';
+}, (dirty, recoveryAvailable, savePending, hasDraft, downloadRequested) => {
+  draftStatus.textContent = downloadRequested ? recoveryAvailable
+    ? 'Download requested · draft backed up locally' : 'Download requested · keep your copy'
+    : dirty ? !recoveryAvailable ? 'Changes in browser · download a copy'
+      : savePending ? 'Changes in browser · backing up draft…' : 'Changes in browser · draft backed up locally'
+      : hasDraft ? recoveryAvailable ? 'Local draft backed up · download a copy to keep it'
+        : 'Local draft · download a copy to keep it' : '';
 });
 
 function download(blob: Blob, name: string) {
@@ -83,7 +102,7 @@ function download(blob: Blob, name: string) {
 document.querySelector<HTMLButtonElement>('#save-source')!.addEventListener('click', () => {
   const name = documentName.replace(/[/\\]/g, '_').replace(/\.d2$/i, '') + '.d2';
   download(new Blob([editor.source], { type: 'text/plain;charset=utf-8' }), name);
-  examplePicker.markSaved();
+  examplePicker.markDownloadRequested();
 });
 
 async function replaceDocument(source: string, name: string) {
@@ -235,7 +254,7 @@ exportButton.addEventListener('click', async () => {
       const boards = await renderExportBoards(loaded.diagram, prepare, loaded.diagnostics);
       blob = format === 'zip' ? new Blob([exportBoardsZip(boards)], { type: 'application/zip' })
         : new Blob([exportBoardsHtml(boards, { title: loaded.name, script: offlineViewerScript(),
-          style: exportStyle + (dark ? ':root{color-scheme:dark;color:#e4eaf2;background:#111722}.zf-stage{background:#0a0f25}' : '') })], { type: 'text/html' });
+          style: offlineViewerStyle + (dark ? ':root{color-scheme:dark;--zf-page:#111722;--zf-text:#e4eaf2;--zf-surface:#182231;--zf-border:#8192a466;--zf-muted:#adbbcd}.zf-stage{background:#0a0f25}' : '') })], { type: 'text/html' });
       name += `.${format}`;
     }
     if (exportRevision !== generation || documentExport !== loaded) {

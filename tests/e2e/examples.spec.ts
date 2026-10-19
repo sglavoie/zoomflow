@@ -88,6 +88,9 @@ test('picker supports keyboard, Escape without navigating, outside dismissal, an
   }).toBeLessThanOrEqual(601);
   await page.keyboard.press('Escape');
   await page.setViewportSize({ width: 375, height: 720 });
+  await expect(page.locator('#header-more-toggle')).toHaveAttribute('aria-expanded', 'false');
+  await page.locator('#header-more-toggle').click();
+  await expect(page.locator('#theme')).toBeVisible();
   await page.selectOption('#theme', 'dark');
   await summary.click();
   const menu = page.locator('.example-menu');

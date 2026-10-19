@@ -5,6 +5,7 @@ import { renderParentContext, simplifyTrail } from './navigation';
 export type RenderBoard = (target: string) => Promise<string>;
 export { prepareExportSvg, rasterizeSvg, offlineViewerScript } from './export';
 export { setupViewport } from './viewport';
+export { offlineViewerStyle } from './export-style';
 
 /** DOM viewer with an injected renderer so callers can reuse compiled documents. */
 export class Viewer {

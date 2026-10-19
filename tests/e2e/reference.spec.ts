@@ -184,6 +184,8 @@ test('reference stays usable on narrow screens, in dark mode, and with storage b
   });
   await page.setViewportSize({ width: 390, height: 844 });
   await ready(page);
+  await page.locator('#header-more-toggle').click();
+  await expect(page.locator('#theme')).toBeVisible();
   await page.getByLabel('Theme').selectOption('dark');
   await toggle(page).click();
   await expect(search(page)).toBeVisible();

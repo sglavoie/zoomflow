@@ -4,6 +4,7 @@ import { EditorView, keymap } from '@codemirror/view';
 import { isolateHistory } from '@codemirror/commands';
 import { lintGutter, openLintPanel, setDiagnostics, type Diagnostic } from '@codemirror/lint';
 import { parseSourceRange, type SourceRange, type LintDiagnostic, type ShapeSource } from '@zoomflow/core';
+import { d2Language } from './d2-language';
 
 export function lintDiagnostics(items: LintDiagnostic[], source: string, sources: ShapeSource[]): Diagnostic[] {
   return items.map((item) => {
@@ -38,7 +39,7 @@ export class SourceEditor {
     this.view = new EditorView({
       parent,
       state: EditorState.create({ doc: source, extensions: [
-        basicSetup, lintGutter(), EditorView.lineWrapping,
+        basicSetup, d2Language, lintGutter(), EditorView.lineWrapping,
         keymap.of([{ key: 'Shift-Alt-f', run: () => { format(); return true; } }]),
         EditorView.contentAttributes.of({ 'aria-label': 'D2 source', 'aria-multiline': 'true' }),
         EditorView.theme({

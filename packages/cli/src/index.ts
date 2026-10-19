@@ -1,6 +1,6 @@
 import { D2 } from '@d2lang/d2';
 import { exportBoardsHtml, indexBoards, lint, renderExportBoards, type Diagram } from '@zoomflow/core';
-import { offlineViewerScript } from '@zoomflow/viewer';
+import { offlineViewerScript, offlineViewerStyle } from '@zoomflow/viewer';
 import { strToU8, zipSync } from 'fflate';
 import { execFile } from 'node:child_process';
 import { copyFile, lstat, mkdir, mkdtemp, readFile, readdir, rename, rm, writeFile } from 'node:fs/promises';
@@ -104,12 +104,6 @@ async function save(output: string, data: string | Uint8Array) {
   } finally { await rm(staging, { recursive: true, force: true }); }
 }
 
-const style = `:root{font:16px system-ui;color:#172033;background:#f5f7fa}
-body{margin:0}header,footer,.zf-breadcrumbs{padding:1rem}header{font-size:1.2rem}
-.zf-stage{padding:1rem;overflow:auto;background:white}.zf-stage>svg{width:100%;height:auto;max-height:80vh}
-button{font:inherit;cursor:pointer;padding:.4rem .7rem}button[aria-current]{font-weight:bold}
-.zf-message{color:#a22;padding:0 1rem}.zf-context{padding:0 1rem;overflow-wrap:anywhere}a[data-missing]{outline:2px dashed #b33}`;
-
 export async function main(args = process.argv.slice(2)): Promise<number> {
   try {
     const { values, positionals } = parseArgs({ args, allowPositionals: true, options: {
@@ -180,7 +174,7 @@ export async function main(args = process.argv.slice(2)): Promise<number> {
             return format === 'png' ? '' : format === 'html' ? htmlLinks(data.toString('utf8'), byTarget.get(target)!) : data.toString('utf8');
           }, format === 'html' ? lint(compiled).diagnostics : []);
           if (format === 'html') {
-            await save(output, exportBoardsHtml(boards, { title: basename(input), script: offlineViewerScript(), style }));
+            await save(output, exportBoardsHtml(boards, { title: basename(input), script: offlineViewerScript(), style: offlineViewerStyle }));
           } else {
             const archive: Record<string, Uint8Array> = Object.create(null);
             boards.forEach((board, i) => { archive[board.path.replace(/\.svg$/, `.${format}`)] = format === 'png' ? binaries[i] : strToU8(board.svg); });
