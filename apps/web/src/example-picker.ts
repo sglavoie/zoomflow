@@ -446,11 +446,11 @@ export function setupExamplePicker(
       persist();
       return { key: draft.key, name: draft.name };
     },
-    rememberFile(name: string, source: string) {
+    rememberFile(name: string, source: string, baseline = source) {
       currentDraft().source = readSource();
       const key = `file:${crypto.randomUUID()}`;
       const number = ++fileNumber;
-      const item: Draft = { key, number, name, title: name, description: 'Your file · return to your edits', source, baseline: source, updatedAt: Date.now() };
+      const item: Draft = { key, number, name, title: name, description: 'Your file · return to your edits', source, baseline, updatedAt: Date.now() };
       drafts.set(key, item);
       addOption(item);
       activate(key);

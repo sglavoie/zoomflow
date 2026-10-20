@@ -1,5 +1,28 @@
 # Working with diagrams
 
+## Create a flow without diagram syntax
+
+Choose **New flow** in the header. Give the flow a name, choose a simple flow or
+an approval example, and replace the step names with your own. Step types are
+**Action**, **Decision**, and **Start / End**. Each connection draws an arrow
+between the selected steps; optional labels such as Yes and No describe branches.
+**Add step** connects the new step from the previous one automatically. Change
+that connection or add others to make branches and loops. Removing a step also
+removes its connections. Layout can run top to bottom or left to right.
+
+**Create flow** opens a separate, unsaved draft and keeps the current diagram in
+the filename menu. **Edit flow** above the preview reopens the form, including
+after browser recovery or reopening its saved `.d2` file. **Apply changes** is
+undoable in the source editor; Cancel leaves the diagram unchanged. Save or
+download a disk copy to keep your work.
+
+The builder writes ordinary D2. It can reopen its own generated source, including
+label edits that preserve its structure. Adding custom D2 styling, boards, or
+other syntax makes **Edit flow** unavailable so the form cannot discard those
+additions. Continue editing those diagrams in the source editor.
+
+## Workspace and drafts
+
 Navigable, drill-down diagrams built on D2. The framework-free Vite app opens
 local `.d2` files or a folder of related D2 files and starts with `fixtures/order.d2` as an example.
 Click the filename dropdown to explore eight built-in templates: order drill-down,
@@ -13,6 +36,8 @@ during the page session. Restoring an example resets its saved view. Source edit
 opened files remain in the dropdown and are backed up in browser storage for reload recovery. The
 source toolbar reserves space for save status so saving does not move the editor.
 Use **Save .d2** above the editor or **⌘S / Ctrl+S** to save a disk copy.
+Use **Clear** beside Format to empty the current source and start from scratch.
+The editor receives focus immediately; **⌘Z / Ctrl+Z** restores the cleared text.
 Browsers with file-system access can write back to a file you opened or a destination
 you choose. Other browsers download the source and label the button **Download .d2**.
 **Export → Download .d2 source** always starts a separate download.

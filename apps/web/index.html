@@ -9,6 +9,7 @@
     <header>
       <strong>Zoomflow</strong>
       <div class="header-controls">
+        <button id="new-flow" class="button-primary" type="button">New flow</button>
         <label class="file-button">Open .d2<input id="file" type="file" accept=".d2" /></label>
         <button id="open-folder" type="button">Open folder</button>
         <input id="folder" type="file" webkitdirectory multiple hidden />
@@ -125,7 +126,7 @@
       <section id="source-pane" aria-label="Source editor">
         <div class="pane-title">
           <div>D2 source</div>
-          <div class="pane-actions"><button id="format-source" class="button-quiet" title="Format D2 source (Shift+Alt+F)">Format</button><button id="save-file" class="button-primary" type="button" aria-describedby="draft-status recovery-info" aria-keyshortcuts="Meta+s Control+s">Save .d2</button></div>
+          <div class="pane-actions"><button id="clear-source" class="button-quiet" type="button" title="Clear D2 source (can be undone)">Clear</button><button id="format-source" class="button-quiet" title="Format D2 source (Shift+Alt+F)">Format</button><button id="save-file" class="button-primary" type="button" aria-describedby="draft-status recovery-info" aria-keyshortcuts="Meta+s Control+s">Save .d2</button></div>
           <span id="recovery-info" class="zf-visually-hidden"></span>
         </div>
         <div id="work-status" role="group" aria-label="Diagram status">

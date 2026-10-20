@@ -15,6 +15,7 @@ import { setupMobileView } from './mobile-view';
 import { projectFileSystem, readDirectoryHandle, readFolderInput } from './project-files';
 import { setupShortcuts } from './shortcuts';
 import { setupCanvasGuidance } from './canvas-guidance';
+import { setupFlowBuilder } from './flow-builder';
 
 const canvasStyle = document.createElement('style');
 canvasStyle.textContent = viewerStyle;
@@ -86,6 +87,7 @@ retryEngine.addEventListener('click', () => {
 let generation = 0;
 let documentRevision = 0;
 let ai: ReturnType<typeof setupAiAssistant> | undefined;
+let flowBuilder: ReturnType<typeof setupFlowBuilder> | undefined;
 let documentName = examples[0].name;
 let currentDocumentKey = examples[0].name;
 const documentRoutes = new Map<string, { hash: string; trail: unknown }>();
@@ -180,6 +182,7 @@ function setEditorDiagnostics(diagnostics: SourceDiagnostic[]) {
 }
 let lintDocument: CompileResponse | undefined;
 function invalidateSource() {
+  flowBuilder?.refresh();
   // Invalidate immediately, including requests still awaiting WASM/render startup.
   ++generation;
   previewQueue.invalidate();
@@ -243,6 +246,19 @@ const examplePicker = setupExamplePicker(() => editor.source, (source, name, key
     if (handle) fileHandles.set(key, handle);
     if (route) documentRoutes.set(key, route);
   };
+});
+
+flowBuilder = setupFlowBuilder({
+  read: () => ({ source: editor.source, name: documentName }),
+  create: (source, name) => {
+    const key = examplePicker.rememberFile(name, source, '');
+    void replaceDocument(source, name, key);
+    showMobileView('preview');
+  },
+  update: source => {
+    editor.replaceSource(source);
+    showMobileView('preview');
+  },
 });
 
 function download(blob: Blob, name: string) {
@@ -373,6 +389,10 @@ async function formatSource() {
   } finally { formatButton.disabled = false; }
 }
 formatButton.addEventListener('click', () => void formatSource());
+document.querySelector('#clear-source')!.addEventListener('click', () => {
+  if (editor.replaceSource('', 'delete.clear')) setActivity('Source cleared. Undo with ⌘Z / Ctrl+Z.');
+  editor.view.focus();
+});
 ai = setupAiAssistant(
   () => ({ source: editor.source, name: documentName, board: viewer.currentBoard?.id ?? 'root', revision: documentRevision }),
   async (source) => { await compileSource(source); },
@@ -744,6 +764,7 @@ currentDocumentKey = examplePicker.initial.key;
 projectDownloadButton.hidden = !examplePicker.projectName;
 viewport.setDocument(currentDocumentKey);
 editor.open(examplePicker.initial.key, examplePicker.initial.source);
+flowBuilder.refresh();
 examplePicker.refresh();
 clearTimeout(debounce);
 void load(editor.source, documentName);

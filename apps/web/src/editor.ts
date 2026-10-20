@@ -145,11 +145,14 @@ export class SourceEditor {
     return `Changes at ${lines.size} source line${lines.size === 1 ? '' : 's'}${deleted ? ' (including deletions)' : ''}.`;
   }
   format(source: string) {
+    return this.replaceSource(source, 'input.format');
+  }
+  replaceSource(source: string, userEvent = 'input.builder') {
     const current = this.source;
     if (source === current) return false;
     const changes = this.view.state.changes(formatChanges(current, source));
     this.view.dispatch({ changes, effects: this.view.scrollSnapshot().map(changes),
-      userEvent: 'input.format', annotations: isolateHistory.of('full') });
+      userEvent, annotations: isolateHistory.of('full') });
     return true;
   }
   select(range: SourceRange, focus: boolean) {
