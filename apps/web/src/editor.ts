@@ -20,7 +20,7 @@ export class SourceEditor {
   private readonly extensions: Extension[];
   private currentKey = '';
   private readonly documents = new Map<string, { state: EditorState; scroll: ReturnType<EditorView['scrollSnapshot']> }>();
-  constructor(parent: HTMLElement, source: string, changed: () => void, selected: () => void, format: () => void, reveal: () => void) {
+  constructor(parent: HTMLElement, source: string, changed: () => void, selected: () => void, format: () => void, reveal: () => void, idSuffix = '') {
     this.extensions = [
         basicSetup, d2Language, lintGutter(), EditorView.lineWrapping, hangingIndentation, aiHighlights,
         codeFolding({ placeholderDOM: (view, unfold) => {
@@ -71,7 +71,7 @@ export class SourceEditor {
       ];
     this.view = new EditorView({ parent, state: EditorState.create({ doc: source, extensions: this.extensions }) });
     this.panel.className = 'cm-panel-lint source-diagnostics';
-    this.panel.id = 'diagnostics-panel';
+    this.panel.id = `diagnostics-panel${idSuffix}`;
     this.panel.hidden = true;
     this.panel.setAttribute('aria-label', 'Diagnostic list');
     const close = document.createElement('button');

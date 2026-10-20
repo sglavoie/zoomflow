@@ -30,9 +30,14 @@ function renderMatches(element: HTMLElement, source: string, terms: string[], sy
   element.replaceChildren(fragment);
 }
 
-/** App-only reference UI; the viewer and exported diagrams remain independent. */
-export function setupReference() {
-  const preview = document.querySelector<HTMLElement>('#preview-pane')!;
+type ReferenceHost = { preview: HTMLElement; source: HTMLElement; showPreview: () => void; showSource: () => void };
+
+/** App-only reference UI; the viewer and exported diagrams remain independent.
+ * One panel serves the workspace: it opens below the diagram of the pane being worked in.
+ */
+export function setupReference(host: () => ReferenceHost) {
+  let target = host();
+  let preview = target.preview;
   const panel = document.querySelector<HTMLElement>('#d2-reference')!;
   const toggle = document.querySelector<HTMLButtonElement>('#toggle-reference')!;
   const close = document.querySelector<HTMLButtonElement>('#close-reference')!;
@@ -141,23 +146,34 @@ export function setupReference() {
   function setOpen(open: boolean) {
     if (open === !panel.hidden) return;
     const active = document.activeElement;
-    if (open) returnFocus = (active instanceof HTMLElement || active instanceof SVGElement) && active !== document.body ? active : toggle;
-    else scrollTop = content.scrollTop;
+    if (open) {
+      returnFocus = (active instanceof HTMLElement || active instanceof SVGElement) && active !== document.body ? active : toggle;
+      move(host());
+    } else scrollTop = content.scrollTop;
     panel.hidden = !open;
     divider.hidden = !open;
     preview.classList.toggle('reference-open', open);
     toggle.setAttribute('aria-expanded', String(open));
     if (open) {
-      document.querySelector<HTMLButtonElement>('#mobile-preview')!.click();
+      target.showPreview();
       search.focus({ preventScroll: true });
       content.scrollTop = scrollTop;
     } else {
       if (drag) finishDrag();
       if (active instanceof Node && (panel.contains(active) || active === divider)) {
-        if (returnFocus && document.querySelector('#source-pane')!.contains(returnFocus)) document.querySelector<HTMLButtonElement>('#mobile-source')!.click();
+        if (returnFocus && target.source.contains(returnFocus)) target.showSource();
         (returnFocus?.isConnected ? returnFocus : toggle).focus({ preventScroll: true });
       }
     }
+  }
+  function move(next: ReferenceHost) {
+    if (next.preview === preview) return;
+    preview.classList.remove('reference-open');
+    target = next;
+    preview = next.preview;
+    preview.append(divider, panel);
+    preview.classList.toggle('reference-open', !panel.hidden);
+    setShare(diagramShare);
   }
   toggle.setAttribute('aria-keyshortcuts', 'Meta+Shift+/ Control+Shift+/');
   toggle.addEventListener('click', () => {
@@ -230,4 +246,11 @@ export function setupReference() {
     setShare(defaultShare);
     saveShare();
   });
+  return {
+    /** Close the reference and return it to the given pane, for example when its pane closes. */
+    reset(next: ReferenceHost) {
+      if (!panel.hidden && preview !== next.preview) setOpen(false);
+      move(next);
+    },
+  };
 }

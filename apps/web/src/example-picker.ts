@@ -2,13 +2,21 @@ import { examples } from './examples';
 import { DraftStore, type Draft } from './draft-store';
 import { setupDocumentActions } from './document-actions';
 
-/** Keep drafts across visits, including distinct uploads with the same filename. */
+export type PaneId = 'a' | 'b';
+const panes: PaneId[] = ['a', 'b'];
+const otherPane = (pane: PaneId): PaneId => pane === 'a' ? 'b' : 'a';
+
+/** Keep drafts across visits, including distinct uploads with the same filename.
+ * Each workspace pane shows one draft; a draft is never open in both panes. The
+ * header menu acts on the target pane, and the first pane always has a document.
+ */
 export function setupExamplePicker(
-  readSource: () => string,
-  open: (source: string, name: string, key: string, reset?: boolean) => void,
-  onState: (dirty: boolean, recoveryAvailable: boolean, savePending: boolean, hasDraft: boolean, downloadRequested: boolean, identity: { key: string; name: string }) => void,
+  readSource: (pane: PaneId) => string,
+  open: (pane: PaneId, document: { source: string; name: string; key: string } | undefined, reset?: boolean) => void,
+  onState: (pane: PaneId, dirty: boolean, recoveryAvailable: boolean, savePending: boolean, hasDraft: boolean, downloadRequested: boolean, identity: { key: string; name: string; projectId?: string }) => void,
   forget: (key: string) => void,
   checkpoint: (key: string) => () => void,
+  focusPane: (pane: PaneId) => void,
 ) {
   const picker = document.querySelector<HTMLDetailsElement>('#example-picker')!;
   const summary = picker.querySelector('summary')!;
@@ -47,11 +55,14 @@ export function setupExamplePicker(
   menu.prepend(search);
   fileOptions.after(empty);
   search.addEventListener('input', filterRows);
-  let current = examples[0].name;
+  const current: Record<PaneId, string | undefined> = { a: examples[0].name, b: undefined };
+  let target: PaneId = 'a';
+  let split = false;
   let fileNumber = 0;
   let recoveryAvailable = true;
   let savePending = false;
-  let downloadRequested = false;
+  const downloadRequested: Record<PaneId, boolean> = { a: false, b: false };
+  let storedSecond: string | undefined;
   let saveTimer: ReturnType<typeof setTimeout> | undefined;
 
   try {
@@ -70,7 +81,8 @@ export function setupExamplePicker(
       item.number = number;
       numbers.add(number);
     }
-    if (saved.current && drafts.has(saved.current)) current = saved.current;
+    if (saved.current && drafts.has(saved.current)) current.a = saved.current;
+    if (saved.second !== current.a && saved.second && drafts.has(saved.second)) storedSecond = saved.second;
   } catch { recoveryAvailable = false; }
   function checkConflicts() {
     try { conflictNotice.hidden = !store?.hasConcurrentChanges(); }
@@ -80,13 +92,20 @@ export function setupExamplePicker(
     if (DraftStore.isDraftEvent(event.key)) checkConflicts();
   });
 
-  function currentDraft() { return drafts.get(current)!; }
+  function draftOf(pane: PaneId) { return current[pane] === undefined ? undefined : drafts.get(current[pane]!); }
+  function currentDraft() { return draftOf(target); }
+  function syncSources() {
+    for (const pane of panes) { const draft = draftOf(pane); if (draft) draft.source = readSource(pane); }
+  }
   function announce() {
-    const draft = currentDraft();
-    const original = examples.find((example) => example.name === draft.key)?.source;
-    onState(draft.source !== draft.baseline, recoveryAvailable, savePending,
-      draft.key.startsWith('file:') || Boolean(draft.projectId) || draft.source !== original || draft.baseline !== original, downloadRequested, draft);
-    refreshRows.get(current)?.();
+    for (const pane of panes) {
+      const draft = draftOf(pane);
+      if (!draft) continue;
+      const original = examples.find((example) => example.name === draft.key)?.source;
+      onState(pane, draft.source !== draft.baseline, recoveryAvailable, savePending,
+        draft.key.startsWith('file:') || Boolean(draft.projectId) || draft.source !== original || draft.baseline !== original, downloadRequested[pane], draft);
+      refreshRows.get(draft.key)?.();
+    }
     for (const [id, group] of projectGroups) {
       const count = [...drafts.values()].filter((item) => item.projectId === id && item.source !== item.baseline).length;
       const indicator = group.section.querySelector<HTMLElement>('.project-unsaved')!;
@@ -102,7 +121,7 @@ export function setupExamplePicker(
       if (!store) store = new DraftStore(localStorage);
       store.save([...drafts.values()].filter((item) => item.key.startsWith('file:') || Boolean(item.projectId) ||
         item.source !== examples.find((example) => example.name === item.key)?.source ||
-        item.baseline !== examples.find((example) => example.name === item.key)?.source), current);
+        item.baseline !== examples.find((example) => example.name === item.key)?.source), current.a!, current.b);
       checkConflicts();
       recoveryAvailable = true;
     } catch { recoveryAvailable = false; }
@@ -114,14 +133,20 @@ export function setupExamplePicker(
     announce();
     saveTimer = setTimeout(persist, 400);
   }
-  function activate(key: string) {
-    current = key;
-    downloadRequested = false;
-    filename.textContent = currentDraft().name;
-    filename.title = currentDraft().title;
+  function activate(key: string, pane = target) {
+    current[pane] = key;
+    downloadRequested[pane] = false;
+    showTarget();
+  }
+  function showTarget() {
+    const draft = currentDraft();
+    filename.textContent = draft?.name ?? 'Choose a diagram';
+    filename.title = draft?.title ?? 'Choose a diagram for this pane';
+    const elsewhere = split ? current[otherPane(target)] : undefined;
     for (const [id, button] of buttons) {
-      if (id === current) button.setAttribute('aria-current', 'true');
+      if (id === current[target]) button.setAttribute('aria-current', 'true');
       else button.removeAttribute('aria-current');
+      button.querySelector<HTMLElement>('.example-elsewhere')!.hidden = id !== elsewhere;
     }
     announce();
   }
@@ -139,7 +164,7 @@ export function setupExamplePicker(
       const visible = [...drafts.values()].some(item => item.projectId === id && !rows.get(item.key)!.hidden);
       group.section.hidden = !visible;
       if (query) group.files.hidden = false;
-      else group.files.hidden = currentDraft().projectId !== id;
+      else group.files.hidden = currentDraft()?.projectId !== id;
       group.toggle.setAttribute('aria-expanded', String(!group.files.hidden));
     }
     fileHeading.hidden = ![...fileOptions.children].some(node => !(node as HTMLElement).hidden);
@@ -152,14 +177,14 @@ export function setupExamplePicker(
 
   async function removeDrafts(item: Draft, wholeProject = Boolean(item.projectId && !item.recoveredFrom)) {
     const projectId = wholeProject ? item.projectId : undefined;
-    currentDraft().source = readSource();
+    syncSources();
     const removed = [...drafts.values()].filter((draft) => projectId ? draft.projectId === projectId : draft.key === item.key);
     const unsaved = removed.filter(draft => draft.source !== draft.baseline).length;
     const name = projectId ? item.title.split('/')[0] : item.name;
     if (!await actions.confirm(`Remove ${name}?`,
       `This removes ${removed.length === 1 ? 'this browser draft' : `all ${removed.length} browser drafts in this project`}. ${unsaved ? `${unsaved} ${unsaved === 1 ? 'file has' : 'files have'} unsaved changes. ` : ''}Files on disk are kept. You can undo for 30 seconds.`,
       projectId ? 'Remove project' : 'Remove draft')) { picker.open = true; return; }
-    const previous = current;
+    const previous = { ...current };
     const restore = removed.map(draft => checkpoint(draft.key));
     for (const draft of removed) {
       drafts.delete(draft.key);
@@ -174,19 +199,23 @@ export function setupExamplePicker(
       projectGroups.delete(projectId);
     }
     summary.focus();
-    if (removed.some((draft) => draft.key === current)) {
-      activate(examples[0].name);
+    for (const pane of panes) {
+      if (!removed.some((draft) => draft.key === current[pane])) continue;
       picker.open = false;
-      open(currentDraft().source, currentDraft().name, current);
+      // The second pane may stay empty; the first falls back to an example the second is not showing.
+      if (pane === 'b') { current.b = undefined; showTarget(); open('b', undefined); continue; }
+      activate(examples.find((example) => example.name !== current.b)!.name, 'a');
+      open('a', draftOf('a'));
     }
     persist();
     restoredKey = undefined;
     actions.offerUndo(`${name} removed.`, () => {
-      currentDraft().source = readSource();
+      syncSources();
       removed.forEach((draft, index) => { drafts.set(draft.key, draft); restore[index](); addOption(draft); });
-      if (removed.some(draft => draft.key === previous)) {
-        activate(previous);
-        open(currentDraft().source, currentDraft().name, current);
+      for (const pane of panes) {
+        if (!removed.some(draft => draft.key === previous[pane]) || current[otherPane(pane)] === previous[pane]) continue;
+        activate(previous[pane]!, pane);
+        open(pane, draftOf(pane));
       }
       orderDrafts();
       persist();
@@ -239,7 +268,7 @@ export function setupExamplePicker(
     for (const item of entries) {
       const key = item.projectId ?? item.key;
       const group = groups.get(key) ?? { node: item.projectId ? projectGroups.get(item.projectId)!.section : rows.get(item.key)!, active: false, updatedAt: 0 };
-      group.active ||= item.key === current;
+      group.active ||= item.key === current[target];
       group.updatedAt = Math.max(group.updatedAt, item.updatedAt ?? 0);
       groups.set(key, group);
     }
@@ -268,11 +297,13 @@ export function setupExamplePicker(
     button.addEventListener('click', () => {
       picker.open = false;
       summary.focus();
-      if (current === item.key) return;
-      currentDraft().source = readSource();
+      if (current[target] === item.key) return;
+      const other = otherPane(target);
+      if (split && current[other] === item.key) { focusPane(other); return; }
+      syncSources();
       activate(item.key);
       schedulePersist();
-      open(item.source, item.name, item.key);
+      open(target, item);
     });
     row.append(button);
     if (item.key.startsWith('file:')) {
@@ -293,7 +324,7 @@ export function setupExamplePicker(
       restore.textContent = 'Restore';
       restore.setAttribute('aria-label', `Restore original example: ${item.title}`);
       restore.addEventListener('click', async () => {
-        currentDraft().source = readSource();
+        syncSources();
         if (!await actions.confirm(`Restore ${item.title}?`,
           `Replace your edits to ${item.name} with the original example. ${item.source !== item.baseline ? 'This example has unsaved changes. ' : ''}Saved file copies are kept. You can undo for 30 seconds, until you edit this example again.`, 'Restore example')) { picker.open = true; return; }
         const previous = { ...item };
@@ -304,21 +335,23 @@ export function setupExamplePicker(
         item.updatedAt = undefined;
         forget(item.key);
         refreshRows.get(item.key)?.();
-        if (current === item.key) {
-          downloadRequested = false;
-          open(item.source, item.name, item.key, true);
+        const showing = panes.find((pane) => current[pane] === item.key);
+        if (showing) {
+          downloadRequested[showing] = false;
+          open(showing, item, true);
         }
         summary.focus();
         picker.open = false;
         persist();
         restoredKey = item.key;
         actions.offerUndo(`${item.name} restored to the original example.`, () => {
-          currentDraft().source = readSource();
+          syncSources();
           Object.assign(item, previous);
           restoreState();
           restoredKey = undefined;
           refreshRows.get(item.key)?.();
-          if (current === item.key) open(item.source, item.name, item.key);
+          const showing = panes.find((pane) => current[pane] === item.key);
+          if (showing) open(showing, item);
           persist();
         });
       });
@@ -337,7 +370,11 @@ export function setupExamplePicker(
     label.append(unsaved);
     const timestamp = document.createElement('span');
     timestamp.className = 'example-description';
-    button.append(timestamp);
+    const elsewhere = document.createElement('span');
+    elsewhere.className = 'example-elsewhere';
+    elsewhere.textContent = 'Open in the other pane';
+    elsewhere.hidden = true;
+    button.append(timestamp, elsewhere);
     refreshRows.set(item.key, () => {
       label.firstChild!.textContent = item.projectId
         ? `${item.path}${item.name !== item.path!.split('/').at(-1) ? ` → ${item.name}` : ''}${item.recoveredFrom ? ' (recovered)' : ''}` : item.title;
@@ -361,7 +398,7 @@ export function setupExamplePicker(
   }
 
   for (const item of drafts.values()) addOption(item);
-  activate(current);
+  activate(current.a!, 'a');
   function positionMenu() {
     if (!picker.open) return;
     const anchor = summary.getBoundingClientRect();
@@ -388,47 +425,72 @@ export function setupExamplePicker(
   });
 
   return {
-    initial: { source: currentDraft().source, name: currentDraft().name, key: current },
-    get currentKey() { return current; },
-    get projectName() { return currentDraft().projectId ? currentDraft().title.split('/')[0] : undefined; },
-    compilation() {
-      const draft = currentDraft();
+    initial: { source: draftOf('a')!.source, name: draftOf('a')!.name, key: current.a! },
+    /** Show the second pane: it reopens the draft it showed before a reload, or starts empty. */
+    setSplit(value: boolean) {
+      if (value === split) return;
+      split = value;
+      syncSources();
+      if (split && storedSecond && drafts.has(storedSecond) && storedSecond !== current.a) current.b = storedSecond;
+      storedSecond = undefined;
+      if (!split) { current.b = undefined; target = 'a'; }
+      showTarget();
+      persist();
+      if (split && current.b) open('b', draftOf('b'));
+    },
+    /** Direct the header menu, file commands and status to the pane being worked in. */
+    setTarget(pane: PaneId) {
+      if (pane === target) return;
+      target = pane;
+      showTarget();
+    },
+    choose(pane: PaneId) {
+      this.setTarget(pane);
+      picker.open = true;
+      summary.focus();
+    },
+    currentKey(pane: PaneId) { return current[pane]; },
+    projectName(pane: PaneId) { const draft = draftOf(pane); return draft?.projectId ? draft.title.split('/')[0] : undefined; },
+    compilation(pane: PaneId) {
+      const draft = draftOf(pane);
+      if (!draft) return { inputPath: 'index', fs: { index: '' } };
       if (!draft.projectId || !draft.path) return { inputPath: 'index', fs: { index: draft.source } };
       const fs: Record<string, string> = Object.create(null);
       for (const item of drafts.values()) if (item.projectId === draft.projectId && item.path && !item.recoveredFrom) fs[item.path] = item.source;
       fs[draft.path] = draft.source;
       return { inputPath: draft.path, fs };
     },
-    hasProjectPath(path: string) {
-      const projectId = currentDraft().projectId;
-      return Boolean(projectId && [...drafts.values()].some((item) => item.projectId === projectId && item.path === path));
-    },
-    selectProjectPath(path: string) {
-      const projectId = currentDraft().projectId;
-      const target = [...drafts.values()].find((item) => item.projectId === projectId && item.path === path && !item.recoveredFrom);
-      if (!target) return;
-      currentDraft().source = readSource();
-      activate(target.key);
+    /** Open another file of the pane's project, or report the pane already showing it. */
+    selectProjectPath(pane: PaneId, path: string) {
+      const projectId = draftOf(pane)?.projectId;
+      const file = [...drafts.values()].find((item) => item.projectId === projectId && item.path === path && !item.recoveredFrom);
+      if (!file) return;
+      if (current[otherPane(pane)] === file.key) return { pane: otherPane(pane), source: file.source, name: file.name, key: file.key };
+      syncSources();
+      activate(file.key, pane);
       schedulePersist();
-      return { source: target.source, name: target.name, key: target.key };
+      return { pane, source: file.source, name: file.name, key: file.key };
     },
     refresh() { announce(); },
-    updateCurrent(source: string) {
-      if (restoredKey === current && source !== currentDraft().source) { actions.expire(); restoredKey = undefined; }
-      if (source !== currentDraft().source) currentDraft().updatedAt = Date.now();
-      currentDraft().source = source;
-      downloadRequested = false;
+    updateCurrent(pane: PaneId, source: string) {
+      const draft = draftOf(pane);
+      if (!draft) return;
+      if (restoredKey === draft.key && source !== draft.source) { actions.expire(); restoredKey = undefined; }
+      if (source !== draft.source) draft.updatedAt = Date.now();
+      draft.source = source;
+      downloadRequested[pane] = false;
       schedulePersist();
     },
-    markDownloadRequested() {
-      currentDraft().source = readSource();
-      downloadRequested = true;
+    markDownloadRequested(pane: PaneId) {
+      syncSources();
+      downloadRequested[pane] = true;
       persist();
     },
     markDiskSaved(key: string, source: string, name: string) {
       let draft = drafts.get(key);
       if (!draft) return;
-      if (current === key) { draft.source = readSource(); downloadRequested = false; }
+      const pane = panes.find((id) => current[id] === key);
+      if (pane) { draft.source = readSource(pane); downloadRequested[pane] = false; }
       // Saving a built-in example creates a named file without taking over the template.
       const template = examples.find((example) => example.name === key);
       if (template) {
@@ -442,12 +504,12 @@ export function setupExamplePicker(
       }
       draft.baseline = source;
       refreshRows.get(draft.key)?.();
-      if (current === key) activate(draft.key);
+      if (pane) activate(draft.key, pane);
       persist();
       return { key: draft.key, name: draft.name };
     },
     rememberFile(name: string, source: string, baseline = source) {
-      currentDraft().source = readSource();
+      syncSources();
       const key = `file:${crypto.randomUUID()}`;
       const number = ++fileNumber;
       const item: Draft = { key, number, name, title: name, description: 'Your file · return to your edits', source, baseline, updatedAt: Date.now() };
@@ -459,7 +521,7 @@ export function setupExamplePicker(
       return key;
     },
     rememberFolder(folderName: string, files: { path: string; source: string }[]) {
-      currentDraft().source = readSource();
+      syncSources();
       const projectId = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
       const keys: Record<string, string> = Object.create(null);
       for (const file of files) {
@@ -479,7 +541,7 @@ export function setupExamplePicker(
       return { key: keys[first.path], name: first.path.split('/').at(-1)!, source: first.source, keys };
     },
     flush() {
-      currentDraft().source = readSource();
+      syncSources();
       persist();
     },
   };

@@ -1,17 +1,10 @@
 import { flowFilename, flowSource, flowTemplate, readFlow, type Flow, type FlowStep } from './flow-model';
 
-export function setupFlowBuilder(options: {
-  read: () => { source: string; name: string };
-  create: (source: string, name: string) => void;
-  update: (source: string) => void;
-}) {
+type FlowTarget = { read: () => { source: string; name: string }; update: (source: string) => void };
+
+/** One builder dialog: New flow creates a draft, and each pane's Edit flow changes that pane's flow. */
+export function setupFlowBuilder(create: (source: string, name: string) => void, read: () => { source: string; name: string }) {
   const launch = document.querySelector<HTMLButtonElement>('#new-flow')!;
-  const toolbar = document.createElement('div');
-  toolbar.className = 'flow-builder-toolbar';
-  toolbar.hidden = true;
-  toolbar.innerHTML = '<button id="edit-flow" type="button">Edit flow</button><span>Change steps and connections without writing code.</span>';
-  document.querySelector('#viewer')!.prepend(toolbar);
-  const edit = toolbar.querySelector('button')!;
   const dialog = document.createElement('dialog');
   dialog.id = 'flow-builder';
   dialog.setAttribute('aria-labelledby', 'flow-builder-title');
@@ -56,6 +49,7 @@ export function setupFlowBuilder(options: {
   let editing = false;
   let original = '';
   let returnFocus: HTMLElement = launch;
+  let target: FlowTarget = { read, update: () => {} };
 
   function announce() {
     feedback.textContent = `${flow.steps.length} steps · ${flow.connections.length} connections`;
@@ -145,14 +139,14 @@ export function setupFlowBuilder(options: {
     direction.value = flow.direction;
     renderSteps(); renderConnections();
   }
-  function open(isEditing: boolean) {
-    const current = options.read();
+  function open(isEditing: boolean, edit?: HTMLElement) {
+    const current = target.read();
     const existing = isEditing ? readFlow(current.source) : undefined;
     if (isEditing && !existing) return;
     editing = isEditing;
     original = current.source;
     flow = existing ?? flowTemplate('simple');
-    returnFocus = editing ? edit : launch;
+    returnFocus = edit ?? launch;
     name.value = editing ? current.name.replace(/\.d2$/i, '') : 'My flow';
     name.setCustomValidity('');
     dialog.querySelector<HTMLElement>('#flow-name-field')!.hidden = editing;
@@ -166,8 +160,7 @@ export function setupFlowBuilder(options: {
     dialog.showModal();
     (editing ? steps.querySelector('input')! : name).focus();
   }
-  launch.addEventListener('click', () => open(false));
-  edit.addEventListener('click', () => open(true));
+  launch.addEventListener('click', () => { target = { read, update: () => {} }; open(false); });
   dialog.querySelectorAll<HTMLButtonElement>('[data-close]').forEach(button => button.addEventListener('click', () => dialog.close()));
   dialog.addEventListener('close', () => (returnFocus.isConnected && !returnFocus.closest('[hidden]') ? returnFocus : launch).focus({ preventScroll: true }));
   name.addEventListener('input', () => name.setCustomValidity(name.value.trim() ? '' : 'Give your flow a name.'));
@@ -192,15 +185,15 @@ export function setupFlowBuilder(options: {
   });
   form.addEventListener('submit', event => {
     event.preventDefault();
-    if (editing && options.read().source !== original) {
+    if (editing && target.read().source !== original) {
       error.textContent = 'This diagram changed while the builder was open. Close and reopen the builder to use the latest version.';
       error.hidden = false;
       return;
     }
     const source = flowSource(flow);
     dialog.close();
-    if (editing) options.update(source);
-    else options.create(source, flowFilename(name.value));
+    if (editing) target.update(source);
+    else create(source, flowFilename(name.value));
   });
   // Keep workspace navigation and save shortcuts out of this modal while allowing typing.
   window.addEventListener('keydown', event => {
@@ -210,5 +203,17 @@ export function setupFlowBuilder(options: {
     else if ((event.metaKey || event.ctrlKey) && ['s', '/', '?'].includes(event.key.toLowerCase())) event.preventDefault();
     else if (event.key === 'Backspace' && !(event.target instanceof HTMLInputElement)) event.preventDefault();
   }, { capture: true });
-  return { refresh() { toolbar.hidden = !readFlow(options.read().source); } };
+  return {
+    /** Offer Edit flow above a pane's diagram while its source is a builder flow. */
+    attach(viewer: HTMLElement, idSuffix: string, pane: FlowTarget) {
+      const toolbar = document.createElement('div');
+      toolbar.className = 'flow-builder-toolbar';
+      toolbar.hidden = true;
+      toolbar.innerHTML = `<button id="edit-flow${idSuffix}" type="button">Edit flow</button><span>Change steps and connections without writing code.</span>`;
+      viewer.prepend(toolbar);
+      const edit = toolbar.querySelector('button')!;
+      edit.addEventListener('click', () => { target = pane; open(true, edit); });
+      return { refresh() { toolbar.hidden = !readFlow(pane.read().source); } };
+    },
+  };
 }

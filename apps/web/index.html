@@ -45,6 +45,7 @@
         </div>
       </div>
       <div class="header-actions">
+        <label class="layout-control"><span class="zf-visually-hidden">Layout</span><select id="layout" aria-label="Layout" title="Workspace layout: one diagram, or two side by side"><option value="single">Single</option><option value="tabs">Split · tabs</option><option value="quad">Split · all views</option></select></label>
         <label class="theme-control"><span class="zf-visually-hidden">Theme</span><select id="theme" aria-label="Theme" title="Appearance"><option value="system">System</option><option value="light">Light</option><option value="dark">Dark</option></select></label>
         <button id="toggle-reference" class="button-quiet" aria-expanded="false" aria-controls="d2-reference" title="D2 reference (⌘⇧/ or Ctrl+Shift+/)">D2 reference</button>
         <button id="show-shortcuts" class="button-quiet" type="button" aria-label="Keyboard shortcuts" aria-haspopup="dialog" aria-controls="keyboard-shortcuts" title="Keyboard shortcuts">
@@ -100,7 +101,17 @@
     <div id="draft-conflict" role="status" hidden>Drafts changed in another tab. Your open source is unchanged. Reload to review saved versions; conflicting edits appear as recovered copies.</div>
     <div id="file-status" role="alert" hidden></div>
     <div id="engine-notice" role="status" hidden><span id="engine-message"></span><button id="retry-engine" type="button" hidden>Retry preview</button></div>
-    <div id="workspace">
+    <div id="workspace" data-layout="single">
+      <div id="pane-a" class="document-pane" data-pane="a">
+      <div class="pane-header" hidden>
+        <button id="pane-document" class="pane-document button-quiet" type="button" title="Choose a diagram for this pane"><span class="pane-document-name"></span><span class="draft-unsaved" role="img" aria-label="Unsaved changes" hidden>•</span><span class="picker-chevron" aria-hidden="true">⌄</span></button>
+        <button id="pane-switch" class="pane-switch button-quiet" type="button">Show the other diagram</button>
+      </div>
+      <div id="pane-empty" class="pane-empty">
+        <p class="pane-empty-title">No diagram in this pane</p>
+        <p>Choose a draft or built-in example, or start from an empty source.</p>
+        <div class="pane-empty-actions"><button id="pane-choose" class="button-primary" type="button">Choose a diagram</button><button id="pane-start-empty" type="button">Start empty</button></div>
+      </div>
       <div id="mobile-view-switch" role="group" aria-label="Workspace view">
         <button id="mobile-preview" type="button" aria-pressed="true" aria-controls="preview-pane">Preview</button>
         <button id="mobile-source" type="button" aria-pressed="false" aria-controls="source-pane">Source</button>
@@ -181,6 +192,9 @@
         </div>
         <div id="editor"></div>
       </section>
+      </div>
+      <div id="pane-divider" role="separator" aria-label="Resize the two documents" aria-orientation="vertical" aria-controls="pane-a pane-b" title="Drag to resize, double-click to reset, or use Left/Right and Home/End when focused" tabindex="0" hidden></div>
+      <div id="pane-b" class="document-pane" data-pane="b" hidden></div>
     </div>
     <script type="module" src="/src/index.ts"></script>
   </body>

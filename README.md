@@ -41,7 +41,8 @@ good preview; **Go to error** and **Diagnostics** lead back to the relevant sour
 ## Guides
 
 - [Workspace guide](docs/workspace.md): projects, saving and recovery, navigation,
-  source editing, diagnostics, keyboard controls, reference, and exports.
+  source editing, diagnostics, keyboard controls, reference, side-by-side diagrams,
+  and exports.
 - [Ask AI](docs/ai.md): local Claude Code / Codex setup, configuration, cancellation,
   and undo.
 - [Command line and CI](docs/cli.md): linting, headless exports, exit codes, and workflows.

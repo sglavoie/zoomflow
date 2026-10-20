@@ -5,6 +5,13 @@ import { renderParentContext, simplifyTrail } from './navigation';
 import { setupBreadcrumbs } from './breadcrumbs';
 
 export type RenderBoard = (target: string) => Promise<string>;
+export type ViewerRoute = { hash: string; trail?: unknown };
+export type ViewerOptions = {
+  /** Mirror the current board in the page URL and history; otherwise keep the route in memory. */
+  history?: boolean;
+  /** Whether page-level Escape/Backspace should navigate this viewer. */
+  active?: () => boolean;
+};
 export { prepareExportSvg, rasterizeSvg, offlineViewerScript } from './export';
 export { setupViewport } from './viewport';
 export { offlineViewerStyle } from './export-style';
@@ -30,8 +37,11 @@ export class Viewer {
   private styles = new WeakMap<Element, string>();
   private transitions = new Set<Animation>();
   private readonly events = new AbortController();
+  private readonly history: boolean;
+  private memoryRoute: ViewerRoute = { hash: '#/' };
 
-  constructor(private readonly host: HTMLElement) {
+  constructor(private readonly host: HTMLElement, private readonly settings: ViewerOptions = {}) {
+    this.history = settings.history ?? true;
     this.crumbs.className = 'zf-breadcrumbs';
     this.crumbs.setAttribute('aria-label', 'Breadcrumb');
     this.context.className = 'zf-context';
@@ -52,10 +62,12 @@ export class Viewer {
     this.stage.addEventListener('keydown', (event) => {
       if (event.key === 'Enter') this.follow(event);
     }, options);
-    window.addEventListener('hashchange', () => void this.fromLocation(), options);
-    window.addEventListener('popstate', () => void this.fromLocation(), options);
+    if (this.history) {
+      window.addEventListener('hashchange', () => void this.fromLocation(), options);
+      window.addEventListener('popstate', () => void this.fromLocation(), options);
+    }
     window.addEventListener('keydown', (event) => {
-      if (event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey ||
+      if (event.defaultPrevented || this.settings.active?.() === false || event.altKey || event.ctrlKey || event.metaKey ||
         (event.target instanceof Element && event.target.closest('input, textarea, select, [contenteditable="true"]'))) return;
       if (event.key === 'Escape' || event.key === 'Backspace') {
         const parent = this.boards.get(this.current)?.parent;
@@ -74,6 +86,16 @@ export class Viewer {
   setSourceShapes(sources: readonly ShapeSource[]) { this.sourceShapes = sources; }
 
   get currentBoard() { return this.boards.get(this.current); }
+
+  get route(): ViewerRoute {
+    return this.history ? { hash: location.hash, trail: history.state?.zoomflowTrail } : { ...this.memoryRoute };
+  }
+
+  /** Choose the board the next document opens on, without navigating now. */
+  setRoute(route?: ViewerRoute) {
+    if (!this.history) { this.memoryRoute = { hash: route?.hash || '#/', trail: route?.trail }; return; }
+    history.replaceState({ zoomflowTrail: route?.trail }, '', `${location.pathname}${location.search}${route?.hash ?? '#/'}`);
+  }
 
   /** Invalidate a render already in flight when the source changes. */
   cancelPendingRender() { ++this.revision; this.cancelTransition(); }
@@ -122,14 +144,15 @@ export class Viewer {
 
   private async fromLocation(preserveViewport = false) {
     if (!this.boards.size) return;
-    let hash = location.hash || '#/';
+    const route = this.route;
+    let hash = route.hash || '#/';
     let board: Board | undefined;
     while (!(board = [...this.boards.values()].find((item) => item.hash === hash)) && hash !== '#/') {
       hash = hash.slice(0, hash.lastIndexOf('/')) || '#/';
       if (hash === '#') hash = '#/';
     }
     board ??= this.boards.get('root')!;
-    const saved: unknown = history.state?.zoomflowTrail;
+    const saved = route.trail;
     const trail = Array.isArray(saved) && saved.length > 0 && saved.at(-1) === board.id &&
       saved.every((id) => typeof id === 'string' && this.boards.has(id)) ? saved as string[] : this.ancestors(board.id);
     await this.navigate(board.id, 'replace', trail, preserveViewport);
@@ -244,9 +267,12 @@ export class Viewer {
       this.trail = simplifyTrail(trail ?? [...this.trail, id]);
       this.stage.dataset.board = id;
       this.stage.dispatchEvent(new CustomEvent('zf-boardchange', { detail: { preserveViewport: preserveViewport && sameBoard } }));
-      const state = { ...history.state, zoomflowTrail: this.trail };
-      if (mode === 'replace' || location.hash === board.hash) history.replaceState(state, '', board.hash);
-      else history.pushState(state, '', board.hash);
+      if (!this.history) this.memoryRoute = { hash: board.hash, trail: this.trail };
+      else {
+        const state = { ...history.state, zoomflowTrail: this.trail };
+        if (mode === 'replace' || location.hash === board.hash) history.replaceState(state, '', board.hash);
+        else history.pushState(state, '', board.hash);
+      }
       this.updateCrumbs();
       if (keepFocus && focusStage) {
         const shape = preserveViewport && sameBoard && focusedShape

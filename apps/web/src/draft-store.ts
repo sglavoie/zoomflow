@@ -5,6 +5,7 @@ type Version = { id: string; key: string; clock: Clock; savedAt: number; draft: 
 type StoredVersion = Version & { slot: string };
 const prefix = 'zoomflow.draft.v2:';
 const selectionKey = 'zoomflow.selection.v2';
+const secondSelectionKey = 'zoomflow.selection.v2:second';
 const legacyKey = 'zoomflow.drafts.v1';
 const dominates = (a: Clock, b: Clock) => Object.entries(b).every(([writer, count]) => (a[writer] ?? 0) >= count);
 function validDraft(value: unknown): value is Draft {
@@ -42,7 +43,7 @@ export class DraftStore {
     return records;
   }
 
-  load(): { drafts: Draft[]; current?: string; recoveryAvailable: boolean } {
+  load(): { drafts: Draft[]; current?: string; second?: string; recoveryAvailable: boolean } {
     const records = this.versions();
     // Migration is idempotent: tabs use the same legacy writer slot, and the old
     // backup is removed only after every migrated record was written successfully.
@@ -97,10 +98,12 @@ export class DraftStore {
       // Make a generated copy durable before its original can be restored or removed.
       if (draft.recoveredFrom && !canonical.has(draft.key)) this.pendingCopies.add(draft.key);
     }
-    return { drafts: [...drafts.values()], current: this.storage.getItem(selectionKey) ?? (typeof legacy?.current === 'string' ? legacy.current : undefined), recoveryAvailable };
+    return { drafts: [...drafts.values()], current: this.storage.getItem(selectionKey) ?? (typeof legacy?.current === 'string' ? legacy.current : undefined),
+      second: this.storage.getItem(secondSelectionKey) ?? undefined, recoveryAvailable };
   }
 
-  save(drafts: Draft[], current: string) {
+  /** `second` is the document open in the split view's second pane, if any. */
+  save(drafts: Draft[], current: string, second?: string) {
     const next = new Map(drafts.map((draft) => [draft.key, draft]));
     for (const key of new Set([...next.keys(), ...this.baselines.keys()])) {
       const draft = next.get(key) ?? null;
@@ -122,6 +125,8 @@ export class DraftStore {
       }
     }
     this.storage.setItem(selectionKey, current);
+    if (second) this.storage.setItem(secondSelectionKey, second);
+    else this.storage.removeItem(secondSelectionKey);
   }
 
   hasConcurrentChanges() {

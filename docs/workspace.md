@@ -212,6 +212,36 @@ screens, the diagram and reference share the Preview pane. Zoom and fullscreen
 controls sit in a toolbar below the canvas so they do not cover diagram content, including
 in fullscreen. Export controls stay in their menu so the editor remains visible.
 
+## Two diagrams side by side
+
+Choose a **Layout** in the header to build two diagrams at once:
+
+- **Single** shows one diagram beside its source.
+- **Split · tabs** shows two documents side by side. Each pane has its own
+  **Preview** and **Source** tabs.
+- **Split · all views** shows both diagrams above their sources, so all four views
+  are visible. Windows narrower than 1,400px show this layout as tabs.
+
+The second pane starts empty: **Choose a diagram** opens the diagram menu for it,
+and **Start empty** creates a blank `untitled.d2` draft. The filename button at the
+top of each pane opens the menu for that pane and marks unsaved changes. A draft
+opens in only one pane at a time; choosing the one shown in the other pane moves
+focus there instead.
+
+The pane you last clicked or focused is active, marked by a colored top edge. The
+header filename menu, **Open .d2**, **Open folder**, **New flow**, **Export**,
+**⌘S / Ctrl+S**, and the D2 reference act on the active pane. Dropping a file onto a
+pane opens it there. Each pane previews, lints and navigates boards independently.
+The first pane's board stays in the page address, and Escape or Backspace go up a
+board only in the active pane. Lint options and AI settings apply to both panes.
+
+Drag the divider between the panes, or focus it and use Left/Right and Home/End,
+to resize them. In **Split · all views**, each pane's divider resizes its diagram and
+source. Sizes, the layout and the second pane's document are remembered after a
+reload. Returning to **Single** closes the second pane and keeps its draft in the
+menu. On phones, a split shows one pane at a time; **Show the other diagram**
+switches between them. The Layout control is hidden on screens 600px wide or narrower.
+
 ## Lint checks
 
 Successful compilations also run Zoomflow lint. **Diagnostics** opens the

@@ -114,3 +114,8 @@ link hit areas do not overlap, and verifies reveal while the mobile preview is h
 widths and remembered overrides, syntax-colored reference search and copy feedback,
 contextual pointer/keyboard/touch guidance, actionable empty boards, and persistent
 AI review with jump-to-change, dismissal, and undo after a failed follow-up request.
+
+`split-view.spec.ts` covers both split layouts: independent editing, previews and
+board routes per pane, one pane per draft, header commands following the active
+pane, the empty second pane, persistence across reload, and the tabbed and single-pane
+fallbacks on narrower windows. The Layout control is hidden on phones (600px and narrower).

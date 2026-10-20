@@ -138,5 +138,13 @@ describe('draft recovery across tabs', () => {
     expect(raced).toBe(true);
     expect(new DraftStore(storage, 'reload').load().drafts.map((d) => d.source).sort()).toEqual(['concurrent', 'latest']);
   });
+  test('the split view second pane selection survives reload until the pane closes', () => {
+    const storage = new MemoryStorage();
+    const store = new DraftStore(storage, 'a'); store.load();
+    store.save([draft('order', 'one'), draft('other', 'two')], 'order', 'other');
+    expect(new DraftStore(storage, 'reload').load()).toMatchObject({ current: 'order', second: 'other' });
+    store.save([draft('order', 'one'), draft('other', 'two')], 'order');
+    expect(new DraftStore(storage, 'reload').load().second).toBeUndefined();
+  });
 
 });

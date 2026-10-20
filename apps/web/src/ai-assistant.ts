@@ -1,26 +1,27 @@
 import { AiError, aiFailure, readAiResponse } from './ai-errors';
 type Snapshot = { source: string; name: string; board: string; revision: number };
 
-export function setupAiAssistant(read: () => Snapshot, validate: (source: string) => Promise<void>, apply: (source: string) => string,
+export function setupAiAssistant(root: HTMLElement, idSuffix: string, read: () => Snapshot, validate: (source: string) => Promise<void>, apply: (source: string) => string,
   onStatus: (message: string, kind: 'info' | 'error') => void = () => {}, undo: () => boolean = () => false,
   revealChange: () => void = () => {}, dismissHighlights: () => void = () => {}) {
-  const form = document.querySelector<HTMLFormElement>('#ai-form')!;
-  const provider = document.querySelector<HTMLSelectElement>('#ai-provider')!;
-  const claudeConfig = document.querySelector<HTMLElement>('#ai-claude-config')!;
-  const claudeConfigDir = document.querySelector<HTMLInputElement>('#ai-claude-config-dir')!;
-  const environment = document.querySelector<HTMLTextAreaElement>('#ai-environment')!;
-  const prompt = document.querySelector<HTMLTextAreaElement>('#ai-prompt')!;
-  const button = document.querySelector<HTMLButtonElement>('#ai-send')!;
-  const status = document.querySelector<HTMLElement>('#ai-status')!;
-  const panel = document.querySelector<HTMLDetailsElement>('#ai-assistant')!;
-  const availability = document.querySelector<HTMLElement>('#ai-availability')!;
-  const retry = document.querySelector<HTMLButtonElement>('#ai-retry')!;
-  const cancel = document.querySelector<HTMLButtonElement>('#ai-cancel')!;
-  const undoButton = document.querySelector<HTMLButtonElement>('#ai-undo')!;
-  const elapsed = document.querySelector<HTMLElement>('#ai-elapsed')!;
-  const changeFeedback = document.querySelector<HTMLElement>('.ai-change-feedback')!;
-  const changeSummary = document.querySelector<HTMLButtonElement>('#ai-change-summary')!;
-  const dismiss = document.querySelector<HTMLButtonElement>('#ai-dismiss-highlights')!;
+  const part = <T extends HTMLElement>(id: string) => root.querySelector<T>(`#${id}${idSuffix}`)!;
+  const form = part<HTMLFormElement>('ai-form');
+  const provider = part<HTMLSelectElement>('ai-provider');
+  const claudeConfig = part<HTMLElement>('ai-claude-config');
+  const claudeConfigDir = part<HTMLInputElement>('ai-claude-config-dir');
+  const environment = part<HTMLTextAreaElement>('ai-environment');
+  const prompt = part<HTMLTextAreaElement>('ai-prompt');
+  const button = part<HTMLButtonElement>('ai-send');
+  const status = part<HTMLElement>('ai-status');
+  const panel = part<HTMLDetailsElement>('ai-assistant');
+  const availability = part<HTMLElement>('ai-availability');
+  const retry = part<HTMLButtonElement>('ai-retry');
+  const cancel = part<HTMLButtonElement>('ai-cancel');
+  const undoButton = part<HTMLButtonElement>('ai-undo');
+  const elapsed = part<HTMLElement>('ai-elapsed');
+  const changeFeedback = root.querySelector<HTMLElement>('.ai-change-feedback')!;
+  const changeSummary = part<HTMLButtonElement>('ai-change-summary');
+  const dismiss = part<HTMLButtonElement>('ai-dismiss-highlights');
   changeSummary.addEventListener('click', revealChange);
   dismiss.addEventListener('click', () => {
     dismissHighlights();
@@ -28,7 +29,7 @@ export function setupAiAssistant(read: () => Snapshot, validate: (source: string
     dismiss.hidden = true;
     undoButton.focus();
   });
-  const tools = document.querySelector<HTMLElement>('.source-tools')!;
+  const tools = root.querySelector<HTMLElement>('.source-tools')!;
   const updateOverflow = () => { tools.dataset.overflow = String(tools.scrollHeight > tools.clientHeight + 1 && tools.scrollTop + tools.clientHeight < tools.scrollHeight - 1); };
   const resize = new ResizeObserver(updateOverflow);
   resize.observe(tools);

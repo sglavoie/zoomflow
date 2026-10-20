@@ -1,42 +1,79 @@
-/** Resizable split between the preview and the D2 source editor. */
-export function setupSourceSplit() {
-  const workspace = document.querySelector<HTMLElement>('#workspace')!;
-  const divider = document.querySelector<HTMLElement>('#source-divider')!;
-  const storageKey = 'zoomflow.source.preview-share';
-  const defaultShare = () => 50 + 12 * Math.max(0, Math.min(1, (workspace.clientWidth - 1100) / 340));
-  let requestedShare = defaultShare();
-  let customized = false;
-  let previewShare = requestedShare;
+/** One way a divider can split its container. Each axis remembers its own share. */
+export type SplitAxis = {
+  container: HTMLElement;
+  storageKey: string;
+  /** Custom properties set on the container for the first and second track. */
+  properties: [string, string];
+  /** Smallest size of either side, in pixels, once the container has room for both. */
+  minimum: number;
+  defaultShare: () => number;
+  describe: (share: number) => string;
+  /** Stack the sides vertically; the divider then moves up and down. */
+  rows?: boolean;
+};
+
+/** Resizable split between two workspace areas. `axis` returns undefined while the divider is not in use. */
+export function setupSplit(divider: HTMLElement, axis: () => SplitAxis | undefined) {
+  type State = { requested: number; customized: boolean; share: number };
+  const states = new Map<string, State>();
   let drag: { pointer: number; offset: number } | undefined;
-  try {
-    const stored = Number(localStorage.getItem(storageKey));
-    if (Number.isFinite(stored) && stored >= 25 && stored <= 75) { requestedShare = stored; customized = true; }
-  } catch { /* The split works when storage is unavailable. */ }
+  function state(current: SplitAxis) {
+    let saved = states.get(current.storageKey);
+    if (saved) return saved;
+    saved = { requested: current.defaultShare(), customized: false, share: 50 };
+    try {
+      const stored = Number(localStorage.getItem(current.storageKey));
+      if (Number.isFinite(stored) && stored >= 25 && stored <= 75) { saved.requested = stored; saved.customized = true; }
+    } catch { /* The split works when storage is unavailable. */ }
+    states.set(current.storageKey, saved);
+    return saved;
+  }
+  const size = (current: SplitAxis, box: DOMRect) => current.rows ? box.height : box.width;
 
   function setShare(value: number) {
-    requestedShare = Math.max(25, Math.min(75, value));
-    const available = workspace.clientWidth - divider.offsetWidth;
-    const minimum = available >= 720 ? Math.max(25, 360 / available * 100) : 25;
-    const maximum = available >= 720 ? Math.min(75, (available - 360) / available * 100) : 75;
-    previewShare = Math.max(minimum, Math.min(maximum, requestedShare));
-    workspace.style.setProperty('--preview-share', `${previewShare}fr`);
-    workspace.style.setProperty('--source-share', `${100 - previewShare}fr`);
+    const current = axis();
+    if (!current) return;
+    const split = state(current);
+    split.requested = Math.max(25, Math.min(75, value));
+    const available = size(current, current.container.getBoundingClientRect()) - size(current, divider.getBoundingClientRect());
+    const roomy = available >= current.minimum * 2;
+    const minimum = roomy ? Math.max(25, current.minimum / available * 100) : 25;
+    const maximum = roomy ? Math.min(75, (available - current.minimum) / available * 100) : 75;
+    split.share = Math.max(minimum, Math.min(maximum, split.requested));
+    current.container.style.setProperty(current.properties[0], `${split.share}fr`);
+    current.container.style.setProperty(current.properties[1], `${100 - split.share}fr`);
+    divider.setAttribute('aria-orientation', current.rows ? 'horizontal' : 'vertical');
     divider.setAttribute('aria-valuemin', String(Math.round(minimum)));
     divider.setAttribute('aria-valuemax', String(Math.round(maximum)));
-    divider.setAttribute('aria-valuenow', String(Math.round(previewShare)));
-    divider.setAttribute('aria-valuetext', `Diagram ${Math.round(previewShare)}%, D2 source ${Math.round(100 - previewShare)}%`);
+    divider.setAttribute('aria-valuenow', String(Math.round(split.share)));
+    divider.setAttribute('aria-valuetext', current.describe(split.share));
   }
   function saveShare() {
-    customized = true;
-    try { localStorage.setItem(storageKey, String(requestedShare)); }
+    const current = axis();
+    if (!current) return;
+    const split = state(current);
+    split.customized = true;
+    try { localStorage.setItem(current.storageKey, String(split.requested)); }
     catch { /* Resizing does not depend on storage. */ }
   }
-  setShare(requestedShare);
-  new ResizeObserver(() => setShare(customized ? requestedShare : defaultShare())).observe(workspace);
+  const observed = new Set<HTMLElement>();
+  const resize = new ResizeObserver(() => refresh());
+  function refresh() {
+    const current = axis();
+    if (!current) return;
+    if (!observed.has(current.container)) { observed.add(current.container); resize.observe(current.container); }
+    const split = state(current);
+    setShare(split.customized ? split.requested : current.defaultShare());
+  }
+  refresh();
 
   divider.addEventListener('keydown', (event) => {
-    const next = event.key === 'ArrowLeft' ? previewShare - 5
-      : event.key === 'ArrowRight' ? previewShare + 5
+    const current = axis();
+    if (!current) return;
+    const share = state(current).share;
+    const [back, forward] = current.rows ? ['ArrowUp', 'ArrowDown'] : ['ArrowLeft', 'ArrowRight'];
+    const next = event.key === back ? share - 5
+      : event.key === forward ? share + 5
       : event.key === 'Home' ? 25 : event.key === 'End' ? 75 : undefined;
     if (next !== undefined) {
       event.preventDefault();
@@ -48,17 +85,21 @@ export function setupSourceSplit() {
     }
   });
   divider.addEventListener('pointerdown', (event) => {
-    if (event.button !== 0 || drag) return;
+    const current = axis();
+    if (!current || event.button !== 0 || drag) return;
     event.preventDefault();
     divider.focus({ preventScroll: true });
-    drag = { pointer: event.pointerId, offset: event.clientX - divider.getBoundingClientRect().left };
+    const box = divider.getBoundingClientRect();
+    drag = { pointer: event.pointerId, offset: current.rows ? event.clientY - box.top : event.clientX - box.left };
     divider.setPointerCapture(event.pointerId);
   });
   divider.addEventListener('pointermove', (event) => {
-    if (drag?.pointer !== event.pointerId) return;
-    const bounds = workspace.getBoundingClientRect();
-    const available = bounds.width - divider.getBoundingClientRect().width;
-    if (available > 0) setShare((event.clientX - bounds.left - drag.offset) / available * 100);
+    const current = axis();
+    if (!current || drag?.pointer !== event.pointerId) return;
+    const bounds = current.container.getBoundingClientRect();
+    const available = size(current, bounds) - size(current, divider.getBoundingClientRect());
+    const position = current.rows ? event.clientY - bounds.top : event.clientX - bounds.left;
+    if (available > 0) setShare((position - drag.offset) / available * 100);
   });
   function finishDrag() {
     const pointer = drag?.pointer;
@@ -70,8 +111,11 @@ export function setupSourceSplit() {
   divider.addEventListener('pointercancel', finishDrag);
   divider.addEventListener('lostpointercapture', finishDrag);
   divider.addEventListener('dblclick', () => {
-    customized = false;
-    setShare(defaultShare());
-    try { localStorage.removeItem(storageKey); } catch { /* Reset works without storage. */ }
+    const current = axis();
+    if (!current) return;
+    state(current).customized = false;
+    setShare(current.defaultShare());
+    try { localStorage.removeItem(current.storageKey); } catch { /* Reset works without storage. */ }
   });
+  return { refresh };
 }
