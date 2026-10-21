@@ -186,6 +186,13 @@ export function setupFlowBuilder(create: (source: string, name: string) => void,
     dialog.close();
   }
   dialog.querySelectorAll<HTMLButtonElement>('[data-close]').forEach(button => button.addEventListener('click', () => void requestClose()));
+  // Handle Escape directly: Chromium may skip the cancel event for repeated close
+  // requests without user activation. The open confirmation stops Escape before this.
+  dialog.addEventListener('keydown', event => {
+    if (event.key !== 'Escape' || event.defaultPrevented) return;
+    event.preventDefault();
+    void requestClose();
+  });
   // Other close requests, such as a platform back gesture, also confirm first.
   dialog.addEventListener('cancel', event => { event.preventDefault(); void requestClose(); });
   dialog.addEventListener('close', () => (returnFocus.isConnected && !returnFocus.closest('[hidden]') ? returnFocus : launch).focus({ preventScroll: true }));
