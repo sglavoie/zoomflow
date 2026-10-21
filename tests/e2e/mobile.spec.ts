@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { openDownloads } from './menu';
-import { source, previewReady, chooseProjectFile } from './helpers';
+import { source, previewReady, chooseProjectFile, openFolder } from './helpers';
 
 /** Phone layouts: the Preview/Source switch, compact tools and the on-screen keyboard. */
 
@@ -58,7 +58,7 @@ test('mobile first fit fills the canvas and diagnostics lead to the source', asy
 test('mobile project switches retain Source and each file selection', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/'); await previewReady(page);
-  await page.locator('#folder').setInputFiles('fixtures/browser-project'); await previewReady(page);
+  await openFolder(page, 'fixtures/browser-project'); await previewReady(page);
   await page.locator('#mobile-source').click();
   await source(page).press('ControlOrMeta+End');
   await chooseProjectFile(page, 'lib/nodes.d2');

@@ -44,13 +44,22 @@ test('a stalled preview can restart without losing the good diagram or latest ed
 
 test('startup failure offers retry without source diagnostics or lost edits', async ({ page }) => {
   let fail = true;
-  await page.route( /SourceSansPro-Regular\.ttf$/, (route) => fail ? route.abort() : route.continue());
+  let aborted = 0;
+  await page.route(/SourceSansPro-Regular\.ttf$/, (route) => {
+    if (!fail) return route.continue();
+    aborted++;
+    return route.abort();
+  });
   await page.goto('/');
   await expect(page.locator('#retry-engine')).toBeVisible();
   await expect(page.locator('#engine-message')).toContainText('could not start');
   await expect(page.locator('#compile-error')).toBeHidden();
   await expect(page.locator('.cm-lint-marker-error')).toHaveCount(0);
+  const failedStarts = aborted;
   await source(page).fill('kept: My edits survived');
+  // The edit's own preview retries startup; let it fail before startup can succeed,
+  // or it recovers by itself and Retry disappears before the click.
+  await expect.poll(() => aborted).toBeGreaterThan(failedStarts);
   await expect(page.locator('#retry-engine')).toBeVisible();
   fail = false;
   await page.locator('#retry-engine').click();

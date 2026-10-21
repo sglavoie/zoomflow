@@ -228,7 +228,8 @@ test('typing indents nested D2, closing braces dedent, and layers can be folded'
   await expect(source(page)).toHaveText('layers: {\n  detail: {\n    a: Nested\n  }\n}', { useInnerText: true });
   await previewReady(page);
   await source(page).press('ControlOrMeta+Home');
-  await source(page).press(process.platform === 'darwin' ? 'Meta+Alt+[' : 'Control+Shift+[');
+  // BracketLeft makes Playwright report the shifted key ({), as a real keyboard does.
+  await source(page).press(process.platform === 'darwin' ? 'Meta+Alt+[' : 'Control+Shift+BracketLeft');
   await expect(page.locator('.cm-foldPlaceholder')).toHaveCount(1);
   await page.locator('.cm-foldPlaceholder').click();
   await expect(source(page)).toContainText('a: Nested');
