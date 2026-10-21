@@ -138,6 +138,7 @@ visual specs and `export.spec.ts`, skips the regular browser tests and uploads o
 new or changed PNGs as the `visual-baselines` artifact, laid out by repository path.
 Extract it at the repository root, inspect every image and commit the ones you accept.
 
-CI never updates baselines on its own. In CI a test that passes only on retry counts as a
-failure (`failOnFlakyTests`), and every browser run uploads `playwright-report` and
+CI never updates baselines on its own. In CI a failed test is retried once. A test that
+passes only on retry does not fail the run; `flaky-reporter.ts` reports it as a warning
+on its file and in the job summary. Every browser run uploads `playwright-report` and
 `test-results`, so flaky and failed runs both leave traces to inspect.

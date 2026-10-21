@@ -118,6 +118,8 @@ test('closing the builder confirms before discarding changes, and closes at once
   await expect(confirm).toBeHidden();
   await expect(builder).toBeVisible();
   await expect(builder.getByLabel('Step 2 name')).toHaveValue('Keep me');
+  // The builder accepts Escape again once the confirmation has returned focus to it.
+  await expect.poll(() => builder.evaluate((dialog) => dialog.contains(document.activeElement))).toBe(true);
   await page.keyboard.press('Escape');
   await confirm.getByRole('button', { name: 'Cancel', exact: true }).click();
   await expect(builder.getByLabel('Step 2 name')).toHaveValue('Keep me');
