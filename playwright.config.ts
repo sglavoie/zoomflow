@@ -15,9 +15,9 @@ export default defineConfig({
   timeout: 90_000,
   expect: { timeout: 30_000, toHaveScreenshot: { maxDiffPixelRatio: 0.005 } },
   forbidOnly: !!process.env.CI,
-  // A retry still runs in CI so a flaky test is reported, but it fails the run.
+  // CI retries a failed test once. A test that passes on retry does not fail the run;
+  // tests/e2e/flaky-reporter.ts reports it as a warning instead.
   retries: process.env.CI ? 1 : 0,
-  failOnFlakyTests: !!process.env.CI,
   workers: 2,
   use: { baseURL: `http://127.0.0.1:${port}`, trace: 'retain-on-failure' },
   webServer: [

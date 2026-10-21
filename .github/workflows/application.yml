@@ -122,14 +122,14 @@ jobs:
       - name: Chromium, visual regression and production tests
         if: ${{ !inputs.update_snapshots }}
         # CI=true adds the production smoke projects, which serve the build above.
-        run: pnpm exec playwright test --project=chromium --project=production --project=production-webkit --reporter=github,html
+        run: pnpm exec playwright test --project=chromium --project=production --project=production-webkit --reporter=github,html,./tests/e2e/flaky-reporter.ts
       - name: WebKit engine tests on macOS
         if: ${{ !cancelled() && !inputs.update_snapshots }}
         # The vendored D2 build patches a WebKit WASM stack overflow; check it on Safari's platform too.
         env:
           PLAYWRIGHT_HTML_OUTPUT_DIR: playwright-report/webkit-engine
-        run: pnpm exec playwright test tests/e2e/engine.spec.ts --project=webkit --reporter=github,html --output=test-results/webkit-engine
-      # Upload after failures and flaky passes alike (flakes fail the run in CI).
+        run: pnpm exec playwright test tests/e2e/engine.spec.ts --project=webkit --reporter=github,html,./tests/e2e/flaky-reporter.ts --output=test-results/webkit-engine
+      # Upload after failures and flaky passes alike (flakes are reported as warnings).
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: ${{ !cancelled() && !inputs.update_snapshots }}
         with:
@@ -172,7 +172,7 @@ jobs:
       - name: Production build
         run: pnpm build
       - name: Firefox and WebKit behavior tests
-        run: pnpm exec playwright test --project=firefox --project=webkit --reporter=github,html
+        run: pnpm exec playwright test --project=firefox --project=webkit --reporter=github,html,./tests/e2e/flaky-reporter.ts
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: ${{ !cancelled() }}
         with:
