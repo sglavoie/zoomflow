@@ -31,6 +31,17 @@ test('AI updates the current diagram and keeps the edit undoable', async ({ page
   await expect(page.locator('.zf-stage')).toContainText('Checkout');
 });
 
+test('opening Ask AI before the app starts still checks availability', async ({ page }) => {
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => { release = resolve; });
+  await page.route(/\/src\/index\.ts/, async (route) => { await gate; await route.continue(); });
+  await page.goto('/', { waitUntil: 'commit' });
+  await page.locator('#ai-assistant > summary').click();
+  release();
+  await expect(page.locator('#ai-availability')).toHaveText('Claude Code is ready on this computer.');
+  await expect(page.locator('#ai-prompt')).toBeEnabled();
+});
+
 test('Claude config directory is visible and sent with shared environment', async ({ page }) => {
   await page.route('**/api/ai', async (route) => {
     const request = route.request().postDataJSON();
@@ -40,7 +51,7 @@ test('Claude config directory is visible and sent with shared environment', asyn
     await route.fulfill({ status: 200, contentType: 'application/json',
       body: JSON.stringify({ reply: 'No change needed.', source: null }) });
   });
-  await page.goto('/');
+  await page.goto('/'); await previewReady(page);
   await page.locator('#ai-assistant > summary').click();
   await page.locator('.ai-settings summary').click();
   await expect(page.locator('#ai-claude-config-dir')).toHaveValue('~/.claude');
@@ -88,7 +99,7 @@ test('invalid AI D2 is reported without replacing the diagram', async ({ page })
 test('CLI failures are shown beside the prompt', async ({ page }) => {
   await page.route('**/api/ai', (route) => route.fulfill({ status: 500, contentType: 'application/json',
     body: JSON.stringify({ error: 'codex is not installed or is not on the server PATH.' }) }));
-  await page.goto('/');
+  await page.goto('/'); await previewReady(page);
   await page.locator('#ai-assistant > summary').click();
   await page.locator('.ai-settings summary').click();
   await page.getByLabel('AI', { exact: true }).selectOption('codex');
@@ -104,7 +115,7 @@ test('AI availability is checked before composing a prompt and can be retried', 
   // A proxy answering for a stopped local server returns a page, not JSON.
   await page.route('**/api/ai/status', (route) => available ? route.fulfill({ json: { available } })
     : route.fulfill({ status: 502, contentType: 'text/html', body: '<!doctype html><title>Bad gateway</title>' }));
-  await page.goto('/');
+  await page.goto('/'); await previewReady(page);
   await page.locator('#ai-assistant > summary').click();
   await expect(page.locator('#ai-availability')).toContainText('pnpm dev');
   await expect(page.locator('#ai-prompt')).toBeDisabled();
@@ -123,7 +134,7 @@ test('provider readiness follows the selected CLI and explains sign-in failures'
         ? { available: false, reason: 'Codex is installed. Sign in with codex login.' }
         : { available: true }) });
   });
-  await page.goto('/');
+  await page.goto('/'); await previewReady(page);
   await page.locator('#ai-assistant > summary').click();
   await expect(page.locator('#ai-prompt')).toBeEnabled();
   await page.locator('.ai-settings summary').click();
@@ -180,7 +191,7 @@ test('explicit AI undo restores source and is retired after subsequent edits', a
 test('AI server failures explain recovery and hide technical details initially', async ({ page }) => {
   await stubAiStatus(page);
   await page.route('**/api/ai/status', route => route.fulfill({ contentType: 'text/html', body: '<!doctype html><html></html>' }));
-  await page.goto('/');
+  await page.goto('/'); await previewReady(page);
   await page.locator('#ai-assistant > summary').click();
   await expect(page.locator('#ai-availability')).toContainText('pnpm dev');
   await expect(page.locator('#ai-availability')).not.toContainText('Unexpected token');
@@ -201,7 +212,7 @@ test('AI availability timeouts offer a retry without exposing abort exceptions',
   const gate = new Promise<void>(resolve => { release = resolve; });
   await page.route('**/api/ai/status', async route => { await gate; await route.fulfill({ json: { available: true } }); });
   try {
-    await page.goto('/');
+    await page.goto('/'); await previewReady(page);
     await page.locator('#ai-assistant > summary').click();
     await page.clock.fastForward(8000);
     await expect(page.locator('#ai-availability')).toContainText('timed out');

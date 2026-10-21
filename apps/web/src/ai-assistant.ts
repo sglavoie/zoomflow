@@ -147,12 +147,15 @@ export function setupAiAssistant({ root, part }: PaneScope, { read, validate, ap
     undoButton.hidden = true;
     changeFeedback.hidden = true;
   });
-  panel.addEventListener('toggle', () => {
+  const panelToggled = () => {
     // WebKit can keep the native select hidden to visibility checks after a
     // details panel opens. A post-toggle style update refreshes its layout.
     provider.style.display = panel.open ? 'inline-block' : '';
     if (panel.open && !checked) { checked = true; void checkAvailability(); }
-  });
+  };
+  panel.addEventListener('toggle', panelToggled);
+  // The panel may have been opened before this script ran, without a toggle to observe.
+  if (panel.open) panelToggled();
   function showProviderSettings() {
     const isClaude = provider.value === 'claude';
     claudeConfig.hidden = !isClaude;

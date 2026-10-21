@@ -1,11 +1,11 @@
 import { readFileSync } from 'node:fs';
 import { expect, test } from '@playwright/test';
-import { source } from './helpers';
+import { source, previewReady } from './helpers';
 
 const fixture = (name: string) => readFileSync(`fixtures/lint/${name}.d2`, 'utf8');
 
 test('bundled stdlib and live lint diagnostics recover, with optional backlink warnings', async ({ page }) => {
-  await page.goto('/');
+  await page.goto('/'); await previewReady(page);
   await page.locator('#lint-details > summary').click();
   const open = async (source: string) => {
     await page.locator('#file').setInputFiles({ name: 'lint.d2', mimeType: 'text/plain', buffer: Buffer.from(source) });
