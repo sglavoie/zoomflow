@@ -156,7 +156,9 @@ test('large document lists filter projects and collapse inactive groups', async 
   await stubAiStatus(page);
   await page.goto('/'); await previewReady(page);
   await openFolder(page, 'fixtures/browser-project'); await previewReady(page);
-  await page.locator('#file').setInputFiles({ name: 'notes.d2', mimeType: 'text/plain', buffer: Buffer.from('a: Notes') }); await previewReady(page);
+  await page.locator('#file').setInputFiles({ name: 'notes.d2', mimeType: 'text/plain', buffer: Buffer.from('a: Notes') });
+  // The file is read asynchronously; the previous document's preview is also ready.
+  await expect(page.locator('#filename')).toHaveText('notes.d2'); await previewReady(page);
   await page.locator('#example-picker summary').click();
   const group = page.getByRole('region', { name: 'browser-project project', exact: true });
   const toggle = group.getByRole('button', { name: 'browser-project', exact: true });
