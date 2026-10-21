@@ -18,7 +18,7 @@ ZOOMFLOW_E2E_PORT=4600 pnpm exec playwright test tests/e2e/editor.spec.ts --outp
 
 Specs are grouped by feature. Add a test to the file for the feature it exercises;
 shared helpers live in `helpers.ts` (source editor, preview readiness, project fixtures,
-CodeMirror selection) and `menu.ts` (export menu and downloads).
+CodeMirror access through `withEditorView`, selection) and `menu.ts` (export menu and downloads).
 
 ## Editing
 
@@ -118,27 +118,26 @@ timezone, reduced motion and the AI availability response. `playwright.config.ts
 allows 0.5% differing pixels for every `toHaveScreenshot` call, and the PNG download
 uses the same tolerance.
 
-Every baseline is a Chromium capture from macOS (`*-chromium-darwin.png`). The
-`comparesVisuals` helper in `helpers.ts` gates each comparison: screenshot assertions
-run only in Chromium on macOS, so Linux and Windows runs skip them automatically. On a
-macOS version that renders text differently from the baselines, skip them explicitly:
-
-```sh
-ZOOMFLOW_SKIP_VISUAL=1 pnpm test:e2e
-```
-
-Purely visual tests are then reported as skipped; tests that mix behavior with a
-screenshot still run their other assertions.
-
-The application workflow runs the browser suite on `macos-15`, matching the baseline
-family; browser versions come from the pinned Playwright dependency. To review a layout change on macOS:
+The application workflow runs Chromium, the production projects and `engine.spec.ts` in
+WebKit on `macos-15`, matching the baseline family; browser versions come from the pinned
+Playwright dependency. Firefox and WebKit behavior tests run in a parallel `ubuntu-24.04`
+job, where `comparesVisuals` skips every comparison. To review a layout change on macOS 15:
 
 ```sh
 pnpm exec playwright test tests/e2e/visual.spec.ts --project=chromium --update-snapshots
 pnpm exec playwright test tests/e2e/visual.spec.ts --project=chromium
 ```
 
-Inspect changed PNGs before committing them. CI never updates baselines; failures upload
-`playwright-report` and `test-results`. Other macOS versions render text slightly
+Inspect changed PNGs before committing them. Other macOS versions render text slightly
 differently, so some baselines fail locally on newer systems even without changes; use
 `ZOOMFLOW_SKIP_VISUAL=1` there.
+
+Without a macOS 15 machine, run the "Application checks" workflow manually (Actions, Run
+workflow) with `update_snapshots` checked. It regenerates the Chromium baselines of the
+visual specs and `export.spec.ts`, skips the regular browser tests and uploads only the
+new or changed PNGs as the `visual-baselines` artifact, laid out by repository path.
+Extract it at the repository root, inspect every image and commit the ones you accept.
+
+CI never updates baselines on its own. In CI a test that passes only on retry counts as a
+failure (`failOnFlakyTests`), and every browser run uploads `playwright-report` and
+`test-results`, so flaky and failed runs both leave traces to inspect.

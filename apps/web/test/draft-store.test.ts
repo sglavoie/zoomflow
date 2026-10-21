@@ -17,7 +17,7 @@ describe('draft recovery across tabs', () => {
     a.load(); b.load();
     a.save([draft('order', 'first'), draft('other', 'keep')], 'order');
     b.save([draft('order', 'second')], 'order');
-    expect(a.hasConcurrentChanges()).toBe(true);
+    expect(a.concurrentChanges()).toEqual(['order']);
     const recovered = new DraftStore(storage, 'reader').load().drafts;
     expect(recovered.map((d) => d.source).sort()).toEqual(['first', 'keep', 'second']);
     expect(recovered.filter((d) => d.recoveredFrom === 'order')).toHaveLength(1);
@@ -105,7 +105,7 @@ describe('draft recovery across tabs', () => {
     a.save([draft('order', 'first')], 'order'); b.save([draft('order', 'second')], 'order');
     const reader = new DraftStore(storage, 'reader');
     const copy = reader.load().drafts.find((item) => item.recoveredFrom)!;
-    expect(reader.hasConcurrentChanges()).toBe(false);
+    expect(reader.concurrentChanges()).toEqual([]);
     reader.save([copy], copy.key);
     const reloaded = new DraftStore(storage, 'last').load().drafts;
     expect(reloaded).toHaveLength(1);
@@ -182,7 +182,7 @@ describe('draft recovery across tabs', () => {
     b.save([draft('order', 'second')], 'order');
     const changed = [...storage.data.keys()].find((key) => key.endsWith(':b-1'))!;
     expect(DraftStore.documentOf(changed)).toBe('order');
-    expect(a.hasConcurrentChanges(new Set([DraftStore.documentOf(changed)]))).toBe(true);
-    expect(a.hasConcurrentChanges(new Set(['other']))).toBe(false);
+    expect(a.concurrentChanges(new Set([DraftStore.documentOf(changed)]))).toEqual(['order']);
+    expect(a.concurrentChanges(new Set(['other']))).toEqual([]);
   });
 });

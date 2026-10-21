@@ -5,7 +5,8 @@ import { flowFilename, flowSource, flowTemplate, readFlow, type Flow, type FlowS
 type FlowTarget = { read: () => { source: string; name: string }; update: (source: string) => void };
 
 /** One builder dialog: New flow creates a draft, and each pane's Edit flow changes that pane's flow. */
-export function setupFlowBuilder(create: (source: string, name: string) => void, read: () => { source: string; name: string }) {
+export function setupFlowBuilder(create: (source: string, name: string) => void, read: () => { source: string; name: string },
+  confirmDiscard: (title: string, description: string, action: string, focus: () => void) => Promise<boolean>) {
   const launch = document.querySelector<HTMLButtonElement>('#new-flow')!;
   const dialog = document.createElement('dialog');
   dialog.id = 'flow-builder';
@@ -50,6 +51,10 @@ export function setupFlowBuilder(create: (source: string, name: string) => void,
   let flow: Flow = flowTemplate('simple');
   let editing = false;
   let original = '';
+  /** The form when the builder opened; closing asks before discarding later changes. */
+  let snapshot = '';
+  let confirming = false;
+  const formState = () => `${editing ? '' : name.value}\n${flowSource(flow)}`;
   let returnFocus: HTMLElement = launch;
   let target: FlowTarget = { read, update: () => {} };
 
@@ -159,12 +164,30 @@ export function setupFlowBuilder(create: (source: string, name: string) => void,
     dialog.querySelector('#flow-save-hint')!.textContent = editing
       ? 'Updates this flow. You can undo in the source editor.' : 'Creates a new draft. Your current diagram is kept.';
     render();
+    snapshot = formState();
     returnFocus.focus({ preventScroll: true });
     dialog.showModal();
     (editing ? steps.querySelector('input')! : name).focus();
   }
   launch.addEventListener('click', () => { target = { read, update: () => {} }; open(false); });
-  dialog.querySelectorAll<HTMLButtonElement>('[data-close]').forEach(button => button.addEventListener('click', () => dialog.close()));
+  /** Close, first confirming when that would discard changes made since the builder opened. */
+  async function requestClose() {
+    if (confirming) return;
+    if (formState() !== snapshot) {
+      const focused = document.activeElement;
+      confirming = true;
+      const discard = await confirmDiscard(editing ? 'Discard flow changes?' : 'Discard this flow?',
+        editing ? 'Closing the builder discards the steps and connections you changed. Your diagram is unchanged.'
+          : 'Closing the builder discards the flow you started. No draft is created.',
+        'Discard changes', () => (focused instanceof HTMLElement && dialog.contains(focused) ? focused : submit).focus({ preventScroll: true }));
+      confirming = false;
+      if (!discard) return;
+    }
+    dialog.close();
+  }
+  dialog.querySelectorAll<HTMLButtonElement>('[data-close]').forEach(button => button.addEventListener('click', () => void requestClose()));
+  // Other close requests, such as a platform back gesture, also confirm first.
+  dialog.addEventListener('cancel', event => { event.preventDefault(); void requestClose(); });
   dialog.addEventListener('close', () => (returnFocus.isConnected && !returnFocus.closest('[hidden]') ? returnFocus : launch).focus({ preventScroll: true }));
   name.addEventListener('input', () => name.setCustomValidity(name.value.trim() ? '' : 'Give your flow a name.'));
   direction.addEventListener('change', () => { flow.direction = direction.value as Flow['direction']; });
@@ -200,9 +223,10 @@ export function setupFlowBuilder(create: (source: string, name: string) => void,
   });
   // Keep workspace navigation and save shortcuts out of this modal while allowing typing.
   window.addEventListener('keydown', event => {
-    if (!dialog.open) return;
+    // The discard confirmation above this dialog handles its own keys.
+    if (!dialog.open || confirming) return;
     event.stopImmediatePropagation();
-    if (event.key === 'Escape') { event.preventDefault(); dialog.close(); }
+    if (event.key === 'Escape') { event.preventDefault(); void requestClose(); }
     else if ((event.metaKey || event.ctrlKey) && ['s', '/', '?'].includes(event.key.toLowerCase())) event.preventDefault();
     else if (event.key === 'Backspace' && !(event.target instanceof HTMLInputElement)) event.preventDefault();
   }, { capture: true });

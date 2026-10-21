@@ -91,7 +91,8 @@ export function setupExportMenu(activePane: () => DocumentPane | undefined, pick
     const formatName = ({ svg: 'SVG', png: 'PNG', zip: 'SVG ZIP', html: 'Interactive HTML' } as Record<string, string>)[exportFormat.value];
     document.querySelector('#export-scope')!.textContent = documentExport
       ? allBoards ? `Entire diagram · ${plural(count, 'board')} · ${formatName}`
-        : `Current board: ${pane!.viewer.currentBoard?.name ?? 'Root'} · ${formatName}` : 'Compile the current source to export a diagram.';
+        : `Current board: ${pane!.viewer.currentBoard?.name ?? 'Root'} · ${formatName}`
+      : pane?.sourceError ? 'Fix source errors to export.' : 'Compile the current source to export a diagram.';
     exportButton.textContent = ({ svg: 'Download SVG', png: 'Download PNG', zip: 'Download SVG ZIP',
       html: 'Download HTML' } as Record<string, string>)[exportFormat.value] ?? 'Download export';
   }
@@ -117,7 +118,7 @@ export function setupExportMenu(activePane: () => DocumentPane | undefined, pick
     const format = exportFormat.value;
     reportExport(`Preparing ${format.toUpperCase()} download…`, 'info', pane);
     const dark = document.documentElement.dataset.theme === 'dark';
-    const exportName = pane.name;
+    const exportName = pane.name.replace(/\.d2$/i, '');
     const warnings: string[] = [];
     // Interactive HTML follows its reader's color scheme; images keep the theme shown here.
     const theme = format === 'html' ? undefined : dark;
@@ -128,7 +129,7 @@ export function setupExportMenu(activePane: () => DocumentPane | undefined, pick
     };
     try {
       let blob: Blob;
-      let name = safeFilename(exportName.replace(/\.d2$/i, ''));
+      let name = safeFilename(exportName);
       if (format === 'svg' || format === 'png') {
         const svg = await prepare(board.target);
         blob = format === 'png' ? await rasterizeSvg(svg) : new Blob([svg], { type: 'image/svg+xml' });

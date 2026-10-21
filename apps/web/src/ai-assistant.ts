@@ -1,6 +1,20 @@
 import type { PaneScope } from './pane-scope';
 import { AiError, aiFailure, readAiResponse } from './ai-errors';
 type Snapshot = { source: string; name: string; board: string; revision: number };
+const switchedDocument = Symbol('switched document');
+
+/** Longer than the server's own CLI timeout, so its clearer explanation arrives first. */
+const CHECK_TIMEOUT_MS = 7000;
+const STATIC_BUILD = 'AI is not available in this build. Run Zoomflow locally with pnpm dev to ask Claude Code or Codex.';
+
+/** A static build has no AI endpoint, so its GET probe answers 404; that answer does not change. */
+let endpoint: Promise<boolean> | undefined;
+function endpointAvailable(signal: AbortSignal) {
+  endpoint ??= fetch('/api/ai/status', { signal }).then((response) => response.status !== 404,
+    // The full check reports transport failures; probe again next time.
+    () => { endpoint = undefined; return true; });
+  return endpoint;
+}
 
 /** Both panes check availability with the same settings; share a check that is still running. */
 const statusChecks = new Map<string, Promise<Record<string, unknown>>>();
@@ -8,10 +22,12 @@ function requestStatus(body: string) {
   let check = statusChecks.get(body);
   if (!check) {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 5000);
-    check = fetch('/api/ai/status', { method: 'POST', signal: controller.signal, headers: { 'Content-Type': 'application/json' }, body })
-      .then(readAiResponse)
-      .catch((error) => { throw controller.signal.aborted ? new AiError('The AI availability check timed out. Check that the local server and selected provider are running, then check again.', 'No availability response within 5 seconds.') : error; })
+    const timeout = setTimeout(() => controller.abort(), CHECK_TIMEOUT_MS);
+    check = endpointAvailable(controller.signal)
+      .then((reachable) => reachable
+        ? fetch('/api/ai/status', { method: 'POST', signal: controller.signal, headers: { 'Content-Type': 'application/json' }, body }).then(readAiResponse)
+        : { available: false, reason: STATIC_BUILD, unsupported: true })
+      .catch((error) => { throw controller.signal.aborted ? new AiError('The AI availability check timed out. Check that the local server and selected provider are running, then check again.', `No availability response within ${CHECK_TIMEOUT_MS / 1000} seconds.`) : error; })
       .finally(() => { clearTimeout(timeout); statusChecks.delete(body); });
     statusChecks.set(body, check);
   }
@@ -104,7 +120,8 @@ export function setupAiAssistant({ root, part }: PaneScope, { read, validate, ap
       available = data.available === true;
       availability.textContent = available ? `${provider.selectedOptions[0]?.textContent ?? 'AI'} is ready on this computer.`
         : typeof data.reason === 'string' ? data.reason : 'The selected provider is unavailable. Check its installation and sign-in.';
-      retry.hidden = available;
+      // A static build cannot gain an AI endpoint by checking again.
+      retry.hidden = available || data.unsupported === true;
     } catch (error) {
       if (health !== controller) return;
       available = false;
@@ -117,7 +134,9 @@ export function setupAiAssistant({ root, part }: PaneScope, { read, validate, ap
     }
   }
   retry.addEventListener('click', () => void checkAvailability());
-  void checkAvailability();
+  // Provider sign-in checks run a CLI, so wait until the panel first opens.
+  let checked = false;
+  const recheck = () => { if (checked) void checkAvailability(); };
   cancel.addEventListener('click', () => active?.abort());
   undoButton.addEventListener('click', () => {
     if (undoRevision === read().revision && undo()) {
@@ -132,15 +151,16 @@ export function setupAiAssistant({ root, part }: PaneScope, { read, validate, ap
     // WebKit can keep the native select hidden to visibility checks after a
     // details panel opens. A post-toggle style update refreshes its layout.
     provider.style.display = panel.open ? 'inline-block' : '';
+    if (panel.open && !checked) { checked = true; void checkAvailability(); }
   });
   function showProviderSettings() {
     const isClaude = provider.value === 'claude';
     claudeConfig.hidden = !isClaude;
     claudeConfigDir.disabled = !isClaude;
   }
-  provider.addEventListener('change', () => { showProviderSettings(); void checkAvailability(); });
-  environment.addEventListener('change', () => void checkAvailability());
-  claudeConfigDir.addEventListener('change', () => void checkAvailability());
+  provider.addEventListener('change', () => { showProviderSettings(); recheck(); });
+  environment.addEventListener('change', recheck);
+  claudeConfigDir.addEventListener('change', recheck);
   showProviderSettings();
   prompt.addEventListener('keydown', (event) => {
     if (event.key !== 'Enter' || !(event.metaKey || event.ctrlKey) || event.isComposing) return;
@@ -211,8 +231,13 @@ export function setupAiAssistant({ root, part }: PaneScope, { read, validate, ap
     } catch (error) {
       if (controller.signal.aborted) {
         status.dataset.kind = 'info';
-        status.textContent = 'AI request canceled. Your source is unchanged.';
-        onStatus('AI request canceled.', 'info');
+        if (controller.signal.reason === switchedDocument) {
+          status.textContent = 'AI request canceled because you switched documents. Send the prompt again to ask about this one.';
+          onStatus('AI request for the previous document canceled.', 'info');
+        } else {
+          status.textContent = 'AI request canceled. Your source is unchanged.';
+          onStatus('AI request canceled.', 'info');
+        }
         return;
       }
       status.setAttribute('role', 'alert');
@@ -229,6 +254,8 @@ export function setupAiAssistant({ root, part }: PaneScope, { read, validate, ap
     }
   });
   return {
+    /** The pane shows another document: a running request must not apply to it. */
+    documentSwitched() { active?.abort(switchedDocument); },
     sourceChanged() { undoRevision = undefined; undoButton.hidden = true; changeFeedback.hidden = true; },
     /** Abandon a running request, for example when its document closes. */
     cancel() { active?.abort(); },

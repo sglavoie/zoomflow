@@ -61,7 +61,7 @@ test('saving uses a file handle after the user chooses a destination', async ({ 
 test('an opened file can be saved back to its original handle', async ({ page }) => {
   await page.addInitScript(() => {
     (window as typeof window & { savedOriginal?: string; showOpenFilePicker?: () => Promise<unknown[]> }).showOpenFilePicker = async () => [{
-      name: 'original.d2', getFile: async () => new File(['original: Before'], 'original.d2', { type: 'text/plain' }),
+      name: 'original.d2', getFile: async () => new File(['original: Before'], 'original.d2', { type: 'text/plain', lastModified: 1 }),
       createWritable: async () => ({ write: async (text: string) => {
         (window as typeof window & { savedOriginal?: string }).savedOriginal = text;
       }, close: async () => {}, abort: async () => {} }),
@@ -79,7 +79,7 @@ test('an opened file can be saved back to its original handle', async ({ page })
 test('directory access opens nested imports and saves an edited file back to its handle', async ({ page }) => {
   await page.addInitScript(() => {
     const fileHandle = (name: string, source: string) => ({ kind: 'file', name,
-      getFile: async () => new File([source], name, { type: 'text/plain' }),
+      getFile: async () => new File([source], name, { type: 'text/plain', lastModified: 1 }),
       createWritable: async () => ({ write: async (text: string) => {
         (window as typeof window & { savedProjectSource?: string }).savedProjectSource = text;
       }, close: async () => {}, abort: async () => {} }),

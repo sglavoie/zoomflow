@@ -1,0 +1,6 @@
+{
+  // Browser sources. vite.config.ts and ai-server.ts run in Node: see tsconfig.node.json.
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": { "lib": ["ES2022", "DOM", "DOM.Iterable"], "types": [] },
+  "include": ["src/**/*.ts"]
+}

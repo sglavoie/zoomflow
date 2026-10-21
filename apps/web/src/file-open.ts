@@ -1,6 +1,7 @@
 import type { DocumentPane, PaneId } from './document-pane';
 import type { setupExamplePicker } from './example-picker';
 import { readDirectoryHandle, readFolderInput } from './project-files';
+import { rememberDiskVersion } from './disk-version';
 import { describeError } from './text';
 
 type PickerWindow = Window & {
@@ -34,17 +35,19 @@ export function setupFileOpen({ picker, activePane, fileHandles, paneRoots, setA
     }
     return (key: string) => known.get(key);
   }
+  /** Resolves whether the file opened. */
   async function openFile(file: File, handle?: FileSystemFileHandle) {
     try {
       if (!/\.d2$/i.test(file.name)) throw new Error('Choose a .d2 file.');
       const source = await file.text();
       setFileError('');
       const key = picker().rememberFile(file.name, source, source, await sameEntries(() => handle));
-      if (handle) fileHandles.set(key, handle);
+      if (handle) { fileHandles.set(key, handle); rememberDiskVersion(handle, file); }
       picker().refresh();
       await activePane().replaceDocument(source, file.name, key);
+      return true;
     }
-    catch (error) { setFileError(`Could not open file: ${describeError(error)}`); }
+    catch (error) { setFileError(`Could not open file: ${describeError(error)}`); return false; }
   }
   const fileInput = document.querySelector<HTMLInputElement>('#file')!;
   fileInput.addEventListener('click', async (event) => {
@@ -103,8 +106,11 @@ export function setupFileOpen({ picker, activePane, fileHandles, paneRoots, setA
     // Dropping onto a pane opens the file there.
     const pane = (['a', 'b'] as const).find((id) => event.target instanceof Node && paneRoots[id].contains(event.target));
     if (pane) setActive(pane);
-    const file = event.dataTransfer?.files[0];
-    if (file) void openFile(file);
+    const [file, ...others] = event.dataTransfer.files;
+    void openFile(file).then((opened) => {
+      // Each pane shows one document, so a drop opens only its first file.
+      if (opened && others.length) activePane().setActivity(`Opened ${file.name}; drop one file at a time.`);
+    });
   });
   return { setFileError };
 }

@@ -1,8 +1,9 @@
 import { boardLabel, classifyHref, indexBoards, parentContext, shapeClass, type Board, type Diagram, type LintDiagnostic, type ShapeSource } from '@zoomflow/core';
 import { restoreMissingLinks } from './missing-links';
-import { decorateLinks } from './link-cues';
-import { renderParentContext, resolveRouteHash, routeFallbackNotice, simplifyTrail } from './navigation';
+import { decorateLinks, splitHitArea } from './link-cues';
+import { childToward, renderParentContext, resolveRouteHash, restoreTrail, routeFallbackNotice, simplifyTrail, watchHistory } from './navigation';
 import { setupBreadcrumbs } from './breadcrumbs';
+import { followLink, linkTo, prepareLinks, resolveLink } from './links';
 import { sanitizeSvg } from './sanitize';
 
 export type RenderBoard = (target: string) => Promise<string>;
@@ -64,17 +65,12 @@ export class Viewer {
     this.stage.addEventListener('keydown', (event) => {
       if (event.key === 'Enter') this.follow(event);
     }, options);
-    if (this.history) {
-      // Traversals fire popstate then hashchange; render each history step once.
-      let popped = false;
-      window.addEventListener('popstate', () => { popped = true; void this.fromLocation(); }, options);
-      window.addEventListener('hashchange', () => { if (!popped) void this.fromLocation(); popped = false; }, options);
-    }
+    if (this.history) watchHistory(window, () => void this.fromLocation(), options);
     this.resume();
   }
 
   private readonly goUp = (event: KeyboardEvent) => {
-    if (event.defaultPrevented || this.settings.active?.() === false || event.altKey || event.ctrlKey || event.metaKey ||
+    if (event.defaultPrevented || event.repeat || this.settings.active?.() === false || event.altKey || event.ctrlKey || event.metaKey ||
       (event.target instanceof Element && event.target.closest('input, textarea, select, [contenteditable="true"]'))) return;
     if (event.key === 'Escape' || event.key === 'Backspace') {
       const parent = this.boards.get(this.current)?.parent;
@@ -168,31 +164,21 @@ export class Viewer {
     const route = this.route;
     const byHash = new Map([...this.boards.values()].map((item) => [item.hash, item]));
     const board = byHash.get(resolveRouteHash(route.hash, (hash) => byHash.has(hash))) ?? this.boards.get('root')!;
-    const saved = route.trail;
-    const trail = Array.isArray(saved) && saved.length > 0 && saved.at(-1) === board.id &&
-      saved.every((id) => typeof id === 'string' && this.boards.has(id)) ? saved as string[] : this.ancestors(board.id);
+    const trail = restoreTrail(route.trail, board.id, (id) => this.boards.has(id), () => this.ancestors(board.id));
     await this.navigate(board.id, 'replace', trail, preserveViewport, routeFallbackNotice(route.hash, board.hash, board.name));
   }
 
+  private readonly resolve = (href: string) => resolveLink(href, (id) => this.boards.has(id), classifyHref);
+
   private svgElement(svg: string, board: Board): SVGElement {
     const doc = new DOMParser().parseFromString(svg, 'image/svg+xml');
-    if (doc.querySelector('parsererror') || doc.documentElement.localName !== 'svg') throw new Error('Invalid SVG from renderer');
+    // File content can contain labels and links; never insert executable markup. Sanitize while
+    // the parsed SVG is still inert: importing an element into this document can start loading it.
+    if (doc.querySelector('parsererror') || !sanitizeSvg(doc.documentElement)) throw new Error('Invalid SVG from renderer');
     const element = document.importNode(doc.documentElement, true) as unknown as SVGElement;
     element.setAttribute('preserveAspectRatio', 'xMidYMid meet');
-    // File content can contain labels and links; never insert executable markup.
-    sanitizeSvg(element);
     restoreMissingLinks(element, this.diagnostics.filter((item) => item.board === board.id));
-    for (const link of [...element.querySelectorAll('a')]) {
-      const action = classifyHref(link.getAttribute('href') ?? link.getAttribute('xlink:href') ?? '');
-      // An unusable link is not a control: keep its shape, drop the anchor.
-      if (action.kind === 'invalid') { link.replaceWith(...link.childNodes); continue; }
-      link.setAttribute('tabindex', '0');
-      link.setAttribute('role', 'link');
-      if (action.kind === 'external') {
-        link.setAttribute('target', '_blank');
-        link.setAttribute('rel', 'noopener noreferrer');
-      } else if (!this.boards.has(action.target)) link.setAttribute('data-missing', '');
-    }
+    prepareLinks(element, this.resolve);
     for (const shape of board.diagram.shapes) {
       const encoded = shapeClass(shape.id);
       const group = [...element.querySelectorAll('g')].find((node) => node.classList.contains(encoded));
@@ -210,15 +196,9 @@ export class Viewer {
   }
 
   private follow(event: MouseEvent | KeyboardEvent) {
-    const link = event.target instanceof Element ? event.target.closest('a') : null;
-    if (!link) return;
-    const href = link.getAttribute('href') ?? link.getAttribute('xlink:href') ?? '';
-    const action = classifyHref(href);
-    if (action.kind === 'external') return;
-    event.preventDefault();
-    if (action.kind === 'invalid') return;
-    if (!this.boards.has(action.target)) { this.setMessage(`Missing board: ${boardLabel(action.target, this.boards)}`, true); return; }
-    void this.navigate(action.target);
+    const action = followLink(event, this.resolve);
+    if (action?.kind === 'missing') this.setMessage(`Missing board: ${boardLabel(action.target, this.boards)}`, true);
+    else if (action?.kind === 'board') void this.navigate(action.target);
   }
 
   private cancelTransition() {
@@ -262,8 +242,9 @@ export class Viewer {
         !matchMedia('(prefers-reduced-motion: reduce)').matches;
       const keepFocus = document.activeElement === active;
       const sameBoard = id === this.current;
+      const previous = this.current;
       this.stage.replaceChildren(content);
-      decorateLinks(content, this.boards, board.id, (target) => boardLabel(target, this.boards));
+      decorateLinks(content, this.boards, board.id, splitHitArea, (target) => boardLabel(target, this.boards));
       this.syncBackground(this.stage);
       if (fade) void this.fadeIn(content);
       this.current = id;
@@ -271,7 +252,8 @@ export class Viewer {
       this.announcement.textContent = `${board.name} board`;
       this.trail = simplifyTrail(trail ?? [...this.trail, id]);
       this.stage.dataset.board = id;
-      this.stage.dispatchEvent(new CustomEvent('zf-boardchange', { detail: { preserveViewport: preserveViewport && sameBoard } }));
+      // Viewports keep a view per board, so re-rendering the same board keeps its viewport anyway.
+      this.stage.dispatchEvent(new Event('zf-boardchange'));
       if (!this.history) this.memoryRoute = { hash: board.hash, trail: this.trail };
       else {
         const state = { ...history.state, zoomflowTrail: this.trail };
@@ -279,13 +261,17 @@ export class Viewer {
         else history.pushState(state, '', board.hash);
       }
       this.updateCrumbs();
+      // Going up keeps the keyboard position: focus the link leading back down, which an
+      // attached viewport reveals as it receives focus. Other crumb moves keep focus in the trail.
+      const child = keepFocus && !sameBoard ? childToward(previous, id, (item) => this.boards.get(item)?.parent) : undefined;
+      const link = child && linkTo(this.stage, child);
       if (keepFocus && focusStage) {
         const shape = preserveViewport && sameBoard && focusedShape
           ? [...this.stage.querySelectorAll<SVGElement>('[data-shape-id]')].find((node) => node.dataset.shapeId === focusedShape) : undefined;
-        const target = shape?.closest<SVGElement>('a') ?? (shape?.hasAttribute('tabindex') ? shape : this.stage);
+        const target = shape?.closest<SVGElement>('a') ?? (shape?.hasAttribute('tabindex') ? shape : link || this.stage);
         target.focus({ preventScroll: true });
       }
-      else if (keepFocus && focusCrumb) this.crumbs.querySelector<HTMLButtonElement>('button[aria-current]')?.focus({ preventScroll: true });
+      else if (keepFocus && focusCrumb) (link || this.crumbs.querySelector<HTMLButtonElement>('button[aria-current]'))?.focus({ preventScroll: true });
       renderParentContext(this.context, parentContext(board, this.boards));
       this.setMessage(notice);
     } catch (error) {

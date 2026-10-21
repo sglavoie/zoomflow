@@ -103,6 +103,8 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
   let previewTimer: ReturnType<typeof setTimeout> | undefined;
   const previewQueue = createPreviewQueue();
   let documentExport: DocumentExport | undefined;
+  /** The latest compile of this document failed with source errors. */
+  let sourceError = false;
 
   function setPreviewState(state: 'loading' | 'updating' | 'ready' | 'error' | 'unavailable') {
     if (state === 'updating') {
@@ -208,6 +210,8 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
   });
 
   async function replaceDocument(source: string, name: string, key: string, reset = false) {
+    ai?.documentSwitched();
+    sourceError = false;
     viewer.setRoute(reset ? undefined : shared.documentRoutes.get(key));
     viewport.setDocument(key, reset);
     documentName = name;
@@ -418,6 +422,7 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
           const result = await engine.compile(glyphs, { ...fonts, layout: 'elk', themeID: 0, darkThemeID: 200 });
           return engine.render(result.diagram, { ...result.renderOptions, noXMLTag: true });
         };
+        sourceError = false;
         documentExport = { diagram: compiled.diagram, render, name, diagnostics, renderSource };
         shared.exportChanged();
         setPreviewState('ready');
@@ -437,6 +442,8 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
         setEditorDiagnostics(diagnostics);
         lintDocument = undefined;
         setText(lintSummary, plural(diagnostics.length, 'source error'));
+        sourceError = true;
+        shared.exportChanged();
         const first = diagnostics[0];
         const externalCompilerError = first.filename && first.filename !== filename ? first : undefined;
         const message = first.message.replace(/^[^:]+:\d+:\d+:\s*/, '');
@@ -469,12 +476,15 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
     get source() { return editor.source; },
     get generation() { return generation; },
     get documentExport() { return documentExport; },
+    get sourceError() { return sourceError; },
     /** The preview reflects the current source, so exports and source selection are valid. */
     get current() { return mappedSource === editor.source; },
     replaceDocument,
     save: () => saveFileButton.click(),
     /** Show a document restored on startup, keeping its board from the page URL. */
     open(document: { key: string; name: string; source: string }) {
+      ai?.documentSwitched();
+      sourceError = false;
       documentName = document.name;
       currentDocumentKey = document.key;
       delete root.dataset.empty;
@@ -487,6 +497,7 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
     },
     /** Leave the pane without a document, for example when its draft is removed. */
     close() {
+      sourceError = false;
       clearTimeout(debounce);
       clearTimeout(previewTimer);
       previewTimer = undefined;

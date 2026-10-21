@@ -1,0 +1,26 @@
+version: 2
+updates:
+  # Workflow actions are pinned to commit SHAs; Dependabot bumps the SHA and version comment.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      github-actions:
+        patterns: ["*"]
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      # Playwright upgrades change browser builds, so review them with the visual baselines.
+      playwright:
+        patterns: ["@playwright/*", "playwright"]
+      codemirror:
+        patterns: ["@codemirror/*", "@lezer/*", "codemirror"]
+      tooling:
+        patterns: ["*"]
+        exclude-patterns: ["@playwright/*", "playwright", "@codemirror/*", "@lezer/*", "codemirror", "@d2lang/d2"]
+    ignore:
+      # A vendored, patched tarball; update it through vendor/d2/build.py.
+      - dependency-name: "@d2lang/d2"

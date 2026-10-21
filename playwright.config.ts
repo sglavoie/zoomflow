@@ -15,7 +15,9 @@ export default defineConfig({
   timeout: 90_000,
   expect: { timeout: 30_000, toHaveScreenshot: { maxDiffPixelRatio: 0.005 } },
   forbidOnly: !!process.env.CI,
+  // A retry still runs in CI so a flaky test is reported, but it fails the run.
   retries: process.env.CI ? 1 : 0,
+  failOnFlakyTests: !!process.env.CI,
   workers: 2,
   use: { baseURL: `http://127.0.0.1:${port}`, trace: 'retain-on-failure' },
   webServer: [
@@ -36,7 +38,12 @@ export default defineConfig({
     { name: 'chromium', testIgnore: productionSpec, use: { ...devices['Desktop Chrome'] } },
     { name: 'firefox', testIgnore: productionSpec, use: { ...devices['Desktop Firefox'] } },
     { name: 'webkit', testIgnore: productionSpec, use: { ...devices['Desktop Safari'] } },
-    ...production ? [{ name: 'production', testMatch: productionSpec,
-      use: { ...devices['Desktop Chrome'], baseURL: `http://127.0.0.1:${previewPort}` } }] : [],
+    // WebKit also loads the bundle: the vendored D2 build carries a WebKit-specific patch.
+    ...production ? [
+      { name: 'production', testMatch: productionSpec,
+        use: { ...devices['Desktop Chrome'], baseURL: `http://127.0.0.1:${previewPort}` } },
+      { name: 'production-webkit', testMatch: productionSpec,
+        use: { ...devices['Desktop Safari'], baseURL: `http://127.0.0.1:${previewPort}` } },
+    ] : [],
   ],
 });

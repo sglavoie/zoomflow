@@ -1,4 +1,5 @@
 import standardLibrary from '../../../stdlib/zoomflow.d2?raw';
+import { rememberDiskVersion } from './disk-version';
 
 export type ProjectSource = { path: string; source: string };
 
@@ -56,7 +57,9 @@ export async function readDirectoryHandle(root: FileSystemDirectoryHandle) {
       } else if (validProjectPath(path)) {
         const handle = entry as FileSystemFileHandle;
         handles[path] = handle;
-        files.push({ path, source: await (await handle.getFile()).text() });
+        const file = await handle.getFile();
+        rememberDiskVersion(handle, file);
+        files.push({ path, source: await file.text() });
       }
     }
   }

@@ -24,7 +24,14 @@ export function createDraftLibrary(changed: () => void) {
   let storedSecond: string | undefined;
   let saveTimer: ReturnType<typeof setTimeout> | undefined;
   let conflictShown = false;
-  const conflictMessage = 'Drafts changed in another tab. Your open source is unchanged. Reload to review saved versions; conflicting edits appear as recovered copies.';
+  const conflictText = conflictNotice.querySelector<HTMLElement>('#draft-conflict-message')!;
+  const reloadButton = conflictNotice.querySelector<HTMLButtonElement>('#draft-conflict-reload')!;
+  /** Name the affected documents so the notice says which drafts to review. */
+  function conflictMessage(keys: string[]) {
+    const names = [...new Set(keys.map((key) => drafts.get(key)?.title ?? 'A removed draft'))];
+    const listed = names.length > 3 ? `${names.slice(0, 3).join(', ')} and ${names.length - 3} more` : names.join(', ');
+    return `${listed} changed in another tab. Your open source is unchanged. Reload to review saved versions; conflicting edits appear as recovered copies.`;
+  }
 
   try {
     store = new DraftStore(localStorage);
@@ -45,12 +52,14 @@ export function createDraftLibrary(changed: () => void) {
     if (saved.current && drafts.has(saved.current)) current.a = saved.current;
     if (saved.second !== current.a && saved.second && drafts.has(saved.second)) storedSecond = saved.second;
   } catch { recoveryAvailable = false; }
-  /** The notice stays rendered so screen readers announce its text when a conflict appears.
+  /** The message stays rendered so screen readers announce its text when a conflict appears.
    * `documents` limits the check to those documents' records. */
   function checkConflicts(documents?: Set<string>) {
     try {
-      conflictShown = Boolean(store?.hasConcurrentChanges(documents));
-      setText(conflictNotice, conflictShown ? conflictMessage : '');
+      const keys = store?.concurrentChanges(documents) ?? [];
+      conflictShown = keys.length > 0;
+      reloadButton.hidden = !conflictShown;
+      setText(conflictText, conflictShown ? conflictMessage(keys) : '');
     } catch { /* Saving reports storage failures beside the save control. */ }
   }
   // Each save in another tab writes several keys; check the changed documents once per burst.
@@ -69,6 +78,18 @@ export function createDraftLibrary(changed: () => void) {
       everyDocument = false;
       checkConflicts(documents);
     }, 100);
+  });
+  reloadButton.addEventListener('click', () => {
+    // Keep this tab's latest edits before reloading every saved version.
+    persist();
+    location.reload();
+  });
+  // Without a browser backup, leaving the page would lose edits that were not saved to disk.
+  window.addEventListener('beforeunload', (event) => {
+    if (savePending || !recoveryAvailable) persist();
+    if (recoveryAvailable || ![...drafts.values()].some((item) => item.source !== item.baseline)) return;
+    event.preventDefault();
+    event.returnValue = '';
   });
   function persist() {
     clearTimeout(saveTimer);

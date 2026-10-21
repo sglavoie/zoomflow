@@ -1,0 +1,6 @@
+{
+  // The CLI runs in Node; DOM types come in with the offline viewer it embeds.
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": { "lib": ["ES2022", "DOM", "DOM.Iterable"], "types": ["node"] },
+  "include": ["src/**/*.ts", "bin/*.mjs", "build.mjs"]
+}

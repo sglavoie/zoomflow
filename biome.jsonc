@@ -2,8 +2,8 @@
   "$schema": "./node_modules/@biomejs/biome/configuration_schema.json",
   "vcs": { "enabled": true, "clientKind": "git", "useIgnoreFile": true },
   "files": { "includes": ["**", "!**/dist", "!vendor"] },
-  // Lint only. The formatter would rewrite most files: the code keeps related
-  // statements on one line and uses lines well beyond any fixed width.
+  // Lint only, apart from JSON (see overrides). The formatter would rewrite most source
+  // files: the code keeps related statements on one line and uses lines beyond any fixed width.
   "formatter": { "enabled": false },
   "assist": { "enabled": false },
   "linter": {
@@ -36,6 +36,11 @@
     }
   },
   "overrides": [
+    {
+      // JSON keeps one consistent layout. Biome does not format YAML; .editorconfig covers it.
+      "includes": ["**/*.json", "**/*.jsonc"],
+      "formatter": { "enabled": true, "indentStyle": "space", "indentWidth": 2, "lineWidth": 140 }
+    },
     {
       // Filename sanitizers and d2 log filters match control characters on purpose.
       "includes": ["apps/web/src/text.ts", "apps/web/src/flow-model.ts", "packages/core/src/export.ts", "packages/cli/src/index.ts"],

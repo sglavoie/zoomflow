@@ -144,16 +144,17 @@ export class DraftStore {
     else this.storage.removeItem(secondSelectionKey);
   }
 
-  /** `documents` limits the check to the records named by `DraftStore.documentOf`. */
-  hasConcurrentChanges(documents?: Set<string>) {
-    return this.versions(documents).some((record) => {
+  /** The documents another tab saved without this tab seeing those versions.
+   * `documents` limits the check to the records named by `DraftStore.documentOf`. */
+  concurrentChanges(documents?: Set<string>) {
+    return [...new Set(this.versions(documents).filter((record) => {
       if (!this.clocks.has(record.key)) return false;
       const known = { ...this.observed.get(record.key) };
       for (const [writer, count] of Object.entries(this.clocks.get(record.key)!)) known[writer] = Math.max(known[writer] ?? 0, count);
       return !dominates(known, record.clock);
-    });
+    }).map((record) => record.key))];
   }
   static isDraftEvent(key: string | null) { return key === null || key.startsWith(prefix); }
-  /** The encoded document a draft storage key belongs to, as `hasConcurrentChanges` accepts it. */
+  /** The encoded document a draft storage key belongs to, as `concurrentChanges` accepts it. */
   static documentOf(storageKey: string) { return storageKey.slice(prefix.length, storageKey.lastIndexOf(':')); }
 }

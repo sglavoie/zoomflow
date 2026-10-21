@@ -1,11 +1,18 @@
 #!/usr/bin/env node
+import { fileURLToPath } from 'node:url';
+
+// A non-literal specifier keeps typechecking independent of the build output.
+const entry = '../dist/index.js';
+/** @type {{ main(): Promise<number> }} */
+let cli;
 try {
-  // A non-literal specifier keeps typechecking independent of the build output.
-  const entry = '../dist/index.js';
-  /** @type {{ main(): Promise<number> }} */
-  const { main } = await import(entry);
-  process.exitCode = await main();
+  cli = await import(entry);
 } catch (error) {
-  console.error(`zoomflow: ${error instanceof Error ? error.message : error}\nRun pnpm --filter cli build after installing dependencies.`);
-  process.exitCode = 2;
+  // Only a missing build output warrants the build hint; anything else is a real failure.
+  const missing = /** @type {{ code?: string }} */ (error).code === 'ERR_MODULE_NOT_FOUND'
+    && String(/** @type {Error} */ (error).message).includes(`'${fileURLToPath(new URL(entry, import.meta.url))}'`);
+  if (!missing) throw error;
+  console.error('zoomflow: the CLI is not built.\nRun pnpm --filter cli build after installing dependencies.');
+  process.exit(2);
 }
+process.exitCode = await cli.main();

@@ -42,3 +42,29 @@ export function routeFallbackNotice(requested: string, resolved: string, name: s
   try { path = decodeURIComponent(path); } catch { /* Keep the raw path. */ }
   return `Board "${path}" not found; showing ${name}`;
 }
+
+/** Reuse a saved visit trail when it still ends at `board` and names only existing boards;
+ * otherwise fall back to the board's ancestors. */
+export function restoreTrail(saved: unknown, board: string, exists: (id: string) => boolean,
+  ancestors: () => string[]): string[] {
+  return Array.isArray(saved) && saved.length > 0 && saved.at(-1) === board &&
+    saved.every((id) => typeof id === 'string' && exists(id)) ? saved as string[] : ancestors();
+}
+
+/** Call `restore` once per history step: traversals fire popstate then hashchange,
+ * while editing the hash in the address bar fires hashchange alone. */
+export function watchHistory(target: EventTarget, restore: () => void, options?: AddEventListenerOptions) {
+  let popped = false;
+  target.addEventListener('popstate', () => { popped = true; restore(); }, options);
+  target.addEventListener('hashchange', () => { if (!popped) restore(); popped = false; }, options);
+}
+
+/** When `ancestor` is a proper ancestor of `descendant`, the child of `ancestor` on the way back down. */
+export function childToward(descendant: string, ancestor: string, parentOf: (id: string) => string | undefined): string | undefined {
+  const seen = new Set<string>();
+  for (let id: string | undefined = descendant; id && !seen.has(id); id = parentOf(id)) {
+    if (parentOf(id) === ancestor) return id;
+    seen.add(id);
+  }
+  return undefined;
+}

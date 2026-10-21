@@ -345,6 +345,7 @@ export function setupExamplePicker({ readSource, open, onState, forget, checkpoi
       return { pane, source: file.source, name: file.name, key: file.key };
     },
     refresh() { announce(); },
+    confirm: actions.confirm,
     updateCurrent(pane: PaneId, source: string) {
       const draft = draftOf(pane);
       if (!draft) return;
@@ -367,8 +368,13 @@ export function setupExamplePicker({ readSource, open, onState, forget, checkpoi
       // Saving a built-in example creates a named file without taking over the template.
       const template = examples.find((example) => example.name === key);
       if (template) {
+        const example = draft;
         draft = { ...draft, key: `file:${crypto.randomUUID()}`, number: library.nextNumber(), template: template.title,
           name, title: name, updatedAt: Date.now() };
+        // The edits moved to the saved copy with their undo history; the example is unedited again.
+        example.source = example.baseline;
+        example.updatedAt = undefined;
+        refreshRows.get(example.key)?.();
         drafts.set(draft.key, draft);
         addOption(draft);
       } else {

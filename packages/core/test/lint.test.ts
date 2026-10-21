@@ -101,6 +101,12 @@ it('finds links D2 silently removes, permits cycles/external links, and flags on
     .toEqual(['root.layers.A', 'root.layers.unused']);
 });
 
+it('asks only layers, not scenarios or steps, for a backlink to their parent', async () => {
+  const compiled = await compile('a.link: layers.l\nlayers: {l: {x}}\nscenarios: {s: {y}}\nsteps: {t: {z}}');
+  expect(lint(compiled, { missingBacklink: true }).diagnostics.filter((item) => item.rule === 'missing-backlink').map((item) => item.board))
+    .toEqual(['root.layers.l']);
+});
+
 it('handles dangling connection links and last-assignment overrides', async () => {
   const compiled = await compile('a.link: layers.missing\na.link: https://example.com\na -> b: {link: layers.absent}');
   const result = lint(compiled);
@@ -193,4 +199,23 @@ steps: {one: {more.link: layers.F; layers: {F: {y}}}}`));
   expect(orphans[0].range).toMatch(/^index,/);
   const unlinked = lint(await compile('layers: {lonely: {x}}')).diagnostics;
   expect(unlinked.map((item) => item.message)).toEqual(['Layer "Root > lonely" has no incoming board link.']);
+});
+
+it('accepts a port that matches any one of several nodes drilling into the same layer', async () => {
+  const source = 'x -> A\nA.link: layers.c\nB.link: layers.c\nB -> y\nlayers.c: {x.class: zf-in; y.class: zf-out}';
+  const result = strictLint(await compile(source));
+  expect(result.diagnostics).toEqual([]);
+  expect(result.boundaries).toMatchObject([{ shape: 'A', expected: 1, evaluated: 1 }, { shape: 'B', expected: 1, evaluated: 1 }]);
+  const stray = strictLint(await compile(source.replace('}', '; z.class: zf-out}')));
+  expect(stray.diagnostics).toMatchObject([{ rule: 'boundary-out', board: 'root.layers.c', shape: 'z',
+    message: 'zf-out port "z" has no matching outgoing neighbour of "A" or "B" in "Root".' }]);
+});
+
+it('reports each dangling connection link separately at its own source line', async () => {
+  const result = lint(await compile('c -> d: {link: layers.nope}\ne -> f: {link: layers.nope}\nk.link: layers.k\nlayers.k: {g -> h: {link: layers.zz}}'));
+  expect(result.diagnostics.filter((item) => item.rule === 'dangling-link')).toMatchObject([
+    { connection: '(c -> d)[0]', target: 'root.layers.nope', range: expect.stringMatching(/^index,0:15:/) },
+    { connection: '(e -> f)[0]', target: 'root.layers.nope', range: expect.stringMatching(/^index,1:15:/) },
+    { board: 'root.layers.k', connection: '(g -> h)[0]', target: 'root.layers.k.layers.zz' },
+  ]);
 });

@@ -2,7 +2,7 @@ import { D2 } from '@d2lang/d2';
 import { boardLabel, exportBoardsHtml, exportBoardsZip, exportGlyphSource, indexBoards, lint, renderExportBoards, shapeClass, type Diagram } from '@zoomflow/core';
 import { offlineViewerScript, offlineViewerStyle } from '@zoomflow/viewer';
 import { execFile } from 'node:child_process';
-import { copyFile, lstat, mkdir, mkdtemp, readFile, readdir, rename, rm, writeFile } from 'node:fs/promises';
+import { copyFile, lstat, mkdir, mkdtemp, readFile, realpath, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { availableParallelism, tmpdir } from 'node:os';
 import { basename, dirname, extname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { parseArgs, promisify } from 'node:util';
@@ -28,7 +28,7 @@ function htmlLinks(svg: string, diagram: Diagram): string {
   });
 }
 const usage = `Usage:
-  zoomflow export file.d2 [--all] [--format svg|png|html] [-o output] [--root directory]
+  zoomflow export file.d2 [--all] [--format svg|png|html] [-o, --output file] [--root directory]
   zoomflow lint file.d2 [--boundary-ports] [--missing-backlink] [--json] [--root directory]
   zoomflow -h | --help | -v | --version`;
 const help = `${usage}
@@ -36,14 +36,15 @@ const help = `${usage}
 SVG/PNG export the root board by default; --all creates a ZIP of every board.
 HTML always includes every board in one navigable, self-contained file.
 Default output: file.svg, file.png, file.html, or file-svg.zip / file-png.zip;
- -o must use the same extension.
+ -o, --output must use the same extension.
 --root bounds local imports and images (default: the input file's directory);
- pass it to import from parent folders. Unreadable folders are skipped with a
- warning. Local zoomflow.d2 files override the bundled stdlib.
+ pass it to import from parent folders. Only the input and the files it imports
+ are read. Local zoomflow.d2 files override the bundled stdlib.
 Export requires D2 v0.9.0 on PATH. Lint uses the bundled D2 compiler.
 Boundary ports are optional; --boundary-ports checks explicit zf-in/zf-out contracts.
-Exit codes: 0 success (warnings allowed), 1 lint errors, 2 usage/compile/export failure.
-`;
+--missing-backlink warns about layers without a link back to their parent.
+--json prints the lint result to stdout, or {"error", "diagnostics": []} on failure.
+Exit codes: 0 success (warnings allowed), 1 lint errors, 2 usage/compile/export failure.`;
 
 class UsageError extends Error {}
 
@@ -52,34 +53,51 @@ function within(root: string, path: string): boolean {
   return !isAbsolute(rel) && rel !== '..' && !rel.startsWith(`..${sep}`);
 }
 
-/** Snapshot D2 sources once for both compilers; do not modify the user's files. */
-async function sources(root: string): Promise<Record<string, string>> {
+// Matches both D2's raw JSON error text, with escaped quotes, and its decoded messages.
+const failedImport = /failed to import \\?"([^"\\]+)\\?": file does not exist/g;
+
+/** Compile from a snapshot of the input and the D2 files it imports; never modify the user's files.
+ * D2 names every missing import at once, so each retry loads one more level of nested imports.
+ * Returns the snapshot for native export; failures carry why an import could not be loaded.
+ */
+async function compileSources(d2: D2, root: string, realRoot: string, inputPath: string) {
   const files: Record<string, string> = Object.create(null);
+  const problems = new Map<string, string>();
   const library = await readFile(new URL('../../../stdlib/zoomflow.d2', import.meta.url), 'utf8');
-  async function visit(directory: string) {
-    const entries = await readdir(directory, { withFileTypes: true }).catch((error: { code?: string }) => {
-      if (directory === root || (error.code !== 'EACCES' && error.code !== 'EPERM')) throw error;
-      process.stderr.write(`zoomflow: skipping unreadable folder ${within(process.cwd(), directory) ? relative(process.cwd(), directory) || '.' : directory}\n`);
-    });
-    if (!entries) return;
-    const prefix = relative(root, directory).split(sep).join('/');
-    const key = (name: string) => prefix ? `${prefix}/${name}` : name;
-    // D2 resolves imports relative to their importing file, including nested imports.
-    files[key('zoomflow.d2')] = library;
-    for (const entry of entries) {
-      if (entry.isDirectory() && !entry.name.startsWith('.') && !['node_modules', 'dist', 'coverage'].includes(entry.name)) {
-        await visit(join(directory, entry.name));
-      } else if (entry.isFile() && entry.name.endsWith('.d2')) {
-        files[key(entry.name)] = await readFile(join(directory, entry.name), 'utf8');
-      }
+  async function load(key: string): Promise<boolean> {
+    const path = resolve(root, key);
+    if (!within(root, path)) { problems.set(key, `outside --root ${root}; pass --root to include it`); return false; }
+    try {
+      const entry = await lstat(path);
+      if (!entry.isFile()) throw Object.assign(new Error(), { code: entry.isSymbolicLink() ? 'ELOOP' : 'EISDIR' });
+      if (!within(realRoot, await realpath(path))) { problems.set(key, `outside --root ${root} through a symlinked directory`); return false; }
+      files[key] = await readFile(path, 'utf8');
+    } catch (error) {
+      const code = (error as { code?: string }).code ?? '';
+      // D2 resolves imports relative to their importing file, so the stdlib sits beside every source.
+      if (basename(key) === 'zoomflow.d2' && ['ENOENT', 'ELOOP', 'EISDIR'].includes(code)) files[key] = library;
+      else if (code === 'ELOOP') problems.set(key, 'symlinks are not followed');
+      else if (code === 'EACCES' || code === 'EPERM') problems.set(key, 'cannot read: permission denied');
+      else if (code !== 'ENOENT') problems.set(key, `cannot read: ${(error as Error).message || code}`);
+    }
+    return Object.hasOwn(files, key);
+  }
+  await load(inputPath);
+  const tried = new Set([inputPath]);
+  for (;;) {
+    try {
+      return { compiled: await d2.compile({ fs: files, inputPath, options: { layout: 'elk' } }), files };
+    } catch (error) {
+      const wanted = [...String((error as Error).message).matchAll(failedImport)].map((match) => match[1]).filter((key) => !tried.has(key));
+      wanted.forEach((key) => tried.add(key));
+      if (!(await Promise.all(wanted.map(load))).some(Boolean)) throw Object.assign(error as Error, { problems });
     }
   }
-  await visit(root);
-  return files;
 }
 
 /** D2 resolves local icons against the entry file, so preserve that layout. Exported for tests. */
 export async function stageIcons(diagram: Diagram, input: string, root: string, temp: string) {
+  const realRoot = await realpath(root);
   const copied = new Set<string>();
   for (const board of indexBoards(diagram).values()) {
     for (const shape of [board.diagram.root, ...board.diagram.shapes]) {
@@ -93,7 +111,9 @@ export async function stageIcons(diagram: Diagram, input: string, root: string, 
       if (!path || /^(?:[a-z][\w+.-]*:|\/\/|#)/i.test(path)) continue;
       const asset = resolve(dirname(input), path);
       if (copied.has(asset)) continue;
-      if (!within(root, asset)) throw new Error(`Local image is outside --root: ${asset}`);
+      // Compare real paths too, so a symlinked directory cannot reach outside the root.
+      const real = await realpath(asset).catch(() => asset);
+      if (!within(root, asset) || !within(realRoot, real)) throw new Error(`Local image is outside --root: ${asset}`);
       if (!(await regularFile(asset, relative(process.cwd(), asset)))) throw new Error(`Local image must be a regular file: ${asset}`);
       const staged = join(temp, relative(root, asset));
       await mkdir(dirname(staged), { recursive: true });
@@ -116,12 +136,15 @@ function location(range: string | undefined, shown: (path: string) => string): s
   return match ? `${shown(match[1])}:${Number(match[2]) + 1}:${Number(match[3]) + 1}` : undefined;
 }
 
-/** D2 reports parse/compile failures as a JSON array of located messages. */
-function compileErrors(message: string, shown: (path: string) => string): string | undefined {
+/** D2 reports parse/compile failures as a JSON array of located messages.
+ * Explain imports that exist but were not loaded, such as those outside --root.
+ */
+function compileErrors(message: string, shown: (path: string) => string, problems = new Map<string, string>()): string | undefined {
   try {
     const entries: unknown = JSON.parse(message);
     if (!Array.isArray(entries) || !entries.length || !entries.every((entry) => typeof entry?.errmsg === 'string')) return;
-    return entries.map(({ errmsg }: { errmsg: string }) => errmsg.replace(/^(.*?)(?=:\d+:\d+:)/, (path) => shown(path))).join('\n');
+    return entries.map(({ errmsg }: { errmsg: string }) => errmsg.replace(/^(.*?)(?=:\d+:\d+:)/, (path) => shown(path))
+      .replace(failedImport, (failure, key: string) => problems.has(key) ? `${failure} (${problems.get(key)})` : failure)).join('\n');
   } catch { return; }
 }
 
@@ -136,10 +159,10 @@ async function save(output: string, data: string | Uint8Array) {
   } finally { await rm(staging, { recursive: true, force: true }); }
 }
 
-
 export async function main(args = process.argv.slice(2)): Promise<number> {
   // Show paths as the user would type them: relative to cwd for root-relative D2 paths.
   let shown = (path: string) => path;
+  let json = false;
   try {
     const { values, positionals } = (() => {
       try {
@@ -160,22 +183,22 @@ export async function main(args = process.argv.slice(2)): Promise<number> {
     const [command, filename] = positionals;
     if (!['lint', 'export'].includes(command)) throw new UsageError(command ? `Unknown command: ${command}` : 'Missing command.');
     if (positionals.length !== 2) throw new UsageError(`${command} takes exactly one .d2 file.`);
-    if (command === 'lint' && (values.all || values.format || values.output)) throw new Error('Export options cannot be used with lint.');
-    if (command === 'export' && (values.json || values['missing-backlink'] || values['boundary-ports'])) throw new Error('Lint options cannot be used with export.');
+    if (command === 'lint' && (values.all || values.format || values.output)) throw new UsageError('Export options cannot be used with lint.');
+    if (command === 'export' && (values.json || values['missing-backlink'] || values['boundary-ports'])) throw new UsageError('Lint options cannot be used with export.');
+    json = command === 'lint' && Boolean(values.json);
     const format = values.format ?? 'svg';
-    if (!['svg', 'png', 'html'].includes(format)) throw new Error(`Unsupported format: ${format}`);
+    if (!['svg', 'png', 'html'].includes(format)) throw new UsageError(`Unsupported format: ${format}`);
     const input = resolve(filename);
-    if (extname(input) !== '.d2') throw new Error('Input must be a .d2 file.');
+    if (extname(input) !== '.d2') throw new UsageError('Input must be a .d2 file.');
     if (!(await regularFile(input, filename))) throw new Error('Input must be a regular file; symlinks are not followed.');
     const root = resolve(values.root ?? dirname(input));
-    if (!within(root, input)) throw new Error('Input must be inside --root.');
+    const realRoot = await realpath(root).catch(() => { throw new Error(`Root directory not found: ${root}`); });
+    if (!within(root, input) || !within(realRoot, await realpath(input))) throw new Error('Input must be inside --root.');
     shown = (path) => {
       const rel = relative(process.cwd(), join(root, path));
       return within(process.cwd(), join(root, path)) && rel ? rel : join(root, path);
     };
-    const fs = await sources(root);
     const inputPath = relative(root, input).split(sep).join('/');
-    if (!Object.hasOwn(fs, inputPath)) throw new Error(`Input not found (symlinks are not followed): ${input}`);
     const all = values.all || format === 'html';
     const extension = all && format !== 'html' ? '.zip' : `.${format}`;
     const output = resolve(values.output ?? input.slice(0, -3) + (extension === '.zip' ? `-${format}.zip` : extension));
@@ -183,16 +206,18 @@ export async function main(args = process.argv.slice(2)): Promise<number> {
     if (command === 'export' && extname(output).toLowerCase() !== extension) {
       throw new Error(`Output must end in ${extension} for ${extension === '.zip' ? `--all --format ${format}` : `--format ${format}`}: ${values.output}`);
     }
+    if (command === 'export' && (await stat(output).catch(() => undefined))?.isDirectory()) throw new Error(`Output is a directory: ${output}`);
     const d2 = new D2();
     try {
-      const compiled = await d2.compile({ fs, inputPath, options: { layout: 'elk' } });
+      const { compiled, files: fs } = await compileSources(d2, root, realRoot, inputPath);
       const boards = indexBoards(compiled.diagram);
       if (command === 'lint') {
         const result = lint(compiled, { missingBacklink: values['missing-backlink'], boundaryPorts: values['boundary-ports'] });
         if (values.json) console.log(JSON.stringify(result, null, 2));
         else {
           for (const diagnostic of result.diagnostics) {
-            console.log(`${location(diagnostic.range, shown) ?? shown(inputPath)}: ${diagnostic.severity} ${diagnostic.rule} [${boardLabel(diagnostic.board, boards)}${diagnostic.shape ? ` / ${diagnostic.shape}` : ''}] ${diagnostic.message}`);
+            const item = diagnostic.shape ?? diagnostic.connection;
+            console.log(`${location(diagnostic.range, shown) ?? shown(inputPath)}: ${diagnostic.severity} ${diagnostic.rule} [${boardLabel(diagnostic.board, boards)}${item ? ` / ${item}` : ''}] ${diagnostic.message}`);
           }
           console.log(`${result.diagnostics.filter((d) => d.severity === 'error').length} errors, ${result.diagnostics.filter((d) => d.severity === 'warning').length} warnings; ${result.boundaryPairsEvaluated} boundary pairs evaluated.`);
         }
@@ -258,10 +283,12 @@ export async function main(args = process.argv.slice(2)): Promise<number> {
     } finally { await d2.dispose(); }
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    const located = compileErrors(message, shown);
+    const located = compileErrors(message, shown, (error as { problems?: Map<string, string> }).problems);
     if (located) console.error(located);
     else if (error instanceof UsageError) console.error(`zoomflow: ${message}\n${usage}\nRun zoomflow --help for details.`);
     else console.error(`zoomflow: ${message}`);
+    // Keep --json output parseable when there is no lint result to print.
+    if (json) console.log(JSON.stringify({ error: located ?? message, diagnostics: [] }, null, 2));
     return 2;
   }
 }

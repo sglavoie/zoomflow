@@ -1,7 +1,10 @@
-import type { Page } from '@playwright/test';
+import { expect, type Page } from '@playwright/test';
 
 export async function openDownloads(page: Page) {
-  if (await page.locator('#header-more-content').isHidden()) await page.locator('#header-more-toggle').click();
+  // aria-expanded is the menu's own state; then wait for the content rather than sampling it once.
+  const toggle = page.locator('#header-more-toggle');
+  if (await toggle.getAttribute('aria-expanded') !== 'true') await toggle.click();
+  await expect(page.locator('#header-more-content')).toBeVisible();
 }
 
 export async function selectMenuOption(page: Page, selector: string, value: string) {

@@ -126,7 +126,7 @@
         </dl>
       </section>
     </dialog>
-    <div id="draft-conflict" role="status"></div>
+    <div id="draft-conflict"><span id="draft-conflict-message" role="status"></span><button id="draft-conflict-reload" type="button" hidden>Reload</button></div>
     <div id="file-status" role="alert" hidden></div>
     <div id="engine-notice" role="status"><span id="engine-message"></span><button id="retry-engine" type="button" hidden>Retry preview</button></div>
     <main id="workspace" data-layout="single">
@@ -198,10 +198,10 @@
                 <select id="ai-provider"><option value="claude">Claude Code</option><option value="codex">Codex</option></select>
               </div>
               <label id="ai-claude-config" data-part="ai-claude-config" class="ai-field" for="ai-claude-config-dir">CLAUDE_CONFIG_DIR <span>Overrides the same name below</span>
-                <input id="ai-claude-config-dir" type="text" value="~/.claude" spellcheck="false" required />
+                <input id="ai-claude-config-dir" type="text" value="~/.claude" spellcheck="false" autocomplete="off" required />
               </label>
               <label class="ai-field" for="ai-environment">Environment <span>One NAME=value per line; values are literal</span>
-                <textarea id="ai-environment" data-part="ai-environment" rows="2" spellcheck="false" placeholder="EXAMPLE_KEY=value"></textarea>
+                <textarea id="ai-environment" data-part="ai-environment" rows="2" spellcheck="false" autocomplete="off" autocapitalize="off" placeholder="EXAMPLE_KEY=value"></textarea>
               </label>
             </details>
           </form>

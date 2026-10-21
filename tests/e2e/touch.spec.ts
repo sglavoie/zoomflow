@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { comparesVisuals, source, previewReady } from './helpers';
+import { comparesVisuals, source, previewReady, selectSource } from './helpers';
 
 test.use({ hasTouch: true, viewport: { width: 390, height: 844 }, colorScheme: 'light', reducedMotion: 'reduce', locale: 'en-US', timezoneId: 'UTC' });
 
@@ -8,9 +8,9 @@ test('the touch canvas exposes readable cues and a zoom hint before any gesture'
   await expect(page.locator('.zf-pan-hint')).toHaveText('Tap Checkout to explore · Pinch to zoom');
   if (comparesVisuals(browserName)) await expect(page).toHaveScreenshot('touch-canvas.png');
   await page.setViewportSize({ width: 844, height: 390 });
-  for (const badge of await page.locator('.appendix-icon circle').all()) {
-    expect((await badge.boundingBox())!.width).toBeGreaterThanOrEqual(23.9);
-  }
+  // Link cues resize on the next animation frame after the viewport changes.
+  await expect.poll(() => page.locator('.appendix-icon circle').evaluateAll((badges) =>
+    badges.length ? Math.min(...badges.map((badge) => badge.getBoundingClientRect().width)) : 0)).toBeGreaterThanOrEqual(23.9);
 });
 
 test('touch hit areas share available space without covering neighboring shapes', async ({ page }) => {
@@ -42,13 +42,7 @@ test('reveal from the hidden mobile preview frames the selected shape after the 
   await page.getByRole('button', { name: 'Zoom in', exact: true }).click();
   await page.getByRole('button', { name: 'Zoom in', exact: true }).click();
   await page.locator('#mobile-source').click();
-  await page.locator('#editor').evaluate(async (el) => {
-    const path = '/node_modules/.vite/deps/@codemirror_view.js';
-    const { EditorView } = await import(/* @vite-ignore */ path);
-    const view = EditorView.findFromDOM(el.querySelector('.cm-editor')!)!;
-    const from = view.state.doc.toString().indexOf('Receipt');
-    view.dispatch({ selection: { anchor: from, head: from + 7 } });
-  });
+  await selectSource(page, 'Receipt');
   await source(page).press('ControlOrMeta+Shift+Enter');
   await expect(page.locator('#preview-pane')).toBeVisible();
   await page.evaluate(() => new Promise(requestAnimationFrame));

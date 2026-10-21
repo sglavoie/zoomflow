@@ -362,3 +362,87 @@ test('destroying a viewer releases its viewport listeners and controls', async (
   }, `/@fs${process.cwd()}/packages/viewer/src/index.ts`);
   expect(result).toEqual({ before: true, after: false, controls: 0 });
 });
+
+test('going up returns keyboard focus to the link that leads back down', async ({ page }) => {
+  await page.goto('/');
+  await board(page, 'root');
+  const checkout = page.locator('.zf-stage a[href="root.layers.checkout"]');
+  await checkout.focus();
+  await checkout.press('Enter');
+  await board(page, 'root.layers.checkout');
+  await expect(page.locator('.zf-stage')).toBeFocused();
+  // A held key repeats: only the first press goes up.
+  const repeated = await page.evaluate(() => {
+    const event = new KeyboardEvent('keydown', { key: 'Escape', repeat: true, bubbles: true, cancelable: true });
+    document.activeElement!.dispatchEvent(event);
+    return event.defaultPrevented;
+  });
+  expect(repeated).toBe(false);
+  await board(page, 'root.layers.checkout');
+  await page.keyboard.press('Escape');
+  await board(page, 'root');
+  await expect(checkout).toBeFocused();
+  // The D2 `_` backlink goes up too.
+  await checkout.press('Enter');
+  await board(page, 'root.layers.checkout');
+  const back = page.locator('.zf-stage a[href="root"]');
+  await back.focus();
+  await back.press('Enter');
+  await board(page, 'root');
+  await expect(checkout).toBeFocused();
+  // A breadcrumb to an ancestor does the same, even across two levels.
+  await checkout.press('Enter');
+  await board(page, 'root.layers.checkout');
+  const charge = page.locator('.zf-stage a[href="root.layers.checkout.layers.charge"]');
+  await charge.focus();
+  await charge.press('Enter');
+  await board(page, 'root.layers.checkout.layers.charge');
+  await page.getByRole('navigation', { name: 'Breadcrumb' }).getByRole('button', { name: 'Root', exact: true }).press('Enter');
+  await board(page, 'root');
+  await expect(checkout).toBeFocused();
+});
+
+test('sanitizing removes HTML-namespaced and odd-case executable elements before they run', async ({ page }) => {
+  await page.goto('/');
+  await board(page, 'root');
+  const url = `/@fs${process.cwd()}/packages/viewer/src/sanitize.ts`;
+  const mount = (flag: string, sanitize: boolean) => page.evaluate(async ({ url, flag, sanitize }) => {
+    const { sanitizeSvg } = await import(url);
+    const markup = '<svg xmlns="http://www.w3.org/2000/svg" xmlns:h="http://www.w3.org/1999/xhtml">' +
+      `<h:iframe src="javascript:parent.${flag}=1"/><h:object data="javascript:parent.${flag}=1"/><h:embed src="javascript:parent.${flag}=1"/>` +
+      `<h:base href="https://attacker.example/"/><h:script>parent.${flag}=1</h:script><h:img src="data:," onerror="parent.${flag}=1"/>` +
+      `<SCRIPT>parent.${flag}=1</SCRIPT><rect width="10" height="10"/></svg>`;
+    const doc = new DOMParser().parseFromString(markup, 'image/svg+xml');
+    if (sanitize) sanitizeSvg(doc.documentElement);
+    const svg = document.importNode(doc.documentElement, true);
+    document.body.append(svg);
+    return [...svg.querySelectorAll('*')].map((node) => `${node.namespaceURI} ${node.localName}`);
+  }, { url, flag, sanitize });
+  expect(await mount('sanitized', true)).toEqual(['http://www.w3.org/2000/svg rect']);
+  // Control: the same markup unsanitized really executes, so the check below is meaningful.
+  await mount('control', false);
+  await expect.poll(() => page.evaluate(() => (window as unknown as { control?: number }).control)).toBe(1);
+  expect(await page.evaluate(() => (window as unknown as { sanitized?: number }).sanitized)).toBeUndefined();
+});
+
+test('a trackpad pinch at a zoom limit never zooms the page', async ({ page }) => {
+  await page.goto('/');
+  await board(page, 'root');
+  const prevented = await page.locator('.zf-stage > svg').evaluate((svg) => {
+    const wheel = (deltaY: number, ctrlKey: boolean) => {
+      const bounds = svg.getBoundingClientRect();
+      const event = new WheelEvent('wheel', { deltaY, ctrlKey, bubbles: true, cancelable: true,
+        clientX: bounds.left + bounds.width / 2, clientY: bounds.top + bounds.height / 2 });
+      svg.dispatchEvent(event);
+      return event.defaultPrevented;
+    };
+    for (let step = 0; step < 40; step++) wheel(240, true);
+    const atMinimum = { pinch: wheel(240, true), scroll: wheel(240, false) };
+    for (let step = 0; step < 40; step++) wheel(-240, true);
+    const atMaximum = { pinch: wheel(-240, true), scroll: wheel(-240, false) };
+    return { atMinimum, atMaximum };
+  });
+  // A plain wheel at a limit scrolls the page as usual; a pinch is always claimed.
+  expect(prevented).toEqual({ atMinimum: { pinch: true, scroll: false }, atMaximum: { pinch: true, scroll: false } });
+  await expect(page.locator('.zf-zoom-controls span')).toHaveText('800%');
+});

@@ -13,7 +13,9 @@ removes its connections. Layout can run top to bottom or left to right.
 **Create flow** opens a separate, unsaved draft and keeps the current diagram in
 the filename menu. **Edit flow** above the preview reopens the form, including
 after browser recovery or reopening its saved `.d2` file. **Apply changes** is
-undoable in the source editor; Cancel leaves the diagram unchanged. Save or
+undoable in the source editor; Cancel leaves the diagram unchanged. Closing the
+builder with **Cancel**, **Close** or Escape after changing the form asks before
+discarding those changes; an unchanged form closes at once. Save or
 download a disk copy to keep your work.
 
 The builder writes ordinary D2. It can reopen its own generated source, including
@@ -43,9 +45,14 @@ you choose. Other browsers download the source and label the button **Download .
 The status beside the save controls reports file state; its tooltip describes browser
 recovery. Successful background backups stay quiet, while unavailable recovery is
 shown explicitly. A disk save that takes longer than 700 ms shows progress.
+If another program changed the file since Zoomflow opened or last saved it, Save
+asks before overwriting it; cancelling leaves the file on disk unchanged. This also
+applies to files of an opened folder.
+While browser recovery is unavailable, leaving or reloading the page with edits
+that are not saved to disk asks for confirmation first.
 Saving an example creates a separate named draft, labeled with its original template.
-Its undo history and diagram view stay intact; restoring the example leaves the saved
-copy alone. The filename, browser tab, and subsequent exports use the chosen disk name.
+The edits, undo history and diagram view move to that copy, and the example itself
+returns to its original source, no longer marked **Modified**. The filename, browser tab, and subsequent exports use the chosen disk name.
 An unsaved-change dot in the browser tab distinguishes edits from the last disk save.
 The active filename also carries an unsaved dot, which stays visible during
 compilation, formatting, errors, and exports. Browser recovery and downloads do
@@ -53,7 +60,8 @@ not clear it; saving to disk or undoing back to the saved source does.
 Project import paths remain stable even when a file copy is saved under another name.
 Browser storage can be cleared. Drafts are stored independently per document and tab;
 simultaneous edits are preserved as **(recovered)** copies in the diagram menu after
-reload. A notice appears when another tab changes a draft. Recovered project files
+reload. A notice names the drafts another tab changed; its **Reload** button keeps
+this tab's latest edits in browser storage, then reloads to show every saved version. Recovered project files
 retain their imports and can be exported as a project ZIP without replacing the
 canonical file. Superseded revisions are reclaimed after their replacements are
 saved, while concurrent versions are retained. Existing browser backups migrate automatically. The picker puts the
@@ -106,7 +114,8 @@ loaded diagram. Child-board links show a downward arrow badge, links to ancestor
 an upward arrow, and links to other boards show a sideways arrow. External links show
 an outward arrow. Hover or focus a link to identify its destination; hovering a shape
 highlights its selectable boundary. These link cues also appear in exported HTML.
-Open a `.d2` file or drop one onto the page; files are compiled locally
+Open a `.d2` file or drop one onto the page; dropping several files opens the first
+and says to drop one file at a time. Files are compiled locally
 with D2's WASM worker. Light, dark and system themes use D2's generated palettes.
 Theme and export format are remembered when browser storage is available. The appearance
 selector is in the header, separate from **Export**, which closes on Escape and restores focus to its button.
@@ -245,7 +254,7 @@ editor's diagnostic list. Missing board links are errors; unlinked layers are
 warnings. **Check boundary ports** opts into explicit `zf-in`/`zf-out` validation;
 boundary mismatches in layers that declare ports are errors only when this is
 enabled. Port-free layers remain valid. **Check parent backlinks** enables an
-additional warning that is off by default. Lint errors do not prevent preview or export.
+additional, off-by-default warning for layers with no link back to their parent. Lint errors do not prevent preview or export.
 Use `...@zoomflow` to import the bundled boundary ports, state pieces and default
 theme; see [stdlib conventions and examples](../stdlib/README.md).
 
@@ -263,7 +272,9 @@ for ZIP/HTML, and explains that HTML preserves offline drill-down navigation.
 Until you choose a format, multi-board diagrams default to interactive HTML and
 single-board diagrams default to SVG. An explicit format choice takes precedence
 and is remembered when browser storage is available. One scope statement beside
-Download identifies the current board or the whole diagram.
+Download identifies the current board or the whole diagram; while the source has
+errors it says **Fix source errors to export.** Interactive HTML is titled with the
+document name without its `.d2` extension.
 SVG, PNG and ZIP exports keep the theme shown in the workspace; interactive HTML
 follows its reader's light or dark color scheme. Remote images are embedded when
 accessible; failed fetches produce a placeholder and a visible warning. ZIP paths follow the

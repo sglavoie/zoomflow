@@ -16,6 +16,7 @@ export function setupDocumentActions(returnFocus: () => void) {
   const [undo, dismiss] = [...notice.querySelectorAll('button')];
   document.body.append(dialog, notice);
   let resolve: ((confirmed: boolean) => void) | undefined;
+  let focusAfter: (() => void) | undefined;
   let pending: (() => void) | undefined;
   let timer: ReturnType<typeof setTimeout> | undefined;
   const expire = () => {
@@ -30,7 +31,8 @@ export function setupDocumentActions(returnFocus: () => void) {
   dialog.addEventListener('close', () => {
     const done = resolve;
     resolve = undefined;
-    returnFocus();
+    (focusAfter ?? returnFocus)();
+    focusAfter = undefined;
     done?.(dialog.returnValue === 'confirm');
   });
   window.addEventListener('keydown', event => {
@@ -49,7 +51,9 @@ export function setupDocumentActions(returnFocus: () => void) {
   notice.addEventListener('focusin', () => clearTimeout(timer));
   notice.addEventListener('focusout', event => { if (!notice.contains(event.relatedTarget as Node | null)) schedule(); });
   return {
-    confirm(title: string, description: string, action: string) {
+    /** `focus` replaces the default focus return, for confirmations asked outside the diagram menu. */
+    confirm(title: string, description: string, action: string, focus?: () => void) {
+      focusAfter = focus;
       dialog.querySelector('h2')!.textContent = title;
       dialog.querySelector('p')!.textContent = description;
       confirm.textContent = action;

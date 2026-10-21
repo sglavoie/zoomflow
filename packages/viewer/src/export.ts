@@ -1,9 +1,10 @@
 import { boardLabel, classifyHref, type ExportBoard, shapeClass } from '@zoomflow/core';
 import { restoreMissingLinks } from './missing-links';
-import { renderParentContext, resolveRouteHash, routeFallbackNotice, simplifyTrail } from './navigation';
-import { setupViewport } from './viewport';
-import { decorateLinks } from './link-cues';
+import { childToward, renderParentContext, resolveRouteHash, restoreTrail, routeFallbackNotice, simplifyTrail, watchHistory } from './navigation';
+import { clampBox, createViewport, revealBox } from './viewport';
+import { decorateLinks, splitHitArea } from './link-cues';
 import { setupBreadcrumbs } from './breadcrumbs';
+import { followLink, linkTo, prepareLinks, resolveLink } from './links';
 import { sanitizeSvg } from './sanitize';
 
 const placeholder = 'data:image/svg+xml;base64,' + btoa('<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64"><rect width="64" height="64" fill="#eee"/><path d="M8 8L56 56M56 8L8 56" stroke="#999" stroke-width="3"/></svg>');
@@ -21,9 +22,8 @@ function dataUrl(blob: Blob): Promise<string> {
  * leaving it undefined keeps D2's `prefers-color-scheme` rules so the SVG follows its reader. */
 export async function prepareExportSvg(svg: string, dark?: boolean): Promise<{ svg: string; warnings: string[] }> {
   const doc = new DOMParser().parseFromString(svg, 'image/svg+xml');
-  if (doc.querySelector('parsererror') || doc.documentElement.localName !== 'svg') throw new Error('Invalid SVG from renderer');
   const root = doc.documentElement;
-  sanitizeSvg(root);
+  if (doc.querySelector('parsererror') || !sanitizeSvg(root)) throw new Error('Invalid SVG from renderer');
   const warnings: string[] = [];
   const resources = new Map<string, Promise<string>>();
   function embed(url: string): Promise<string> {
@@ -86,19 +86,25 @@ export async function rasterizeSvg(svg: string): Promise<Blob> {
   } finally { URL.revokeObjectURL(url); }
 }
 
+// Every helper the runtime uses. Each must be self-contained: the runtime receives their
+// compiled source text, so they cannot reach module imports or one another directly.
+const runtime = { classifyHref, shapeClass, boardLabel, sanitizeSvg, restoreMissingLinks, simplifyTrail, renderParentContext,
+  createViewport, clampBox, revealBox, decorateLinks, splitHitArea, setupBreadcrumbs, resolveRouteHash, routeFallbackNotice,
+  restoreTrail, watchHistory, childToward, resolveLink, prepareLinks, followLink, linkTo };
+
 // Keep this runtime self-contained: its compiled function body is embedded in HTML.
 // It consumes the same board IDs, hashes, parent and visited-trail model as Viewer.
-function offlineViewer(restoreLinks: typeof restoreMissingLinks, normalizeTrail: typeof simplifyTrail,
-  renderContext: typeof renderParentContext, makeViewport: typeof setupViewport, decorate: typeof decorateLinks,
-  makeBreadcrumbs: typeof setupBreadcrumbs, resolveRoute: typeof resolveRouteHash, fallbackNotice: typeof routeFallbackNotice,
-  sanitize: typeof sanitizeSvg, classify: typeof classifyHref, classOf: typeof shapeClass, label: typeof boardLabel) {
+function offlineViewer(lib: typeof runtime) {
   const boards: ExportBoard[] = JSON.parse(document.getElementById('zoomflow-data')!.textContent!);
   const byId = new Map(boards.map((board) => [board.id, board]));
+  const exists = (id: string) => byId.has(id);
+  const parentOf = (id: string) => byId.get(id)?.parent;
+  const resolve = (href: string) => lib.resolveLink(href, exists, lib.classifyHref);
   // boardLabel reads only `name` and `parent`, which export boards share with live ones.
-  const describe = (id: string) => label(id, byId as unknown as Parameters<typeof boardLabel>[1]);
+  const describe = (id: string) => lib.boardLabel(id, byId as unknown as Parameters<typeof boardLabel>[1]);
   const stage = document.querySelector<HTMLElement>('.zf-stage')!;
   const crumbs = document.querySelector<HTMLElement>('.zf-breadcrumbs')!;
-  const breadcrumbs = makeBreadcrumbs(crumbs);
+  const breadcrumbs = lib.setupBreadcrumbs(crumbs);
   const context = document.querySelector<HTMLElement>('.zf-context')!;
   const message = document.querySelector<HTMLElement>('.zf-message')!;
   const announcement = document.querySelector<HTMLElement>('.zf-visually-hidden')!;
@@ -106,98 +112,87 @@ function offlineViewer(restoreLinks: typeof restoreMissingLinks, normalizeTrail:
   area.className = 'zf-stage-area';
   stage.before(area);
   area.append(stage);
-  makeViewport(stage, area);
+  lib.createViewport(stage, area, lib.clampBox, lib.revealBox);
   let current = boards[0];
   let trail: string[] = [];
   function ancestors(board: ExportBoard): string[] {
     return board.parent ? [...ancestors(byId.get(board.parent)!), board.id] : [board.id];
   }
+  function syncBackground() {
+    const background = stage.querySelector('svg > rect');
+    stage.style.backgroundColor = background ? getComputedStyle(background).fill : '';
+  }
+  // D2's styles follow the reader's color scheme; keep the letterboxing around the SVG in step.
+  matchMedia('(prefers-color-scheme: dark)').addEventListener('change', syncBackground);
   function show(board: ExportBoard, visits: string[], replace = false, notice = '') {
     const focusStage = stage.contains(document.activeElement);
     const focusCrumb = crumbs.contains(document.activeElement);
+    const previous = current.id;
     current = board;
-    trail = normalizeTrail(visits);
+    trail = lib.simplifyTrail(visits);
     message.textContent = notice;
     message.setAttribute('role', 'status');
-    if (board.empty) {
-      stage.textContent = 'This board is empty.';
-      stage.style.backgroundColor = '';
-    }
+    if (board.empty) stage.textContent = 'This board is empty.';
     else {
       const doc = new DOMParser().parseFromString(board.svg, 'image/svg+xml');
-      if (doc.querySelector('parsererror') || doc.documentElement.localName !== 'svg') {
+      // Sanitize while the parsed SVG is still inert, before importing it into this document.
+      if (doc.querySelector('parsererror') || !lib.sanitizeSvg(doc.documentElement)) {
         stage.textContent = 'This board could not be displayed.';
-        stage.style.backgroundColor = '';
         message.setAttribute('role', 'alert');
         message.textContent = `Invalid SVG for ${board.name}`;
       } else {
         const svg = document.importNode(doc.documentElement, true);
         svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
-        sanitize(svg);
-        restoreLinks(svg, board.missingLinks ?? [], classOf);
-        for (const link of [...svg.querySelectorAll('a')]) {
-          const action = classify(link.getAttribute('href') ?? link.getAttribute('xlink:href') ?? '');
-          // An unusable link is not a control: keep its shape, drop the anchor.
-          if (action.kind === 'invalid') { link.replaceWith(...link.childNodes); continue; }
-          link.setAttribute('tabindex', '0');
-          link.setAttribute('role', 'link');
-          if (action.kind === 'external') {
-            link.setAttribute('target', '_blank');
-            link.setAttribute('rel', 'noopener noreferrer');
-          } else if (!byId.has(action.target)) link.setAttribute('data-missing', '');
-        }
+        lib.restoreMissingLinks(svg, board.missingLinks ?? [], lib.shapeClass);
+        lib.prepareLinks(svg, resolve);
         stage.replaceChildren(svg);
-        decorate(svg, byId, board.id, describe);
-        const background = svg.querySelector('svg > rect');
-        stage.style.backgroundColor = background ? getComputedStyle(background).fill : '';
+        lib.decorateLinks(svg, byId, board.id, lib.splitHitArea, describe);
       }
     }
+    syncBackground();
     stage.dataset.board = board.id;
     stage.dispatchEvent(new Event('zf-boardchange'));
     stage.setAttribute('aria-label', `${board.name} diagram`);
     announcement.textContent = `${board.name} board`;
-    renderContext(context, board.parentContext ?? []);
+    lib.renderParentContext(context, board.parentContext ?? []);
     const visited = trail;
     breadcrumbs.render(visited.map((id, index) => ({ name: byId.get(id)!.name,
       activate: () => show(byId.get(id)!, visited.slice(0, index + 1)) })));
-    if (focusStage) stage.focus({ preventScroll: true });
-    else if (focusCrumb) crumbs.querySelector<HTMLButtonElement>('button[aria-current]')?.focus({ preventScroll: true });
+    if (focusStage || focusCrumb) {
+      // Going up keeps the keyboard position: focus the link leading back down, which the
+      // viewport reveals as it receives focus. Other crumb moves keep focus in the trail.
+      const child = lib.childToward(previous, board.id, parentOf);
+      const link = child && lib.linkTo(stage, child);
+      (link || (focusStage ? stage : crumbs.querySelector<HTMLButtonElement>('button[aria-current]')))?.focus({ preventScroll: true });
+    }
     history[replace || location.hash === board.hash ? 'replaceState' : 'pushState']({ zoomflowTrail: trail }, '', board.hash);
   }
   function restore() {
     const requested = location.hash;
-    const hash = resolveRoute(requested, (item) => boards.some((entry) => entry.hash === item));
+    const hash = lib.resolveRouteHash(requested, (item) => boards.some((entry) => entry.hash === item));
     const board = boards.find((item) => item.hash === hash) ?? boards[0];
-    const saved = history.state?.zoomflowTrail;
-    show(board, Array.isArray(saved) && saved.at(-1) === board.id && saved.every((id) => byId.has(id)) ? saved : ancestors(board), true,
-      fallbackNotice(requested, board.hash, board.name));
+    show(board, lib.restoreTrail(history.state?.zoomflowTrail, board.id, exists, () => ancestors(board)), true,
+      lib.routeFallbackNotice(requested, board.hash, board.name));
   }
   function follow(event: MouseEvent | KeyboardEvent) {
-    const link = event.target instanceof Element ? event.target.closest('a') : null;
-    if (!link) return;
-    const action = classify(link.getAttribute('href') ?? link.getAttribute('xlink:href') ?? '');
-    if (action.kind === 'external') return;
-    event.preventDefault();
-    if (action.kind === 'invalid') return;
-    const board = byId.get(action.target);
-    if (board) show(board, [...trail, board.id]);
-    else { message.setAttribute('role', 'alert'); message.textContent = `Missing board: ${describe(action.target)}`; }
+    const action = lib.followLink(event, resolve);
+    if (action?.kind === 'board') show(byId.get(action.target)!, [...trail, action.target]);
+    else if (action?.kind === 'missing') { message.setAttribute('role', 'alert'); message.textContent = `Missing board: ${describe(action.target)}`; }
   }
   stage.addEventListener('click', follow);
   stage.addEventListener('keydown', (event) => { if (event.key === 'Enter') follow(event); });
   window.addEventListener('keydown', (event) => {
-    if (!event.defaultPrevented && !event.altKey && !event.ctrlKey && !event.metaKey && (event.key === 'Escape' || event.key === 'Backspace') && current.parent) {
+    if (!event.defaultPrevented && !event.repeat && !event.altKey && !event.ctrlKey && !event.metaKey &&
+      (event.key === 'Escape' || event.key === 'Backspace') && current.parent) {
       event.preventDefault();
       show(byId.get(current.parent)!, [...trail, current.parent]);
     }
   });
-  // Traversals fire popstate then hashchange; render each history step once.
-  let popped = false;
-  window.addEventListener('popstate', () => { popped = true; restore(); });
-  window.addEventListener('hashchange', () => { if (!popped) restore(); popped = false; });
+  lib.watchHistory(window, restore);
   restore();
 }
 
 export function offlineViewerScript(): string {
-  return `(${offlineViewer.toString()})(${restoreMissingLinks.toString()}, ${simplifyTrail.toString()}, ${renderParentContext.toString()}, ${setupViewport.toString()}, ${decorateLinks.toString()}, ${setupBreadcrumbs.toString()}, ${resolveRouteHash.toString()}, ${routeFallbackNotice.toString()}, ${sanitizeSvg.toString()}, ${classifyHref.toString()}, ${shapeClass.toString()}, ${boardLabel.toString()});`;
+  const helpers = Object.entries(runtime).map(([name, helper]) => `${JSON.stringify(name)}: ${helper.toString()}`);
+  return `(${offlineViewer.toString()})({ ${helpers.join(', ')} });`;
 }

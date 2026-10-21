@@ -84,7 +84,7 @@ const flowBuilder = setupFlowBuilder((source, name) => {
   const key = examplePicker.rememberFile(name, source, '');
   void activePane().replaceDocument(source, name, key);
   activePane().showView('preview');
-}, () => ({ source: activePane().source, name: activePane().name }));
+}, () => ({ source: activePane().source, name: activePane().name }), (...request) => examplePicker.confirm(...request));
 
 function context(id: PaneId): PaneContext {
   return {

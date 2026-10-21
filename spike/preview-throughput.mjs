@@ -9,16 +9,26 @@ const browser = await chromium.launch();
 try {
   for (const queued of [false, true]) {
     const page = await browser.newPage();
+    /** @type {Error | undefined} */
+    let instrumentationError;
     await page.route((requestUrl) => requestUrl.pathname === '/src/document-pane.ts', async (route) => {
       const response = await route.fetch();
       let body = await response.text();
       const call = 'return previewQueue.run(() => loadPreview(source, name, preserveViewport));';
-      if (!body.includes(call)) throw new Error('Update benchmark instrumentation for the current preview entry point.');
+      const compile = 'const compiled = await compileSource(source);';
+      const missing = [call, compile].filter((text) => !body.includes(text));
+      if (missing.length) {
+        // A throw here would only reject the route handler; fail the run after navigation instead.
+        instrumentationError = new Error(`apps/web/src/document-pane.ts no longer contains ${missing.map((text) => JSON.stringify(text)).join(' or ')}. Update the benchmark instrumentation in spike/preview-throughput.mjs.`);
+        await route.abort();
+        return;
+      }
       if (!queued) body = body.replace(call, 'return loadPreview(source, name, preserveViewport);');
-      body = body.replace('const compiled = await compileSource(source);', 'window.previewCompiles = (window.previewCompiles ?? 0) + 1; const compiled = await compileSource(source);');
+      body = body.replace(compile, 'window.previewCompiles = (window.previewCompiles ?? 0) + 1; ' + compile);
       await route.fulfill({ response, body });
     });
     await page.goto(url);
+    if (instrumentationError) throw instrumentationError;
     await page.locator('#preview-status').filter({ hasText: 'Preview ready' }).waitFor({ state: 'attached', timeout: 60_000 });
     if (!await page.evaluate(() => (/** @type {BenchmarkWindow} */ (window).previewCompiles ?? 0) > 0)) throw new Error('Compilation instrumentation did not run.');
     const result = await page.evaluate(async (nodes) => {

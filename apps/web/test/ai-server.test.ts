@@ -2,10 +2,10 @@ import { afterEach, expect, it, vi } from 'vitest';
 import { chmod, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { createServer, request as httpRequest, type ServerResponse } from 'node:http';
+import { createServer, request as httpRequest, type IncomingMessage, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { Readable } from 'node:stream';
-import { handle, providerStatus, readBody, runAi } from '../ai-server';
+import { handle, isLoopbackAddress, providerStatus, readBody, runAi } from '../ai-server';
 
 const originalPath = process.env.PATH;
 let fakeBin: string | undefined;
@@ -157,4 +157,33 @@ it('answers non-JSON requests with 415 and other methods with 405', async () => 
     await expect(call('POST', '/api/ai', 'text/plain')).resolves.toEqual({ status: 415, error: 'Send the AI request as JSON.' });
     await expect(call('GET', '/api/ai')).resolves.toEqual({ status: 405, error: 'Send a JSON POST request.' });
   } finally { await new Promise((done) => server.close(done)); }
+});
+
+it('refuses environment variables that change which programs or code the CLI loads', async () => {
+  for (const name of ['PATH', 'NODE_OPTIONS', 'NODE_PATH', 'LD_PRELOAD', 'DYLD_INSERT_LIBRARIES', 'ELECTRON_RUN_AS_NODE', 'BASH_ENV', 'ENV', 'node_options']) {
+    await expect(runAi({ ...request, provider: 'codex', environment: `SAFE=1\n${name}=/tmp/evil` }))
+      .rejects.toThrow(`Environment line 2: ${name} cannot be set here`);
+  }
+  await expect(providerStatus({ provider: 'claude', environment: 'DYLD_LIBRARY_PATH=/tmp' })).rejects.toThrow('DYLD_LIBRARY_PATH cannot be set here');
+});
+
+it('recognizes loopback connection addresses only', () => {
+  for (const address of ['127.0.0.1', '127.8.9.10', '::1', '::ffff:127.0.0.1']) expect(isLoopbackAddress(address)).toBe(true);
+  for (const address of [undefined, '', '10.0.0.2', '192.168.1.5', '::ffff:192.168.1.5', 'fe80::1', '128.0.0.1']) expect(isLoopbackAddress(address)).toBe(false);
+});
+
+async function call(remoteAddress: string, host = '127.0.0.1:5173') {
+  const request = Object.assign((async function* () { /* No body. */ })(), {
+    method: 'GET', url: '/api/ai/status', headers: { host }, socket: { remoteAddress },
+  }) as unknown as IncomingMessage;
+  const { response, sent } = fakeResponse();
+  await handle(request, response);
+  return { status: sent.status, body: JSON.parse(sent.body ?? '{}') };
+}
+
+it('rejects remote connections even when they claim a local Host header', async () => {
+  await expect(call('127.0.0.1')).resolves.toEqual({ status: 200, body: { available: true } });
+  await expect(call('::ffff:127.0.0.1', 'localhost:5173')).resolves.toEqual({ status: 200, body: { available: true } });
+  await expect(call('192.168.1.20')).resolves.toMatchObject({ status: 403 });
+  await expect(call('127.0.0.1', 'evil.example:5173')).resolves.toMatchObject({ status: 403 });
 });

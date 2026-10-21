@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { source, previewReady, stubAiStatus } from './helpers';
+import { source, previewReady, stubAiStatus, selectSource, withEditorView } from './helpers';
 
 test.beforeEach(async ({ page }) => {
   await page.route('**/api/ai/status', (route) => route.fulfill({ status: 200,
@@ -101,9 +101,9 @@ test('CLI failures are shown beside the prompt', async ({ page }) => {
 
 test('AI availability is checked before composing a prompt and can be retried', async ({ page }) => {
   let available = false;
-  await page.route('**/api/ai/status', (route) => route.fulfill({
-    status: available ? 200 : 404, contentType: 'application/json', body: JSON.stringify({ available }),
-  }));
+  // A proxy answering for a stopped local server returns a page, not JSON.
+  await page.route('**/api/ai/status', (route) => available ? route.fulfill({ json: { available } })
+    : route.fulfill({ status: 502, contentType: 'text/html', body: '<!doctype html><title>Bad gateway</title>' }));
   await page.goto('/');
   await page.locator('#ai-assistant > summary').click();
   await expect(page.locator('#ai-availability')).toContainText('pnpm dev');
@@ -117,7 +117,7 @@ test('AI availability is checked before composing a prompt and can be retried', 
 
 test('provider readiness follows the selected CLI and explains sign-in failures', async ({ page }) => {
   await page.route('**/api/ai/status', (route) => {
-    const provider = route.request().postDataJSON().provider;
+    const provider = route.request().postDataJSON()?.provider;
     return route.fulfill({ status: 200, contentType: 'application/json',
       body: JSON.stringify(provider === 'codex'
         ? { available: false, reason: 'Codex is installed. Sign in with codex login.' }
@@ -203,7 +203,7 @@ test('AI availability timeouts offer a retry without exposing abort exceptions',
   try {
     await page.goto('/');
     await page.locator('#ai-assistant > summary').click();
-    await page.clock.fastForward(6000);
+    await page.clock.fastForward(8000);
     await expect(page.locator('#ai-availability')).toContainText('timed out');
     await expect(page.locator('#ai-availability')).not.toContainText('AbortError');
     await expect(page.getByRole('button', { name: 'Check again' })).toBeVisible();
@@ -258,13 +258,7 @@ test('AI edits highlight only changed lines, preserve selection and undo, and re
   await page.clock.install();
   await page.goto('/'); await previewReady(page);
   await source(page).fill(before); await previewReady(page);
-  await page.locator('#editor').evaluate(async el => {
-    const path = '/node_modules/.vite/deps/@codemirror_view.js';
-    const { EditorView } = await import(/* @vite-ignore */ path);
-    const view = EditorView.findFromDOM(el.querySelector('.cm-editor')!)!;
-    const from = view.state.doc.toString().indexOf('Kept');
-    view.dispatch({ selection: { anchor: from, head: from + 4 } });
-  });
+  await selectSource(page, 'Kept');
   await page.locator('#ai-assistant > summary').click();
   const send = async () => {
     await page.locator('#ai-prompt').fill('Update the outer nodes'); await page.locator('#ai-send').click();
@@ -273,12 +267,7 @@ test('AI edits highlight only changed lines, preserve selection and undo, and re
     await expect(page.locator('#ai-change-summary')).toHaveText('Changes at 2 source lines.');
   };
   await send();
-  const selected = await page.locator('#editor').evaluate(async el => {
-    const path = '/node_modules/.vite/deps/@codemirror_view.js';
-    const { EditorView } = await import(/* @vite-ignore */ path);
-    const view = EditorView.findFromDOM(el.querySelector('.cm-editor')!)!;
-    return view.state.sliceDoc(view.state.selection.main.from, view.state.selection.main.to);
-  });
+  const selected = await withEditorView(page, view => view.state.sliceDoc(view.state.selection.main.from, view.state.selection.main.to));
   expect(selected).toBe('Kept');
   await page.locator('#ai-undo').click();
   await expect(source(page)).toHaveText(before, { useInnerText: true });
@@ -343,20 +332,80 @@ test('the AI prompt sends with Command or Control+Enter', async ({ page }) => {
 test('mirrored AI settings check availability once per change', async ({ page }) => {
   const checks: string[] = [];
   await page.route('**/api/ai/status', async (route) => {
-    checks.push(route.request().postDataJSON().provider);
+    if (route.request().method() === 'POST') checks.push(route.request().postDataJSON().provider);
     await new Promise((resolve) => setTimeout(resolve, 200));
     await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ available: true }) });
   });
   await page.setViewportSize({ width: 1600, height: 900 });
   await page.goto('/'); await previewReady(page);
   await page.selectOption('#layout', 'quad');
+  await page.locator('#pane-start-empty-b').click(); await previewReady(page, 'b');
+  await page.locator('#ai-assistant > summary').click();
+  await page.locator('#ai-assistant-b > summary').click();
   await expect(page.locator('#ai-availability-b')).toContainText('ready');
   await expect(page.locator('#ai-availability')).toContainText('ready');
   checks.length = 0;
-  await page.locator('#ai-assistant > summary').click();
   await page.locator('#ai-form .ai-settings summary').click();
   await page.locator('#ai-provider').selectOption('codex');
   await expect(page.locator('#ai-availability')).toContainText('Codex is ready');
   await expect(page.locator('#ai-availability-b')).toContainText('Codex is ready');
   expect(checks).toEqual(['codex']);
+});
+
+test('AI availability is checked only once the panel first opens', async ({ page }) => {
+  const methods: string[] = [];
+  await page.route('**/api/ai/status', (route) => {
+    methods.push(route.request().method());
+    return route.fulfill({ json: { available: true } });
+  });
+  await page.goto('/'); await previewReady(page);
+  // Settings changed while the panel is closed wait for it to open.
+  await page.locator('#ai-provider').evaluate((select: HTMLSelectElement) => {
+    select.value = 'codex';
+    select.dispatchEvent(new Event('change'));
+  });
+  await page.waitForTimeout(300);
+  expect(methods).toEqual([]);
+  await page.locator('#ai-assistant > summary').click();
+  await expect(page.locator('#ai-availability')).toContainText('Codex is ready');
+  // The endpoint probe runs once per page; the provider check follows it.
+  expect(methods).toEqual(['GET', 'POST']);
+});
+
+test('a static build without the AI endpoint explains that AI needs the local server', async ({ page }) => {
+  const methods: string[] = [];
+  await page.route('**/api/ai/status', (route) => {
+    methods.push(route.request().method());
+    return route.fulfill({ status: 404, contentType: 'text/html', body: '<!doctype html><title>Not found</title>' });
+  });
+  await page.goto('/'); await previewReady(page);
+  await page.locator('#ai-assistant > summary').click();
+  await expect(page.locator('#ai-availability')).toHaveText('AI is not available in this build. Run Zoomflow locally with pnpm dev to ask Claude Code or Codex.');
+  await expect(page.locator('#ai-prompt')).toBeDisabled();
+  await expect(page.locator('#ai-send')).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'Check again' })).toBeHidden();
+  expect(methods).toEqual(['GET']);
+});
+
+test('switching documents cancels a running AI request with its own explanation', async ({ page }) => {
+  await stubAiStatus(page);
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => { release = resolve; });
+  await page.route('**/api/ai', async (route) => {
+    await gate;
+    await route.fulfill({ json: { reply: 'Changed.', source: 'late: Wrong' } }).catch(() => {});
+  });
+  await page.goto('/'); await previewReady(page);
+  await page.locator('#ai-assistant > summary').click();
+  await page.locator('#ai-prompt').fill('Make a change');
+  await page.locator('#ai-send').click();
+  await expect(page.locator('#ai-cancel')).toBeVisible();
+  await page.locator('#file').setInputFiles({ name: 'other.d2', mimeType: 'text/plain', buffer: Buffer.from('other: Unrelated') });
+  await expect(page.locator('#ai-status')).toHaveText('AI request canceled because you switched documents. Send the prompt again to ask about this one.');
+  await expect(page.locator('#ai-send')).toBeVisible();
+  await expect(page.locator('#ai-prompt')).toHaveValue('Make a change');
+  release();
+  await previewReady(page);
+  await expect(source(page)).toHaveText('other: Unrelated');
+  await expect(page.locator('.zf-stage')).not.toContainText('Wrong');
 });

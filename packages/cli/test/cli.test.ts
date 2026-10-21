@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process';
-import { chmod, mkdtemp, readFile, rm, writeFile, mkdir } from 'node:fs/promises';
+import { chmod, mkdtemp, readFile, rm, symlink, writeFile, mkdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -167,7 +167,7 @@ describe.concurrent('zoomflow CLI', () => {
     expect(await readFile(join(root, 'nested', 'input.svg'), 'utf8')).toContain('data:image/svg+xml;base64,');
   });
 
-  it('defaults --root to the input directory and skips unreadable folders with a warning', async () => {
+  it('defaults --root to the input directory and never reads unrelated unreadable folders', async () => {
     // Its own directory: other cases lint inputs directly under the shared temp folder.
     const home = await mkdtemp(join(tmpdir(), 'zoomflow-cli-home-'));
     const project = join(home, 'project');
@@ -180,7 +180,8 @@ describe.concurrent('zoomflow CLI', () => {
       const result = await run(['lint', 'project/a.d2', '--json'], { cwd: home });
       success(result);
       expect(JSON.parse(result.stdout).diagnostics).toEqual([]);
-      expect(result.stderr).toBe(`zoomflow: skipping unreadable folder ${join('project', 'private')}\n`);
+      // Only imported files are read, so the locked folder is never visited.
+      expect(result.stderr).toBe('');
       const locked = await run(['lint', join(project, 'a.d2'), '--root', join(home, 'locked')]);
       expect(locked.code).toBe(2);
       expect(locked.stderr).toBe('zoomflow: Input must be inside --root.\n');
@@ -197,6 +198,75 @@ describe.concurrent('zoomflow CLI', () => {
       .rejects.toThrow('Local image path is not valid URL encoding: ./bad%E0%A4%A.svg');
   });
 
+  it('keeps local images inside --root, through symlinked folders too, and requires regular files', async () => {
+    const project = join(temp, 'icons');
+    const root = join(project, 'q');
+    await mkdir(join(project, 'out'), { recursive: true });
+    await mkdir(join(root, 'folder'), { recursive: true });
+    await writeFile(join(project, 'out', 's.svg'), '<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"/>');
+    await symlink('../out', join(root, 'link'));
+    const cases = [['./link/s.svg', 'Local image is outside --root'], ['../out/s.svg', 'Local image is outside --root'],
+      ['./folder', 'Local image must be a regular file']] as const;
+    const results = await Promise.all(cases.map(async ([icon], i) => {
+      await writeFile(join(root, `icon-${i}.d2`), `a.icon: ${icon}`);
+      return run(['export', join(root, `icon-${i}.d2`), '--root', root, '-o', join(project, `icon-${i}.svg`)]);
+    }));
+    results.forEach((result, i) => {
+      expect(result.code).toBe(2);
+      expect(result.stderr).toContain(cases[i][1]);
+    });
+  });
+
+  it('reads only the input and its imports, explaining imports it could not load', async () => {
+    const root = join(temp, 'reachable');
+    await mkdir(join(root, 'dist', 'nested'), { recursive: true });
+    await Promise.all([
+      writeFile(join(root, 'dist', 'input.d2'), '...@zoomflow\n...@nested/part\na -> b'),
+      writeFile(join(root, 'dist', 'nested', 'part.d2'), '...@../../deep\nc'),
+      writeFile(join(root, 'deep.d2'), 'd'),
+      writeFile(join(root, 'locked.d2'), 'e'),
+      writeFile(join(root, 'uses-locked.d2'), '...@locked'),
+      writeFile(join(temp, 'outside.d2'), 'f'),
+      writeFile(join(root, 'uses-outside.d2'), '...@../outside'),
+    ]);
+    await chmod(join(root, 'locked.d2'), 0o000);
+    try {
+      // An unreadable file elsewhere in the root, and the excluded-looking dist folder, no longer matter.
+      const reachable = await run(['lint', join(root, 'dist', 'input.d2'), '--root', root, '--json']);
+      success(reachable);
+      expect(JSON.parse(reachable.stdout).diagnostics).toEqual([]);
+      const [locked, outside] = await Promise.all([run(['lint', join(root, 'uses-locked.d2'), '--root', root]),
+        run(['lint', join(root, 'uses-outside.d2'), '--root', root])]);
+      expect(locked.code).toBe(2);
+      expect(locked.stderr).toContain('failed to import "locked.d2": file does not exist (cannot read: permission denied)');
+      expect(outside.code).toBe(2);
+      expect(outside.stderr).toContain(`failed to import "../outside.d2": file does not exist (outside --root ${root}; pass --root to include it)`);
+    } finally { await chmod(join(root, 'locked.d2'), 0o644); }
+  });
+
+  it('prints a JSON error object for lint --json failures', async () => {
+    const input = join(temp, 'invalid-json.d2');
+    await writeFile(input, 'x: {');
+    const result = await run(['lint', input, '--json']);
+    expect(result.code).toBe(2);
+    expect(JSON.parse(result.stdout)).toEqual({ error: `${input}:1:4: maps must be terminated with }`, diagnostics: [] });
+  });
+
+  it('rejects an output directory before rendering', async () => {
+    const output = join(temp, 'output.svg');
+    await mkdir(output, { recursive: true });
+    const result = await run(['export', 'fixtures/order.d2', '-o', output]);
+    expect(result.code).toBe(2);
+    expect(result.stderr).toBe(`zoomflow: Output is a directory: ${output}\n`);
+  });
+
+  it('documents every option in the help text', async () => {
+    const result = await run(['--help']);
+    success(result);
+    for (const option of ['-o, --output', '--json', '--missing-backlink', '--boundary-ports', '--root']) expect(result.stdout).toContain(option);
+    expect(result.stdout).toMatch(/failure\.\n$/);
+  });
+
   it('reports usage concisely and prints the version', async () => {
     const version = await run(['--version']);
     success(version);
@@ -207,7 +277,9 @@ describe.concurrent('zoomflow CLI', () => {
     expect(help.stdout).toContain("--root bounds local imports and images (default: the input file's directory)");
     expect(help.stdout).toContain('  zoomflow -h | --help | -v | --version\n');
     const cases = [[['lint'], 'lint takes exactly one .d2 file.'], [['lint', 'a.d2', 'b.d2'], 'lint takes exactly one .d2 file.'],
-      [[], 'Missing command.'], [['build', 'a.d2'], 'Unknown command: build'], [['--bogus'], "Unknown option '--bogus'"]] as const;
+      [[], 'Missing command.'], [['build', 'a.d2'], 'Unknown command: build'], [['--bogus'], "Unknown option '--bogus'"],
+      [['lint', 'a.d2', '--all'], 'Export options cannot be used with lint.'], [['export', 'a.d2', '--json'], 'Lint options cannot be used with export.'],
+      [['export', 'a.d2', '--format', 'pdf'], 'Unsupported format: pdf'], [['lint', 'a.txt'], 'Input must be a .d2 file.']] as const;
     const results = await Promise.all(cases.map(([args]) => run([...args])));
     results.forEach((result, i) => {
       expect(result.code).toBe(2);

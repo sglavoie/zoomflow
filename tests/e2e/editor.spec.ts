@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import { selectMenuOption } from './menu';
-import { source, previewReady, stubAiStatus } from './helpers';
+import { source, previewReady, stubAiStatus, editorText, withEditorView } from './helpers';
 
 async function ready(page: Page, id = 'root') {
   await expect(page.locator('.zf-stage')).toHaveAttribute('data-board', id);
@@ -135,11 +135,7 @@ layers: {
 
 // Read CodeMirror's document, including lines outside its rendered viewport.
 async function editorSource(page: Page) {
-  return page.locator('#editor').evaluate(async (element) => {
-    const modulePath = '/node_modules/.vite/deps/@codemirror_view.js';
-    const { EditorView } = await import(/* @vite-ignore */ modulePath);
-    return EditorView.findFromDOM(element.querySelector('.cm-editor')!)!.state.doc.toString();
-  });
+  return editorText(page);
 }
 
 test('formats nested boards with D2 rules, refreshes navigation, and supports undo and shortcut', async ({ page }) => {
@@ -243,10 +239,7 @@ test('format preserves selection, cursor and scroll inside a large edited docume
   await page.goto('/'); await previewReady(page);
   const text = Array.from({ length: 80 }, (_, i) => `node${i}:{label:Same}`).join('\n');
   await source(page).fill(text); await previewReady(page);
-  const before = await page.locator('.cm-editor').evaluate(async element => {
-    const path = '/node_modules/.vite/deps/@codemirror_view.js';
-    const { EditorView } = await import(/* @vite-ignore */ path);
-    const view = EditorView.findFromDOM(element)!;
+  const before = await withEditorView(page, (view, EditorView) => {
     const start = view.state.doc.toString().indexOf('node50');
     view.dispatch({ selection: { anchor: start + 6, head: start }, effects: EditorView.scrollIntoView(start, { y: 'center' }) });
     view.focus();
@@ -259,11 +252,7 @@ test('format preserves selection, cursor and scroll inside a large edited docume
   await expect.poll(() => page.evaluate(() => getSelection()?.toString())).toBe(before);
   expect(Math.abs(await page.locator('.cm-scroller').evaluate(el => el.scrollTop) - scroll)).toBeLessThan(4);
   await source(page).press('ControlOrMeta+z');
-  await expect.poll(() => source(page).evaluate(async element => {
-    const path = '/node_modules/.vite/deps/@codemirror_view.js';
-    const { EditorView } = await import(/* @vite-ignore */ path);
-    return EditorView.findFromDOM(element)!.state.doc.toString();
-  })).toBe(text);
+  await expect.poll(() => editorText(page)).toBe(text);
 });
 
 test('format success returns to file state, while failures persist and later edits clear them', async ({ page }) => {

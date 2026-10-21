@@ -354,3 +354,83 @@ test('export stays disabled until the running export finishes', async ({ page })
   await expect(exportButton).toBeEnabled();
   await expect.poll(() => downloads).toEqual(['image-root.svg']);
 });
+
+test('exported HTML returns keyboard focus to the link it came from when going up', async ({ page, context }, info) => {
+  await page.goto('/');
+  await board(page, 'root');
+  const path = await download(page, 'html', info);
+  const offline = await context.newPage();
+  await offline.goto(pathToFileURL(path).href);
+  await board(offline, 'root');
+  const stage = offline.locator('.zf-stage');
+  const checkout = offline.locator('.zf-stage a[href="root.layers.checkout"]');
+  await checkout.focus();
+  await checkout.press('Enter');
+  await board(offline, 'root.layers.checkout');
+  const charge = offline.locator('.zf-stage a[href="root.layers.checkout.layers.charge"]');
+  await charge.focus();
+  await charge.press('Enter');
+  await board(offline, 'root.layers.checkout.layers.charge');
+  await expect(stage).toBeFocused();
+  // A held key repeats: only the first press goes up.
+  const repeated = await offline.evaluate(() => {
+    const event = new KeyboardEvent('keydown', { key: 'Escape', repeat: true, bubbles: true, cancelable: true });
+    document.activeElement!.dispatchEvent(event);
+    return event.defaultPrevented;
+  });
+  expect(repeated).toBe(false);
+  await board(offline, 'root.layers.checkout.layers.charge');
+  await offline.keyboard.press('Escape');
+  await board(offline, 'root.layers.checkout');
+  await expect(charge).toBeFocused();
+  await offline.keyboard.press('Backspace');
+  await board(offline, 'root');
+  await expect(checkout).toBeFocused();
+  // A breadcrumb to an ancestor does the same, even across two levels.
+  await checkout.press('Enter');
+  await board(offline, 'root.layers.checkout');
+  await charge.focus();
+  await charge.press('Enter');
+  await board(offline, 'root.layers.checkout.layers.charge');
+  await offline.locator('.zf-breadcrumbs').getByRole('button', { name: 'Root', exact: true }).press('Enter');
+  await board(offline, 'root');
+  await expect(checkout).toBeFocused();
+  // The focused link is revealed inside the visible canvas.
+  const bounds = (await checkout.boundingBox())!;
+  const canvas = (await stage.boundingBox())!;
+  expect(bounds.x).toBeGreaterThanOrEqual(canvas.x - 1);
+  expect(bounds.x + bounds.width).toBeLessThanOrEqual(canvas.x + canvas.width + 1);
+});
+
+test('exported HTML restyles its canvas and link badges when the reader switches color scheme', async ({ page, context }, info) => {
+  await page.goto('/');
+  await board(page, 'root');
+  const path = await download(page, 'html', info);
+  const offline = await context.newPage();
+  await offline.emulateMedia({ colorScheme: 'light' });
+  await offline.goto(pathToFileURL(path).href);
+  await board(offline, 'root');
+  const colors = () => offline.locator('.zf-stage').evaluate((stage) => ({
+    stage: getComputedStyle(stage).backgroundColor,
+    board: getComputedStyle(stage.querySelector('svg svg > rect')!).fill,
+    badge: getComputedStyle(stage.querySelector('.appendix-icon circle')!).fill,
+    ink: getComputedStyle(stage.querySelector('.appendix-icon circle')!).stroke,
+  }));
+  const light = await colors();
+  expect(light.stage).toBe(light.board);
+  expect([light.badge, light.ink]).toEqual(['rgb(255, 255, 255)', 'rgb(82, 101, 125)']);
+  await offline.emulateMedia({ colorScheme: 'dark' });
+  await expect.poll(async () => (await colors()).stage).not.toBe(light.stage);
+  const dark = await colors();
+  expect(dark.stage).toBe(dark.board);
+  expect([dark.badge, dark.ink]).toEqual(['rgb(24, 34, 49)', 'rgb(173, 187, 205)']);
+  await offline.emulateMedia({ colorScheme: 'light' });
+  await expect.poll(colors).toEqual(light);
+});
+
+test('interactive HTML is titled with the document name without its .d2 extension', async ({ page }, info) => {
+  await page.goto('/'); await previewReady(page);
+  const html = await readFile(await download(page, 'html', info), 'utf8');
+  expect(html).toContain('<title>order</title>');
+  expect(html).toContain('<header><strong>order</strong></header>');
+});

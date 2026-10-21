@@ -14,7 +14,8 @@ pnpm zoomflow export fixtures/order.d2 --all --format html -o artifacts/order.ht
 
 The workspace installs the `zoomflow` executable (`pnpm exec zoomflow`);
 `pnpm zoomflow` is a root-workspace shortcut. Run `pnpm zoomflow --help` (`-h`) for
-options and `--version` (`-v`) for the version. Rebuild after source changes.
+options and `--version` (`-v`) for the version. Rebuild after source changes. The
+CLI requires Node.js 26 or later.
 Without `--all`, SVG/PNG exports contain only the root board. With `--all`, they
 produce a ZIP using the same board paths as browser exports. ZIP entry names keep
 board names, including Unicode; only characters and names that archives or common
@@ -28,36 +29,43 @@ face is embedded once; repeated D2 theme styles are also stored once, and empty
 boards carry no SVG. Faces that render lacks, such as code fonts, stay with their board. Default outputs sit beside the input: `file.svg`, `file.png`, `file.html`,
 `file-svg.zip`, or `file-png.zip`. `-o`/`--output` sets an explicit destination
 whose extension must match (`.zip` with `--all` for SVG/PNG), written only after
-successful rendering. Existing exports at that destination are replaced.
+successful rendering. Existing exports at that destination are replaced; a
+directory there is rejected before rendering (`Output is a directory`).
 Exports succeed with dangling board links but print a one-line summary such as
 `zoomflow: 1 dangling link (run zoomflow lint)` on stderr.
 
 Lint uses the pinned bundled WASM compiler and needs no native D2 installation.
 Exit status is **0** for success (including warnings), **1** for lint errors,
 and **2** for invalid arguments, missing input/dependencies, compilation or export
-failure. `--json` prints the core lint result; `--boundary-ports` opts into explicit
-port validation, and `--missing-backlink` opts into parent-backlink warnings.
+failure. `--json` prints the core lint result; if there is no result (exit **2**),
+it prints `{ "error": "<message>", "diagnostics": [] }` to stdout instead, with the
+human-readable message still on stderr. `--boundary-ports` opts into explicit
+port validation, and `--missing-backlink` opts into warnings for layers without a link back to their parent.
 Human diagnostics start with a clickable `path:line:column` (one-based, relative
 to the working directory, possibly an imported file) and name boards by their
-trail, for example `Root > checkout`; `--json` keeps the raw board IDs and D2
-ranges. Compile errors print one `path:line:column: message` per line. Wrong
-arguments print the short usage and point to `--help`.
+trail, for example `Root > checkout`, followed by the shape or connection ID such
+as `(a -> b)[0]`; `--json` keeps the raw board IDs and D2 ranges. Compile errors
+print one `path:line:column: message` per line. Wrong arguments, including
+conflicting lint/export options, an unsupported format or a non-`.d2` input, print
+the short usage and point to `--help`.
 
-Both commands snapshot `.d2` files under a project root, which defaults to the
-input file's directory regardless of the working directory. Set `--root path` to
-include imports from parent folders; the input must be inside it. Imports must
-remain within that root; hidden directories, `node_modules`, `dist`, `coverage`,
-and symlinks are excluded. Subfolders that cannot be read (permission denied) are
-skipped with a `zoomflow: skipping unreadable folder …` warning on stderr; an
-unreadable root itself is an error. The bundled `zoomflow.d2` is available beside
+Both commands snapshot the input and the `.d2` files it imports, transitively;
+no other file or folder is read, so unrelated unreadable files cannot fail a run.
+The project root defaults to the input file's directory regardless of the working
+directory. Set `--root path` to include imports from parent folders; the input
+must be inside it. Inputs, imports and local images must remain within that root,
+compared by real path so a symlinked directory cannot reach outside it; symlinked
+files are not followed. An import that exists but cannot be used names the reason
+after D2's error, for example `(outside --root /work/app; pass --root to include
+it)` or `(cannot read: permission denied)`. The bundled `zoomflow.d2` is available beside
 each source file, with a local file of that name taking precedence. Export stages the
 same source snapshot in a temporary directory, then runs native D2 with ELK,
 asset bundling and one explicit board target per process, running up to one
 process per available CPU and skipping empty boards in HTML. D2's progress output
 is dropped; its warnings and errors are printed once, with staging paths replaced
 by your source paths. Local icon/image paths resolve
-from the original input directory, must remain within the project root, and are
-staged alongside the sources; remote images must be accessible during export.
+from the original input directory, must be regular files within the project root,
+and are staged alongside the sources; remote images must be accessible during export.
 D2 embeds the shipped fonts and bundled assets; HTML needs no compiler or network
 at viewing time. Native D2 handles PNG rendering. No Go or Bun is needed for the CLI build.
 

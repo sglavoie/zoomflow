@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import { referenceTopics } from '../../apps/web/src/reference-data';
-import { source, previewReady } from './helpers';
+import { source, previewReady, withEditorView } from './helpers';
 
 const panel = (page: Page) => page.getByRole('complementary', { name: 'D2 reference' });
 const search = (page: Page) => page.getByRole('searchbox', { name: 'Search D2 reference' });
@@ -14,12 +14,7 @@ async function ready(page: Page) {
 }
 
 async function editorState(page: Page) {
-  return page.locator('#editor').evaluate(async (element) => {
-    const modulePath = '/node_modules/.vite/deps/@codemirror_view.js';
-    const { EditorView } = await import(/* @vite-ignore */ modulePath);
-    const state = EditorView.findFromDOM(element.querySelector('.cm-editor')!)!.state;
-    return { source: state.doc.toString(), selection: state.selection.toJSON() };
-  });
+  return withEditorView(page, view => ({ source: view.state.doc.toString() as string, selection: view.state.selection.toJSON() }));
 }
 
 test('reference shortcuts work from the editor and panel without changing source or selection', async ({ page }) => {

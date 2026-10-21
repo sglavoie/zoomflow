@@ -44,6 +44,33 @@ describe('sanitizeSvg', () => {
     expect(root.querySelector('#b')!.getAttribute('xlink:href')).toBe('https://example.com/icon.svg');
   });
 
+  it('removes HTML-namespaced elements whatever their prefix, and odd-case script', () => {
+    const root = new DOMParser().parseFromString(`<svg xmlns="${svgNs}" xmlns:h="http://www.w3.org/1999/xhtml">` +
+      '<h:iframe src="javascript:parent.x=1"/><h:object data="javascript:parent.x=1"/><h:embed src="javascript:parent.x=1"/>' +
+      '<h:base href="https://attacker.example/"/><h:script>parent.x=1</h:script><h:img src="x" onerror="parent.x=1"/>' +
+      '<SCRIPT>parent.x=1</SCRIPT><Script>parent.x=1</Script><g><h:div><rect id="nested"/></h:div><rect id="kept"/></g></svg>',
+    'image/svg+xml').documentElement;
+    expect(sanitizeSvg(root)).toBe(true);
+    expect([...root.querySelectorAll('*')].map((node) => node.localName)).toEqual(['g', 'rect']);
+    expect(root.querySelector('#kept')).not.toBeNull();
+  });
+
+  it('removes elements in no namespace or an unknown one and keeps everything D2 emits', () => {
+    const root = svg('<style>.a{}</style><defs><clipPath id="c"><rect/></clipPath><marker><path/></marker><filter>' +
+      '<feGaussianBlur/><feOffset/><feFlood/><feComposite/><feBlend/></filter><pattern><rect/></pattern><mask><rect/></mask></defs>' +
+      '<a href="root"><g><polygon/><line/><circle/><text><tspan/></text><image href="data:image/png;base64,AAAA"/></g></a>' +
+      '<svg viewBox="0 0 1 1"><title>t</title></svg><x:foo xmlns:x="urn:example"/><bar xmlns=""/>');
+    const before = [...root.querySelectorAll('*')].length;
+    expect(sanitizeSvg(root)).toBe(true);
+    expect([...root.querySelectorAll('*')].length).toBe(before - 2);
+  });
+
+  it('rejects a root that is not an SVG svg element', () => {
+    const html = new DOMParser().parseFromString('<svg xmlns="http://www.w3.org/1999/xhtml"><script/></svg>', 'image/svg+xml').documentElement;
+    expect(sanitizeSvg(html)).toBe(false);
+    expect(sanitizeSvg(svg('<g/>').firstElementChild!)).toBe(false);
+  });
+
   it('works without its module scope', () => {
     const root = svg('<a href=" javascript:alert(1)"/><set/>');
     isolated(sanitizeSvg)(root);

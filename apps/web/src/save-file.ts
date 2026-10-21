@@ -1,4 +1,5 @@
 import type { setupExamplePicker } from './example-picker';
+import { changedOnDisk, refreshDiskVersion } from './disk-version';
 import { describeError } from './text';
 
 type PickerWindow = Window & { showSaveFilePicker?: (options?: object) => Promise<FileSystemFileHandle> };
@@ -31,6 +32,16 @@ export function setupSaveFile(button: HTMLButtonElement, target: SaveFileTarget)
     let saving: ReturnType<typeof setTimeout> | undefined;
     try {
       let handle = target.fileHandles.get(key);
+      if (handle && await changedOnDisk(handle)) {
+        const focused = document.activeElement;
+        const overwrite = await target.picker().confirm('File changed on disk — overwrite?',
+          `${handle.name} changed outside Zoomflow since it was opened or last saved. Saving replaces those changes with the source shown here.`,
+          'Overwrite file', () => { if (focused instanceof HTMLElement && focused.isConnected) focused.focus({ preventScroll: true }); });
+        if (!overwrite) {
+          if (target.key() === key) target.setActivity('Save canceled. The file on disk is unchanged.');
+          return;
+        }
+      }
       if (!handle && pickerWindow.showSaveFilePicker) {
         handle = await pickerWindow.showSaveFilePicker({ suggestedName: name,
           types: [{ description: 'D2 source', accept: { 'text/plain': ['.d2'] } }] });
@@ -43,6 +54,7 @@ export function setupSaveFile(button: HTMLButtonElement, target: SaveFileTarget)
       const writable = await handle.createWritable();
       try { await writable.write(source); await writable.close(); }
       catch (error) { await writable.abort(); throw error; }
+      await refreshDiskVersion(handle);
       const saved = target.picker().markDiskSaved(key, source, handle.name);
       if (!saved) return; // The draft may have been removed while the file dialog was open.
       target.fileHandles.set(saved.key, handle);

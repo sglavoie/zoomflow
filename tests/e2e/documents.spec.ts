@@ -127,9 +127,10 @@ test('saving an example creates a named copy with its history, export names and 
   expect((await pending).suggestedFilename()).toBe('checkout-design-root.svg');
   await page.locator('#example-picker summary').click();
   await expect(page.locator('#draft-options')).toContainText('Saved copy of Order flow');
-  await page.getByRole('button', { name: 'Restore original example: Order flow' }).click();
-  await page.getByRole('dialog').getByRole('button', { name: 'Restore example', exact: true }).click();
-  await expect(source(page)).toHaveText('saved: After');
+  // The edits moved to the saved copy, so the example itself is no longer modified.
+  await expect(page.locator('#example-options').getByRole('button', { name: /^Order flow/ }).locator('.example-modified')).toBeHidden();
+  await expect(page.getByRole('button', { name: 'Restore original example: Order flow' })).toBeHidden();
+  await page.keyboard.press('Escape');
   await page.reload(); await previewReady(page);
   await expect(page.locator('#filename')).toHaveText('checkout-design.d2');
   await expect(page).toHaveTitle('checkout-design.d2 — Zoomflow');
@@ -247,7 +248,7 @@ test('removed file undo restores its save handle, board view and editor history'
   const text = readFileSync('fixtures/order.d2', 'utf8');
   await page.addInitScript(text => {
     const target = window as typeof window & { written?: string; showOpenFilePicker?: () => Promise<unknown[]> };
-    target.showOpenFilePicker = async () => [{ name: 'work.d2', getFile: async () => new File([text], 'work.d2'),
+    target.showOpenFilePicker = async () => [{ name: 'work.d2', getFile: async () => new File([text], 'work.d2', { lastModified: 1 }),
       createWritable: async () => ({ write: async (value: string) => { target.written = value; }, close: async () => {}, abort: async () => {} }) }];
   }, text);
   await page.goto('/'); await previewReady(page);
@@ -439,4 +440,69 @@ test('reopening a picked file matches its file handle', async ({ page }) => {
   await page.locator('label.file-button').click();
   await expect(page.locator('.zf-stage')).toContainText('First version'); await previewReady(page);
   expect(await draftRows(page, 'picked.d2')).toBe(2);
+});
+
+test('saving asks before overwriting a file that changed on disk since it was opened or saved', async ({ page }) => {
+  await page.addInitScript(() => {
+    const disk = { text: 'disk: Original', modified: 1 };
+    (window as any).disk = disk;
+    (window as any).showOpenFilePicker = async () => [{ kind: 'file', name: 'shared.d2',
+      getFile: async () => new File([disk.text], 'shared.d2', { type: 'text/plain', lastModified: disk.modified }),
+      createWritable: async () => ({ write: async (text: string) => { disk.text = text; disk.modified++; }, close: async () => {}, abort: async () => {} }) }];
+  });
+  await page.goto('/'); await previewReady(page);
+  await page.locator('#file').click();
+  await expect(page.locator('#filename')).toHaveText('shared.d2'); await previewReady(page);
+  await source(page).fill('disk: First save');
+  await page.locator('#save-file').click();
+  await expect(page.locator('#draft-status')).toHaveText('Saved to file');
+  // Saving again after our own write does not ask.
+  await source(page).fill('disk: Second save');
+  await page.locator('#save-file').click();
+  await expect(page.locator('#draft-status')).toHaveText('Saved to file');
+  expect(await page.evaluate(() => (window as any).disk.text)).toBe('disk: Second save');
+  // Another program changes the file.
+  await page.evaluate(() => { (window as any).disk.text = 'disk: Edited elsewhere'; (window as any).disk.modified = 99; });
+  await source(page).fill('disk: Mine');
+  await page.locator('#save-file').click();
+  const dialog = page.getByRole('dialog', { name: 'File changed on disk — overwrite?' });
+  await expect(dialog).toContainText('shared.d2 changed outside Zoomflow');
+  await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await expect(page.locator('#activity-status')).toHaveText('Save canceled. The file on disk is unchanged.');
+  expect(await page.evaluate(() => (window as any).disk.text)).toBe('disk: Edited elsewhere');
+  await expect(page.locator('#draft-status')).toHaveText('File has unsaved changes');
+  await page.locator('#save-file').click();
+  await dialog.getByRole('button', { name: 'Overwrite file', exact: true }).click();
+  await expect(page.locator('#draft-status')).toHaveText('Saved to file');
+  expect(await page.evaluate(() => (window as any).disk.text)).toBe('disk: Mine');
+});
+
+test('leaving the page asks first when edits exist only in memory because browser backup failed', async ({ page }) => {
+  await page.addInitScript(() => { Storage.prototype.setItem = () => { throw new Error('Storage blocked'); }; });
+  await page.goto('/'); await previewReady(page);
+  const prompts = () => page.evaluate(() => {
+    const event = new Event('beforeunload', { cancelable: true });
+    window.dispatchEvent(event);
+    return event.defaultPrevented;
+  });
+  expect(await prompts()).toBe(false);
+  await source(page).fill('memory: Only here');
+  await expect(page.locator('#draft-status')).toContainText('Browser draft unavailable');
+  expect(await prompts()).toBe(true);
+  await source(page).press('ControlOrMeta+z');
+  await expect(page.locator('#document-unsaved')).toBeHidden();
+  expect(await prompts()).toBe(false);
+});
+
+test('dropping several files opens the first and says to drop one at a time', async ({ page }) => {
+  await page.goto('/'); await previewReady(page);
+  await page.evaluate(() => {
+    const transfer = new DataTransfer();
+    transfer.items.add(new File(['first: First'], 'first.d2', { type: 'text/plain' }));
+    transfer.items.add(new File(['second: Second'], 'second.d2', { type: 'text/plain' }));
+    document.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: transfer }));
+  });
+  await expect(page.locator('#filename')).toHaveText('first.d2');
+  await expect(page.locator('#activity-status')).toHaveText('Opened first.d2; drop one file at a time.');
+  expect(await draftRows(page, 'second.d2')).toBe(0);
 });

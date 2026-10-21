@@ -61,6 +61,7 @@ test('adds steps and branches, validates names, removes dangling connections and
   await page.getByRole('button', { name: 'Edit flow', exact: true }).click();
   await page.getByLabel('Step 1 name').fill('Not applied');
   await page.keyboard.press('Escape');
+  await page.getByRole('dialog', { name: 'Discard flow changes?' }).getByRole('button', { name: 'Discard changes', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Edit flow', exact: true })).toBeFocused();
   await expect(page.locator('.cm-content')).toHaveText(before, { useInnerText: true });
   await source(page).fill(before + '\nstep_1.style.fill: red');
@@ -98,4 +99,31 @@ test('removing a connection keeps focus on the neighbouring connection', async (
   await expect(dialog.getByRole('button', { name: `Remove connection ${count - 2}`, exact: true })).toBeFocused();
   while (await remove.count()) await remove.first().click();
   await expect(dialog.getByRole('button', { name: 'Add connection', exact: true })).toBeFocused();
+});
+
+test('closing the builder confirms before discarding changes, and closes at once without them', async ({ page }) => {
+  await page.goto('/'); await ready(page);
+  const builder = page.getByRole('dialog', { name: 'Create a flow' });
+  const confirm = page.getByRole('dialog', { name: 'Discard this flow?' });
+  await page.getByRole('button', { name: 'New flow', exact: true }).click();
+  await builder.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await expect(builder).toBeHidden();
+  await expect(confirm).toBeHidden();
+  await page.getByRole('button', { name: 'New flow', exact: true }).click();
+  await builder.getByLabel('Step 2 name').fill('Keep me');
+  await builder.getByRole('button', { name: 'Close flow builder' }).click();
+  await expect(confirm).toContainText('No draft is created.');
+  // Escape answers the confirmation, not the builder beneath it.
+  await page.keyboard.press('Escape');
+  await expect(confirm).toBeHidden();
+  await expect(builder).toBeVisible();
+  await expect(builder.getByLabel('Step 2 name')).toHaveValue('Keep me');
+  await page.keyboard.press('Escape');
+  await confirm.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await expect(builder.getByLabel('Step 2 name')).toHaveValue('Keep me');
+  await builder.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await confirm.getByRole('button', { name: 'Discard changes', exact: true }).click();
+  await expect(builder).toBeHidden();
+  await expect(page.locator('#filename')).toHaveText('order.d2');
+  await expect(page.getByRole('button', { name: 'New flow', exact: true })).toBeFocused();
 });

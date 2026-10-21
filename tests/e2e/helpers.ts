@@ -54,12 +54,28 @@ export async function chooseProjectFile(page: Page, path: string) {
   await page.locator(`.example-option[title="browser-project/${path}"]`).click();
 }
 
-/** Select source text through CodeMirror, as a person reading the source would. */
-export async function selectSource(page: Page, text: string) {
-  await page.locator('#editor').evaluate(async (el, text) => {
-    const path = '/node_modules/.vite/deps/@codemirror_view.js';
+// Vite's prebundled CodeMirror module: the same instance the app uses, so
+// `EditorView.findFromDOM` finds the live editor. The only place tests name this path.
+const codemirrorView = '/node_modules/.vite/deps/@codemirror_view.js';
+
+/**
+ * Run `fn` in the page with the first pane's CodeMirror view and the `EditorView` class.
+ * `fn` is serialized like any `evaluate` callback: it may use only its arguments.
+ */
+export async function withEditorView<R, A = undefined>(page: Page, fn: (view: any, EditorView: any, arg: A) => R, arg?: A): Promise<Awaited<R>> {
+  return page.locator('#editor').evaluate(async (el, { path, body, arg }) => {
     const { EditorView } = await import(/* @vite-ignore */ path);
     const view = EditorView.findFromDOM(el.querySelector('.cm-editor')!)!;
+    return new Function(`return (${body})`)()(view, EditorView, arg);
+  }, { path: codemirrorView, body: fn.toString(), arg: arg as A });
+}
+
+/** Read CodeMirror's document, including lines outside its rendered viewport. */
+export const editorText = (page: Page) => withEditorView(page, view => view.state.doc.toString() as string);
+
+/** Select source text through CodeMirror, as a person reading the source would. */
+export async function selectSource(page: Page, text: string) {
+  await withEditorView(page, (view, _, text) => {
     const from = view.state.doc.toString().indexOf(text);
     view.dispatch({ selection: { anchor: from, head: from + text.length } });
   }, text);
@@ -67,10 +83,7 @@ export async function selectSource(page: Page, text: string) {
 
 /** Select source text, scroll it into view and focus the editor. */
 export async function cursorAt(page: Page, text: string) {
-  await page.locator('#editor').evaluate(async (el, text) => {
-    const path = '/node_modules/.vite/deps/@codemirror_view.js';
-    const { EditorView } = await import(/* @vite-ignore */ path);
-    const view = EditorView.findFromDOM(el.querySelector('.cm-editor')!)!;
+  await withEditorView(page, (view, _, text) => {
     const from = view.state.doc.toString().indexOf(text);
     view.dispatch({ selection: { anchor: from, head: from + text.length }, scrollIntoView: true });
     view.focus();

@@ -44,6 +44,16 @@ function isRequest(value: unknown): value is AiRequest {
     && typeof item.board === 'string' && item.board.length <= 300;
 }
 
+/** Variables that load code or change which programs run would let a page run arbitrary commands. */
+const BLOCKED_ENVIRONMENT = new Set(['PATH', 'NODE_OPTIONS', 'NODE_PATH', 'NODE_REPL_EXTERNAL_MODULE', 'ELECTRON_RUN_AS_NODE',
+  'BASH_ENV', 'ENV', 'SHELL', 'SHELLOPTS', 'BASHOPTS', 'PS4', 'PROMPT_COMMAND', 'IFS', 'CDPATH', 'HOME', 'ZDOTDIR',
+  'PYTHONPATH', 'PYTHONSTARTUP', 'PYTHONHOME', 'PERL5LIB', 'PERL5OPT', 'RUBYLIB', 'RUBYOPT', 'GIT_EXEC_PATH', 'GIT_SSH',
+  'GIT_SSH_COMMAND', 'GIT_CONFIG_GLOBAL', 'GIT_CONFIG_SYSTEM', 'EDITOR', 'VISUAL', 'PAGER', 'BROWSER', 'COMSPEC', 'PATHEXT']);
+export const blockedEnvironmentName = (name: string) => {
+  const upper = name.toUpperCase();
+  return BLOCKED_ENVIRONMENT.has(upper) || /^(LD_|DYLD_|BASH_FUNC_|GIT_CONFIG_)/.test(upper) || upper.startsWith('NPM_CONFIG_');
+};
+
 function parseEnvironment(text: string): Record<string, string> {
   const entries: [string, string][] = [];
   for (const [index, line] of text.split(/\r?\n/).entries()) {
@@ -52,6 +62,9 @@ function parseEnvironment(text: string): Record<string, string> {
     const name = line.slice(0, equals);
     if (equals < 0 || !/^[A-Za-z_][A-Za-z0-9_]*$/.test(name) || line.includes('\0')) {
       throw new Error(`Environment line ${index + 1} must be NAME=value.`);
+    }
+    if (blockedEnvironmentName(name)) {
+      throw new Error(`Environment line ${index + 1}: ${name} cannot be set here because it changes which programs or code the CLI loads. Set it in the shell that starts the local server instead.`);
     }
     entries.push([name, line.slice(equals + 1)]);
   }
@@ -203,10 +216,17 @@ export async function readBody(request: AsyncIterable<Buffer | string>, response
 
 const isJson = (request: IncomingMessage) => request.headers['content-type']?.startsWith('application/json') === true;
 
+/** The connection itself comes from this computer; the Host header alone can be forged by remote clients. */
+export function isLoopbackAddress(address: string | undefined) {
+  if (!address) return false;
+  const ipv4 = address.startsWith('::ffff:') ? address.slice(7) : address;
+  return address === '::1' || /^127\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(ipv4);
+}
+
 export async function handle(request: IncomingMessage, response: ServerResponse) {
   const host = request.headers.host ?? '';
   const origin = request.headers.origin;
-  if (!/^(localhost|127\.0\.0\.1|\[::1\])(?::\d+)?$/.test(host) || (origin && origin !== `http://${host}`)) {
+  if (!isLoopbackAddress(request.socket.remoteAddress) || !/^(localhost|127\.0\.0\.1|\[::1\])(?::\d+)?$/.test(host) || (origin && origin !== `http://${host}`)) {
     send(response, 403, { error: 'AI is available only from the local Zoomflow server.' });
     return;
   }

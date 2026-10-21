@@ -10,9 +10,10 @@
   "scripts": {
     "test": "pnpm test:unit && pnpm test:e2e",
     "test:unit": "vitest run",
+    "test:coverage": "vitest run --coverage",
     "test:e2e": "playwright test",
-    "typecheck": "tsc --noEmit",
-    "lint": "biome lint .",
+    "typecheck": "tsc -p packages/core && tsc -p packages/viewer && tsc -p packages/cli && tsc -p apps/web && tsc -p apps/web/tsconfig.node.json && tsc -p .",
+    "lint": "biome check .",
     "dev": "pnpm --filter @zoomflow/web dev",
     "build": "pnpm --filter @zoomflow/web build",
     "zoomflow": "node packages/cli/bin/zoomflow.mjs"
@@ -21,6 +22,7 @@
     "@biomejs/biome": "2.5.15",
     "@playwright/test": "1.64.1",
     "@types/node": "26.6.5",
+    "@vitest/coverage-v8": "5.0.5",
     "@zoomflow/cli": "workspace:*",
     "happy-dom": "20.14.6",
     "typescript": "7.0.2",

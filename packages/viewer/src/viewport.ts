@@ -1,8 +1,37 @@
-type Box = { x: number; y: number; width: number; height: number };
+export type Box = { x: number; y: number; width: number; height: number };
+
+/** Keep a view inside the fitted diagram; a view wider or taller than it stays within its overhang. */
+export function clampBox(base: Box, next: Box): Box {
+  const xLimit = base.x + base.width - next.width;
+  const yLimit = base.y + base.height - next.height;
+  const x = Math.max(Math.min(base.x, xLimit), Math.min(Math.max(base.x, xLimit), next.x));
+  const y = Math.max(Math.min(base.y, yLimit), Math.min(Math.max(base.y, yLimit), next.y));
+  return { ...next, x, y };
+}
+
+/** Frame `target` with minimal movement from `box`, keeping the current zoom whenever it fits.
+ * `available` is the visible user-space size at the current zoom, letterboxing included. */
+export function revealBox(base: Box, box: Box, target: Box, available: { width: number; height: number },
+  minZoom: number): Box {
+  const factor = Math.max(1, target.width / available.width, target.height / available.height);
+  const width = Math.min(base.width / minZoom, box.width * factor);
+  const height = width * base.height / base.width;
+  const centerX = Math.max(target.x + target.width - available.width * factor / 2,
+    Math.min(target.x + available.width * factor / 2, box.x + box.width / 2));
+  const centerY = Math.max(target.y + target.height - available.height * factor / 2,
+    Math.min(target.y + available.height * factor / 2, box.y + box.height / 2));
+  return { x: centerX - width / 2, y: centerY - height / 2, width, height };
+}
 
 /** Zoom the rendered SVG itself so links and shape selection keep working. */
 export function setupViewport(stage: HTMLElement, host: HTMLElement) {
-  const touch = matchMedia('(pointer: coarse)').matches;
+  return createViewport(stage, host, clampBox, revealBox);
+}
+
+/** `setupViewport` with its pure geometry injected, so the offline HTML runtime can serialize it. */
+export function createViewport(stage: HTMLElement, host: HTMLElement, clamp: typeof clampBox, frame: typeof revealBox) {
+  const coarse = matchMedia('(pointer: coarse)');
+  let touch = coarse.matches;
   const minZoom = 0.1;
   const maxZoom = 8;
   const zoomEpsilon = 0.001;
@@ -38,6 +67,11 @@ export function setupViewport(stage: HTMLElement, host: HTMLElement) {
   host.append(hint);
   const teardown = new AbortController();
   const signal = teardown.signal;
+  coarse.addEventListener('change', () => {
+    touch = coarse.matches;
+    updateControls();
+    svg?.dispatchEvent(new Event('zf-viewportchange'));
+  }, { signal });
 
   let svg: SVGSVGElement | null = null;
   let base: Box | null = null;
@@ -108,12 +142,8 @@ export function setupViewport(stage: HTMLElement, host: HTMLElement) {
   }
   function setBox(next: Box) {
     if (!base || !svg) return;
-    const xLimit = base.x + base.width - next.width;
-    const yLimit = base.y + base.height - next.height;
-    const x = Math.max(Math.min(base.x, xLimit), Math.min(Math.max(base.x, xLimit), next.x));
-    const y = Math.max(Math.min(base.y, yLimit), Math.min(Math.max(base.y, yLimit), next.y));
-    box = { ...next, x, y };
-    svg.setAttribute('viewBox', `${x} ${y} ${next.width} ${next.height}`);
+    box = clamp(base, next);
+    svg.setAttribute('viewBox', `${box.x} ${box.y} ${box.width} ${box.height}`);
     updateControls();
     svg.dispatchEvent(new Event('zf-viewportchange'));
   }
@@ -162,15 +192,9 @@ export function setupViewport(stage: HTMLElement, host: HTMLElement) {
     const viewport = svg.getBoundingClientRect();
     const availableWidth = Math.max(1, viewport.width - 32) / Math.abs(matrix.a);
     const availableHeight = Math.max(1, viewport.height - 32) / Math.abs(matrix.d);
-    const factor = Math.max(1, (end.x - start.x) / availableWidth, (end.y - start.y) / availableHeight);
-    const width = Math.min(base.width / minZoom, box.width * factor);
-    const height = width * base.height / base.width;
-    const centerX = Math.max(end.x - availableWidth * factor / 2,
-      Math.min(start.x + availableWidth * factor / 2, box.x + box.width / 2));
-    const centerY = Math.max(end.y - availableHeight * factor / 2,
-      Math.min(start.y + availableHeight * factor / 2, box.y + box.height / 2));
-    const x = centerX - width / 2;
-    const y = centerY - height / 2;
+    const { x, y, width, height } = frame(base, box,
+      { x: start.x, y: start.y, width: end.x - start.x, height: end.y - start.y },
+      { width: availableWidth, height: availableHeight }, minZoom);
     // Ignore subpixel measurement noise (notably SVG bounds in Firefox).
     if (Math.max(Math.abs(x - box.x), Math.abs(width - box.width)) * Math.abs(matrix.a) > 0.25 ||
       Math.abs(y - box.y) * Math.abs(matrix.d) > 0.25) setBox({ x, y, width, height });
@@ -310,7 +334,10 @@ export function setupViewport(stage: HTMLElement, host: HTMLElement) {
     // Trackpad pinch is delivered as ctrl+wheel. Bound individual jumps from coarse wheels.
     const delta = Math.max(-240, Math.min(240, event.deltaY * unit));
     const factor = Math.exp(-delta * (event.ctrlKey ? 0.01 : 0.0015));
-    if (Math.max(minZoom, Math.min(maxZoom, scale() * factor)) === scale()) return;
+    // Always claim a pinch, even at a zoom limit, so it never zooms the page instead.
+    if (event.ctrlKey) event.preventDefault();
+    // Compare relatively: a clamped scale can differ from the limit by rounding.
+    if (Math.abs(Math.max(minZoom, Math.min(maxZoom, scale() * factor)) / scale() - 1) < 1e-9) return;
     event.preventDefault();
     zoom(factor, event.clientX, event.clientY);
   }, { passive: false, signal });

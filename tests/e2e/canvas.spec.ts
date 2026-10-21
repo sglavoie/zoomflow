@@ -88,7 +88,8 @@ test('keyboard board navigation retains focus and announces the new board', asyn
   await expect(page.locator('#viewer .zf-visually-hidden')).toHaveText('checkout board');
   await page.keyboard.press('Escape');
   await expect(page.locator('.zf-stage')).toHaveAttribute('data-board', 'root');
-  await expect(page.locator('.zf-stage')).toBeFocused();
+  // Going up returns to the link that led down, not the stage.
+  await expect(link).toBeFocused();
 });
 
 test('explicit reveal frames an offscreen shape with minimal pan and only zooms out when necessary', async ({ page }) => {

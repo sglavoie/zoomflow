@@ -23,14 +23,18 @@ test('concurrent tabs keep both versions and unrelated drafts after reload', asy
   const other = await context.newPage(); await other.goto('/'); await previewReady(other);
   await source(page).fill('a: First tab'); await saved(page);
   // The notice stays in the accessibility tree, empty, so its later text is announced.
-  await expect(page.getByRole('status').and(page.locator('#draft-conflict'))).toHaveText('');
+  await expect(page.getByRole('status').and(page.locator('#draft-conflict-message'))).toHaveText('');
+  await expect(page.locator('#draft-conflict-reload')).toBeHidden();
   await other.locator('#file').setInputFiles({ name: 'other.d2', mimeType: 'text/plain', buffer: Buffer.from('other: Unrelated') });
   await previewReady(other);
   await chooseExample(other, /Order flow/);
   await source(other).fill('b: Second tab'); await saved(other);
   await expect(page.locator('#draft-conflict')).toBeVisible();
-  await expect(page.locator('#draft-conflict')).toContainText('Drafts changed in another tab.');
-  await page.reload(); await previewReady(page);
+  // The notice names the affected document and reloads after keeping this tab's edits.
+  await expect(page.locator('#draft-conflict-message')).toHaveText(/^Order flow changed in another tab\./);
+  await Promise.all([page.waitForEvent('load'), page.getByRole('button', { name: 'Reload', exact: true }).click()]);
+  await previewReady(page);
+  await expect(page.locator('#draft-conflict-message')).toHaveText('');
   await chooseExample(page, /Order flow \(recovered\)/);
   await expect(source(page)).toHaveText('a: First tab');
   await chooseExample(page, /^Order flow Modified/);
@@ -132,7 +136,7 @@ test('workspace is compact and stable, zoom explains its baseline, export descri
   await expect(page.locator('#compile-error')).toBeVisible();
   expect((await page.locator('#editor').boundingBox())!.y).toBe(editor.y);
   await openDownloads(page);
-  await expect(page.locator('#export-scope')).toContainText('Compile the current source');
+  await expect(page.locator('#export-scope')).toHaveText('Fix source errors to export.');
   await expect(page.locator('#export')).toBeDisabled();
 });
 

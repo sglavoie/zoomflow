@@ -10,6 +10,8 @@ export interface LintDiagnostic {
   message: string;
   board: string;
   shape?: string;
+  /** Compiled connection ID, such as `(a -> b)[0]`, for dangling connection links. */
+  connection?: string;
   /** Resolved missing board ID for dangling-link diagnostics. */
   target?: string;
   /** Original D2 range, possibly in an imported file. Never assume it is index. */
@@ -121,11 +123,14 @@ export function lint(compiled: Pick<CompileResponse, 'diagram' | 'graph'>, optio
   const links = new Map<string, Set<string>>();
   const linkKeys = new Set<string>();
   const boardRanges = new Map<string, string>();
+  const owners = new Map<string, { board: Board; shape: string; child: Board }[]>();
   const label = (id: string) => boardLabel(id, boards);
   let ranges: Map<string, string> | undefined;
   const shapeRange = (board: string, shape: string) =>
     (ranges ??= shapeRanges(compiled.diagram, compiled.graph)).get(JSON.stringify([board, shape]));
-  function checkLink(href: string, board: Board, shape?: string, range?: string) {
+  // Authored connection-link ranges, in source order, per board and missing target.
+  const connectionRanges = new Map<string, string[]>();
+  function checkLink(href: string, board: Board, shape?: string, range?: string, connection?: string) {
     const target = boardTarget(href, board, boards);
     if (!target) return;
     if (boards.has(target)) {
@@ -133,7 +138,7 @@ export function lint(compiled: Pick<CompileResponse, 'diagram' | 'graph'>, optio
       links.get(board.id)!.add(target);
       return;
     }
-    const key = JSON.stringify([board.id, shape, target]);
+    const key = JSON.stringify([board.id, shape ?? connection, target]);
     if (linkKeys.has(key)) return;
     linkKeys.add(key);
     // Compiler-expanded child ASTs carry placeholder ranges without a file.
@@ -149,13 +154,13 @@ export function lint(compiled: Pick<CompileResponse, 'diagram' | 'graph'>, optio
         break;
       }
     }
-    diagnostics.push({ rule: 'dangling-link', severity: 'error', board: board.id, shape, range, target,
+    diagnostics.push({ rule: 'dangling-link', severity: 'error', board: board.id, shape, connection, range, target,
       message: `Link targets missing board "${label(target)}".${hint}` });
   }
 
   for (const board of boards.values()) {
     for (const shape of board.diagram.shapes) checkLink(shape.link, board, shape.id);
-    for (const connection of board.diagram.connections) checkLink(connection.link, board);
+    for (const connection of board.diagram.connections) checkLink(connection.link, board, undefined, undefined, connection.id);
     checkLink(board.diagram.root.link, board);
   }
 
@@ -188,13 +193,17 @@ export function lint(compiled: Pick<CompileResponse, 'diagram' | 'graph'>, optio
           const value = stringValue(entry.value) !== undefined ? entry.value : entry.primary;
           authored.set(owner, { href: stringValue(value) ?? '', range: scalarRange(value) ?? entry.range });
         } else if (entry.edges?.length) {
-          // Connection links do not establish boundary ownership.
+          // Connection links do not establish boundary ownership. The compiled pass reports
+          // each connection; here only record where its link was authored, once per edge.
           for (const item of entry.value?.map?.nodes ?? []) {
             const key = item.map_key;
-            if (stringValue(key?.key?.path?.[0]) === 'link') {
-              const value = stringValue(key?.value) !== undefined ? key?.value : key?.primary;
-              checkLink(canonicalLink(stringValue(value) ?? ''), board, undefined, scalarRange(value));
-            }
+            if (stringValue(key?.key?.path?.[0]) !== 'link') continue;
+            const value = stringValue(key?.value) !== undefined ? key?.value : key?.primary;
+            const target = boardTarget(canonicalLink(stringValue(value) ?? ''), board, boards);
+            const range = scalarRange(value);
+            if (!target || boards.has(target) || !range || range.startsWith(',')) continue;
+            const located = JSON.stringify([board.id, target]);
+            connectionRanges.set(located, [...connectionRanges.get(located) ?? [], ...entry.edges.map(() => range)]);
           }
         } else visitMap(entry.value?.map, fullPath);
       }
@@ -211,6 +220,11 @@ export function lint(compiled: Pick<CompileResponse, 'diagram' | 'graph'>, optio
     }
   }
   visitGraph(compiled.graph as LintGraph, 'root');
+  // D2 orders connections as authored, so pair them with authored link ranges in turn.
+  for (const diagnostic of diagnostics) {
+    if (!diagnostic.connection) continue;
+    diagnostic.range ??= connectionRanges.get(JSON.stringify([diagnostic.board, diagnostic.target]))?.shift();
+  }
 
   // Layers are reachable only by following links from root; like D2's own viewer,
   // a reachable board's scenarios and steps are reachable without a link.
@@ -227,7 +241,8 @@ export function lint(compiled: Pick<CompileResponse, 'diagram' | 'graph'>, optio
       message: linked.has(board.id) ? `Layer "${label(board.id)}" is linked only from boards unreachable from the root.`
         : `Layer "${label(board.id)}" has no incoming board link.`,
     });
-    if (options.missingBacklink && board.parent && ![
+    // Scenarios and steps are navigated without links, so only layers need a way back.
+    if (options.missingBacklink && board.kind === 'layers' && board.parent && ![
       ...board.diagram.shapes, ...board.diagram.connections, board.diagram.root,
     ].some((item) => boardTarget(item.link, board, boards) === board.parent)) diagnostics.push({
       rule: 'missing-backlink', severity: 'warning', board: board.id, range: boardRanges.get(board.id),
@@ -239,34 +254,46 @@ export function lint(compiled: Pick<CompileResponse, 'diagram' | 'graph'>, optio
       const child = target && boards.get(target);
       // Only immediate child layers represent a parent's drillable node.
       if (!child || child.kind !== 'layers' || child.parent !== board.id) continue;
-      const ports = {
-        in: child.diagram.shapes.filter((port) => port.classes?.includes('zf-in')),
-        out: child.diagram.shapes.filter((port) => port.classes?.includes('zf-out')),
-      };
-      // Port-free layers use inferred parent connections; they have no explicit contract.
-      if (!ports.in.length && !ports.out.length) continue;
-      const required = boundaryNeighbours(board.diagram, shape.id);
-      const evaluation: BoundaryEvaluation = { board: board.id, shape: shape.id, child: child.id,
-        expected: required.in.size + required.out.size, evaluated: 0 };
-      for (const direction of ['in', 'out'] as const) {
+      owners.set(child.id, [...owners.get(child.id) ?? [], { board, shape: shape.id, child }]);
+    }
+  }
+
+  // Several parent nodes may drill into one layer; a port need only match one of them.
+  for (const group of owners.values()) {
+    const { board, child } = group[0];
+    const ports = {
+      in: child.diagram.shapes.filter((port) => port.classes?.includes('zf-in')),
+      out: child.diagram.shapes.filter((port) => port.classes?.includes('zf-out')),
+    };
+    // Port-free layers use inferred parent connections; they have no explicit contract.
+    if (!ports.in.length && !ports.out.length) continue;
+    const requirements = group.map(({ shape }) => ({ shape, required: boundaryNeighbours(board.diagram, shape),
+      evaluation: { board: board.id, shape, child: child.id, expected: 0, evaluated: 0 } as BoundaryEvaluation }));
+    const names = requirements.map(({ shape }) => `"${shape}"`).join(' or ');
+    for (const direction of ['in', 'out'] as const) {
+      // Missing ports are per owner; a port is unmatched only if no owner needs it.
+      for (const { shape, required, evaluation } of requirements) {
+        evaluation.expected += required[direction].size;
         for (const neighbour of required[direction]) {
           const matches = ports[direction].filter((port) => port.id === neighbour);
           if (matches.length) evaluation.evaluated++;
-          else diagnostics.push({ rule: `boundary-${direction}`, severity: 'error', board: board.id, shape: shape.id,
-            range: shapeRange(board.id, shape.id),
-            message: `"${shape.id}" needs a zf-${direction} port named "${neighbour}" in "${label(child.id)}".` });
-        }
-        for (const port of ports[direction]) {
-          if (!required[direction].has(port.id)) diagnostics.push({
-            rule: `boundary-${direction}`, severity: 'error', board: child.id, shape: port.id, range: shapeRange(child.id, port.id),
-            message: `zf-${direction} port "${port.id}" has no matching ${direction === 'in' ? 'incoming' : 'outgoing'} neighbour of "${shape.id}" in "${label(board.id)}".`,
-          });
+          else diagnostics.push({ rule: `boundary-${direction}`, severity: 'error', board: board.id, shape,
+            range: shapeRange(board.id, shape),
+            message: `"${shape}" needs a zf-${direction} port named "${neighbour}" in "${label(child.id)}".` });
         }
       }
+      for (const port of ports[direction]) {
+        if (!requirements.some(({ required }) => required[direction].has(port.id))) diagnostics.push({
+          rule: `boundary-${direction}`, severity: 'error', board: child.id, shape: port.id, range: shapeRange(child.id, port.id),
+          message: `zf-${direction} port "${port.id}" has no matching ${direction === 'in' ? 'incoming' : 'outgoing'} neighbour of ${names} in "${label(board.id)}".`,
+        });
+      }
+    }
+    for (const { shape, required, evaluation } of requirements) {
       if (required.incident && evaluation.evaluated === 0) diagnostics.push({
         rule: required.out.size && !required.in.size ? 'boundary-out' : 'boundary-in',
-        severity: 'error', board: board.id, shape: shape.id, range: shapeRange(board.id, shape.id),
-        message: `Zero boundary pairs evaluated for "${shape.id}" → "${label(child.id)}" despite incident edges. Add matching zf-in/zf-out ports and directed edges.`,
+        severity: 'error', board: board.id, shape, range: shapeRange(board.id, shape),
+        message: `Zero boundary pairs evaluated for "${shape}" → "${label(child.id)}" despite incident edges. Add matching zf-in/zf-out ports and directed edges.`,
       });
       boundaries.push(evaluation);
     }

@@ -1,11 +1,32 @@
-/** Shared by the live viewer and serialized offline runtime. Call after mounting the SVG. */
+export type Rect = { left: number; top: number; right: number; bottom: number };
+
+/** Grow a link's hit area from its shape's `own` bounds towards `expanded`, splitting the
+ * whitespace with each overlapping obstacle at their midpoint. An obstacle that overlaps the
+ * shape itself, rather than a gap beside it, limits the hit area to the shape. */
+export function splitHitArea(own: Rect, expanded: Rect, obstacles: readonly { bounds: Rect; area: Rect }[]): Rect {
+  const rect = { ...expanded };
+  for (const { bounds: other, area } of obstacles) {
+    if (area.right <= rect.left || area.left >= rect.right || area.bottom <= rect.top || area.top >= rect.bottom) continue;
+    if (other.left >= own.right) rect.right = Math.min(rect.right, (own.right + other.left) / 2);
+    else if (other.right <= own.left) rect.left = Math.max(rect.left, (own.left + other.right) / 2);
+    else if (other.top >= own.bottom) rect.bottom = Math.min(rect.bottom, (own.bottom + other.top) / 2);
+    else if (other.bottom <= own.top) rect.top = Math.max(rect.top, (own.top + other.bottom) / 2);
+    else Object.assign(rect, own);
+  }
+  return rect;
+}
+
+/** Shared by the live viewer and serialized offline runtime. Call after mounting the SVG.
+ * `split` is `splitHitArea`, passed in so this function stays self-contained. */
 export function decorateLinks(svg: Element, boards: Map<string, { name: string; parent?: string }>, current: string,
+  split: typeof splitHitArea,
   /** Name a missing board target; defaults to its raw ID. */
   describe: (target: string) => string = (target) => target) {
   const ns = 'http://www.w3.org/2000/svg';
-  const touch = matchMedia('(pointer: coarse)').matches;
-  const cues: { link: SVGAElement; shape: SVGGraphicsElement; badge: SVGGElement; hit: SVGRectElement;
-    x: number; y: number }[] = [];
+  // Read live: the primary pointer can change, and an attached viewport re-measures when it does.
+  const coarse = matchMedia('(pointer: coarse)');
+  const cues: { link: SVGAElement; shape: SVGGraphicsElement; badge: SVGGElement; hit: SVGRectElement; x: number; y: number;
+    toReference?: DOMMatrix; bounds?: Rect; obstacles: { node: Element; bounds: Rect; link: boolean }[] }[] = [];
   function ancestor(parent: string, child: string): boolean {
     for (let id = boards.get(child)?.parent; id; id = boards.get(id)?.parent) if (id === parent) return true;
     return false;
@@ -21,11 +42,8 @@ export function decorateLinks(svg: Element, boards: Map<string, { name: string; 
       : target ? direction === 'parent' ? `Return to ${target.name}` : direction === 'child' ? `Open ${target.name} board` : `Visit ${target.name} board` : `Missing board: ${describe(href)}`;
     link.dataset.linkKind = external ? 'external' : 'board';
     if (direction) link.dataset.linkDirection = direction;
+    // One accessible name: a <title> as well would make screen readers announce it twice.
     link.setAttribute('aria-label', label);
-    const title = document.createElementNS(ns, 'title');
-    title.textContent = label;
-    link.prepend(title);
-
   }
   function attachCues() {
     for (const link of svg.querySelectorAll<SVGAElement>('a[data-link-kind]')) {
@@ -73,63 +91,82 @@ export function decorateLinks(svg: Element, boards: Map<string, { name: string; 
         hit.setAttribute('fill', 'transparent');
         hit.setAttribute('aria-hidden', 'true');
         link.prepend(hit);
-        cues.push({ link, shape, badge, hit, x: matrix.e + 16, y: matrix.f + 16 });
+        cues.push({ link, shape, badge, hit, x: matrix.e + 16, y: matrix.f + 16, obstacles: [] });
       }
     }
   }
+  // Geometry is measured once per board in the diagram's own user space ("reference" space,
+  // fixed relative to every shape under pan and zoom), then mapped to the screen per frame.
+  const graph = svg.querySelector<SVGGraphicsElement>(':scope > svg');
+  const reference = graph ?? (svg as SVGGraphicsElement);
+  function measure() {
+    const screen = reference.getScreenCTM();
+    if (!screen) return false;
+    const inverse = screen.inverse();
+    const bounds = (node: SVGGraphicsElement): Rect | undefined => {
+      const box = node.getBBox();
+      const matrix = node.getScreenCTM();
+      if (!matrix) return undefined;
+      const toReference = inverse.multiply(matrix);
+      const start = new DOMPoint(box.x, box.y).matrixTransform(toReference);
+      const end = new DOMPoint(box.x + box.width, box.y + box.height).matrixTransform(toReference);
+      return { left: Math.min(start.x, end.x), top: Math.min(start.y, end.y),
+        right: Math.max(start.x, end.x), bottom: Math.max(start.y, end.y) };
+    };
+    // Split available whitespace with neighboring shapes. Never expand a link's
+    // hit area over another shape, including ordinary source-selection shapes.
+    const obstacles = graph ? [...graph.children].filter((node) =>
+      ['g', 'a'].includes(node.localName) && !node.classList.contains('appendix-icon')).flatMap((node) => {
+        const shape = node.localName === 'a' ? node.querySelector('g:not(.appendix-icon)') ?? node : node;
+        const box = bounds(shape as SVGGraphicsElement);
+        return box ? [{ node, bounds: box, link: node.localName === 'a' }] : [];
+      }) : [];
+    for (const cue of cues) {
+      const link = cue.link.getScreenCTM();
+      const own = bounds(cue.shape);
+      if (!link || !own) continue;
+      cue.toReference = inverse.multiply(link);
+      cue.bounds = own;
+      cue.obstacles = obstacles.filter((obstacle) => obstacle.node !== cue.link && !obstacle.node.contains(cue.link));
+    }
+    return true;
+  }
   let attached = false;
+  let measured = false;
   function updateGeometry() {
     // Hidden mobile previews have no measurable SVG bounds. Associate their
     // badges once the SVG first becomes visible, before sizing the touch targets.
     if (!attached && svg.getClientRects().length) { attachCues(); attached = true; }
     if (!cues.length) return;
-    // Size badges in screen pixels, independently of diagram fit and zoom.
-    for (const cue of cues) {
-      const matrix = cue.link.getScreenCTM();
-      if (!matrix || !matrix.a || !matrix.d) continue;
-      const scale = 1 / Math.abs(matrix.a);
-      cue.badge.setAttribute('transform', `translate(${cue.x - 16 * scale} ${cue.y - 16 * scale}) scale(${scale})`);
-    }
-    const rectangles = cues.map((cue) => {
-      const bounds = cue.shape.getBoundingClientRect();
-      const dx = touch ? Math.max(0, (44 - bounds.width) / 2) : 0;
-      const dy = touch ? Math.max(0, (44 - bounds.height) / 2) : 0;
-      return { cue, bounds, left: bounds.left - dx, right: bounds.right + dx,
-        top: bounds.top - dy, bottom: bounds.bottom + dy };
+    if (!measured) measured = measure();
+    const screen = reference.getScreenCTM();
+    if (!measured || !screen || !screen.a || !screen.d) return;
+    const touch = coarse.matches;
+    // Expand touch targets to 44 screen pixels, expressed in reference units.
+    const expand = (rect: Rect, enabled: boolean): Rect => {
+      const dx = enabled ? Math.max(0, (44 / Math.abs(screen.a) - (rect.right - rect.left)) / 2) : 0;
+      const dy = enabled ? Math.max(0, (44 / Math.abs(screen.d) - (rect.bottom - rect.top)) / 2) : 0;
+      return { left: rect.left - dx, right: rect.right + dx, top: rect.top - dy, bottom: rect.bottom + dy };
+    };
+    // Compute everything first, then write: no layout reads between attribute writes.
+    const updates = cues.flatMap((cue) => {
+      if (!cue.toReference || !cue.bounds) return [];
+      const link = screen.multiply(cue.toReference);
+      if (!link.a || !link.d) return [];
+      const area = split(cue.bounds, expand(cue.bounds, touch),
+        cue.obstacles.map((obstacle) => ({ bounds: obstacle.bounds, area: expand(obstacle.bounds, touch && obstacle.link) })));
+      const fromReference = cue.toReference.inverse();
+      const start = new DOMPoint(area.left, area.top).matrixTransform(fromReference);
+      const end = new DOMPoint(area.right, area.bottom).matrixTransform(fromReference);
+      return [{ cue, scale: 1 / Math.abs(link.a), start, end }];
     });
-    // Split available whitespace with neighboring shapes. Never expand a link's
-    // hit area over another shape, including ordinary source-selection shapes.
-    const graph = svg.querySelector(':scope > svg');
-    const obstacles = graph ? [...graph.children].filter((node) =>
-      ['g', 'a'].includes(node.localName) && !node.classList.contains('appendix-icon')).map((node) => {
-        const shape = node.localName === 'a' ? node.querySelector('g:not(.appendix-icon)') ?? node : node;
-        const bounds = shape.getBoundingClientRect();
-        const dx = touch && node.localName === 'a' ? Math.max(0, (44 - bounds.width) / 2) : 0;
-        const dy = touch && node.localName === 'a' ? Math.max(0, (44 - bounds.height) / 2) : 0;
-        return { node, bounds, left: bounds.left - dx, right: bounds.right + dx,
-          top: bounds.top - dy, bottom: bounds.bottom + dy };
-      }) : [];
-    for (const rect of rectangles) {
-      for (const obstacle of obstacles) {
-        if (obstacle.node === rect.cue.link || obstacle.node.contains(rect.cue.link)) continue;
-        if (obstacle.right <= rect.left || obstacle.left >= rect.right || obstacle.bottom <= rect.top || obstacle.top >= rect.bottom) continue;
-        const other = obstacle.bounds;
-        const own = rect.bounds;
-        if (other.left >= own.right) rect.right = Math.min(rect.right, (own.right + other.left) / 2);
-        else if (other.right <= own.left) rect.left = Math.max(rect.left, (own.left + other.right) / 2);
-        else if (other.top >= own.bottom) rect.bottom = Math.min(rect.bottom, (own.bottom + other.top) / 2);
-        else if (other.bottom <= own.top) rect.top = Math.max(rect.top, (own.top + other.bottom) / 2);
-        else { rect.left = own.left; rect.right = own.right; rect.top = own.top; rect.bottom = own.bottom; }
-      }
-      const matrix = rect.cue.link.getScreenCTM();
-      if (!matrix || !matrix.a || !matrix.d) continue;
-      const inverse = matrix.inverse();
-      const start = new DOMPoint(rect.left, rect.top).matrixTransform(inverse);
-      const end = new DOMPoint(rect.right, rect.bottom).matrixTransform(inverse);
-      rect.cue.hit.setAttribute('x', String(start.x));
-      rect.cue.hit.setAttribute('y', String(start.y));
-      rect.cue.hit.setAttribute('width', String(Math.max(0, end.x - start.x)));
-      rect.cue.hit.setAttribute('height', String(Math.max(0, end.y - start.y)));
+    for (const { cue, scale, start, end } of updates) {
+      // Size badges in screen pixels, independently of diagram fit and zoom.
+      cue.badge.setAttribute('transform', `translate(${cue.x - 16 * scale} ${cue.y - 16 * scale}) scale(${scale})`);
+      cue.hit.setAttribute('x', String(start.x));
+      cue.hit.setAttribute('y', String(start.y));
+      cue.hit.setAttribute('width', String(Math.max(0, end.x - start.x)));
+      cue.hit.setAttribute('height', String(Math.max(0, end.y - start.y)));
     }
   }
   // Viewport changes fire on every pointermove and wheel event: measure once per frame.
@@ -143,6 +180,8 @@ export function decorateLinks(svg: Element, boards: Map<string, { name: string; 
     });
   });
   updateGeometry();
+  // Embedded fonts can still be loading on first paint; re-measure text once they settle.
+  void document.fonts?.ready.then(() => { if (cues.length && svg.isConnected && measure()) updateGeometry(); });
   if (!svg.querySelector('a[data-link-kind]')) return;
   const hint = document.createElement('div');
   hint.className = 'zf-link-hint';

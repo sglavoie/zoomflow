@@ -1,0 +1,18 @@
+{
+  // Shared compiler options. Each project picks its own lib, types and files, so
+  // browser code cannot reach Node APIs and core can use neither DOM nor Node types.
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "allowImportingTsExtensions": true,
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noImplicitOverride": true,
+    "allowJs": true,
+    "checkJs": true,
+    "noEmit": true,
+    "skipLibCheck": true
+  }
+}
