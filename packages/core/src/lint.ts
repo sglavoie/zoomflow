@@ -1,6 +1,7 @@
 import type { CompileResponse } from '@d2lang/d2';
 import { classifyHref, indexBoards, type Board } from './index';
 import { boundaryNeighbours } from './context';
+import { shapeRanges } from './source';
 
 export type LintRule = 'boundary-in' | 'boundary-out' | 'orphan-board' | 'dangling-link' | 'missing-backlink';
 export interface LintDiagnostic {
@@ -83,6 +84,20 @@ function boardTarget(href: string, board: Board, boards: Map<string, Board>): st
   return path === '' ? base.id : /^(layers|scenarios|steps)\./.test(path) ? `${base.id}.${path}` : undefined;
 }
 
+/** Name a board, or a missing board below an existing one, by its breadcrumb trail. */
+export function boardLabel(id: string, boards: Map<string, Board>): string {
+  let board = boards.get(id), rest = '';
+  if (!board) {
+    const ancestor = [...boards.keys()].filter((key) => id.startsWith(`${key}.`)).sort((a, b) => b.length - a.length)[0];
+    if (!ancestor) return id;
+    board = boards.get(ancestor);
+    rest = id.slice(ancestor.length + 1);
+  }
+  const names = rest.split(/(?:^|\.)(?:layers|scenarios|steps)\./).filter(Boolean);
+  for (let item = board; item; item = item.parent ? boards.get(item.parent) : undefined) names.unshift(item.name);
+  return names.join(' > ');
+}
+
 /** Lint a compiled document without following its cyclic navigation graph.
  * Shape identifiers, not display labels, are the boundary-port naming contract.
  */
@@ -93,6 +108,10 @@ export function lint(compiled: Pick<CompileResponse, 'diagram' | 'graph'>, optio
   const incoming = new Set<string>();
   const linkKeys = new Set<string>();
   const boardRanges = new Map<string, string>();
+  const label = (id: string) => boardLabel(id, boards);
+  let ranges: Map<string, string> | undefined;
+  const shapeRange = (board: string, shape: string) =>
+    (ranges ??= shapeRanges(compiled.diagram, compiled.graph)).get(JSON.stringify([board, shape]));
   function checkLink(href: string, board: Board, shape?: string, range?: string) {
     const target = boardTarget(href, board, boards);
     if (!target) return;
@@ -100,6 +119,8 @@ export function lint(compiled: Pick<CompileResponse, 'diagram' | 'graph'>, optio
     const key = JSON.stringify([board.id, shape, target]);
     if (linkKeys.has(key)) return;
     linkKeys.add(key);
+    // Compiler-expanded child ASTs carry placeholder ranges without a file.
+    if (!range || range.startsWith(',')) range = shape ? shapeRange(board.id, shape) : undefined;
     let hint = '';
     const childPath = target.startsWith(`${board.id}.`) ? target.slice(board.id.length + 1) : '';
     // Suggest an ancestor only for a missing immediate child with the same name/kind.
@@ -112,7 +133,7 @@ export function lint(compiled: Pick<CompileResponse, 'diagram' | 'graph'>, optio
       }
     }
     diagnostics.push({ rule: 'dangling-link', severity: 'error', board: board.id, shape, range, target,
-      message: `Link targets missing board "${target}".${hint}` });
+      message: `Link targets missing board "${label(target)}".${hint}` });
   }
 
   for (const board of boards.values()) {
@@ -177,13 +198,13 @@ export function lint(compiled: Pick<CompileResponse, 'diagram' | 'graph'>, optio
   for (const board of boards.values()) {
     if (board.kind === 'layers' && !incoming.has(board.id)) diagnostics.push({
       rule: 'orphan-board', severity: 'warning', board: board.id, range: boardRanges.get(board.id),
-      message: `Layer "${board.id}" has no incoming board link.`,
+      message: `Layer "${label(board.id)}" has no incoming board link.`,
     });
     if (options.missingBacklink && board.parent && ![
       ...board.diagram.shapes, ...board.diagram.connections, board.diagram.root,
     ].some((item) => boardTarget(item.link, board, boards) === board.parent)) diagnostics.push({
       rule: 'missing-backlink', severity: 'warning', board: board.id, range: boardRanges.get(board.id),
-      message: `Board "${board.id}" has no link to its parent "${board.parent}".`,
+      message: `Board "${label(board.id)}" has no link to its parent "${label(board.parent)}".`,
     });
     if (!options.boundaryPorts) continue;
     for (const shape of board.diagram.shapes) {
@@ -205,19 +226,20 @@ export function lint(compiled: Pick<CompileResponse, 'diagram' | 'graph'>, optio
           const matches = ports[direction].filter((port) => port.id === neighbour);
           if (matches.length) evaluation.evaluated++;
           else diagnostics.push({ rule: `boundary-${direction}`, severity: 'error', board: board.id, shape: shape.id,
-            message: `"${shape.id}" needs a zf-${direction} port named "${neighbour}" in "${child.id}".` });
+            range: shapeRange(board.id, shape.id),
+            message: `"${shape.id}" needs a zf-${direction} port named "${neighbour}" in "${label(child.id)}".` });
         }
         for (const port of ports[direction]) {
           if (!required[direction].has(port.id)) diagnostics.push({
-            rule: `boundary-${direction}`, severity: 'error', board: child.id, shape: port.id,
-            message: `zf-${direction} port "${port.id}" has no matching ${direction === 'in' ? 'incoming' : 'outgoing'} neighbour of "${shape.id}" in "${board.id}".`,
+            rule: `boundary-${direction}`, severity: 'error', board: child.id, shape: port.id, range: shapeRange(child.id, port.id),
+            message: `zf-${direction} port "${port.id}" has no matching ${direction === 'in' ? 'incoming' : 'outgoing'} neighbour of "${shape.id}" in "${label(board.id)}".`,
           });
         }
       }
       if (required.incident && evaluation.evaluated === 0) diagnostics.push({
         rule: required.out.size && !required.in.size ? 'boundary-out' : 'boundary-in',
-        severity: 'error', board: board.id, shape: shape.id,
-        message: `Zero boundary pairs evaluated for "${shape.id}" → "${child.id}" despite incident edges. Add matching zf-in/zf-out ports and directed edges.`,
+        severity: 'error', board: board.id, shape: shape.id, range: shapeRange(board.id, shape.id),
+        message: `Zero boundary pairs evaluated for "${shape.id}" → "${label(child.id)}" despite incident edges. Add matching zf-in/zf-out ports and directed edges.`,
       });
       boundaries.push(evaluation);
     }

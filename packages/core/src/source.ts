@@ -27,11 +27,10 @@ interface SourceGraph {
 
 /** Join serialized objects to shapes by their unique compiled box, not local
  * names (which collide in containers). These boxes are never animation geometry.
- * Ambiguous or imported references are omitted rather than selecting wrong text.
+ * Yields every raw D2 reference range, which may name an imported file.
  */
-export function indexShapeSources(diagram: Diagram, graph: unknown, source: string, filename = 'index'): ShapeSource[] {
+function visitShapeReferences(diagram: Diagram, graph: unknown, visitor: (board: string, shape: string, range: string) => void) {
   const boards = indexBoards(diagram);
-  const result: ShapeSource[] = [];
   function visit(node: SourceGraph, id: string) {
     const board = boards.get(id);
     if (!board) return;
@@ -45,8 +44,7 @@ export function indexShapeSources(diagram: Diagram, graph: unknown, source: stri
       for (const reference of object.references ?? []) {
         const part = reference.key?.path?.[reference.key_path_index ?? 0];
         const raw = part ? Object.values(part).find((value) => value.range)?.range : reference.key?.range;
-        const range = raw && parseSourceRange(raw, source, filename);
-        if (range && range.from < range.to) result.push({ board: id, shape: shapes[0].id, ...range });
+        if (raw) visitor(id, shapes[0].id, raw);
       }
     }
     for (const group of ['layers', 'scenarios', 'steps'] as const) {
@@ -54,5 +52,24 @@ export function indexShapeSources(diagram: Diagram, graph: unknown, source: stri
     }
   }
   visit(graph as SourceGraph, 'root');
+}
+
+/** Ambiguous or imported references are omitted rather than selecting wrong text. */
+export function indexShapeSources(diagram: Diagram, graph: unknown, source: string, filename = 'index'): ShapeSource[] {
+  const result: ShapeSource[] = [];
+  visitShapeReferences(diagram, graph, (board, shape, raw) => {
+    const range = parseSourceRange(raw, source, filename);
+    if (range && range.from < range.to) result.push({ board, shape, ...range });
+  });
+  return result;
+}
+
+/** First raw D2 range per shape, keyed by board ID and shape ID. */
+export function shapeRanges(diagram: Diagram, graph: unknown): Map<string, string> {
+  const result = new Map<string, string>();
+  visitShapeReferences(diagram, graph, (board, shape, raw) => {
+    const key = JSON.stringify([board, shape]);
+    if (!result.has(key)) result.set(key, raw);
+  });
   return result;
 }

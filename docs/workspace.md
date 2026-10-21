@@ -274,6 +274,7 @@ and has a 64 megapixel limit.
 
 The viewer and browser/CLI exports use the same shipped Source Sans Pro Regular,
 Bold, Italic and Semibold fonts, with embedded font subsets in SVG and HTML.
+Single-file HTML shares one subset per face across its boards.
 See [font assets, license and renderer wiring](../fonts/README.md).
 
 

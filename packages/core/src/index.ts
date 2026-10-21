@@ -1,9 +1,9 @@
 import type { Diagram } from '@d2lang/d2';
 export { parentContext, type ParentContext } from './context';
-export { renderExportBoards, exportBoardsZip, exportSourcesZip, exportBoardsHtml, type ExportBoard } from './export';
+export { renderExportBoards, exportBoardsZip, exportSourcesZip, exportBoardsHtml, exportGlyphSource, type ExportBoard } from './export';
 export type { Diagram, CompileResponse, RenderOptions } from '@d2lang/d2';
-export { indexShapeSources, parseSourceRange, type SourceRange, type ShapeSource } from './source';
-export { lint, type LintRule, type LintDiagnostic, type LintOptions, type LintResult, type BoundaryEvaluation } from './lint';
+export { indexShapeSources, parseSourceRange, shapeRanges, type SourceRange, type ShapeSource } from './source';
+export { lint, boardLabel, type LintRule, type LintDiagnostic, type LintOptions, type LintResult, type BoundaryEvaluation } from './lint';
 
 export interface Board {
   id: string;

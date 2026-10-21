@@ -1,7 +1,7 @@
 import { D2 } from '@d2lang/d2';
 import { readFileSync } from 'node:fs';
 import { afterAll, expect, it } from 'vitest';
-import { lint } from '../src';
+import { boardLabel, indexBoards, lint } from '../src';
 
 const d2 = new D2();
 afterAll(() => d2.dispose());
@@ -92,6 +92,8 @@ it('finds links D2 silently removes, permits cycles/external links, and flags on
   const result = lint(compiled);
   expect(result.diagnostics.filter((item) => item.rule === 'dangling-link').map((item) => item.board))
     .toEqual(['root', 'root.layers.A']);
+  // Child boards' expanded ASTs have file-less ranges; fall back to the shape's source.
+  expect(result.diagnostics.filter((item) => item.rule === 'dangling-link').map((item) => item.range?.split(',')[0])).toEqual(['index', 'index']);
   expect(result.diagnostics.filter((item) => item.rule === 'orphan-board').map((item) => item.board))
     .toEqual(['root.layers.unused']);
   expect(result.diagnostics.some((item) => item.rule === 'missing-backlink')).toBe(false);
@@ -103,7 +105,19 @@ it('handles dangling connection links and last-assignment overrides', async () =
   const compiled = await compile('a.link: layers.missing\na.link: https://example.com\na -> b: {link: layers.absent}');
   const result = lint(compiled);
   expect(result.diagnostics.filter((item) => item.rule === 'dangling-link')).toHaveLength(1);
-  expect(result.diagnostics[0].message).toContain('root.layers.absent');
+  expect(result.diagnostics[0]).toMatchObject({ target: 'root.layers.absent', message: 'Link targets missing board "Root > absent".' });
+});
+
+it('locates boundary diagnostics at the shape or port and names boards by their trail', async () => {
+  const result = strictLint(await compile(fixture('mismatched')));
+  const ranges = result.diagnostics.map((item) => item.range);
+  expect(ranges.every((range) => /^index,\d+:\d+:\d+-/.test(range ?? ''))).toBe(true);
+  expect(result.diagnostics.find((item) => item.shape === 'wrong')).toMatchObject({ board: 'root.layers.checkout', range: expect.stringMatching(/^index,7:4:/) });
+  expect(result.diagnostics[0].message).toBe('"checkout" needs a zf-in port named "a" in "Root > checkout".');
+  const boards = indexBoards((await compile('layers: {a: {layers: {"b.c": {x}}}}\nscenarios: {s: {y}}')).diagram);
+  expect(boardLabel('root.layers.a.layers.b.c', boards)).toBe('Root > a > b.c');
+  expect(boardLabel('root.layers.a.layers.gone.scenarios.x', boards)).toBe('Root > a > gone > x');
+  expect(boardLabel('root.scenarios.s', boards)).toBe('Root > s');
 });
 
 it('does not require boundary ports for sibling links or scenario switches', async () => {
