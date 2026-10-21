@@ -6,8 +6,11 @@
 Build flows with a form or edit D2 source, explore drill-down diagrams, and export a navigable HTML file that
 works offline. Diagrams compile locally in your browser.
 
-**Status:** early development. Zoomflow runs from source and is not published to npm;
-expect breaking changes.
+**[Try it in your browser](https://sglavoie.github.io/zoomflow/)**: no install needed.
+Ask AI needs a local server, so it is available only when you [run locally](#run-locally).
+
+**Status:** early development; expect breaking changes. The CLI runs from source and
+is not published to npm.
 
 ![Zoomflow with a drill-down diagram beside its D2 source](docs/images/workspace.png)
 
@@ -68,7 +71,8 @@ pnpm build
 
 Install test browsers with `pnpm exec playwright install`. CLI export tests also
 require native D2 v0.9.0; see the [CLI setup](docs/cli.md). Production output is in
-`apps/web/dist`.
+`apps/web/dist`;
+every push to `main` that passes the application checks deploys it to GitHub Pages.
 
 ## Contributing and security
 
