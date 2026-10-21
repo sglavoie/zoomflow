@@ -36,6 +36,8 @@ export function setupViewport(stage: HTMLElement, host: HTMLElement) {
   let preferGuidance = false;
   stage.after(controls);
   host.append(hint);
+  const teardown = new AbortController();
+  const signal = teardown.signal;
 
   let svg: SVGSVGElement | null = null;
   let base: Box | null = null;
@@ -56,22 +58,35 @@ export function setupViewport(stage: HTMLElement, host: HTMLElement) {
   let spaceHeld = false;
   let hovered = false;
 
-  stage.addEventListener('pointerenter', () => { hovered = true; });
-  stage.addEventListener('pointerleave', () => { hovered = false; });
-  window.addEventListener('keydown', (event) => {
+  stage.addEventListener('pointerenter', () => { hovered = true; }, { signal });
+  stage.addEventListener('pointerleave', () => { hovered = false; }, { signal });
+  /** Page-level key listeners, released while a hidden viewport is suspended. */
+  let windowEvents: AbortController | undefined;
+  function listenToWindow() {
+    if (windowEvents || signal.aborted) return;
+    windowEvents = new AbortController();
+    const options = { signal: windowEvents.signal };
+    window.addEventListener('keydown', onKeyDown, options);
+    window.addEventListener('keyup', onKeyUp, options);
+    window.addEventListener('blur', releaseSpace, options);
+  }
+  function releaseSpace() { spaceHeld = false; stage.classList.remove('zf-pan-ready'); }
+  function onKeyDown(event: KeyboardEvent) {
     if (event.code !== 'Space' || event.repeat || event.target instanceof Element &&
       event.target.closest('button, [role="button"], input, textarea, select, [contenteditable="true"]')) return;
+    // A hidden stage may never receive pointerleave; it must not claim Space page-wide.
+    if (!stage.getClientRects().length) { hovered = false; return; }
     if (Math.abs(scale() - 1) <= zoomEpsilon || !hovered && !stage.contains(document.activeElement)) return;
     event.preventDefault();
     spaceHeld = true;
     stage.classList.add('zf-pan-ready');
-  });
-  window.addEventListener('keyup', (event) => {
+  }
+  function onKeyUp(event: KeyboardEvent) {
     if (event.code !== 'Space') return;
-    spaceHeld = false;
-    stage.classList.remove('zf-pan-ready');
-  });
-  window.addEventListener('blur', () => { spaceHeld = false; stage.classList.remove('zf-pan-ready'); });
+    releaseSpace();
+  }
+  listenToWindow();
+  signal.addEventListener('abort', () => windowEvents?.abort());
 
   function scale() { return base && box ? base.width / box.width : 1; }
   function updateControls() {
@@ -177,7 +192,7 @@ export function setupViewport(stage: HTMLElement, host: HTMLElement) {
     stage.tabIndex = target ? -1 : 0;
     for (const node of targets) node.setAttribute('tabindex', node === target ? '0' : '-1');
     if (target) reveal([target]);
-  });
+  }, { signal });
   stage.addEventListener('keydown', (event) => {
     if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey ||
       !['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End'].includes(event.key)) return;
@@ -202,8 +217,10 @@ export function setupViewport(stage: HTMLElement, host: HTMLElement) {
       next = candidates[0]?.node ?? active;
     }
     if (next) { reveal([next]); next.focus({ preventScroll: true }); }
-  });
-  new ResizeObserver(() => svg?.dispatchEvent(new Event('zf-viewportchange'))).observe(stage);
+  }, { signal });
+  const resize = new ResizeObserver(() => svg?.dispatchEvent(new Event('zf-viewportchange')));
+  resize.observe(stage);
+  signal.addEventListener('abort', () => resize.disconnect());
   function fittedBox(element: SVGSVGElement, fallback: Box): Box {
     const graph = element.querySelector<SVGSVGElement>(':scope > svg');
     const matrix = element.getScreenCTM();
@@ -254,7 +271,7 @@ export function setupViewport(stage: HTMLElement, host: HTMLElement) {
     resetFocus();
     svg?.dispatchEvent(new Event('zf-viewportchange'));
   }
-  stage.addEventListener('zf-boardchange', reset);
+  stage.addEventListener('zf-boardchange', reset, { signal });
   reset();
   out.addEventListener('click', () => zoom(1 / 1.5));
   inside.addEventListener('click', () => zoom(1.5));
@@ -269,7 +286,7 @@ export function setupViewport(stage: HTMLElement, host: HTMLElement) {
     if (Math.max(minZoom, Math.min(maxZoom, scale() * factor)) === scale()) return;
     event.preventDefault();
     zoom(factor, event.clientX, event.clientY);
-  }, { passive: false });
+  }, { passive: false, signal });
   stage.addEventListener('pointerdown', (event) => {
     const forcePan = event.pointerType === 'mouse' && Math.abs(scale() - 1) > zoomEpsilon && (spaceHeld || event.button === 1);
     if (!svg || !(event.target instanceof Element) || !svg.contains(event.target) ||
@@ -278,7 +295,7 @@ export function setupViewport(stage: HTMLElement, host: HTMLElement) {
     if (forcePan) event.preventDefault();
     pointers.set(event.pointerId, { x: event.clientX, y: event.clientY, startX: event.clientX, startY: event.clientY });
     stage.setPointerCapture(event.pointerId);
-  });
+  }, { signal });
   stage.addEventListener('pointermove', (event) => {
     if (!pointers.has(event.pointerId)) return;
     const before = [...pointers.values()];
@@ -298,7 +315,7 @@ export function setupViewport(stage: HTMLElement, host: HTMLElement) {
       moved = true;
     }
     if (moved) stage.classList.add('zf-panning');
-  });
+  }, { signal });
   function finish(event: PointerEvent) {
     if (!pointers.has(event.pointerId)) return;
     pointers.delete(event.pointerId);
@@ -312,16 +329,31 @@ export function setupViewport(stage: HTMLElement, host: HTMLElement) {
       panGesture = false;
     }
   }
-  stage.addEventListener('pointerup', finish);
-  stage.addEventListener('pointercancel', finish);
+  stage.addEventListener('pointerup', finish, { signal });
+  stage.addEventListener('pointercancel', finish, { signal });
   stage.addEventListener('click', (event) => {
     if (!suppressClick) return;
     event.preventDefault();
     event.stopImmediatePropagation();
     suppressClick = false;
-  }, { capture: true });
+  }, { capture: true, signal });
+  /** Release page-level listeners and controls; Viewer.destroy() triggers this through `zf-destroy`. */
+  function destroy() {
+    teardown.abort();
+    controls.remove();
+    hint.remove();
+    stage.classList.remove('zf-pan-ready', 'zf-panning');
+  }
+  stage.addEventListener('zf-destroy', destroy, { signal });
+  /** Release page-level listeners while the viewport is hidden; Viewer.suspend() and resume() forward here. */
+  function suspend() { windowEvents?.abort(); windowEvents = undefined; releaseSpace(); hovered = false; }
+  stage.addEventListener('zf-suspend', suspend, { signal });
+  stage.addEventListener('zf-resume', listenToWindow, { signal });
   return {
     reveal,
+    destroy,
+    suspend,
+    resume: listenToWindow,
     setGuidance(text: string, priority = false) { guidance = text; preferGuidance = priority; updateControls(); },
     refresh() { if (activeKey) reset(); },
     checkpoint(key: string) {
@@ -349,5 +381,4 @@ export function setupViewport(stage: HTMLElement, host: HTMLElement) {
       if (documentKey === key) activeKey = undefined;
     },
   };
-
 }

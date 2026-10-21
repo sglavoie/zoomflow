@@ -24,3 +24,21 @@ export function simplifyTrail(visits: readonly string[]): string[] {
   }
   return trail;
 }
+
+/** Resolve a route to the nearest existing board hash, walking up its path. */
+export function resolveRouteHash(hash: string, exists: (hash: string) => boolean): string {
+  let current = hash || '#/';
+  while (!exists(current) && current !== '#/') {
+    current = current.slice(0, current.lastIndexOf('/')) || '#/';
+    if (current === '#') current = '#/';
+  }
+  return current;
+}
+
+/** Describe a deep link that fell back to an ancestor board; empty when it resolved exactly. */
+export function routeFallbackNotice(requested: string, resolved: string, name: string): string {
+  if ((requested || '#/') === resolved) return '';
+  let path = requested.replace(/^#\/?/, '');
+  try { path = decodeURIComponent(path); } catch { /* Keep the raw path. */ }
+  return `Board "${path}" not found; showing ${name}`;
+}

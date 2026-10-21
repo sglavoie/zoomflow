@@ -1,7 +1,7 @@
 import { classifyHref, indexBoards, parentContext, type Board, type Diagram, type LintDiagnostic, type ShapeSource } from '@zoomflow/core';
 import { restoreMissingLinks } from './missing-links';
 import { decorateLinks } from './link-cues';
-import { renderParentContext, simplifyTrail } from './navigation';
+import { renderParentContext, resolveRouteHash, routeFallbackNotice, simplifyTrail } from './navigation';
 import { setupBreadcrumbs } from './breadcrumbs';
 
 export type RenderBoard = (target: string) => Promise<string>;
@@ -37,6 +37,7 @@ export class Viewer {
   private styles = new WeakMap<Element, string>();
   private transitions = new Set<Animation>();
   private readonly events = new AbortController();
+  private keys?: AbortController;
   private readonly history: boolean;
   private memoryRoute: ViewerRoute = { hash: '#/' };
 
@@ -63,17 +64,36 @@ export class Viewer {
       if (event.key === 'Enter') this.follow(event);
     }, options);
     if (this.history) {
-      window.addEventListener('hashchange', () => void this.fromLocation(), options);
-      window.addEventListener('popstate', () => void this.fromLocation(), options);
+      // Traversals fire popstate then hashchange; render each history step once.
+      let popped = false;
+      window.addEventListener('popstate', () => { popped = true; void this.fromLocation(); }, options);
+      window.addEventListener('hashchange', () => { if (!popped) void this.fromLocation(); popped = false; }, options);
     }
-    window.addEventListener('keydown', (event) => {
-      if (event.defaultPrevented || this.settings.active?.() === false || event.altKey || event.ctrlKey || event.metaKey ||
-        (event.target instanceof Element && event.target.closest('input, textarea, select, [contenteditable="true"]'))) return;
-      if (event.key === 'Escape' || event.key === 'Backspace') {
-        const parent = this.boards.get(this.current)?.parent;
-        if (parent) { event.preventDefault(); void this.navigate(parent); }
-      }
-    }, options);
+    this.resume();
+  }
+
+  private readonly goUp = (event: KeyboardEvent) => {
+    if (event.defaultPrevented || this.settings.active?.() === false || event.altKey || event.ctrlKey || event.metaKey ||
+      (event.target instanceof Element && event.target.closest('input, textarea, select, [contenteditable="true"]'))) return;
+    if (event.key === 'Escape' || event.key === 'Backspace') {
+      const parent = this.boards.get(this.current)?.parent;
+      if (parent) { event.preventDefault(); void this.navigate(parent); }
+    }
+  };
+
+  /** Release page-level key listeners while the viewer is hidden, including an attached viewport's. */
+  suspend() {
+    this.keys?.abort();
+    this.keys = undefined;
+    this.stage.dispatchEvent(new Event('zf-suspend'));
+  }
+
+  /** Listen for page-level keys again after `suspend`. */
+  resume() {
+    if (this.keys || this.events.signal.aborted) return;
+    this.keys = new AbortController();
+    window.addEventListener('keydown', this.goUp, { signal: this.keys.signal });
+    this.stage.dispatchEvent(new Event('zf-resume'));
   }
 
   setMessage(text: string, error = false) {
@@ -145,17 +165,12 @@ export class Viewer {
   private async fromLocation(preserveViewport = false) {
     if (!this.boards.size) return;
     const route = this.route;
-    let hash = route.hash || '#/';
-    let board: Board | undefined;
-    while (!(board = [...this.boards.values()].find((item) => item.hash === hash)) && hash !== '#/') {
-      hash = hash.slice(0, hash.lastIndexOf('/')) || '#/';
-      if (hash === '#') hash = '#/';
-    }
-    board ??= this.boards.get('root')!;
+    const byHash = new Map([...this.boards.values()].map((item) => [item.hash, item]));
+    const board = byHash.get(resolveRouteHash(route.hash, (hash) => byHash.has(hash))) ?? this.boards.get('root')!;
     const saved = route.trail;
     const trail = Array.isArray(saved) && saved.length > 0 && saved.at(-1) === board.id &&
       saved.every((id) => typeof id === 'string' && this.boards.has(id)) ? saved as string[] : this.ancestors(board.id);
-    await this.navigate(board.id, 'replace', trail, preserveViewport);
+    await this.navigate(board.id, 'replace', trail, preserveViewport, routeFallbackNotice(route.hash, board.hash, board.name));
   }
 
   private svgElement(svg: string, board: Board): SVGElement {
@@ -230,7 +245,7 @@ export class Viewer {
     animation.cancel();
   }
 
-  async navigate(id: string, mode: 'push' | 'replace' = 'push', trail?: string[], preserveViewport = false) {
+  async navigate(id: string, mode: 'push' | 'replace' = 'push', trail?: string[], preserveViewport = false, notice = '') {
     const board = this.boards.get(id);
     if (!board) return;
     const revision = ++this.revision;
@@ -282,7 +297,7 @@ export class Viewer {
       }
       else if (keepFocus && focusCrumb) this.crumbs.querySelector<HTMLButtonElement>('button[aria-current]')?.focus({ preventScroll: true });
       renderParentContext(this.context, parentContext(board, this.boards));
-      this.setMessage('');
+      this.setMessage(notice);
     } catch (error) {
       if (revision === this.revision) { this.cancelTransition(); this.setMessage(String(error), true); }
     } finally {
@@ -296,5 +311,6 @@ export class Viewer {
       activate: () => { void this.navigate(id, 'push', trail.slice(0, index + 1)); } })));
   }
 
-  destroy() { ++this.revision; this.events.abort(); this.breadcrumbs.destroy(); this.cancelTransition(); }
+  /** Also tears down a viewport attached to this stage with setupViewport(). */
+  destroy() { ++this.revision; this.stage.dispatchEvent(new Event('zf-destroy')); this.events.abort(); this.keys?.abort(); this.breadcrumbs.destroy(); this.cancelTransition(); }
 }

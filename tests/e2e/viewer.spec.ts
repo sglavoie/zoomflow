@@ -1,16 +1,8 @@
 import { selectMenuOption, downloadExport } from './menu';
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type BrowserContext, type Page, type TestInfo } from '@playwright/test';
 import { pathToFileURL } from 'node:url';
 import { readFileSync } from 'node:fs';
-
-async function board(page: Page, id: string) {
-  await expect(page.locator('.zf-stage')).toHaveAttribute('data-board', id);
-  await expect(page.locator('#viewer')).toHaveAttribute('aria-busy', 'false');
-}
-async function drill(page: Page, id: string) {
-  await page.locator(`.zf-stage a[href="${id}"]`).click();
-  await board(page, id);
-}
+import { board, drill } from './helpers';
 
 for (const offline of [false, true]) {
   test(`port-free layers infer parent context ${offline ? 'in offline HTML' : 'in the viewer'}`, async ({ page, context }, info) => {
@@ -225,8 +217,10 @@ test('handles external links, theme changes, invalid files and missing deep link
   await page.goto('/#/checkout/missing');
   await board(page, 'root.layers.checkout');
   await expect(page).toHaveURL(/#\/checkout$/);
+  await expect(page.locator('.zf-message')).toHaveText('Board "checkout/missing" not found; showing checkout');
   await page.keyboard.press('Escape');
   await board(page, 'root');
+  await expect(page.locator('.zf-message')).toBeEmpty();
   const external = page.locator('.zf-stage a[href="https://d2lang.com/tour/intro/"]');
   await expect(external).toHaveAttribute('target', '_blank');
   await expect(external).toHaveAttribute('rel', 'noopener noreferrer');
@@ -266,4 +260,96 @@ layers: {empty: {}}`) });
   await board(page, 'root');
   await drill(page, 'root.layers.empty');
   await expect(page.locator('.zf-stage')).toContainText('This board is empty.');
+});
+
+async function openViewer(page: Page, context: BrowserContext, info: TestInfo, offline: boolean, hash = '') {
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.goto('/');
+  await board(page, 'root');
+  if (offline) {
+    await selectMenuOption(page, '#export-format', 'html');
+    const pending = page.waitForEvent('download');
+    await downloadExport(page);
+    const path = info.outputPath('history.html');
+    await (await pending).saveAs(path);
+    await context.setOffline(true);
+    await page.goto(pathToFileURL(path).href + hash);
+  } else if (hash) await page.goto(`/${hash}`);
+}
+
+for (const offline of [false, true]) {
+  test(`same-board navigation keeps history and each Back renders once ${offline ? 'in offline HTML' : 'in the viewer'}`, async ({ page, context }, info) => {
+    await openViewer(page, context, info, offline);
+    const stage = page.locator('.zf-stage').first();
+    const crumbs = page.getByRole('navigation', { name: 'Breadcrumb' });
+    await page.locator('.zf-stage a[href="root.layers.checkout"]').click();
+    await expect(stage).toHaveAttribute('data-board', 'root.layers.checkout');
+    const length = await page.evaluate(() => history.length);
+    await crumbs.getByRole('button', { name: 'checkout', exact: true }).click();
+    await crumbs.getByRole('button', { name: 'checkout', exact: true }).click();
+    await expect(stage).toHaveAttribute('data-board', 'root.layers.checkout');
+    expect(await page.evaluate(() => history.length)).toBe(length);
+    await crumbs.getByRole('button', { name: 'Root', exact: true }).click();
+    await expect(stage).toHaveAttribute('data-board', 'root');
+    expect(await page.evaluate(() => history.length)).toBe(length + 1);
+
+    await stage.evaluate((element) => {
+      (window as unknown as { renders: number }).renders = 0;
+      element.addEventListener('zf-boardchange', () => { (window as unknown as { renders: number }).renders++; });
+    });
+    const renders = () => page.evaluate(() => new Promise<number>((resolve) =>
+      setTimeout(() => resolve((window as unknown as { renders: number }).renders), 300)));
+    await page.goBack();
+    await expect(stage).toHaveAttribute('data-board', 'root.layers.checkout');
+    expect(await renders()).toBe(1);
+    await page.goBack();
+    await expect(stage).toHaveAttribute('data-board', 'root');
+    expect(await renders()).toBe(2);
+    await page.goForward();
+    await expect(stage).toHaveAttribute('data-board', 'root.layers.checkout');
+    expect(await renders()).toBe(3);
+  });
+
+  test(`unknown deep links name the missing board ${offline ? 'in offline HTML' : 'in the viewer'}`, async ({ page, context }, info) => {
+    await openViewer(page, context, info, offline, '#/nope/deeper');
+    const stage = page.locator('.zf-stage').first();
+    const message = page.locator('.zf-message').first();
+    await expect(stage).toHaveAttribute('data-board', 'root');
+    await expect(message).toHaveText('Board "nope/deeper" not found; showing Root');
+    await expect(message).toHaveAttribute('role', 'status');
+    expect(await page.evaluate(() => location.hash)).toBe('#/');
+    await page.locator('.zf-stage a[href="root.layers.checkout"]').click();
+    await expect(stage).toHaveAttribute('data-board', 'root.layers.checkout');
+    await expect(message).toBeEmpty();
+  });
+}
+
+test('destroying a viewer releases its viewport listeners and controls', async ({ page }) => {
+  await page.goto('/');
+  await board(page, 'root');
+  const result = await page.evaluate(async (url) => {
+    const { Viewer, setupViewport } = await import(url);
+    const host = document.createElement('div');
+    host.style.cssText = 'position: fixed; inset: 0; width: 400px; height: 300px';
+    document.body.append(host);
+    const viewer = new Viewer(host, { history: false });
+    setupViewport(viewer.stage, host);
+    viewer.stage.style.cssText = 'width: 400px; height: 300px';
+    viewer.stage.innerHTML = '<svg viewBox="0 0 100 100" width="400" height="300"><rect width="100" height="100"/></svg>';
+    viewer.stage.dispatchEvent(new Event('zf-boardchange'));
+    host.querySelector<HTMLButtonElement>('.zf-zoom-controls button[aria-label="Zoom in"]')!.click();
+    viewer.stage.focus();
+    const space = () => {
+      const event = new KeyboardEvent('keydown', { code: 'Space', key: ' ', bubbles: true, cancelable: true });
+      document.body.dispatchEvent(event);
+      return event.defaultPrevented;
+    };
+    const before = space();
+    viewer.destroy();
+    const after = space();
+    const controls = host.querySelectorAll('.zf-zoom-controls, .zf-pan-hint').length;
+    host.remove();
+    return { before, after, controls };
+  }, `/@fs${process.cwd()}/packages/viewer/src/index.ts`);
+  expect(result).toEqual({ before: true, after: false, controls: 0 });
 });

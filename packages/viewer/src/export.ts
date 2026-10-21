@@ -1,6 +1,6 @@
 import type { ExportBoard } from '@zoomflow/core';
 import { restoreMissingLinks } from './missing-links';
-import { renderParentContext, simplifyTrail } from './navigation';
+import { renderParentContext, resolveRouteHash, routeFallbackNotice, simplifyTrail } from './navigation';
 import { setupViewport } from './viewport';
 import { decorateLinks } from './link-cues';
 import { setupBreadcrumbs } from './breadcrumbs';
@@ -91,7 +91,7 @@ export async function rasterizeSvg(svg: string): Promise<Blob> {
 // It consumes the same board IDs, hashes, parent and visited-trail model as Viewer.
 function offlineViewer(restoreLinks: typeof restoreMissingLinks, normalizeTrail: typeof simplifyTrail,
   renderContext: typeof renderParentContext, makeViewport: typeof setupViewport, decorate: typeof decorateLinks,
-  makeBreadcrumbs: typeof setupBreadcrumbs) {
+  makeBreadcrumbs: typeof setupBreadcrumbs, resolveRoute: typeof resolveRouteHash, fallbackNotice: typeof routeFallbackNotice) {
   const boards: ExportBoard[] = JSON.parse(document.getElementById('zoomflow-data')!.textContent!);
   const byId = new Map(boards.map((board) => [board.id, board]));
   const stage = document.querySelector<HTMLElement>('.zf-stage')!;
@@ -110,12 +110,12 @@ function offlineViewer(restoreLinks: typeof restoreMissingLinks, normalizeTrail:
   function ancestors(board: ExportBoard): string[] {
     return board.parent ? [...ancestors(byId.get(board.parent)!), board.id] : [board.id];
   }
-  function show(board: ExportBoard, visits: string[], replace = false) {
+  function show(board: ExportBoard, visits: string[], replace = false, notice = '') {
     const focusStage = stage.contains(document.activeElement);
     const focusCrumb = crumbs.contains(document.activeElement);
     current = board;
     trail = normalizeTrail(visits);
-    message.textContent = '';
+    message.textContent = notice;
     message.setAttribute('role', 'status');
     if (board.empty) {
       stage.textContent = 'This board is empty.';
@@ -158,19 +158,15 @@ function offlineViewer(restoreLinks: typeof restoreMissingLinks, normalizeTrail:
       activate: () => show(byId.get(id)!, visited.slice(0, index + 1)) })));
     if (focusStage) stage.focus({ preventScroll: true });
     else if (focusCrumb) crumbs.querySelector<HTMLButtonElement>('button[aria-current]')?.focus({ preventScroll: true });
-    history[replace ? 'replaceState' : 'pushState']({ zoomflowTrail: trail }, '', board.hash);
+    history[replace || location.hash === board.hash ? 'replaceState' : 'pushState']({ zoomflowTrail: trail }, '', board.hash);
   }
   function restore() {
-    let hash = location.hash || '#/';
-    let board = boards.find((item) => item.hash === hash);
-    while (!board && hash !== '#/') {
-      hash = hash.slice(0, hash.lastIndexOf('/')) || '#/';
-      if (hash === '#') hash = '#/';
-      board = boards.find((item) => item.hash === hash);
-    }
-    board ??= boards[0];
+    const requested = location.hash;
+    const hash = resolveRoute(requested, (item) => boards.some((entry) => entry.hash === item));
+    const board = boards.find((item) => item.hash === hash) ?? boards[0];
     const saved = history.state?.zoomflowTrail;
-    show(board, Array.isArray(saved) && saved.at(-1) === board.id && saved.every((id) => byId.has(id)) ? saved : ancestors(board), true);
+    show(board, Array.isArray(saved) && saved.at(-1) === board.id && saved.every((id) => byId.has(id)) ? saved : ancestors(board), true,
+      fallbackNotice(requested, board.hash, board.name));
   }
   function follow(event: MouseEvent | KeyboardEvent) {
     const link = event.target instanceof Element ? event.target.closest('a') : null;
@@ -190,11 +186,13 @@ function offlineViewer(restoreLinks: typeof restoreMissingLinks, normalizeTrail:
       show(byId.get(current.parent)!, [...trail, current.parent]);
     }
   });
-  window.addEventListener('popstate', restore);
-  window.addEventListener('hashchange', restore);
+  // Traversals fire popstate then hashchange; render each history step once.
+  let popped = false;
+  window.addEventListener('popstate', () => { popped = true; restore(); });
+  window.addEventListener('hashchange', () => { if (!popped) restore(); popped = false; });
   restore();
 }
 
 export function offlineViewerScript(): string {
-  return `(${offlineViewer.toString()})(${restoreMissingLinks.toString()}, ${simplifyTrail.toString()}, ${renderParentContext.toString()}, ${setupViewport.toString()}, ${decorateLinks.toString()}, ${setupBreadcrumbs.toString()});`;
+  return `(${offlineViewer.toString()})(${restoreMissingLinks.toString()}, ${simplifyTrail.toString()}, ${renderParentContext.toString()}, ${setupViewport.toString()}, ${decorateLinks.toString()}, ${setupBreadcrumbs.toString()}, ${resolveRouteHash.toString()}, ${routeFallbackNotice.toString()});`;
 }
