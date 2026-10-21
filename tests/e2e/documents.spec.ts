@@ -1,0 +1,355 @@
+import { expect, test } from '@playwright/test';
+import { readFile } from 'node:fs/promises';
+import { readFileSync } from 'node:fs';
+import { selectMenuOption, downloadExport, downloadSource, openDownloads } from './menu';
+import { source, previewReady, stubAiStatus, chooseExample } from './helpers';
+
+/** Documents: drafts, recovery, saving to disk, downloads and removal with undo. */
+
+test('draft recovers after reload and D2 source downloads', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.locator('.zf-stage > svg')).toBeVisible();
+  await page.getByRole('textbox', { name: 'D2 source' }).fill('draft: Recovered');
+  await expect(page.locator('#draft-status')).toHaveAttribute('data-recovery', 'saved');
+  await page.reload();
+  await expect(page.getByRole('textbox', { name: 'D2 source' })).toContainText('draft: Recovered');
+  await expect(page.locator('.zf-stage')).toContainText('Recovered');
+  const [download] = await Promise.all([
+    page.waitForEvent('download'),
+    downloadSource(page),
+  ]);
+  expect(download.suggestedFilename()).toBe('order.d2');
+  expect(await readFile(await download.path(), 'utf8')).toBe('draft: Recovered');
+  await expect(page.locator('#draft-status')).toContainText('Source download started');
+  await page.reload();
+  await expect(page.getByRole('textbox', { name: 'D2 source' })).toContainText('draft: Recovered');
+  await expect(page.locator('#draft-status')).toHaveAttribute('data-recovery', 'saved');
+  await page.locator('#file').setInputFiles({ name: 'custom.d2', mimeType: 'text/plain', buffer: Buffer.from('uploaded: Original') });
+  await page.getByRole('textbox', { name: 'D2 source' }).fill('uploaded: Edited');
+  await page.reload();
+  await expect(page.locator('#filename')).toHaveText('custom.d2');
+  await expect(page.getByRole('textbox', { name: 'D2 source' })).toContainText('uploaded: Edited');
+  await expect(page.locator('#draft-status')).toHaveAttribute('data-recovery', 'saved');
+});
+
+test('uploaded drafts can be removed without affecting other diagrams', async ({ page }) => {
+  await page.goto('/');
+  await page.locator('#file').setInputFiles({ name: 'old.d2', mimeType: 'text/plain', buffer: Buffer.from('old: Draft') });
+  await page.locator('#file').setInputFiles({ name: 'active.d2', mimeType: 'text/plain', buffer: Buffer.from('active: Keep') });
+  await page.locator('#example-picker summary').click();
+  await page.getByRole('button', { name: 'Remove old.d2 draft' }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Remove draft', exact: true }).click();
+  await expect(page.locator('#filename')).toHaveText('active.d2');
+  await expect(page.locator('.zf-stage')).toContainText('Keep');
+  await page.locator('#example-picker summary').click();
+  await page.getByRole('button', { name: 'Remove active.d2 draft' }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Remove draft', exact: true }).click();
+  await expect(page.locator('#filename')).toHaveText('order.d2');
+  await page.reload();
+  await page.locator('#example-picker summary').click();
+  await expect(page.getByRole('button', { name: 'Remove old.d2 draft' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Remove active.d2 draft' })).toHaveCount(0);
+});
+
+test('file drops reject other formats and leave ordinary text drops alone', async ({ page }) => {
+  await page.goto('/');
+  const textPrevented = await page.evaluate(() => {
+    const event = new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: new DataTransfer() });
+    document.dispatchEvent(event);
+    return event.defaultPrevented;
+  });
+  expect(textPrevented).toBe(false);
+  await page.evaluate(() => {
+    const transfer = new DataTransfer();
+    transfer.items.add(new File(['not D2'], 'notes.txt', { type: 'text/plain' }));
+    document.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: transfer }));
+  });
+  await expect(page.locator('#activity-status')).toContainText('Choose a .d2 file');
+  await expect(page.locator('#file-status')).toBeVisible();
+  await expect(page.locator('#filename')).toHaveText('order.d2');
+});
+
+test('routine editing keeps status copy steady and exposes recovery details without layout movement', async ({ page }) => {
+  await page.goto('/'); await previewReady(page);
+  const before = await page.locator('#editor').boundingBox();
+  await source(page).fill('a: First edit');
+  await expect(page.locator('#draft-status')).toHaveText('File has unsaved changes');
+  await expect(page.locator('#draft-status')).toHaveAttribute('data-recovery', 'saved');
+  await expect(page.locator('#draft-status')).toHaveAttribute('title', /Browser draft saved/);
+  await page.evaluate(() => {
+    const el = document.querySelector('#draft-status')!;
+    const updates: string[] = [];
+    (window as typeof window & { statusUpdates: string[] }).statusUpdates = updates;
+    new MutationObserver(() => updates.push(el.textContent!)).observe(el, { childList: true, subtree: true });
+  });
+  await source(page).press('End');
+  await source(page).pressSequentially(' updated', { delay: 80 });
+  await expect(page.locator('#draft-status')).toHaveAttribute('data-recovery', 'saved');
+  await previewReady(page);
+  expect(await page.evaluate(() => (window as typeof window & { statusUpdates: string[] }).statusUpdates)).toEqual([]);
+  await expect(page.locator('#preview-status')).toBeHidden();
+  await expect(page.locator('#lint-summary')).toBeHidden();
+  expect((await page.locator('#editor').boundingBox())!.y).toBe(before!.y);
+});
+
+test('saving an example creates a named copy with its history, export names and reload identity', async ({ page }) => {
+  await page.addInitScript(() => {
+    const target = window as typeof window & { showSaveFilePicker?: () => Promise<unknown> };
+    target.showSaveFilePicker = async () => ({ name: 'checkout-design.d2', createWritable: async () => ({
+      write: async () => {}, close: async () => {}, abort: async () => {},
+    }) });
+  });
+  await page.goto('/'); await previewReady(page);
+  const original = await source(page).textContent();
+  await source(page).fill('saved: After');
+  await expect(page.locator('.zf-stage')).toContainText('After'); await previewReady(page);
+  await source(page).press('ControlOrMeta+s');
+  await expect(page.locator('#filename')).toHaveText('checkout-design.d2');
+  await expect(page).toHaveTitle('checkout-design.d2 — Zoomflow');
+  await expect(page.locator('#draft-status')).toHaveText('Saved to file');
+  await source(page).press('ControlOrMeta+z');
+  await expect(source(page)).toHaveText(original!);
+  await expect(page).toHaveTitle('• checkout-design.d2 — Zoomflow');
+  await source(page).press('ControlOrMeta+Shift+z');
+  await expect(source(page)).toHaveText('saved: After');
+  await expect(page.locator('.zf-stage')).toContainText('After');
+  await previewReady(page);
+  await selectMenuOption(page, '#export-format', 'svg');
+  const pending = page.waitForEvent('download');
+  await downloadExport(page);
+  expect((await pending).suggestedFilename()).toBe('checkout-design-root.svg');
+  await page.locator('#example-picker summary').click();
+  await expect(page.locator('#draft-options')).toContainText('Saved copy of Order flow');
+  await page.getByRole('button', { name: 'Restore original example: Order flow' }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Restore example', exact: true }).click();
+  await expect(source(page)).toHaveText('saved: After');
+  await page.reload(); await previewReady(page);
+  await expect(page.locator('#filename')).toHaveText('checkout-design.d2');
+  await expect(page).toHaveTitle('checkout-design.d2 — Zoomflow');
+  await expect(source(page)).toHaveText('saved: After');
+});
+
+test('a slow save preserves later edits and does not rename a document opened in the meantime', async ({ page }) => {
+  await page.addInitScript(() => {
+    (window as any).showSaveFilePicker = async () => ({ name: 'saved-copy.d2', createWritable: async () => ({
+      write: async (text: string) => { (window as any).written = text; await new Promise<void>((resolve) => { (window as any).finishSave = resolve; }); },
+      close: async () => {}, abort: async () => {},
+    }) });
+  });
+  await page.goto('/'); await previewReady(page);
+  await page.locator('#file').setInputFiles({ name: 'original.d2', mimeType: 'text/plain', buffer: Buffer.from('a: Original') });
+  await expect(page.locator('#filename')).toHaveText('original.d2'); await previewReady(page);
+  await source(page).fill('a: Saved revision');
+  await source(page).press('ControlOrMeta+s');
+  await expect.poll(() => page.evaluate(() => typeof (window as any).finishSave)).toBe('function');
+  await expect(page.locator('#activity-status')).toHaveText('Saving file…');
+  await source(page).fill('a: Later edit');
+  await page.locator('#file').setInputFiles({ name: 'unrelated.d2', mimeType: 'text/plain', buffer: Buffer.from('b: Unrelated') });
+  await expect(page.locator('#filename')).toHaveText('unrelated.d2');
+  await page.evaluate(() => (window as any).finishSave());
+  await expect(page.locator('#save-file')).toBeEnabled();
+  await expect(page).toHaveTitle('unrelated.d2 — Zoomflow');
+  await page.locator('#example-picker summary').click();
+  await page.locator('#draft-options .example-option').filter({ hasText: 'saved-copy.d2' }).click();
+  await expect(source(page)).toHaveText('a: Later edit');
+  await expect(page).toHaveTitle('• saved-copy.d2 — Zoomflow');
+  await expect(page.locator('#draft-status')).toHaveText('File has unsaved changes');
+  expect(await page.evaluate(() => (window as any).written)).toBe('a: Saved revision');
+  await page.locator('#example-picker summary').click();
+  await expect(page.locator('#draft-options .example-option')).toHaveCount(2);
+  await expect(page.getByRole('button', { name: 'Remove saved-copy.d2 draft', exact: true })).toBeVisible();
+});
+
+test('canceling a slow file save clears progress and retains the original document identity', async ({ page }) => {
+  await page.addInitScript(() => {
+    (window as any).showSaveFilePicker = async () => ({ name: 'canceled.d2', createWritable: async () => ({
+      write: async () => new Promise((_resolve, reject) => { (window as any).cancelSave = () => reject(new DOMException('Canceled', 'AbortError')); }),
+      close: async () => {}, abort: async () => {},
+    }) });
+  });
+  await page.goto('/'); await previewReady(page);
+  await source(page).fill('a: Keep this');
+  await source(page).press('ControlOrMeta+s');
+  await expect(page.locator('#activity-status')).toHaveText('Saving file…');
+  await page.evaluate(() => (window as any).cancelSave());
+  await expect(page.locator('#activity-status')).toBeHidden();
+  await expect(page.locator('#save-file')).toBeEnabled();
+  await expect(page.locator('#filename')).toHaveText('order.d2');
+  await expect(source(page)).toHaveText('a: Keep this');
+  await expect(page).toHaveTitle('• order.d2 — Zoomflow');
+});
+
+test('same-name documents keep separate undo histories and drafts', async ({ page }) => {
+  await page.goto('/');
+  await previewReady(page);
+  await page.locator('#file').setInputFiles({ name: 'same.d2', mimeType: 'text/plain', buffer: Buffer.from('a: Original A') });
+  await previewReady(page);
+  await source(page).fill('a: Edited A');
+  await previewReady(page);
+  await page.locator('#file').setInputFiles({ name: 'same.d2', mimeType: 'text/plain', buffer: Buffer.from('b: Original B') });
+  await previewReady(page);
+  await source(page).press('ControlOrMeta+z');
+  await expect(source(page)).toHaveText('b: Original B');
+  await source(page).fill('b: Edited B');
+  await previewReady(page);
+  await chooseExample(page, /same\.d2.*Draft 1/);
+  await source(page).press('ControlOrMeta+z');
+  await expect(source(page)).toHaveText('a: Original A');
+  await chooseExample(page, /same\.d2.*Draft 2/);
+  await source(page).press('ControlOrMeta+z');
+  await expect(source(page)).toHaveText('b: Original B');
+});
+
+test('header stays stable while saving and preferences survive reload', async ({ page }) => {
+  await page.setViewportSize({ width: 1024, height: 768 });
+  await page.goto('/');
+  await previewReady(page);
+  const before = await page.locator('header').boundingBox();
+  const title = (await page.locator('header > strong').boundingBox())!;
+  const open = (await page.locator('.file-button').boundingBox())!;
+  const picker = (await page.locator('#example-picker summary').boundingBox())!;
+  const center = (box: { y: number; height: number }) => box.y + box.height / 2;
+  expect(Math.abs(center(title) - center(picker))).toBeLessThan(1);
+  expect(Math.abs(center(open) - center(picker))).toBeLessThan(1);
+  const status = (await page.locator('#draft-status').boundingBox())!;
+  const save = (await page.locator('#save-file').boundingBox())!;
+  expect(status.y).toBeGreaterThanOrEqual(save.y + save.height);
+  const statusRow = (await page.locator('#work-status').boundingBox())!;
+  expect(statusRow.height).toBeLessThanOrEqual(40);
+  expect(status.y).toBeGreaterThanOrEqual(statusRow.y);
+  expect(status.y + status.height).toBeLessThanOrEqual(statusRow.y + statusRow.height);
+  expect(statusRow.y + statusRow.height).toBeLessThanOrEqual((await page.locator('#editor').boundingBox())!.y);
+  await source(page).fill('a: Edited');
+  expect(await page.locator('header').boundingBox()).toEqual(before);
+  await expect(page.locator('#draft-status')).toHaveAttribute('data-recovery', 'saved');
+  expect(await page.locator('header').boundingBox()).toEqual(before);
+  await selectMenuOption(page, '#theme', 'dark');
+  await selectMenuOption(page, '#export-format', 'html');
+  await page.reload();
+  await previewReady(page);
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+  await openDownloads(page);
+  await expect(page.locator('#export-format input[value="html"]')).toBeChecked();
+  await page.locator('#export-format input[value="html"]').press('Escape');
+  await expect(page.locator('#header-more-toggle')).toBeFocused();
+  await expect(page.locator('#header-more-content')).toBeHidden();
+});
+
+test('removed file undo restores its save handle, board view and editor history', async ({ page }) => {
+  await stubAiStatus(page);
+  const text = readFileSync('fixtures/order.d2', 'utf8');
+  await page.addInitScript(text => {
+    const target = window as typeof window & { written?: string; showOpenFilePicker?: () => Promise<unknown[]> };
+    target.showOpenFilePicker = async () => [{ name: 'work.d2', getFile: async () => new File([text], 'work.d2'),
+      createWritable: async () => ({ write: async (value: string) => { target.written = value; }, close: async () => {}, abort: async () => {} }) }];
+  }, text);
+  await page.goto('/'); await previewReady(page);
+  await page.locator('#file').click();
+  await expect(page.locator('#filename')).toHaveText('work.d2'); await previewReady(page);
+  await source(page).fill(`${text}\n# Edited`); await previewReady(page);
+  await page.locator('.zf-stage a[href="root.layers.checkout"]').click();
+  await expect(page.locator('.zf-stage')).toHaveAttribute('data-board', 'root.layers.checkout');
+  await page.getByRole('button', { name: 'Zoom in', exact: true }).click();
+  const box = await page.locator('.zf-stage > svg').getAttribute('viewBox');
+  await page.locator('#example-picker summary').click();
+  await page.getByRole('button', { name: 'Remove work.d2 draft' }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Remove draft', exact: true }).click();
+  await expect(page.locator('#filename')).toHaveText('order.d2'); await previewReady(page);
+  await page.locator('#document-undo').getByRole('button', { name: 'Undo', exact: true }).click();
+  await expect(page.locator('#filename')).toHaveText('work.d2'); await previewReady(page);
+  await expect(page.locator('.zf-stage')).toHaveAttribute('data-board', 'root.layers.checkout');
+  await expect(page.locator('.zf-stage > svg')).toHaveAttribute('viewBox', box!);
+  await source(page).press('ControlOrMeta+s');
+  await expect.poll(() => page.evaluate(() => (window as typeof window & { written?: string }).written)).toBe(`${text}\n# Edited`);
+  await source(page).press('ControlOrMeta+z');
+  await expect(source(page)).not.toContainText('# Edited');
+});
+
+test('undo notices pause while focused and expire without restoring removed drafts', async ({ page }) => {
+  await stubAiStatus(page);
+  await page.goto('/'); await previewReady(page);
+  await page.clock.install();
+  await page.locator('#file').setInputFiles({ name: 'temporary.d2', mimeType: 'text/plain', buffer: Buffer.from('a: Temporary') });
+  await previewReady(page);
+  await page.locator('#example-picker summary').click();
+  await page.getByRole('button', { name: 'Remove temporary.d2 draft' }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Remove draft', exact: true }).click();
+  const notice = page.locator('#document-undo');
+  await notice.getByRole('button', { name: 'Undo', exact: true }).focus();
+  await page.clock.fastForward(31_000);
+  await expect(notice).toBeVisible();
+  await source(page).focus();
+  await page.clock.fastForward(31_000);
+  await expect(notice).toBeHidden();
+  await page.reload(); await previewReady(page);
+  await page.locator('#example-picker summary').click();
+  await expect(page.locator('.example-option').filter({ hasText: 'temporary.d2' })).toHaveCount(0);
+});
+
+test('unsaved marker survives activity, errors and downloads, and follows disk save and undo', async ({ page }) => {
+  await stubAiStatus(page);
+  await page.addInitScript(() => {
+    (window as any).showSaveFilePicker = async () => ({ name: 'kept.d2', createWritable: async () => ({
+      write: async () => {}, close: async () => {}, abort: async () => {},
+    }) });
+  });
+  await page.goto('/'); await previewReady(page);
+  const marker = page.locator('#document-unsaved');
+  await expect(marker).toBeHidden();
+  await source(page).fill('a:{label:Changed}');
+  await expect(marker).toBeVisible();
+  await previewReady(page);
+  await page.locator('#format-source').click();
+  await expect(page.locator('#format-status')).toBeVisible();
+  await expect(marker).toBeVisible();
+  await previewReady(page);
+  await selectMenuOption(page, '#export-format', 'svg');
+  const download = page.waitForEvent('download');
+  await page.locator('#export').click(); await download;
+  await expect(page.locator('#activity-status')).toContainText('Download started');
+  await expect(marker).toBeVisible();
+  await page.locator('#header-more-toggle').click();
+  await source(page).fill('a: {');
+  await expect(page.locator('#compile-error')).toBeVisible();
+  await expect(marker).toBeVisible();
+  await source(page).fill('a: Saved'); await previewReady(page);
+  await page.locator('#save-file').click();
+  await expect(page.locator('#draft-status')).toHaveText('Saved to file');
+  await expect(marker).toBeHidden();
+  await source(page).press('ControlOrMeta+z');
+  await expect(marker).toBeVisible();
+});
+
+test('save shortcut writes to the chosen file and reports disk state beside Save', async ({ page }) => {
+  await page.addInitScript(() => {
+    (window as typeof window & { savedSource?: string; showSaveFilePicker?: () => Promise<unknown> }).showSaveFilePicker = async () => ({
+      name: 'saved.d2', createWritable: async () => ({
+        write: async (text: string) => { (window as typeof window & { savedSource?: string }).savedSource = text; },
+        close: async () => {}, abort: async () => {},
+      }),
+    });
+  });
+  await page.goto('/');
+  await source(page).fill('saved: Shortcut');
+  await source(page).press('ControlOrMeta+s');
+  await expect(page.locator('#draft-status')).toContainText('Saved to file');
+  expect(await page.evaluate(() => (window as typeof window & { savedSource?: string }).savedSource)).toBe('saved: Shortcut');
+  await source(page).fill('saved: Changed again');
+  await expect(page.locator('#draft-status')).toContainText('File has unsaved changes');
+  await expect(page.locator('#work-status #draft-status')).toBeVisible();
+});
+
+test('download fallback is explicit and never claims a disk save or unavailable recovery', async ({ page }) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(window, 'showSaveFilePicker', { value: undefined, configurable: true });
+    Storage.prototype.setItem = () => { throw new Error('Storage blocked'); };
+  });
+  await page.goto('/');
+  await expect(page.locator('#save-file')).toHaveText('Download .d2');
+  await source(page).fill('download: Keep this');
+  const [download] = await Promise.all([page.waitForEvent('download'), source(page).press('ControlOrMeta+s')]);
+  expect(await readFile(await download.path(), 'utf8')).toBe('download: Keep this');
+  await expect(page.locator('#draft-status')).toContainText('Source download started');
+  await expect(page.locator('#draft-status')).toContainText('Browser draft unavailable');
+  await expect(page.locator('#draft-status')).not.toContainText('Saved to file');
+});

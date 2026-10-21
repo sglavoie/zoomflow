@@ -2,7 +2,9 @@ import { examples } from './examples';
 import { DraftStore, type Draft } from './draft-store';
 import { setupDocumentActions } from './document-actions';
 
-export type PaneId = 'a' | 'b';
+import type { PaneId } from './pane-scope';
+
+export type { PaneId };
 const panes: PaneId[] = ['a', 'b'];
 const otherPane = (pane: PaneId): PaneId => pane === 'a' ? 'b' : 'a';
 
@@ -10,14 +12,29 @@ const otherPane = (pane: PaneId): PaneId => pane === 'a' ? 'b' : 'a';
  * Each workspace pane shows one draft; a draft is never open in both panes. The
  * header menu acts on the target pane, and the first pane always has a document.
  */
-export function setupExamplePicker(
-  readSource: (pane: PaneId) => string,
-  open: (pane: PaneId, document: { source: string; name: string; key: string } | undefined, reset?: boolean) => void,
-  onState: (pane: PaneId, dirty: boolean, recoveryAvailable: boolean, savePending: boolean, hasDraft: boolean, downloadRequested: boolean, identity: { key: string; name: string; projectId?: string }) => void,
-  forget: (key: string) => void,
-  checkpoint: (key: string) => () => void,
-  focusPane: (pane: PaneId) => void,
-) {
+export type DraftState = {
+  dirty: boolean;
+  recoveryAvailable: boolean;
+  savePending: boolean;
+  /** The draft differs from a bundled example, so only the browser or a file keeps it. */
+  hasDraft: boolean;
+  downloadRequested: boolean;
+  identity: { key: string; name: string; projectId?: string };
+};
+
+/** What the picker needs from the workspace that shows its drafts. */
+export type PickerHost = {
+  readSource: (pane: PaneId) => string;
+  open: (pane: PaneId, document: { source: string; name: string; key: string } | undefined, reset?: boolean) => void;
+  onState: (pane: PaneId, state: DraftState) => void;
+  /** Drop per-document editor, viewport and file state for a removed draft. */
+  forget: (key: string) => void;
+  /** Capture per-document state before removal; the returned function restores it on undo. */
+  checkpoint: (key: string) => () => void;
+  focusPane: (pane: PaneId) => void;
+};
+
+export function setupExamplePicker({ readSource, open, onState, forget, checkpoint, focusPane }: PickerHost) {
   const picker = document.querySelector<HTMLDetailsElement>('#example-picker')!;
   const summary = picker.querySelector('summary')!;
   const menu = picker.querySelector<HTMLElement>('.example-menu')!;
@@ -102,8 +119,9 @@ export function setupExamplePicker(
       const draft = draftOf(pane);
       if (!draft) continue;
       const original = examples.find((example) => example.name === draft.key)?.source;
-      onState(pane, draft.source !== draft.baseline, recoveryAvailable, savePending,
-        draft.key.startsWith('file:') || Boolean(draft.projectId) || draft.source !== original || draft.baseline !== original, downloadRequested[pane], draft);
+      onState(pane, { dirty: draft.source !== draft.baseline, recoveryAvailable, savePending,
+        hasDraft: draft.key.startsWith('file:') || Boolean(draft.projectId) || draft.source !== original || draft.baseline !== original,
+        downloadRequested: downloadRequested[pane], identity: draft });
       refreshRows.get(draft.key)?.();
     }
     for (const [id, group] of projectGroups) {

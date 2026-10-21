@@ -1,7 +1,8 @@
 import { expect, test, type Page } from '@playwright/test';
-import { openDownloads } from './menu';
 import { pathToFileURL } from 'node:url';
-const source = (page: Page) => page.getByRole('textbox', { name: 'D2 source', exact: true });
+import { openDownloads } from './menu';
+import { source, previewReady, chooseExample } from './helpers';
+
 async function ready(page: Page) {
   await expect(page.locator('#preview-status')).toHaveText('Preview ready');
   await expect(page.locator('#viewer')).toHaveAttribute('aria-busy', 'false');
@@ -141,7 +142,6 @@ test('workspace is compact and stable, zoom explains its baseline, export descri
   await expect(page.locator('#export')).toBeDisabled();
 });
 
-
 test('offline HTML restores each board view and explains zoom', async ({ page, context }, info) => {
   await page.goto('/'); await ready(page);
   await openDownloads(page);
@@ -163,4 +163,24 @@ test('offline HTML restores each board view and explains zoom', async ({ page, c
   await offline.keyboard.press('Escape');
   await expect(offline.locator('.zf-stage')).toHaveAttribute('data-board', 'root');
   await expect(offline.locator('.zf-zoom-controls span')).toHaveText('150%');
+});
+
+test('switching documents restores selection and scroll position', async ({ page }) => {
+  await page.goto('/');
+  await previewReady(page);
+  const long = Array.from({ length: 120 }, (_, i) => `# comment ${i}`).join('\n') + '\na: Final line';
+  await source(page).fill(long);
+  await previewReady(page);
+  await source(page).press('ControlOrMeta+End');
+  await source(page).press('Shift+Home');
+  const selected = await page.evaluate(() => window.getSelection()?.toString());
+  const scroll = await page.locator('.cm-scroller').evaluate((node) => node.scrollTop);
+  expect(scroll).toBeGreaterThan(500);
+  await chooseExample(page, /Flowchart basics/);
+  // Browsers round CodeMirror's top padding differently by a pixel.
+  await expect.poll(() => page.locator('.cm-scroller').evaluate((node) => node.scrollTop)).toBeLessThan(3);
+  await chooseExample(page, /Order flow/);
+  await source(page).focus();
+  await expect.poll(() => page.evaluate(() => window.getSelection()?.toString())).toBe(selected);
+  await expect.poll(() => page.locator('.cm-scroller').evaluate((node, previous) => Math.abs(node.scrollTop - previous), scroll)).toBeLessThan(3);
 });

@@ -11,6 +11,17 @@ import { formatChanges } from './format-changes';
 import { hangingIndentation } from './editor-indentation';
 import { aiChanges } from './ai-changes';
 import { aiHighlights, highlightAiLines } from './editor-ai-highlights';
+import { plural } from './text';
+
+export type SourceEditorOptions = {
+  source?: string;
+  /** Page-unique ID for the diagnostics panel. */
+  panelId: string;
+  changed: () => void;
+  selected: () => void;
+  format: () => void;
+  reveal: () => void;
+};
 
 export class SourceEditor {
   readonly view: EditorView;
@@ -20,7 +31,7 @@ export class SourceEditor {
   private readonly extensions: Extension[];
   private currentKey = '';
   private readonly documents = new Map<string, { state: EditorState; scroll: ReturnType<EditorView['scrollSnapshot']> }>();
-  constructor(parent: HTMLElement, source: string, changed: () => void, selected: () => void, format: () => void, reveal: () => void, idSuffix = '') {
+  constructor(parent: HTMLElement, { source = '', panelId, changed, selected, format, reveal }: SourceEditorOptions) {
     this.extensions = [
         basicSetup, d2Language, lintGutter(), EditorView.lineWrapping, hangingIndentation, aiHighlights,
         codeFolding({ placeholderDOM: (view, unfold) => {
@@ -56,7 +67,7 @@ export class SourceEditor {
         EditorView.theme({
           '&': { height: '100%', backgroundColor: 'transparent', color: 'inherit' },
           '.cm-scroller': { overflow: 'auto', fontFamily: 'monospace' },
-          '.cm-gutters': { backgroundColor: 'transparent', color: '#7a899d', borderColor: '#8192a444' },
+          '.cm-gutters': { backgroundColor: 'transparent', color: '#7a899d', borderColor: 'var(--border)' },
           '.cm-activeLine, .cm-activeLineGutter': { backgroundColor: '#8192a418' },
           '&.cm-focused .cm-selectionBackground, .cm-selectionBackground, ::selection': { backgroundColor: '#477de544' },
           '.cm-cursor': { borderLeftColor: 'currentColor' },
@@ -71,7 +82,7 @@ export class SourceEditor {
       ];
     this.view = new EditorView({ parent, state: EditorState.create({ doc: source, extensions: this.extensions }) });
     this.panel.className = 'cm-panel-lint source-diagnostics';
-    this.panel.id = `diagnostics-panel${idSuffix}`;
+    this.panel.id = panelId;
     this.panel.hidden = true;
     this.panel.setAttribute('aria-label', 'Diagnostic list');
     const close = document.createElement('button');
@@ -142,7 +153,7 @@ export class SourceEditor {
     const scroll = this.view.scrollSnapshot().map(changes);
     this.view.dispatch({ changes, effects: [...(scroll ? [scroll] : []), highlightAiLines.of([...lines].sort((a, b) => a - b))],
       userEvent: 'input.ai', annotations: isolateHistory.of('full') });
-    return `Changes at ${lines.size} source line${lines.size === 1 ? '' : 's'}${deleted ? ' (including deletions)' : ''}.`;
+    return `Changes at ${plural(lines.size, 'source line')}${deleted ? ' (including deletions)' : ''}.`;
   }
   format(source: string) {
     return this.replaceSource(source, 'input.format');

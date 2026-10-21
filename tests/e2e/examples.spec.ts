@@ -1,5 +1,6 @@
-import { selectMenuOption, downloadExport } from './menu';
 import { expect, test, type Page } from '@playwright/test';
+import { selectMenuOption, downloadExport } from './menu';
+import { source, previewReady, stubAiStatus } from './helpers';
 
 async function ready(page: Page, id = 'root') {
   await expect(page.locator('.zf-stage')).toHaveAttribute('data-board', id);
@@ -103,7 +104,7 @@ test('picker supports keyboard, Escape without navigating, outside dismissal, an
   }).toBe(true);
   await page.locator('#example-options').getByRole('button', { name: 'Find & fix a broken link' }).click();
   await ready(page);
-  await expect(page.locator('#lint-summary')).toHaveText('1 lint error(s), 1 warning(s)');
+  await expect(page.locator('#lint-summary')).toHaveText('1 lint error, 1 warning');
 });
 
 test('rapid example changes during compiler startup only publish the last selection', async ({ page }) => {
@@ -121,4 +122,95 @@ test('rapid example changes during compiler startup only publish the last select
   await expect(page.locator('#filename')).toHaveText('sequence.d2');
   await expect(page.locator('.zf-stage')).toContainText('Place order');
   await expect(page.locator('#compile-error')).toBeHidden();
+});
+
+test('picker groups drafts, marks modified examples and restores the original', async ({ page }) => {
+  await page.goto('/');
+  await previewReady(page);
+  const original = await source(page).textContent();
+  await source(page).fill('changed: My draft');
+  await previewReady(page);
+  await page.locator('#example-picker summary').click();
+  const order = page.locator('#example-options').getByRole('button', { name: /Order flow.*Modified/ });
+  await expect(order).toContainText('Edited');
+  await page.getByRole('button', { name: 'Restore original example: Order flow', exact: true }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Cancel', exact: true }).click();
+  await expect(source(page)).toHaveText('changed: My draft');
+  await page.getByRole('button', { name: 'Restore original example: Order flow', exact: true }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Restore example', exact: true }).click();
+  await previewReady(page);
+  await expect(source(page)).toHaveText(original!);
+  await source(page).press('ControlOrMeta+z');
+  expect(await source(page).textContent()).toBe(original);
+  await page.locator('#file').setInputFiles({ name: 'local.d2', mimeType: 'text/plain', buffer: Buffer.from('local: Draft') });
+  await page.locator('#example-picker summary').click();
+  await expect(page.getByRole('heading', { name: 'Your drafts' })).toBeVisible();
+  await expect(page.locator('#draft-options')).toContainText('local.d2');
+  await expect(page.locator('#example-options')).not.toContainText('local.d2');
+  await page.reload();
+  await previewReady(page);
+  await page.locator('#example-picker summary').click();
+  await expect(page.locator('#draft-options')).toContainText('Edited');
+});
+
+test('large document lists filter projects and collapse inactive groups', async ({ page }) => {
+  await stubAiStatus(page);
+  await page.goto('/'); await previewReady(page);
+  await page.locator('#folder').setInputFiles('fixtures/browser-project'); await previewReady(page);
+  await page.locator('#file').setInputFiles({ name: 'notes.d2', mimeType: 'text/plain', buffer: Buffer.from('a: Notes') }); await previewReady(page);
+  await page.locator('#example-picker summary').click();
+  const group = page.getByRole('region', { name: 'browser-project project', exact: true });
+  const toggle = group.getByRole('button', { name: 'browser-project', exact: true });
+  await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+  await expect(group.locator('.example-option').first()).toBeHidden();
+  const filter = page.getByRole('searchbox', { name: 'Find a diagram or project' });
+  await filter.fill('nodes.d2');
+  await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+  await expect(page.locator('.example-option:visible')).toHaveCount(1);
+  await page.locator('.example-option:visible').click();
+  await expect(page.locator('#filename')).toHaveText('nodes.d2');
+  await page.locator('#example-picker summary').click();
+  await filter.fill('no such file');
+  await expect(page.getByText('No matching diagrams. Try a filename or project name.')).toBeVisible();
+  await filter.fill('');
+  await expect(group.locator('.example-option').first()).toBeVisible();
+});
+
+test('restoring an example can be canceled or undone with its editing history', async ({ page }) => {
+  await stubAiStatus(page);
+  await page.goto('/'); await previewReady(page);
+  await source(page).fill('a: First edit'); await previewReady(page);
+  // Formatting is a real, isolated history event. Consecutive rapid fills may
+  // otherwise be one typing group, particularly in Firefox.
+  await source(page).press('Shift+Alt+f');
+  await expect(page.locator('#format-status')).toHaveText('Source formatted.');
+  await source(page).fill('b: Second edit'); await previewReady(page);
+  await page.locator('#example-picker summary').click();
+  await page.getByRole('button', { name: 'Restore original example: Order flow', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: 'Restore Order flow?' });
+  await expect(dialog).toContainText('unsaved changes');
+  await expect(dialog.getByRole('button', { name: 'Cancel', exact: true })).toBeFocused();
+  await page.keyboard.press('Escape');
+  await expect(source(page)).toHaveText('b: Second edit');
+  await page.getByRole('button', { name: 'Restore original example: Order flow', exact: true }).click();
+  await dialog.getByRole('button', { name: 'Restore example', exact: true }).click();
+  await previewReady(page);
+  await expect(source(page)).toContainText('Checkout');
+  await page.locator('#document-undo').getByRole('button', { name: 'Undo', exact: true }).click();
+  await expect(source(page)).toHaveText('b: Second edit');
+  await source(page).press('ControlOrMeta+z');
+  await expect(source(page)).toHaveText('a: First edit');
+});
+
+test('editing a restored example retires its undo without overwriting the new work', async ({ page }) => {
+  await stubAiStatus(page);
+  await page.goto('/'); await previewReady(page);
+  await source(page).fill('a: Previous work'); await previewReady(page);
+  await page.locator('#example-picker summary').click();
+  await page.getByRole('button', { name: 'Restore original example: Order flow', exact: true }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Restore example', exact: true }).click();
+  await expect(page.locator('#document-undo')).toBeVisible();
+  await source(page).fill('b: New work');
+  await expect(page.locator('#document-undo')).toBeHidden();
+  await expect(source(page)).toHaveText('b: New work');
 });

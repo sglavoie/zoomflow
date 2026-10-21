@@ -10,6 +10,8 @@ import { readDirectoryHandle, readFolderInput } from './project-files';
 import { setupShortcuts } from './shortcuts';
 import { setupFlowBuilder } from './flow-builder';
 import { createDocumentPane, type DocumentPane, type PaneContext, type PaneId } from './document-pane';
+import { describeError, plural, safeFilename } from './text';
+import { cloneSecondPane, nameParts, paneScope } from './pane-scope';
 
 const canvasStyle = document.createElement('style');
 canvasStyle.textContent = viewerStyle;
@@ -25,19 +27,11 @@ const paneDivider = document.querySelector<HTMLElement>('#pane-divider')!;
  * The D2 reference stays a single panel that opens in the active pane.
  */
 function secondPaneMarkup() {
-  const copy = paneRoots.a.cloneNode(true) as HTMLElement;
-  copy.querySelector('#d2-reference')?.remove();
-  copy.querySelector('#reference-divider')?.remove();
-  for (const node of copy.querySelectorAll('*')) {
-    if (node.id) node.id += '-b';
-    for (const name of ['for', 'aria-controls', 'aria-describedby', 'aria-labelledby']) {
-      const value = node.getAttribute(name);
-      if (value) node.setAttribute(name, value.split(/\s+/).map((id) => `${id}-b`).join(' '));
-    }
-  }
-  for (const [selector, label] of [['#preview-pane-b', 'Second diagram'], ['#viewer-b', 'Second live preview'],
-    ['#source-pane-b', 'Second source editor'], ['#mobile-view-switch-b', 'Second document view']]) {
-    copy.querySelector(selector)!.setAttribute('aria-label', label);
+  nameParts(paneRoots.a);
+  const copy = cloneSecondPane(paneRoots.a, ['#d2-reference', '#reference-divider']);
+  for (const [part, label] of [['preview-pane', 'Second diagram'], ['viewer', 'Second live preview'],
+    ['source-pane', 'Second source editor'], ['mobile-view-switch', 'Second document view']]) {
+    copy.querySelector(`[data-part="${part}"]`)!.setAttribute('aria-label', label);
   }
   return [...copy.childNodes];
 }
@@ -115,6 +109,11 @@ function setExportStatus(message: string, kind: 'info' | 'error' = 'info') {
   exportStatus.dataset.kind = kind;
   exportStatus.hidden = !message;
 }
+/** The export menu shows the result while open; the pane's live activity line announces it once. */
+function reportExport(message: string, kind: 'info' | 'error' = 'info', pane = activePane()) {
+  pane.setActivity(message, kind);
+  setExportStatus(message, kind);
+}
 function setFileError(message: string) {
   fileStatus.textContent = message;
   fileStatus.hidden = !message;
@@ -148,25 +147,32 @@ function context(id: PaneId): PaneContext {
 }
 
 panes.a = createDocumentPane('a', paneRoots.a, context('a'));
-const examplePicker = setupExamplePicker((pane) => panes[pane]?.source ?? '', (pane, document, reset) => {
-  if (document) void panes[pane]?.replaceDocument(document.source, document.name, document.key, reset);
-  else panes[pane]?.close();
-}, (pane, dirty, recoveryAvailable, savePending, hasDraft, downloadRequested, identity) => {
-  panes[pane]?.renderDraftState(dirty, recoveryAvailable, savePending, hasDraft, downloadRequested);
-  if (pane === active) showDocumentState(dirty, identity.name, Boolean(identity.projectId));
-}, (key) => {
-  for (const pane of Object.values(panes)) { pane.editor.forget(key); pane.viewport.forget(key); }
-  fileHandles.delete(key); documentRoutes.delete(key);
-}, (key) => {
-  const restore = Object.values(panes).flatMap((pane) => [pane.editor.checkpoint(key), pane.viewport.checkpoint(key)]);
-  const handle = fileHandles.get(key);
-  const route = documentRoutes.get(key);
-  return () => {
-    restore.forEach((undo) => undo());
-    if (handle) fileHandles.set(key, handle);
-    if (route) documentRoutes.set(key, route);
-  };
-}, (pane) => focusPane(pane));
+const examplePicker = setupExamplePicker({
+  readSource: (pane) => panes[pane]?.source ?? '',
+  open: (pane, document, reset) => {
+    if (document) void panes[pane]?.replaceDocument(document.source, document.name, document.key, reset);
+    else panes[pane]?.close();
+  },
+  onState: (pane, state) => {
+    panes[pane]?.renderDraftState(state);
+    if (pane === active) showDocumentState(state.dirty, state.identity.name, Boolean(state.identity.projectId));
+  },
+  forget: (key) => {
+    for (const pane of Object.values(panes)) { pane.editor.forget(key); pane.viewport.forget(key); }
+    fileHandles.delete(key); documentRoutes.delete(key);
+  },
+  checkpoint: (key) => {
+    const restore = Object.values(panes).flatMap((pane) => [pane.editor.checkpoint(key), pane.viewport.checkpoint(key)]);
+    const handle = fileHandles.get(key);
+    const route = documentRoutes.get(key);
+    return () => {
+      restore.forEach((undo) => undo());
+      if (handle) fileHandles.set(key, handle);
+      if (route) documentRoutes.set(key, route);
+    };
+  },
+  focusPane: (pane) => focusPane(pane),
+});
 
 function showDocumentState(dirty: boolean, name?: string, project = false) {
   document.title = name ? `${dirty ? '• ' : ''}${name} — Zoomflow` : 'Zoomflow';
@@ -199,16 +205,13 @@ for (const id of ['a', 'b'] as const) {
 
 const reference = setupReference(() => {
   const pane = activePane();
-  const suffix = pane.id === 'a' ? '' : '-b';
-  return { preview: pane.root.querySelector<HTMLElement>(`#preview-pane${suffix}`)!, source: pane.root.querySelector<HTMLElement>(`#source-pane${suffix}`)!,
+  return { preview: pane.scope.part('preview-pane'), source: pane.scope.part('source-pane'),
     showPreview: () => pane.showView('preview'), showSource: () => pane.showView('source') };
 });
 document.querySelector('#toggle-reference')!.addEventListener('click', () => activePane().showView('preview'));
 
 function wirePaneHeader(id: PaneId) {
-  const root = paneRoots[id];
-  const suffix = id === 'a' ? '' : '-b';
-  const button = (name: string) => root.querySelector<HTMLButtonElement>(`#${name}${suffix}`)!;
+  const button = (name: string) => paneScope(id, paneRoots[id]).part<HTMLButtonElement>(name);
   button('pane-document').addEventListener('click', (event) => { event.stopPropagation(); setActive(id); examplePicker.choose(id); });
   button('pane-choose').addEventListener('click', (event) => { event.stopPropagation(); setActive(id); examplePicker.choose(id); });
   button('pane-start-empty').addEventListener('click', () => {
@@ -226,8 +229,9 @@ function ensureSecondPane() {
   paneRoots.b.append(...secondPane);
   // Start with the first pane's AI settings, then keep both panes' settings in step.
   const settings = ['ai-provider', 'ai-environment', 'ai-claude-config-dir'];
+  const [a, b] = [paneScope('a', paneRoots.a), paneScope('b', paneRoots.b)];
   for (const name of settings) {
-    const [first, second] = [paneRoots.a.querySelector<HTMLInputElement>(`#${name}`)!, paneRoots.b.querySelector<HTMLInputElement>(`#${name}-b`)!];
+    const [first, second] = [a.part<HTMLInputElement>(name), b.part<HTMLInputElement>(name)];
     second.value = first.value;
     for (const [from, to] of [[first, second], [second, first]]) {
       from.addEventListener('change', () => {
@@ -238,7 +242,7 @@ function ensureSecondPane() {
     }
   }
   for (const name of ['missing-backlink', 'boundary-ports']) {
-    paneRoots.b.querySelector<HTMLInputElement>(`#${name}-b`)!.checked = paneRoots.a.querySelector<HTMLInputElement>(`#${name}`)!.checked;
+    b.part<HTMLInputElement>(name).checked = a.part<HTMLInputElement>(name).checked;
   }
   panes.b = createDocumentPane('b', paneRoots.b, context('b'));
   panes.b.viewer.setTheme(document.documentElement.dataset.theme === 'dark');
@@ -256,7 +260,6 @@ function effectiveLayout() {
   return layout === 'single' ? 'single' : layout === 'quad' && roomy.matches ? 'quad' : 'tabs';
 }
 function sourceSplit(id: PaneId) {
-  const suffix = id === 'a' ? '' : '-b';
   const root = paneRoots[id];
   const columns: SplitAxis = { container: workspace, storageKey: 'zoomflow.source.preview-share', properties: ['--preview-share', '--source-share'],
     minimum: 360, defaultShare: () => 50 + 12 * Math.max(0, Math.min(1, (workspace.clientWidth - 1100) / 340)),
@@ -264,7 +267,7 @@ function sourceSplit(id: PaneId) {
   const rows: SplitAxis = { container: root, storageKey: 'zoomflow.split.preview-share', properties: ['--preview-share', '--source-share'],
     minimum: 160, defaultShare: () => 55, rows: true,
     describe: (share) => `Diagram ${Math.round(share)}%, D2 source ${Math.round(100 - share)}%` };
-  return setupSplit(root.querySelector<HTMLElement>(`#source-divider${suffix}`)!, () => {
+  return setupSplit(paneScope(id, root).part('source-divider'), () => {
     if (narrow.matches) return undefined;
     const layout = workspace.dataset.layout;
     return layout === 'single' && id === 'a' ? columns : layout === 'quad' ? rows : undefined;
@@ -310,7 +313,7 @@ function download(blob: Blob, name: string) {
 document.querySelector<HTMLButtonElement>('#save-source')!.addEventListener('click', () => {
   const pane = activePane();
   if (!pane.key) return;
-  const name = pane.name.replace(/[/\\]/g, '_').replace(/\.d2$/i, '') + '.d2';
+  const name = safeFilename(pane.name.replace(/\.d2$/i, '')) + '.d2';
   download(new Blob([pane.source], { type: 'text/plain;charset=utf-8' }), name);
   examplePicker.markDownloadRequested(pane.id);
   pane.setActivity(`Source download started: ${name}`);
@@ -321,10 +324,10 @@ projectDownloadButton.addEventListener('click', () => {
   try {
     const { fs, inputPath } = examplePicker.compilation(active);
     fs[inputPath] = activePane().source;
-    const filename = `${name.replace(/[/\\]/g, '_')}.zip`;
+    const filename = `${safeFilename(name)}.zip`;
     download(new Blob([exportSourcesZip(fs)], { type: 'application/zip' }), filename);
-    setExportStatus(`Project source download started: ${filename}`);
-  } catch (error) { setExportStatus(`Project source download failed: ${String(error)}`, 'error'); }
+    reportExport(`Project source download started: ${filename}`);
+  } catch (error) { reportExport(`Project source download failed: ${describeError(error)}`, 'error'); }
 });
 window.addEventListener('keydown', (event) => {
   if (event.isComposing || event.altKey || event.shiftKey || !(event.metaKey || event.ctrlKey) || event.key.toLowerCase() !== 's') return;
@@ -352,7 +355,7 @@ function updateExportLabel() {
   const allBoards = exportFormat.value === 'zip' || exportFormat.value === 'html';
   const formatName = ({ svg: 'SVG', png: 'PNG', zip: 'SVG ZIP', html: 'Interactive HTML' } as Record<string, string>)[exportFormat.value];
   document.querySelector('#export-scope')!.textContent = documentExport
-    ? allBoards ? `Entire diagram · ${count} board${count === 1 ? '' : 's'} · ${formatName}`
+    ? allBoards ? `Entire diagram · ${plural(count, 'board')} · ${formatName}`
       : `Current board: ${pane!.viewer.currentBoard?.name ?? 'Root'} · ${formatName}` : 'Compile the current source to export a diagram.';
   exportButton.textContent = ({ svg: 'Download SVG', png: 'Download PNG', zip: 'Download SVG ZIP',
     html: 'Download HTML' } as Record<string, string>)[exportFormat.value] ?? 'Download export';
@@ -376,43 +379,40 @@ exportButton.addEventListener('click', async () => {
   const exportRevision = pane.generation;
   exportButton.disabled = true;
   const format = exportFormat.value;
-  pane.setActivity(`Preparing ${format.toUpperCase()} download…`);
-  setExportStatus(`Preparing ${format.toUpperCase()} download…`);
+  reportExport(`Preparing ${format.toUpperCase()} download…`, 'info', pane);
   const dark = document.documentElement.dataset.theme === 'dark';
   const exportName = pane.name;
   const warnings: string[] = [];
+  // Interactive HTML follows its reader's color scheme; images keep the theme shown here.
+  const theme = format === 'html' ? undefined : dark;
   const prepare = async (target: string) => {
-    const result = await prepareExportSvg(await loaded.render(target), dark);
+    const result = await prepareExportSvg(await loaded.render(target), theme);
     warnings.push(...result.warnings);
     return result.svg;
   };
   try {
     let blob: Blob;
-    let name = exportName.replace(/\.d2$/i, '');
+    let name = safeFilename(exportName.replace(/\.d2$/i, ''));
     if (format === 'svg' || format === 'png') {
       const svg = await prepare(board.target);
       blob = format === 'png' ? await rasterizeSvg(svg) : new Blob([svg], { type: 'image/svg+xml' });
-      name += `-${board.name === 'Root' ? 'root' : encodeURIComponent(board.name)}.${format}`;
+      name += `-${board.name === 'Root' ? 'root' : safeFilename(board.name)}.${format}`;
     } else {
       const boards = await renderExportBoards(loaded.diagram, prepare, loaded.diagnostics);
       blob = format === 'zip' ? new Blob([exportBoardsZip(boards)], { type: 'application/zip' })
         : new Blob([exportBoardsHtml(boards, { title: exportName, script: offlineViewerScript(),
-          style: offlineViewerStyle + (dark ? ':root{color-scheme:dark;--zf-page:#111722;--zf-text:#e4eaf2;--zf-surface:#182231;--zf-border:#8192a466;--zf-muted:#adbbcd}.zf-stage{background:#0a0f25}' : '') })], { type: 'text/html' });
+          style: offlineViewerStyle })], { type: 'text/html' });
       name += `.${format}`;
     }
     if (exportRevision !== pane.generation || pane.documentExport !== loaded) {
-      pane.setActivity('Export canceled because the source changed.');
-      setExportStatus('Export canceled because the source changed.');
+      reportExport('Export canceled because the source changed.', 'info', pane);
       return;
     }
     download(blob, name);
     const result = warnings.length ? `Download started: ${name}. ${[...new Set(warnings)].join(' ')}` : `Download started: ${name}`;
-    pane.setActivity(result, warnings.length > 0 ? 'error' : 'info');
-    setExportStatus(result, warnings.length > 0 ? 'error' : 'info');
+    reportExport(result, warnings.length > 0 ? 'error' : 'info', pane);
   } catch (error) {
-    const message = `Export failed: ${String(error)}`;
-    pane.setActivity(message, 'error');
-    setExportStatus(message, 'error');
+    reportExport(`Export failed: ${describeError(error)}`, 'error', pane);
   }
   finally { exportButton.disabled = !activePane().documentExport || !activePane().current; }
 });
@@ -426,7 +426,7 @@ async function openFile(file: File, handle?: FileSystemFileHandle) {
     examplePicker.refresh();
     await activePane().replaceDocument(source, file.name, key);
   }
-  catch (error) { setFileError(`Could not open file: ${String(error)}`); }
+  catch (error) { setFileError(`Could not open file: ${describeError(error)}`); }
 }
 const fileInput = document.querySelector<HTMLInputElement>('#file')!;
 fileInput.addEventListener('click', async (event) => {
@@ -436,7 +436,7 @@ fileInput.addEventListener('click', async (event) => {
     const [handle] = await pickerWindow.showOpenFilePicker({ types: [{ description: 'D2 source', accept: { 'text/plain': ['.d2'] } }] });
     if (handle) await openFile(await handle.getFile(), handle);
   } catch (error) {
-    if (!(error instanceof DOMException && error.name === 'AbortError')) setFileError(`Could not open file: ${String(error)}`);
+    if (!(error instanceof DOMException && error.name === 'AbortError')) setFileError(`Could not open file: ${describeError(error)}`);
   }
 });
 fileInput.addEventListener('change', () => {
@@ -457,7 +457,7 @@ async function chooseFolder() {
   if (!pickerWindow.showDirectoryPicker) { folderInput.click(); return; }
   try { await openFolder(await readDirectoryHandle(await pickerWindow.showDirectoryPicker())); }
   catch (error) {
-    if (!(error instanceof DOMException && error.name === 'AbortError')) setFileError(`Could not open folder: ${String(error)}`);
+    if (!(error instanceof DOMException && error.name === 'AbortError')) setFileError(`Could not open folder: ${describeError(error)}`);
   }
 }
 document.querySelector<HTMLButtonElement>('#open-folder')!.addEventListener('click', () => void chooseFolder());
@@ -465,7 +465,7 @@ document.querySelector<HTMLButtonElement>('#open-folder-picker')!.addEventListen
 folderInput.addEventListener('change', async () => {
   const files = folderInput.files;
   try { if (files?.length) await openFolder(await readFolderInput(files)); }
-  catch (error) { setFileError(`Could not open folder: ${String(error)}`); }
+  catch (error) { setFileError(`Could not open folder: ${describeError(error)}`); }
   finally { folderInput.value = ''; }
 });
 let dropHint: ReturnType<typeof setTimeout> | undefined;

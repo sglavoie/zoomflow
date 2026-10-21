@@ -8,7 +8,7 @@ const browser = await chromium.launch();
 try {
   for (const queued of [false, true]) {
     const page = await browser.newPage();
-    await page.route((requestUrl) => requestUrl.pathname === '/src/index.ts', async (route) => {
+    await page.route((requestUrl) => requestUrl.pathname === '/src/document-pane.ts', async (route) => {
       const response = await route.fetch();
       let body = await response.text();
       const call = 'return previewQueue.run(() => loadPreview(source, name, preserveViewport));';

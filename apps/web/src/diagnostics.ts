@@ -1,4 +1,5 @@
 import { parseSourceRange, type SourceRange, type LintDiagnostic, type ShapeSource } from '@zoomflow/core';
+import { describeError } from './text';
 
 export type SourceDiagnostic = {
   severity: 'error' | 'warning';
@@ -46,7 +47,7 @@ export function compilerDiagnostics(error: unknown, source: string, filename = '
       if (diagnostics.length) return diagnostics;
     }
   } catch { /* Non-parser failures have no trustworthy source location. */ }
-  return [{ severity: 'error', message }];
+  return [{ severity: 'error', message: describeError(error) }];
 }
 
 export function diagnosticLocation(item: SourceDiagnostic, documentName: string): string {

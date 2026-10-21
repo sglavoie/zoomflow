@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { source } from './helpers';
 
 test('shortcuts dialog contains keyboard focus and leaves the current board unchanged', async ({ page }) => {
   await page.goto('/');
@@ -54,4 +55,19 @@ test('shortcuts stay within a narrow viewport in dark mode', async ({ page }) =>
   await expect(dialog.getByText('Smallest / largest diagram share')).toBeVisible();
   await page.keyboard.press('Escape');
   await expect(dialog).toBeHidden();
+});
+
+test('comment shortcut toggles D2 comments and remains undoable', async ({ page }) => {
+  await page.goto('/');
+  await source(page).fill('a -> b\nb -> c');
+  await source(page).press('ControlOrMeta+a');
+  await source(page).press('ControlOrMeta+/');
+  await expect(source(page)).toHaveText('# a -> b# b -> c');
+  await expect(page.locator('#d2-reference')).toBeHidden();
+  await source(page).press('ControlOrMeta+z');
+  await expect(source(page)).toHaveText('a -> bb -> c');
+  await source(page).press('ControlOrMeta+/');
+  await expect(source(page)).toHaveText('# a -> b# b -> c');
+  await source(page).press('ControlOrMeta+/');
+  await expect(source(page)).toHaveText('a -> bb -> c');
 });

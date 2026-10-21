@@ -1,4 +1,4 @@
-import { indexShapeSources, parseSourceRange, lint, type CompileResponse, type ShapeSource, type Diagram, type LintDiagnostic } from '@zoomflow/core';
+import { indexShapeSources, parseSourceRange, lint, type CompileResponse, type ShapeSource, type Diagram, type LintDiagnostic, type LintResult } from '@zoomflow/core';
 import { Viewer, setupViewport, type RenderBoard, type ViewerRoute } from '@zoomflow/viewer';
 import { SourceEditor } from './editor';
 import { compilerDiagnostics, lintDiagnostics, type SourceDiagnostic } from './diagnostics';
@@ -10,9 +10,11 @@ import { setupMobileView } from './mobile-view';
 import { projectFileSystem } from './project-files';
 import { setupCanvasGuidance } from './canvas-guidance';
 import type { setupFlowBuilder } from './flow-builder';
-import type { PaneId, setupExamplePicker } from './example-picker';
+import type { DraftState, setupExamplePicker } from './example-picker';
+import { paneScope, type PaneId } from './pane-scope';
+import { describeError, plural } from './text';
 
-export type { PaneId } from './example-picker';
+export type { PaneId } from './pane-scope';
 export type DocumentExport = { diagram: Diagram; render: RenderBoard; name: string; diagnostics: LintDiagnostic[] };
 type PickerWindow = Window & { showSaveFilePicker?: (options?: object) => Promise<FileSystemFileHandle> };
 
@@ -36,16 +38,30 @@ export type PaneContext = {
   lintChanged: () => void;
 };
 
+/** A status message that announces errors as alerts and hides settled info after a few seconds. */
+function statusLine(element: HTMLElement) {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  return (message: string, kind: 'info' | 'error' = 'info') => {
+    clearTimeout(timer);
+    element.textContent = message;
+    element.title = message;
+    element.dataset.kind = kind;
+    element.setAttribute('role', kind === 'error' ? 'alert' : 'status');
+    element.hidden = !message;
+    if (message && kind === 'info' && !message.endsWith('…')) timer = setTimeout(() => { element.hidden = true; }, 4000);
+  };
+}
+
 /** One document's editor, preview, diagnostics and status. The workspace shows one or two panes. */
 export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneContext) {
-  const suffix = id === 'a' ? '' : '-b';
-  const part = <T extends HTMLElement = HTMLElement>(name: string) => root.querySelector<T>(`#${name}${suffix}`)!;
+  const scope = paneScope(id, root);
+  const { part } = scope;
   const picker = () => shared.picker();
   const pickerWindow = window as PickerWindow;
   const viewer = new Viewer(part('viewer'), { history: id === 'a', active: shared.isActive });
   const viewport = setupViewport(viewer.stage, setupFullscreen(viewer.stage, root));
   const mobileError = document.createElement('div');
-  mobileError.id = `mobile-error${suffix}`;
+  mobileError.id = scope.id('mobile-error');
   mobileError.className = 'mobile-error';
   mobileError.hidden = true;
   mobileError.innerHTML = '<span role="status"></span><button type="button">Go to error</button>';
@@ -80,8 +96,6 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
   const goToError = part<HTMLButtonElement>('go-to-error');
   const compileErrorMessage = part('compile-error-message');
   let activeDiagnostics: SourceDiagnostic[] = [];
-  let activityTimer: ReturnType<typeof setTimeout> | undefined;
-  let formatTimer: ReturnType<typeof setTimeout> | undefined;
   let previewTimer: ReturnType<typeof setTimeout> | undefined;
   const previewQueue = createPreviewQueue();
   let documentExport: DocumentExport | undefined;
@@ -107,36 +121,22 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
     else delete viewer.stage.dataset.previewState;
     viewer.stage.dispatchEvent(new Event('zf-sourcechange'));
   }
-  function setActivity(message: string, kind: 'info' | 'error' = 'info') {
-    clearTimeout(activityTimer);
-    activityStatus.textContent = message;
-    activityStatus.title = message;
-    activityStatus.dataset.kind = kind;
-    activityStatus.setAttribute('role', kind === 'error' ? 'alert' : 'status');
-    activityStatus.hidden = !message;
-    if (message && kind === 'info' && !message.endsWith('…')) activityTimer = setTimeout(() => { activityStatus.hidden = true; }, 4000);
-  }
-  function setFormatStatus(message: string, kind: 'info' | 'error' = 'info') {
-    clearTimeout(formatTimer);
-    formatStatus.textContent = message;
-    formatStatus.title = message;
-    formatStatus.dataset.kind = kind;
-    formatStatus.setAttribute('role', kind === 'error' ? 'alert' : 'status');
-    formatStatus.hidden = !message;
-    if (message && kind === 'info' && !message.endsWith('…')) formatTimer = setTimeout(() => { formatStatus.hidden = true; }, 4000);
-  }
+  const setActivity = statusLine(activityStatus);
+  const setFormatStatus = statusLine(formatStatus);
   function setEditorDiagnostics(diagnostics: SourceDiagnostic[]) {
     activeDiagnostics = diagnostics;
     const errors = diagnostics.filter((item) => item.severity === 'error').length;
     const warnings = diagnostics.length - errors;
-    part('mobile-source').textContent = errors ? `Source · ${errors} error${errors === 1 ? '' : 's'}`
-      : warnings ? `Source · ${warnings} warning${warnings === 1 ? '' : 's'}` : 'Source';
+    part('mobile-source').textContent = errors ? `Source · ${plural(errors, 'error')}`
+      : warnings ? `Source · ${plural(warnings, 'warning')}` : 'Source';
     editor.diagnostics(diagnostics, picker().compilation(id).inputPath, documentName, canOpenDiagnostic, (item) => void openDiagnostic(item));
     diagnosticsButton.disabled = diagnostics.length === 0;
     diagnosticsButton.textContent = diagnostics.length ? `Diagnostics (${diagnostics.length})` : 'Diagnostics';
-    diagnosticsButton.setAttribute('aria-label', `Review ${diagnostics.length} diagnostic${diagnostics.length === 1 ? '' : 's'}`);
+    diagnosticsButton.setAttribute('aria-label', `Review ${plural(diagnostics.length, 'diagnostic')}`);
   }
   let lintDocument: CompileResponse | undefined;
+  /** Lint with default options, computed once per compile for the viewer and exports. */
+  let defaultLint: LintResult | undefined;
   function invalidateSource() {
     flowEdit.refresh();
     // Invalidate immediately, including requests still awaiting WASM/render startup.
@@ -162,13 +162,19 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
     goToError.disabled = true;
     viewer.stage.dispatchEvent(new Event('zf-sourcechange'));
   }
-  const editor = new SourceEditor(part('editor'), '', () => {
-    invalidateSource();
-    picker().updateCurrent(id, editor.source);
-    clearTimeout(debounce);
-    debounce = setTimeout(() => void load(editor.source, documentName, true), 350);
-  }, () => void highlightSelection(false), () => void formatSource(), () => void revealSelection(), suffix);
-  const flowEdit = shared.flowBuilder.attach(part('viewer'), suffix, {
+  const editor = new SourceEditor(part('editor'), {
+    panelId: scope.id('diagnostics-panel'),
+    changed: () => {
+      invalidateSource();
+      picker().updateCurrent(id, editor.source);
+      clearTimeout(debounce);
+      debounce = setTimeout(() => void load(editor.source, documentName, true), 350);
+    },
+    selected: () => void highlightSelection(false),
+    format: () => void formatSource(),
+    reveal: () => void revealSelection(),
+  });
+  const flowEdit = shared.flowBuilder.attach(scope, {
     read: () => ({ source: editor.source, name: documentName }),
     update: source => {
       editor.replaceSource(source);
@@ -214,7 +220,7 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
         setActivity('');
       }
     } catch (error) {
-      if (currentDocumentKey === key && !(error instanceof DOMException && error.name === 'AbortError')) setActivity(`Could not save file: ${String(error)}`, 'error');
+      if (currentDocumentKey === key && !(error instanceof DOMException && error.name === 'AbortError')) setActivity(`Could not save file: ${describeError(error)}`, 'error');
     } finally {
       clearTimeout(saving);
       if (currentDocumentKey === key && activityStatus.textContent === 'Saving file…') setActivity('');
@@ -274,23 +280,24 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
     if (editor.replaceSource('', 'delete.clear')) setActivity('Source cleared. Undo with ⌘Z / Ctrl+Z.');
     editor.view.focus();
   });
-  ai = setupAiAssistant(root, suffix,
-    () => ({ source: editor.source, name: documentName, board: viewer.currentBoard?.id ?? 'root', revision: documentRevision }),
-    async (source) => { await compileSource(source); },
-    (source) => editor.applyAi(source),
-    (message, kind) => setActivity(message, kind),
-    () => editor.undo(),
-    () => { showView('source'); editor.revealAiChange(); },
-    () => editor.clearAiHighlights(),
-  );
+  ai = setupAiAssistant(scope, {
+    read: () => ({ source: editor.source, name: documentName, board: viewer.currentBoard?.id ?? 'root', revision: documentRevision }),
+    validate: async (source) => { await compileSource(source); },
+    apply: (source) => editor.applyAi(source),
+    onStatus: (message, kind) => setActivity(message, kind),
+    undo: () => editor.undo(),
+    revealChange: () => { showView('source'); editor.revealAiChange(); },
+    dismissHighlights: () => editor.clearAiHighlights(),
+  });
 
   function updateLint() {
     if (!lintDocument || mappedSource !== editor.source) return;
-    const result = lint(lintDocument, { missingBacklink: missingBacklink.checked, boundaryPorts: boundaryPorts.checked });
+    const result = !missingBacklink.checked && !boundaryPorts.checked && defaultLint ? defaultLint
+      : lint(lintDocument, { missingBacklink: missingBacklink.checked, boundaryPorts: boundaryPorts.checked });
     setEditorDiagnostics(lintDiagnostics(result.diagnostics, editor.source, sourceMap, lintDocument.inputPath));
     const errors = result.diagnostics.filter((item) => item.severity === 'error').length;
     const warnings = result.diagnostics.length - errors;
-    lintSummary.textContent = errors || warnings ? `${errors} lint error(s), ${warnings} warning(s)` : 'No lint issues';
+    lintSummary.textContent = errors || warnings ? `${plural(errors, 'lint error')}, ${plural(warnings, 'warning')}` : 'No lint issues';
     lintSummary.dataset.empty = String(!errors && !warnings);
   }
   for (const option of [missingBacklink, boundaryPorts]) option.addEventListener('change', () => { updateLint(); shared.lintChanged(); });
@@ -423,7 +430,8 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
       const render: RenderBoard = (target) => d2.render(compiled.diagram, {
         ...compiled.renderOptions, target, noXMLTag: true,
       });
-      const diagnostics = lint(compiled).diagnostics;
+      const linted = lint(compiled);
+      const { diagnostics } = linted;
       const compiledSources = indexShapeSources(compiled.diagram, compiled.graph, source, compiled.inputPath);
       viewer.setSourceShapes(compiledSources);
       await viewer.setDocument(compiled.diagram, render, diagnostics, preserveViewport);
@@ -431,6 +439,7 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
         sourceMap = compiledSources;
         mappedSource = source;
         lintDocument = compiled;
+        defaultLint = linted;
         updateLint();
         errorBanner.hidden = true;
         goToError.hidden = true;
@@ -459,7 +468,7 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
         const diagnostics = compilerDiagnostics(error, source, picker().compilation(id).inputPath);
         setEditorDiagnostics(diagnostics);
         lintDocument = undefined;
-        lintSummary.textContent = `${diagnostics.length} source error${diagnostics.length === 1 ? '' : 's'}`;
+        lintSummary.textContent = plural(diagnostics.length, 'source error');
         const first = diagnostics[0];
         const filename = picker().compilation(id).inputPath;
         const externalCompilerError = first.filename && first.filename !== filename ? first : undefined;
@@ -494,6 +503,7 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
   const pane = {
     id,
     root,
+    scope,
     viewer,
     editor,
     viewport,
@@ -548,7 +558,7 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
       if (range) editor.select(range, true);
       else editor.view.focus();
     },
-    renderDraftState(dirty: boolean, recoveryAvailable: boolean, savePending: boolean, hasDraft: boolean, downloadRequested: boolean) {
+    renderDraftState({ dirty, recoveryAvailable, savePending, hasDraft, downloadRequested }: DraftState) {
       const handle = currentDocumentKey ? shared.fileHandles.get(currentDocumentKey) : undefined;
       const canSave = Boolean(handle || pickerWindow.showSaveFilePicker);
       saveFileButton.textContent = canSave ? 'Save .d2' : 'Download .d2';
@@ -573,7 +583,7 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
     lintOptions: { missingBacklink, boundaryPorts },
     updateLint,
     dispose() {
-      clearTimeout(debounce); clearTimeout(previewTimer); clearTimeout(activityTimer);
+      clearTimeout(debounce); clearTimeout(previewTimer); setActivity(''); setFormatStatus('');
       previewQueue.invalidate(); ai?.dispose(); ++generation; editor.destroy(); viewer.destroy();
     },
   };

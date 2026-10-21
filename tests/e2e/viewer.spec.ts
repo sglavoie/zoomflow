@@ -19,7 +19,7 @@ for (const offline of [false, true]) {
     await board(page, 'root');
     const source = readFileSync('fixtures/lint/nested-navigation.d2', 'utf8');
     await page.locator('#file').setInputFiles({ name: 'nested.d2', mimeType: 'text/plain', buffer: Buffer.from(source) });
-    await expect(page.locator('#lint-summary')).toHaveText('1 lint error(s), 0 warning(s)');
+    await expect(page.locator('#lint-summary')).toHaveText('1 lint error, 0 warnings');
     await page.locator('#show-diagnostics').click();
     await expect(page.locator('.cm-panel-lint')).toContainText('Use link: _');
     await expect(page.locator('.cm-panel-lint')).not.toContainText('boundary-in');

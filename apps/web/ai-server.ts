@@ -22,16 +22,23 @@ const MAX_OUTPUT = 500_000;
 const TIMEOUT_MS = 180_000;
 const exec = promisify(execFile);
 
-function isRequest(value: unknown): value is AiRequest {
+const optionalText = (value: unknown, limit: number) => value === undefined || typeof value === 'string' && value.length <= limit;
+
+type StatusRequest = Pick<AiRequest, 'provider' | 'environment' | 'claudeConfigDir'>;
+function isStatusRequest(value: unknown): value is StatusRequest {
   if (!value || typeof value !== 'object') return false;
-  const item = value as Partial<AiRequest>;
+  const item = value as Partial<StatusRequest>;
   return (item.provider === 'claude' || item.provider === 'codex')
-    && typeof item.prompt === 'string' && item.prompt.trim().length > 0 && item.prompt.length <= 8_000
+    && optionalText(item.environment, 8_000) && optionalText(item.claudeConfigDir, 4_000);
+}
+
+function isRequest(value: unknown): value is AiRequest {
+  if (!isStatusRequest(value)) return false;
+  const item = value as Partial<AiRequest>;
+  return typeof item.prompt === 'string' && item.prompt.trim().length > 0 && item.prompt.length <= 8_000
     && typeof item.source === 'string' && item.source.length <= 180_000
     && typeof item.name === 'string' && item.name.length <= 300
-    && typeof item.board === 'string' && item.board.length <= 300
-    && (item.environment === undefined || (typeof item.environment === 'string' && item.environment.length <= 8_000))
-    && (item.claudeConfigDir === undefined || (typeof item.claudeConfigDir === 'string' && item.claudeConfigDir.length <= 4_000));
+    && typeof item.board === 'string' && item.board.length <= 300;
 }
 
 function parseEnvironment(text: string): Record<string, string> {
@@ -61,15 +68,6 @@ function processEnvironment(request: StatusRequest): NodeJS.ProcessEnv {
       : path.startsWith('~/') ? resolve(homedir(), path.slice(2)) : resolve(process.cwd(), path);
   }
   return env;
-}
-
-type StatusRequest = Pick<AiRequest, 'provider' | 'environment' | 'claudeConfigDir'>;
-function isStatusRequest(value: unknown): value is StatusRequest {
-  if (!value || typeof value !== 'object') return false;
-  const item = value as Partial<StatusRequest>;
-  return (item.provider === 'claude' || item.provider === 'codex') &&
-    (item.environment === undefined || typeof item.environment === 'string' && item.environment.length <= 8_000) &&
-    (item.claudeConfigDir === undefined || typeof item.claudeConfigDir === 'string' && item.claudeConfigDir.length <= 4_000);
 }
 
 export async function providerStatus(request: StatusRequest): Promise<{ available: boolean; reason?: string }> {
@@ -184,6 +182,18 @@ function send(response: ServerResponse, status: number, data: object) {
   response.end(JSON.stringify(data));
 }
 
+const message = (error: unknown) => error instanceof Error ? error.message : String(error);
+
+/** Read a request body up to `limit` characters; answers 413 and returns undefined beyond it. */
+async function readBody(request: IncomingMessage, response: ServerResponse, limit: number, tooLarge: string) {
+  let body = '';
+  for await (const chunk of request) {
+    body += chunk;
+    if (body.length > limit) { send(response, 413, { error: tooLarge }); return undefined; }
+  }
+  return body;
+}
+
 async function handle(request: IncomingMessage, response: ServerResponse) {
   const host = request.headers.host ?? '';
   const origin = request.headers.origin;
@@ -195,15 +205,12 @@ async function handle(request: IncomingMessage, response: ServerResponse) {
     if (request.method === 'GET') send(response, 200, { available: true });
     else if (request.method === 'POST' && request.headers['content-type']?.startsWith('application/json')) {
       try {
-        let body = '';
-        for await (const chunk of request) {
-          body += chunk;
-          if (body.length > 16_000) { send(response, 413, { error: 'Status request is too large.' }); return; }
-        }
+        const body = await readBody(request, response, 16_000, 'Status request is too large.');
+        if (body === undefined) return;
         const payload: unknown = JSON.parse(body);
         if (!isStatusRequest(payload)) { send(response, 400, { error: 'Invalid provider status request.' }); return; }
         send(response, 200, await providerStatus(payload));
-      } catch (error) { send(response, 400, { error: error instanceof Error ? error.message : String(error) }); }
+      } catch (error) { send(response, 400, { error: message(error) }); }
     } else send(response, 405, { error: 'Use POST to check a provider.' });
     return;
   }
@@ -212,17 +219,14 @@ async function handle(request: IncomingMessage, response: ServerResponse) {
     return;
   }
   try {
-    let body = '';
-    for await (const chunk of request) {
-      body += chunk;
-      if (body.length > MAX_REQUEST) { send(response, 413, { error: 'Request is too large.' }); return; }
-    }
+    const body = await readBody(request, response, MAX_REQUEST, 'Request is too large.');
+    if (body === undefined) return;
     let payload: unknown;
     try { payload = JSON.parse(body); }
     catch { send(response, 400, { error: 'Invalid JSON request.' }); return; }
     if (!isRequest(payload)) { send(response, 400, { error: 'Invalid AI request.' }); return; }
     try { processEnvironment(payload); }
-    catch (error) { send(response, 400, { error: error instanceof Error ? error.message : String(error) }); return; }
+    catch (error) { send(response, 400, { error: message(error) }); return; }
     const controller = new AbortController();
     const disconnect = () => controller.abort();
     response.on('close', disconnect);
@@ -230,7 +234,7 @@ async function handle(request: IncomingMessage, response: ServerResponse) {
     try { send(response, 200, await runAi(payload, controller.signal)); }
     finally { response.off('close', disconnect); }
   } catch (error) {
-    send(response, 500, { error: error instanceof Error ? error.message : String(error) });
+    send(response, 500, { error: message(error) });
   }
 }
 

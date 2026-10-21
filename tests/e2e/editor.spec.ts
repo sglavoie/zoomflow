@@ -1,4 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
+import { selectMenuOption } from './menu';
+import { source, previewReady, stubAiStatus } from './helpers';
 
 const sourceInput = (page: Page) => page.getByRole('textbox', { name: 'D2 source', exact: true });
 async function ready(page: Page, id = 'root') {
@@ -203,4 +205,120 @@ test('formatting during compiler startup cannot overwrite later edits', async ({
   await expect(page.locator('.zf-stage')).toContainText('Keep this edit');
   expect(await editorSource(page)).toBe('latest: Keep this edit');
   await expect(page.locator('#format-status')).toBeHidden();
+});
+
+test('D2 syntax tokens remain visible in light and dark themes', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.locator('#editor .zf-token-comment').first()).toBeVisible();
+  await expect(page.locator('#editor .zf-token-keyword').first()).toBeVisible();
+  await expect(page.locator('#editor .zf-token-property').first()).toBeVisible();
+  await expect(page.locator('#editor .zf-token-url').first()).toBeVisible();
+  await expect(page.locator('#editor .zf-token-operator').first()).toBeVisible();
+  const light = await page.locator('#editor .zf-token-comment').first().evaluate((node) => getComputedStyle(node).color);
+  await selectMenuOption(page, '#theme', 'dark');
+  const dark = await page.locator('#editor .zf-token-comment').first().evaluate((node) => getComputedStyle(node).color);
+  expect(dark).not.toBe(light);
+});
+
+test('typing indents nested D2, closing braces dedent, and layers can be folded', async ({ page }) => {
+  await page.goto('/'); await previewReady(page);
+  await source(page).fill('layers: {');
+  await source(page).press('End'); await source(page).press('Enter');
+  await source(page).pressSequentially('detail: {');
+  await source(page).press('Enter');
+  await source(page).pressSequentially('a: Nested');
+  // CodeMirror already inserted the inner closing brace. Continue after it.
+  await source(page).press('ArrowDown'); await source(page).press('End');
+  await source(page).press('Enter'); await source(page).pressSequentially('}');
+  await expect(source(page)).toHaveText('layers: {\n  detail: {\n    a: Nested\n  }\n}', { useInnerText: true });
+  await previewReady(page);
+  await source(page).press('ControlOrMeta+Home');
+  await source(page).press(process.platform === 'darwin' ? 'Meta+Alt+[' : 'Control+Shift+[');
+  await expect(page.locator('.cm-foldPlaceholder')).toHaveCount(1);
+  await page.locator('.cm-foldPlaceholder').click();
+  await expect(source(page)).toContainText('a: Nested');
+});
+
+test('format preserves selection, cursor and scroll inside a large edited document', async ({ page }) => {
+  await stubAiStatus(page);
+  await page.goto('/'); await previewReady(page);
+  const text = Array.from({ length: 80 }, (_, i) => `node${i}:{label:Same}`).join('\n');
+  await source(page).fill(text); await previewReady(page);
+  const before = await page.locator('.cm-editor').evaluate(async element => {
+    const path = '/node_modules/.vite/deps/@codemirror_view.js';
+    const { EditorView } = await import(/* @vite-ignore */ path);
+    const view = EditorView.findFromDOM(element)!;
+    const start = view.state.doc.toString().indexOf('node50');
+    view.dispatch({ selection: { anchor: start + 6, head: start }, effects: EditorView.scrollIntoView(start, { y: 'center' }) });
+    view.focus();
+    return view.state.doc.sliceString(start, start + 6);
+  });
+  await expect.poll(() => page.locator('.cm-scroller').evaluate(el => el.scrollTop)).toBeGreaterThan(500);
+  const scroll = await page.locator('.cm-scroller').evaluate(el => el.scrollTop);
+  await source(page).press('Shift+Alt+f');
+  await expect(page.locator('#format-status')).toHaveText('Source formatted.');
+  await expect.poll(() => page.evaluate(() => getSelection()?.toString())).toBe(before);
+  expect(Math.abs(await page.locator('.cm-scroller').evaluate(el => el.scrollTop) - scroll)).toBeLessThan(4);
+  await source(page).press('ControlOrMeta+z');
+  await expect.poll(() => source(page).evaluate(async element => {
+    const path = '/node_modules/.vite/deps/@codemirror_view.js';
+    const { EditorView } = await import(/* @vite-ignore */ path);
+    return EditorView.findFromDOM(element)!.state.doc.toString();
+  })).toBe(text);
+});
+
+test('format success returns to file state, while failures persist and later edits clear them', async ({ page }) => {
+  await page.clock.install();
+  await page.goto('/'); await previewReady(page);
+  await source(page).fill('a:{label: Hello}'); await previewReady(page);
+  await page.locator('#format-source').click();
+  await expect(page.locator('#format-status')).toHaveText('Source formatted.');
+  await previewReady(page);
+  await expect(page.locator('#draft-status')).toBeHidden();
+  await page.clock.fastForward(4100);
+  await expect(page.locator('#format-status')).toBeHidden();
+  await expect(page.locator('#draft-status')).toHaveText('File has unsaved changes');
+  await expect(page.locator('#draft-status')).toBeVisible();
+  await page.locator('#format-source').click();
+  await expect(page.locator('#format-status')).toHaveText('Source is already formatted.');
+  await source(page).fill('broken: {');
+  await page.locator('#format-source').click();
+  await expect(page.locator('#format-status')).toContainText('Formatting failed:');
+  await page.clock.fastForward(5000);
+  await expect(page.locator('#format-status')).toBeVisible();
+  await source(page).fill('a: Repaired'); await previewReady(page);
+  await expect(page.locator('#format-status')).toBeHidden();
+  await expect(page.locator('#draft-status')).toBeVisible();
+});
+
+test('wrapped source retains its nesting columns after resize and edits', async ({ page }) => {
+  await stubAiStatus(page);
+  await page.setViewportSize({ width: 390, height: 640 });
+  await page.goto('/'); await previewReady(page);
+  await page.locator('#mobile-source').click();
+  await source(page).fill(`group: {\n    child: This is a long label that should wrap across several visual lines while keeping its nesting visible\n}`);
+  const line = page.locator('.cm-line').filter({ hasText: 'child: This' });
+  await expect(line).toHaveClass(/zf-indented-line/);
+  for (const width of [390, 540]) {
+    await page.setViewportSize({ width, height: 640 });
+    // Compare the first non-whitespace glyph with the first glyph on each
+    // wrapped row; checking CSS alone wouldn't catch a wrong text-indent.
+    const rows = await line.evaluate(el => {
+      const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+      const rows: { x: number; y: number }[] = [];
+      for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+        for (let i = 0; i < node.textContent!.length; i++) {
+          if (/\s/.test(node.textContent![i])) continue;
+          const range = document.createRange(); range.setStart(node, i); range.setEnd(node, i + 1);
+          const r = range.getBoundingClientRect();
+          if (!rows.some(row => Math.abs(row.y - r.y) < 1)) rows.push({ x: r.x, y: r.y });
+        }
+      }
+      return rows;
+    });
+    expect(rows.length).toBeGreaterThan(1);
+    for (const row of rows.slice(1)) expect(Math.abs(row.x - rows[0].x)).toBeLessThan(1);
+  }
+  await source(page).fill('plain: No indentation');
+  await expect(page.locator('.zf-indented-line')).toHaveCount(0);
 });

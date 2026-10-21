@@ -1,10 +1,21 @@
+import type { PaneScope } from './pane-scope';
 import { AiError, aiFailure, readAiResponse } from './ai-errors';
 type Snapshot = { source: string; name: string; board: string; revision: number };
 
-export function setupAiAssistant(root: HTMLElement, idSuffix: string, read: () => Snapshot, validate: (source: string) => Promise<void>, apply: (source: string) => string,
-  onStatus: (message: string, kind: 'info' | 'error') => void = () => {}, undo: () => boolean = () => false,
-  revealChange: () => void = () => {}, dismissHighlights: () => void = () => {}) {
-  const part = <T extends HTMLElement>(id: string) => root.querySelector<T>(`#${id}${idSuffix}`)!;
+export type AiAssistantHost = {
+  read: () => Snapshot;
+  /** Rejects when the proposed source does not compile. */
+  validate: (source: string) => Promise<void>;
+  /** Apply proposed source and return a summary of the change. */
+  apply: (source: string) => string;
+  onStatus?: (message: string, kind: 'info' | 'error') => void;
+  undo?: () => boolean;
+  revealChange?: () => void;
+  dismissHighlights?: () => void;
+};
+
+export function setupAiAssistant({ root, part }: PaneScope, { read, validate, apply, onStatus = () => {}, undo = () => false,
+  revealChange = () => {}, dismissHighlights = () => {} }: AiAssistantHost) {
   const form = part<HTMLFormElement>('ai-form');
   const provider = part<HTMLSelectElement>('ai-provider');
   const claudeConfig = part<HTMLElement>('ai-claude-config');

@@ -12,7 +12,7 @@ test('bundled stdlib and live lint diagnostics recover, with optional backlink w
   await open(fixture('mismatched'));
   await expect(page.locator('#lint-summary')).toHaveText('No lint issues');
   await page.getByLabel('Check boundary ports').check();
-  await expect(page.locator('#lint-summary')).toContainText('5 lint error(s)');
+  await expect(page.locator('#lint-summary')).toContainText('5 lint errors');
   await expect(page.locator('#compile-error')).toBeHidden();
   await expect(page.locator('.zf-stage [data-shape-id="checkout"]')).toBeVisible();
   await expect(page.locator('.cm-lintRange-error').first()).toBeVisible();
@@ -38,13 +38,13 @@ test('bundled stdlib and live lint diagnostics recover, with optional backlink w
   await expect(page.locator('#viewer')).toHaveAttribute('aria-busy', 'false');
   await expect(page.locator('#lint-summary')).toHaveText('No lint issues');
   await page.getByLabel('Check parent backlinks').check();
-  await expect(page.locator('#lint-summary')).toHaveText('0 lint error(s), 1 warning(s)');
+  await expect(page.locator('#lint-summary')).toHaveText('0 lint errors, 1 warning');
   await expect(page.locator('.cm-panel-lint')).toContainText('missing-backlink');
   await page.getByLabel('Check parent backlinks').uncheck();
   await expect(page.locator('#lint-summary')).toHaveText('No lint issues');
 
   await open(fixture('navigation'));
-  await expect(page.locator('#lint-summary')).toHaveText('2 lint error(s), 1 warning(s)');
+  await expect(page.locator('#lint-summary')).toHaveText('2 lint errors, 1 warning');
   await expect(page.locator('.cm-panel-lint')).toContainText('dangling-link');
   await expect(page.locator('.cm-panel-lint')).toContainText('orphan-board');
   await open('broken: {');

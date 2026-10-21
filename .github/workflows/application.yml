@@ -41,6 +41,7 @@ jobs:
       - name: Production build
         run: pnpm build
       - name: Browser and visual regression tests
+        # CI=true adds the production smoke project, which serves the build above.
         run: pnpm exec playwright test --reporter=github,html
       - uses: actions/upload-artifact@v4
         if: failure()

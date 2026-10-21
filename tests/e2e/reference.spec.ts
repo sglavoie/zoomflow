@@ -1,7 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 import { referenceTopics } from '../../apps/web/src/reference-data';
+import { source, previewReady } from './helpers';
 
-const source = (page: Page) => page.getByRole('textbox', { name: 'D2 source', exact: true });
 const panel = (page: Page) => page.getByRole('complementary', { name: 'D2 reference' });
 const search = (page: Page) => page.getByRole('searchbox', { name: 'Search D2 reference' });
 const divider = (page: Page) => page.getByRole('separator', { name: 'Resize diagram and reference' });
@@ -203,4 +203,54 @@ test('reference stays usable on narrow screens, in dark mode, and with storage b
   await expect(divider(page)).toHaveAttribute('aria-valuenow', '55');
   await page.getByRole('button', { name: 'Close D2 reference' }).click();
   await expect(panel(page)).toBeHidden();
+});
+
+test('reference keeps exact code, highlights search matches, and acknowledges each copy locally', async ({ page }) => {
+  await page.clock.install();
+  await page.goto('/'); await previewReady(page);
+  await page.evaluate(() => Object.defineProperty(navigator, 'clipboard', { configurable: true,
+    value: { writeText: async (text: string) => { document.documentElement.dataset.copied = text; } } }));
+  await page.locator('#toggle-reference').click();
+  await expect(page.locator('.reference-topic .zf-token-property').first()).toBeVisible();
+  await page.locator('#reference-search').fill('connections arrows');
+  const card = page.locator('.reference-topic:visible');
+  await expect(card).toHaveCount(1);
+  await expect(card.locator('h3 mark')).toHaveText(['Connections', 'arrows']);
+  const expected = referenceTopics.find((topic) => topic.id === 'connections')!.source;
+  expect(await card.locator('code').textContent()).toBe(expected);
+  const copy = card.getByRole('button', { name: 'Copy Connections and arrows example' });
+  await copy.click();
+  await expect(copy).toHaveText('Copied');
+  expect(await page.locator('html').getAttribute('data-copied')).toBe(expected);
+  await page.clock.fastForward(2100);
+  await expect(copy).toHaveText('Copy');
+  await page.locator('#reference-search').fill('->');
+  await expect(page.locator('.reference-topic:visible code mark.zf-token-operator').first()).toBeVisible();
+  await page.locator('#reference-search').fill('');
+  await expect(page.locator('.reference-topic mark')).toHaveCount(0);
+  await expect(page.locator('.reference-topic .zf-token-property').first()).toBeVisible();
+});
+
+test('tablet panes stay usable and reference returns to the editor without losing edits', async ({ page }) => {
+  await page.setViewportSize({ width: 768, height: 800 });
+  await page.goto('/');
+  await previewReady(page);
+  await expect(page.locator('#mobile-view-switch')).toBeVisible();
+  await expect(page.locator('#source-pane')).toBeHidden();
+  await page.locator('#mobile-source').click();
+  expect((await page.locator('#source-pane').boundingBox())!.width).toBe(768);
+  await source(page).fill('tablet: Keep my edits');
+  await source(page).press('ControlOrMeta+Shift+/');
+  await expect(page.locator('#d2-reference')).toBeVisible();
+  await expect(page.locator('#reference-search')).toBeFocused();
+  await page.keyboard.press('Escape');
+  await expect(source(page)).toBeFocused();
+  await expect(source(page)).toHaveText('tablet: Keep my edits');
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await expect(page.locator('#preview-pane')).toBeVisible();
+  await expect(page.locator('#source-pane')).toBeVisible();
+  await expect(page.locator('#mobile-view-switch')).toBeHidden();
+  await page.setViewportSize({ width: 768, height: 800 });
+  await expect(source(page)).toBeVisible();
+  await expect(source(page)).toHaveText('tablet: Keep my edits');
 });

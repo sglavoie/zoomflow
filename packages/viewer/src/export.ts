@@ -16,8 +16,9 @@ function dataUrl(blob: Blob): Promise<string> {
   });
 }
 
-/** Freeze theme and embed resources before downloading or drawing onto a canvas. */
-export async function prepareExportSvg(svg: string, dark: boolean): Promise<{ svg: string; warnings: string[] }> {
+/** Embed resources before downloading or drawing onto a canvas. A `dark` boolean freezes the theme;
+ * leaving it undefined keeps D2's `prefers-color-scheme` rules so the SVG follows its reader. */
+export async function prepareExportSvg(svg: string, dark?: boolean): Promise<{ svg: string; warnings: string[] }> {
   const doc = new DOMParser().parseFromString(svg, 'image/svg+xml');
   if (doc.querySelector('parsererror') || doc.documentElement.localName !== 'svg') throw new Error('Invalid SVG from renderer');
   const root = doc.documentElement;
@@ -39,7 +40,7 @@ export async function prepareExportSvg(svg: string, dark: boolean): Promise<{ sv
     return resources.get(url)!;
   }
   async function css(text: string): Promise<string> {
-    text = text.replace(/@media\s*(?:screen\s+and\s*)?\(prefers-color-scheme:\s*dark\)/g, `@media ${dark ? 'all' : 'not all'}`);
+    if (dark !== undefined) text = text.replace(/@media\s*(?:screen\s+and\s*)?\(prefers-color-scheme:\s*dark\)/g, `@media ${dark ? 'all' : 'not all'}`);
     // Imported styles cannot be made portable without a CSS dependency resolver.
     text = text.replace(/@import\s+[^;]+;/gi, () => {
       warnings.push('Removed an external stylesheet import.');

@@ -1,3 +1,4 @@
+import type { PaneScope } from './pane-scope';
 import { flowFilename, flowSource, flowTemplate, readFlow, type Flow, type FlowStep } from './flow-model';
 
 type FlowTarget = { read: () => { source: string; name: string }; update: (source: string) => void };
@@ -205,12 +206,12 @@ export function setupFlowBuilder(create: (source: string, name: string) => void,
   }, { capture: true });
   return {
     /** Offer Edit flow above a pane's diagram while its source is a builder flow. */
-    attach(viewer: HTMLElement, idSuffix: string, pane: FlowTarget) {
+    attach(scope: PaneScope, pane: FlowTarget) {
       const toolbar = document.createElement('div');
       toolbar.className = 'flow-builder-toolbar';
       toolbar.hidden = true;
-      toolbar.innerHTML = `<button id="edit-flow${idSuffix}" type="button">Edit flow</button><span>Change steps and connections without writing code.</span>`;
-      viewer.prepend(toolbar);
+      toolbar.innerHTML = `<button id="${scope.id('edit-flow')}" type="button">Edit flow</button><span>Change steps and connections without writing code.</span>`;
+      scope.part('viewer').prepend(toolbar);
       const edit = toolbar.querySelector('button')!;
       edit.addEventListener('click', () => { target = pane; open(true, edit); });
       return { refresh() { toolbar.hidden = !readFlow(pane.read().source); } };

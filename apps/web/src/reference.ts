@@ -1,5 +1,6 @@
 import { referenceTopics } from './reference-data';
 import { d2HighlightRanges } from './d2-language';
+import { plural } from './text';
 
 /** Build text nodes only, preserving exact copy text and syntax colors under matches. */
 function renderMatches(element: HTMLElement, source: string, terms: string[], syntax = false) {
@@ -136,7 +137,7 @@ export function setupReference(host: () => ReferenceHost) {
       }
     }
     empty.hidden = matches > 0;
-    count.textContent = `${matches} topic${matches === 1 ? '' : 's'}`;
+    count.textContent = plural(matches, 'topic');
     content.scrollTop = 0;
     status.textContent = '';
   }

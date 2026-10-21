@@ -1,121 +1,108 @@
 # Browser tests
 
-`editing-polish.spec.ts` checks phone composer visibility with Send/Cancel,
-persistent unsaved state during errors and activity, actual wrapped-text alignment,
-adaptive export defaults and remembered choices, fixed-size badges in live/offline
-viewers, and AI change highlights with selection, expiry, undo and document switching.
-The AI diff unit tests also cover deletions, repeated lines, Unicode, and bounded
-large rewrites.
+Playwright starts the Vite app and runs every spec in Chromium, Firefox and WebKit.
+Install browsers with `pnpm exec playwright install` and run `pnpm test:e2e` from the
+workspace root. Do not run separate Playwright invocations concurrently: they share a
+server and output directory.
 
-`quality-pass.spec.ts` covers formatting selection and scroll, compact breadcrumb
-overflow in both live and offline viewers, export choices on short screens,
-project filtering and collapsed groups, AI transport feedback, and undoable
-document restoration/removal with recovery after reload. It also checks undo expiry,
-retained file handles and board views, and availability timeouts. The companion
-`quality-pass-visual.spec.ts` captures the export choices, filtered picker, confirmation
-dialog and breadcrumb overflow in light and dark themes.
+Specs are grouped by feature. Add a test to the file for the feature it exercises;
+shared helpers live in `helpers.ts` (source editor, preview readiness, project fixtures,
+CodeMirror selection) and `menu.ts` (export menu and downloads).
 
-Playwright starts the Vite app and runs viewer navigation and animation tests in
-Chromium, Firefox and WebKit. Install browsers with `pnpm exec playwright install`
-and run `pnpm test:e2e` from the workspace root.
+## Editing
 
-`transition.spec.ts` checks that board changes fade in place at two viewport
-sizes, without scaling or an overlay. It also checks reduced motion support.
+- `editor.spec.ts`: real CodeMirror input, retained previews and inline diagnostics on
+  syntax errors, startup edits, exact source selections (including Unicode and container
+  names), keyboard isolation, file replacement, D2 typing with indentation and folding,
+  wrapped-line nesting columns, syntax colors in both themes, and formatting feedback
+  that preserves selection and scroll.
+- `diagnostics.spec.ts`: one diagnostics summary with a stable editor through failure and
+  recovery, file-aware navigation to imported locations, and compiler failures without a
+  usable location.
+- `lint.spec.ts`: the bundled stdlib import, inline and list diagnostics, opt-in boundary
+  checking (name mismatches and the zero-pairs guard), optional backlink warnings,
+  dangling links, orphan layers, and recovery after lint and compiler errors.
+- `shortcuts.spec.ts`: the shortcuts dialog and D2 comment toggling.
+- `reference.spec.ts`: reference shortcuts, source and selection preservation, focus
+  restoration, search, copy feedback, resizing, offline use, narrow and dark layouts, and
+  tablet pane switching. `apps/web/test/reference.test.ts` compiles every bundled example.
+- `flow-builder.spec.ts`: building flows from the form and editing them again.
+- `ai.spec.ts`: AI edits and undo, availability checks and timeouts, cancellation,
+  transport failures, highlights of changed lines, deletions on short phone screens, and
+  the phone composer. Server unit tests verify that aborting a request ends its CLI process.
 
-`export.spec.ts` downloads real SVG, PNG, ZIP and HTML files. It opens HTML via
-`file://` with the browser offline, exercises nested and cyclic board navigation,
-and checks remote-image embedding and fallback. Root PNG baselines are per browser
-and OS; review the images before deliberately updating them with
-`pnpm exec playwright test tests/e2e/export.spec.ts --update-snapshots`.
+## Documents and projects
 
-`editor.spec.ts` exercises real CodeMirror input, retained previews and inline
-diagnostics on syntax errors, recovery, startup edits, exact source selections
-(including Unicode and container names), explicit source reveal,
-preview highlights, editor keyboard isolation and file replacement.
+- `documents.spec.ts`: draft recovery and removal, same-name documents with separate
+  histories, disk saves (slow, canceled and via shortcut), the download fallback, saved
+  example identity, unsaved markers, stable header and status copy, preference storage,
+  file drops, and undoable removal that restores handles, views and history.
+- `examples.spec.ts`: the bundled examples, the grouped and filtered picker, and
+  restoring examples with cancel and undo.
+- `project.spec.ts`: opened folders with relative imports, project grouping and scoped
+  removal with undo, per-project unsaved counts, and saving project file copies.
+- `continuity.spec.ts`: concurrent-tab recovery, per-document and per-board view
+  restoration, and restored selection and scroll when switching documents.
+- `split-view.spec.ts`: both split layouts, independent panes and routes, one pane per
+  draft, header commands following the active pane, and narrower fallbacks.
+- `source-split.spec.ts`: the adaptive diagram/source split and remembered resizes.
 
-`polish.spec.ts` checks draft recovery and removal, copy downloads, syntax
-highlighting, mobile editor visibility, and Space+drag panning on linked shapes.
+## Diagram
 
-`refinement.spec.ts` covers isolated undo histories for same-name documents, restored
-selection and scroll, draft grouping and example restoration, stable header geometry,
-remembered preferences, unobscured mobile controls, delayed progress feedback, error
-navigation, and distinct link cues in both live and offline viewers. `ai.spec.ts` also
-covers availability checks, cancellation, elapsed time, and the explicit undo action;
-the server unit tests verify that aborting a request terminates its CLI process.
+- `viewer.spec.ts`: drill-down navigation, ancestor-link suggestions and inferred parent
+  connections, live and offline.
+- `canvas.spec.ts`: zoom, pan and fit, wheel and pinch input, spatial keyboard navigation,
+  link badges (direction, tooltips, size through zoom), compact breadcrumbs, canvas
+  guidance, explicit source reveal, and shape selection by keyboard and Alt+click.
+- `transition.spec.ts`: board changes fade in place, with reduced-motion support.
+- `fullscreen.spec.ts`: the fullscreen diagram.
+- `engine.spec.ts`: slow first download, module and worker startup failures with retry,
+  and restarting a stalled preview without losing edits.
+- `preview-queue.spec.ts`: intermediate edits are skipped while a compile is running.
 
-`workspace-polish.spec.ts` covers tablet pane switching and reference focus restoration,
-D2 comment toggling, the save shortcut and download fallback, stable editor geometry
-through compile errors, project grouping and scoped removal, independent appearance
-controls, and desktop canvas controls outside the diagram.
+## Phones and touch
 
-`reference.spec.ts` checks reference shortcuts from the editor and reference,
-source/selection preservation, focus restoration, search and scroll retention,
-pointer and keyboard resizing, stored split size, offline search and clipboard
-handling, board navigation isolation, and narrow-screen/dark-mode layouts with
-storage disabled. `apps/web/test/reference.test.ts` compiles and renders each
-bundled example with the pinned D2 compiler and checks Zoomflow lint.
+- `mobile.spec.ts`: the Preview/Source switch, selection that reveals source, first fit,
+  compact and scrollable tools, the on-screen keyboard (simulated with a `visualViewport`
+  resize), and unobscured canvas controls.
+- `touch.spec.ts`: touch cues and hit areas, reveal from the hidden preview, and a touch
+  visual baseline. Chromium also exercises real multi-touch input through CDP in `canvas.spec.ts`.
 
-`lint.spec.ts` checks the bundled stdlib import, inline and list diagnostics,
-opt-in boundary checking (name mismatches and the zero-pairs guard), optional backlink warnings, dangling
-links, orphan layers, and recovery after both lint and compiler errors.
-`viewer.spec.ts` also checks port-free nested navigation, ancestor-link suggestions,
-and inferred parent connections in the live viewer and offline HTML.
+## Export
 
-`continuity.spec.ts` verifies concurrent-tab recovery (including project imports),
-per-document and per-board view restoration, mobile error repair, compact stable
-source chrome, zoom hints, and explicit export scope. Draft-store unit tests cover
-revision conflicts, migration, deletion, and edits to recovered copies.
+- `export.spec.ts`: real SVG, PNG, ZIP and HTML downloads, HTML opened over `file://`
+  offline with nested and cyclic navigation, remote-image embedding and fallback, export
+  defaults and remembered choices, progress, and cancellation when the source changes.
+- `export-visual.spec.ts`: offline HTML at phone, short, landscape and enlarged-text sizes.
 
-`visual.spec.ts` captures 28 Chromium workspace baselines at 1440×900 and 390×844:
-light/dark healthy views, source errors, mobile preview errors, expanded AI/lint
-panels, the reference panel, AI change highlights with Undo, and expanded settings at short, landscape, and enlarged-text phone sizes. It fixes locale, timezone, reduced motion, and the
-local AI availability response; it uses the real editor and D2 renderer.
+## Production build
 
-The application workflow runs all checks on `macos-15`, matching the macOS baseline
-family. Browser versions come from the pinned Playwright dependency. To review a
-layout change, run on macOS:
+`production.spec.ts` runs only in the `production` project, against `pnpm build` output
+served by `vite preview`. It checks what only the bundle can break: the lazy D2 worker,
+WASM, fonts and the offline export runtime. CI enables it; locally, build first and set
+`ZOOMFLOW_PRODUCTION_E2E=1`:
+
+```sh
+pnpm build
+ZOOMFLOW_PRODUCTION_E2E=1 pnpm exec playwright test --project=production
+```
+
+## Visual baselines
+
+`visual.spec.ts` captures Chromium workspace baselines at 1440×900 and 390×844 (healthy,
+source and preview errors, expanded tools, the reference, AI changes). `controls-visual.spec.ts`
+captures export choices, the filtered picker, the confirmation dialog and breadcrumb
+overflow. `export-visual.spec.ts` and `touch.spec.ts` add offline-viewer and touch
+baselines. They fix locale, timezone, reduced motion and the AI availability response.
+
+The application workflow runs on `macos-15`, matching the baseline family; browser
+versions come from the pinned Playwright dependency. To review a layout change on macOS:
 
 ```sh
 pnpm exec playwright test tests/e2e/visual.spec.ts --project=chromium --update-snapshots
 pnpm exec playwright test tests/e2e/visual.spec.ts --project=chromium
 ```
 
-Inspect changed PNGs before committing them. CI never updates baselines; failures
-upload `playwright-report` and `test-results` for inspection. Changes to the runner
-OS or Playwright version may require reviewed baseline updates. Do not run separate
-Playwright invocations concurrently: they share a server and output directory.
-
-`finishing.spec.ts` covers source-pane continuity across project files, keyboard
-shape selection and focus after recompilation, file-aware diagnostic navigation
-and unavailable locations, normalized wheel units, expanded-tool scrolling,
-larger text, and module/worker/font startup recovery. Chromium also exercises
-real multi-touch events through CDP. Software-keyboard layout is simulated with
-short viewports and a `visualViewport` resize; it is not a physical-device keyboard test.
-
-`final-polish.spec.ts` covers passive source selection versus explicit reveal, quiet
-status copy, saved-example identity and undo, and directional link badges in live and
-offline viewers. `preview-queue.spec.ts` holds a real compilation to verify that
-intermediate edits are skipped; queue unit tests cover invalidation and failure recovery.
-`export-visual.spec.ts` checks offline HTML at phone, short, landscape, and enlarged-text
-sizes in all three browsers, with eight light/dark Chromium visual baselines. It verifies
-that the diagram remains usable and its controls stay inside the viewport.
-
-`interaction-polish.spec.ts` checks minimal viewport framing on explicit reveal,
-spatial keyboard navigation and Tab exit on a large diagram, per-project unsaved
-indicators across undo/save/reload, actual D2 typing and folding, recovery from a
-stalled worker, and touch cues plus keyboard behavior in offline HTML. Language
-unit tests compile representative multiline labels and nested boards with the
-bundled D2 engine, alongside indentation and fold-range assertions.
-
-`viewport-polish.spec.ts` adds a touch-device visual baseline, checks that enlarged
-link hit areas do not overlap, and verifies reveal while the mobile preview is hidden.
-
-`experience-polish.spec.ts` checks formatting feedback lifetimes, adaptive source
-widths and remembered overrides, syntax-colored reference search and copy feedback,
-contextual pointer/keyboard/touch guidance, actionable empty boards, and persistent
-AI review with jump-to-change, dismissal, and undo after a failed follow-up request.
-
-`split-view.spec.ts` covers both split layouts: independent editing, previews and
-board routes per pane, one pane per draft, header commands following the active
-pane, the empty second pane, persistence across reload, and the tabbed and single-pane
-fallbacks on narrower windows. The Layout control is hidden on phones (600px and narrower).
+Inspect changed PNGs before committing them. CI never updates baselines; failures upload
+`playwright-report` and `test-results`. Other macOS versions render text slightly
+differently, so some baselines fail locally on newer systems even without changes.
