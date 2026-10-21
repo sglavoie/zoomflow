@@ -11,7 +11,8 @@ test('diagnostics open every imported location without marking unrelated local t
   await source(page).fill('Imported: {shape: invalid}\nOther: {shape: invalid}');
   await chooseProjectFile(page, 'main.d2');
   await expect(page.locator('#compile-error')).toBeVisible();
-  await source(page).press('ControlOrMeta+Shift+m');
+  // Key codes make Playwright report the shifted key (M), as a real keyboard does.
+  await source(page).press('ControlOrMeta+Shift+KeyM');
   await expect(page.locator('#diagnostics-panel')).toBeVisible();
   await page.keyboard.press('Escape');
   await expect(page.locator('#diagnostics-panel')).toBeHidden();

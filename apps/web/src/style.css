@@ -1738,7 +1738,16 @@ footer {
     padding-bottom: var(--space-1);
   }
   .pane-title {
+    flex-wrap: nowrap;
     padding-block: var(--space-1);
+  }
+  /* A wrapped title row would push the editor below short phone screens; the title
+     yields to the actions, whose labels vary by browser (Save or Download). */
+  .pane-title > :first-child {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
   [data-part="work-status"] {
     height: 36px;
