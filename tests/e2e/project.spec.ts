@@ -1,12 +1,12 @@
 import { expect, test } from '@playwright/test';
 import { fileURLToPath } from 'node:url';
-import { source, previewReady, stubAiStatus, projectFolder } from './helpers';
+import { source, previewReady, stubAiStatus, projectFolder, openFolder } from './helpers';
 
 const folder = fileURLToPath(new URL('../../fixtures/browser-project', import.meta.url));
 
 test('folder files resolve imports and keep edits across file switches and reload', async ({ page }) => {
   await page.goto('/');
-  await page.locator('#folder').setInputFiles(folder);
+  await openFolder(page, folder);
   await expect(page.locator('#filename')).toHaveText('main.d2');
   await expect(page.locator('.zf-stage')).toContainText('From a local import');
   await page.locator('#example-picker summary').click();
@@ -26,7 +26,7 @@ test('folder files resolve imports and keep edits across file switches and reloa
 
 test('an error in an imported file opens that file at the reported source', async ({ page }) => {
   await page.goto('/');
-  await page.locator('#folder').setInputFiles(folder);
+  await openFolder(page, folder);
   await expect(page.locator('.zf-stage')).toContainText('From a local import');
   await page.locator('#example-picker summary').click();
   await page.locator('#draft-options .example-option[title="browser-project/lib/nodes.d2"]').click();
@@ -111,7 +111,7 @@ test('project dirty indicators and counts follow edits, undo, saving and reload'
     (window as any).showSaveFilePicker = async () => ({ name: 'nodes.d2', createWritable: async () => ({ write: async () => {}, close: async () => {} }) });
   });
   await page.goto('/'); await previewReady(page);
-  await page.locator('#folder').setInputFiles('fixtures/browser-project'); await previewReady(page);
+  await openFolder(page, 'fixtures/browser-project'); await previewReady(page);
   const choose = async (path: string) => {
     await page.locator('#example-picker summary').click();
     await page.locator(`.example-option[title="browser-project/${path}"]`).click();
@@ -149,7 +149,7 @@ test('saving a project file copy keeps its import path and updates its visible i
     }) });
   });
   await page.goto('/'); await previewReady(page);
-  await page.locator('#folder').setInputFiles('fixtures/browser-project');
+  await openFolder(page, 'fixtures/browser-project');
   await expect(page.locator('.zf-stage')).toContainText('From a local import');
   await page.locator('#save-file').click();
   await expect(page.locator('#filename')).toHaveText('main-copy.d2');
@@ -170,7 +170,7 @@ test('saving a project file copy keeps its import path and updates its visible i
 test('project removal undo recovers imports, edited files and persisted drafts', async ({ page }) => {
   await stubAiStatus(page);
   await page.goto('/'); await previewReady(page);
-  await page.locator('#folder').setInputFiles('fixtures/browser-project'); await previewReady(page);
+  await openFolder(page, 'fixtures/browser-project'); await previewReady(page);
   const original = await source(page).innerText();
   await source(page).fill(`${original}\nextra: Unsaved work`); await previewReady(page);
   await page.locator('#example-picker summary').click();
@@ -194,7 +194,7 @@ test('project removal undo recovers imports, edited files and persisted drafts',
 test('projects group files above examples and removal only affects the chosen project', async ({ page }) => {
   await page.goto('/');
   await page.locator('#file').setInputFiles({ name: 'keep.d2', mimeType: 'text/plain', buffer: Buffer.from('keep: My draft') });
-  await page.locator('#folder').setInputFiles(projectFolder);
+  await openFolder(page, projectFolder);
   await previewReady(page);
   await page.locator('#example-picker summary').click();
   const group = page.getByRole('region', { name: 'browser-project project', exact: true });

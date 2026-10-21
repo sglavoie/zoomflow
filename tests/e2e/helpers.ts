@@ -17,6 +17,19 @@ export const projectFolder = fileURLToPath(new URL('../../fixtures/browser-proje
 
 export const source = (page: Page) => page.getByRole('textbox', { name: 'D2 source', exact: true });
 
+/** Opens a project folder through the Open folder input.
+ * Firefox and WebKit on Linux sometimes never acknowledge a directory upload that the
+ * page already received, so this waits for the input's change event instead. */
+export async function openFolder(page: Page, path: string) {
+  await page.locator('#folder').evaluate((input) => {
+    input.addEventListener('change', () => { input.dataset.testChanged = 'true'; }, { once: true });
+  });
+  const upload = page.locator('#folder').setInputFiles(path);
+  upload.catch(() => {}); // A hung upload is rejected when the page closes.
+  await Promise.race([upload, expect(page.locator('#folder')).toHaveAttribute('data-test-changed', 'true')]);
+  await page.locator('#folder').evaluate((input) => { delete input.dataset.testChanged; });
+}
+
 /** A pane (the first by default) shows a finished preview of its current source. */
 export async function previewReady(page: Page, pane: 'a' | 'b' = 'a') {
   const suffix = pane === 'b' ? '-b' : '';

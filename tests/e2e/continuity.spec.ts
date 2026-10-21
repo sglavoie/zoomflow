@@ -1,7 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 import { pathToFileURL } from 'node:url';
 import { openDownloads } from './menu';
-import { source, previewReady, chooseExample } from './helpers';
+import { source, previewReady, chooseExample, openFolder } from './helpers';
 
 async function saved(page: Page) {
   await expect(page.locator('#draft-status')).toHaveAttribute('data-recovery', 'saved');
@@ -45,7 +45,7 @@ test('concurrent tabs keep both versions and unrelated drafts after reload', asy
 
 test('project recovery copies keep imports and do not replace the canonical project file', async ({ page, context }) => {
   await page.goto('/'); await previewReady(page);
-  await page.locator('#folder').setInputFiles('fixtures/browser-project');
+  await openFolder(page, 'fixtures/browser-project');
   await previewReady(page);
   const original = await source(page).innerText();
   const other = await context.newPage(); await other.goto('/'); await previewReady(other);

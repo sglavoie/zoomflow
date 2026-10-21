@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { readFileSync } from 'node:fs';
-import { comparesVisuals, visualSkipReason } from './helpers';
+import { comparesVisuals, visualSkipReason, openFolder } from './helpers';
 
 test.use({ reducedMotion: 'reduce', locale: 'en-US', timezoneId: 'UTC' });
 for (const theme of ['light', 'dark'] as const) test(`polished controls in ${theme}`, async ({ page, browserName }) => {
@@ -14,7 +14,7 @@ for (const theme of ['light', 'dark'] as const) test(`polished controls in ${the
   await page.locator('#header-more-toggle').click();
   await expect(page.locator('#header-more-content')).toHaveScreenshot(`export-${theme}.png`);
   await page.locator('#header-more-toggle').click();
-  await page.locator('#folder').setInputFiles('fixtures/browser-project');
+  await openFolder(page, 'fixtures/browser-project');
   await expect(page.locator('.zf-stage')).toContainText('From a local import');
   await page.locator('#example-picker summary').click();
   await page.locator('#diagram-search').fill('nodes');

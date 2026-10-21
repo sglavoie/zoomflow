@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import { selectMenuOption, downloadExport } from './menu';
-import { source, previewReady, stubAiStatus } from './helpers';
+import { source, previewReady, stubAiStatus, openFolder } from './helpers';
 
 async function ready(page: Page, id = 'root') {
   await expect(page.locator('.zf-stage')).toHaveAttribute('data-board', id);
@@ -155,7 +155,7 @@ test('picker groups drafts, marks modified examples and restores the original', 
 test('large document lists filter projects and collapse inactive groups', async ({ page }) => {
   await stubAiStatus(page);
   await page.goto('/'); await previewReady(page);
-  await page.locator('#folder').setInputFiles('fixtures/browser-project'); await previewReady(page);
+  await openFolder(page, 'fixtures/browser-project'); await previewReady(page);
   await page.locator('#file').setInputFiles({ name: 'notes.d2', mimeType: 'text/plain', buffer: Buffer.from('a: Notes') }); await previewReady(page);
   await page.locator('#example-picker summary').click();
   const group = page.getByRole('region', { name: 'browser-project project', exact: true });

@@ -2,7 +2,7 @@ import { expect, test, type Page } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 import { readFileSync } from 'node:fs';
 import { selectMenuOption, downloadExport, downloadSource, openDownloads } from './menu';
-import { source, previewReady, stubAiStatus, chooseExample, projectFolder } from './helpers';
+import { source, previewReady, stubAiStatus, chooseExample, projectFolder, openFolder } from './helpers';
 
 /** Documents: drafts, recovery, saving to disk, downloads and removal with undo. */
 
@@ -400,8 +400,8 @@ test('reopening an unchanged file, folder or empty draft reuses its draft', asyn
   await expect(source(page)).toHaveText('repeat: Same file');
   expect(await draftRows(page, 'repeat.d2')).toBe(2);
 
-  await page.locator('#folder').setInputFiles(projectFolder); await previewReady(page);
-  await page.locator('#folder').setInputFiles(projectFolder); await previewReady(page);
+  await openFolder(page, projectFolder); await previewReady(page);
+  await openFolder(page, projectFolder); await previewReady(page);
   await page.locator('#example-picker > summary').click();
   await expect(page.locator('.project-group')).toHaveCount(1);
   await page.keyboard.press('Escape');

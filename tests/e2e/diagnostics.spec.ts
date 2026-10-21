@@ -1,12 +1,12 @@
 import { expect, test } from '@playwright/test';
-import { source, previewReady, chooseProjectFile } from './helpers';
+import { source, previewReady, chooseProjectFile, openFolder } from './helpers';
 import { openDownloads } from './menu';
 
 /** Compiler and lint diagnostics: summaries, locations and navigation to source. */
 
 test('diagnostics open every imported location without marking unrelated local text', async ({ page }) => {
   await page.goto('/'); await previewReady(page);
-  await page.locator('#folder').setInputFiles('fixtures/browser-project'); await previewReady(page);
+  await openFolder(page, 'fixtures/browser-project'); await previewReady(page);
   await chooseProjectFile(page, 'lib/nodes.d2');
   await source(page).fill('Imported: {shape: invalid}\nOther: {shape: invalid}');
   await chooseProjectFile(page, 'main.d2');
