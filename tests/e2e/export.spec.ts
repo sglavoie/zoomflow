@@ -2,15 +2,8 @@ import { expect, test, type Page, type TestInfo } from '@playwright/test';
 import { pathToFileURL } from 'node:url';
 import { readFile } from 'node:fs/promises';
 import { selectMenuOption, downloadExport } from './menu';
-import { source, previewReady, stubAiStatus } from './helpers';
+import { source, previewReady, stubAiStatus, board, drill } from './helpers';
 
-async function board(page: Page, id: string) {
-  await expect(page.locator('.zf-stage')).toHaveAttribute('data-board', id);
-}
-async function drill(page: Page, id: string) {
-  await page.locator(`.zf-stage a[href="${id}"]`).click();
-  await board(page, id);
-}
 async function download(page: Page, format: string, info: TestInfo) {
   await selectMenuOption(page, '#export-format', format);
   const pending = page.waitForEvent('download');
@@ -64,6 +57,9 @@ test('opens a single HTML file offline and drills every level with history and b
   const path = await download(page, 'html', info);
   const html = await readFile(path, 'utf8');
   expect(html).not.toMatch(/<script[^>]+src=|d2\.wasm/);
+  // Boards share one font subset per face instead of embedding their own.
+  expect(html.match(/@font-face/g)).toHaveLength(1);
+  expect(html).toContain('@font-face{font-family:zf-font-bold;');
   await page.goto('about:blank');
   const network: string[] = [];
   context.on('request', (request) => { if (/^https?:/.test(request.url())) network.push(request.url()); });
@@ -77,6 +73,11 @@ test('opens a single HTML file offline and drills every level with history and b
   await drill(page, 'root.layers.checkout');
   await drill(page, 'root.layers.checkout.layers.charge');
   await expect(page.locator('.zf-stage')).toContainText('Capture');
+  const font = await page.locator('.zf-stage text.text-bold').first().evaluate(async (text) => {
+    await document.fonts.ready;
+    return { family: getComputedStyle(text).fontFamily.replace(/"/g, ''), loaded: document.fonts.check(`16px ${getComputedStyle(text).fontFamily}`, text.textContent!) };
+  });
+  expect(font).toEqual({ family: 'zf-font-bold', loaded: true });
   const colors = await page.locator('.zf-stage').evaluate((stage) => ({
     stage: getComputedStyle(stage).backgroundColor,
     board: getComputedStyle(stage.querySelector('svg svg > rect')!).fill,
@@ -181,7 +182,7 @@ test('invalid current file cannot export the previous diagram', async ({ page })
   await expect(page.locator('#compile-error')).toBeVisible();
   await expect(page.locator('#export')).toBeDisabled();
   await expect(page.locator('#preview-status')).toContainText('Preview out of date');
-  await page.getByRole('textbox', { name: 'D2 source' }).fill('fixed: Current file');
+  await source(page).fill('fixed: Current file');
   await expect(page.locator('#export')).toBeEnabled();
   const [download] = await Promise.all([page.waitForEvent('download'), downloadExport(page)]);
   expect(download.suggestedFilename()).toBe('bad-root.svg');
@@ -219,7 +220,7 @@ test('source changes cancel an export already embedding images', async ({ page }
   page.on('download', () => { ++downloads; });
   await downloadExport(page);
   await requestSeen;
-  await page.getByRole('textbox', { name: 'D2 source' }).fill('new: Current source');
+  await source(page).fill('new: Current source');
   release();
   await expect(page.locator('#activity-status')).toContainText('Export canceled because the source changed.');
   expect(downloads).toBe(0);
@@ -321,4 +322,34 @@ test('clicking the recommended format makes it explicit even without preference 
   await page.locator('#header-more-toggle').click();
   await source(page).fill('one: Single board'); await previewReady(page);
   await expect(selected).toHaveValue('html');
+});
+
+test('export stays disabled until the running export finishes', async ({ page }) => {
+  let hold = false;
+  let release: (() => void) | undefined;
+  await page.route('https://assets.example/icon.svg', async (route) => {
+    const reply = () => route.fulfill({ contentType: 'image/svg+xml', headers: { 'Access-Control-Allow-Origin': '*' },
+      body: '<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40"><rect width="40" height="40" fill="red"/></svg>' });
+    if (hold) release = () => void reply();
+    else await reply();
+  });
+  await page.goto('/'); await previewReady(page);
+  await page.locator('#file').setInputFiles({ name: 'image.d2', mimeType: 'text/plain', buffer: Buffer.from('Picture: {icon: https://assets.example/icon.svg}') });
+  await expect(page.locator('.zf-stage [data-shape-id="Picture"]')).toBeVisible();
+  await previewReady(page);
+  await selectMenuOption(page, '#export-format', 'svg');
+  const downloads: string[] = [];
+  page.on('download', (download) => downloads.push(download.suggestedFilename()));
+  hold = true;
+  const exportButton = page.locator('#export');
+  await exportButton.click();
+  await expect(exportButton).toBeDisabled();
+  await expect.poll(() => Boolean(release)).toBe(true);
+  // Changing the format refreshes the export label but must not re-enable the running export.
+  await page.locator('#export-format input[value="png"]').check();
+  await page.locator('#export-format input[value="svg"]').check();
+  await expect(exportButton).toBeDisabled();
+  release!();
+  await expect(exportButton).toBeEnabled();
+  await expect.poll(() => downloads).toEqual(['image-root.svg']);
 });

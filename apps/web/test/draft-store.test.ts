@@ -146,5 +146,18 @@ describe('draft recovery across tabs', () => {
     store.save([draft('order', 'one'), draft('other', 'two')], 'order');
     expect(new DraftStore(storage, 'reload').load().second).toBeUndefined();
   });
+  test('a save reads only the changed documents and reclaims each ancestor', () => {
+    const storage = new MemoryStorage();
+    const store = new DraftStore(storage, 'a'); store.load();
+    const many = Array.from({ length: 50 }, (_, i) => draft(`file:${i}`, 'same'));
+    store.save(many, 'file:0');
+    const read: string[] = [];
+    const getItem = storage.getItem.bind(storage);
+    storage.getItem = (key) => { read.push(key); return getItem(key); };
+    store.save(many.map((d, i) => i < 2 ? { ...d, source: 'changed' } : d), 'file:0');
+    expect(read.filter((key) => key.startsWith('zoomflow.draft.v2:'))).toHaveLength(4);
+    expect([...storage.data.keys()].filter((key) => key.startsWith('zoomflow.draft.v2:'))).toHaveLength(50);
+    expect(new DraftStore(storage, 'reload').load().drafts.filter((d) => d.source === 'changed')).toHaveLength(2);
+  });
 
 });

@@ -1,9 +1,19 @@
 # Browser tests
 
-Playwright starts the Vite app and runs every spec in Chromium, Firefox and WebKit.
-Install browsers with `pnpm exec playwright install` and run `pnpm test:e2e` from the
-workspace root. Do not run separate Playwright invocations concurrently: they share a
-server and output directory.
+Playwright starts the Vite app and runs the behavioral specs in Chromium, Firefox and
+WebKit. `production.spec.ts` runs only in its own project (see below), and screenshot
+comparisons run in Chromium only: `visual.spec.ts` and `controls-visual.spec.ts` skip
+other engines, while `export-visual.spec.ts` and `touch.spec.ts` check layout in every
+engine but compare baselines in Chromium. Install browsers with
+`pnpm exec playwright install` and run `pnpm test:e2e` from the workspace root.
+
+The dev server listens on port 4173 and the production preview on 4174. To run separate
+Playwright invocations at the same time, give each its own base port (the preview uses
+the next one) and its own output directory:
+
+```sh
+ZOOMFLOW_E2E_PORT=4600 pnpm exec playwright test tests/e2e/editor.spec.ts --output=test-results/editor
+```
 
 Specs are grouped by feature. Add a test to the file for the feature it exercises;
 shared helpers live in `helpers.ts` (source editor, preview readiness, project fixtures,
@@ -17,8 +27,8 @@ CodeMirror selection) and `menu.ts` (export menu and downloads).
   wrapped-line nesting columns, syntax colors in both themes, and formatting feedback
   that preserves selection and scroll.
 - `diagnostics.spec.ts`: one diagnostics summary with a stable editor through failure and
-  recovery, file-aware navigation to imported locations, and compiler failures without a
-  usable location.
+  recovery, file-aware navigation to imported locations, compiler failures without a
+  usable location, and live regions that are not rewritten with unchanged text.
 - `lint.spec.ts`: the bundled stdlib import, inline and list diagnostics, opt-in boundary
   checking (name mismatches and the zero-pairs guard), optional backlink warnings,
   dangling links, orphan layers, and recovery after lint and compiler errors.
@@ -26,17 +36,21 @@ CodeMirror selection) and `menu.ts` (export menu and downloads).
 - `reference.spec.ts`: reference shortcuts, source and selection preservation, focus
   restoration, search, copy feedback, resizing, offline use, narrow and dark layouts, and
   tablet pane switching. `apps/web/test/reference.test.ts` compiles every bundled example.
-- `flow-builder.spec.ts`: building flows from the form and editing them again.
+- `flow-builder.spec.ts`: building flows from the form and editing them again, and focus
+  that moves to the neighbouring connection after a removal.
 - `ai.spec.ts`: AI edits and undo, availability checks and timeouts, cancellation,
-  transport failures, highlights of changed lines, deletions on short phone screens, and
-  the phone composer. Server unit tests verify that aborting a request ends its CLI process.
+  transport failures, highlights of changed lines, deletions on short phone screens, the
+  phone composer, sending with ⌘/Ctrl+Enter, and AI settings mirrored across split panes
+  with one availability check per change. Server unit tests verify that aborting a request ends its CLI process.
 
 ## Documents and projects
 
 - `documents.spec.ts`: draft recovery and removal, same-name documents with separate
   histories, disk saves (slow, canceled and via shortcut), the download fallback, saved
   example identity, unsaved markers, stable header and status copy, preference storage,
-  file drops, and undoable removal that restores handles, views and history.
+  file drops, undoable removal that restores handles, views and history, back/forward
+  cache recovery, saving when the page is hidden, and reusing unchanged drafts when a
+  file, folder, picked file handle or empty draft is opened again.
 - `examples.spec.ts`: the bundled examples, the grouped and filtered picker, and
   restoring examples with cancel and undo.
 - `project.spec.ts`: opened folders with relative imports, project grouping and scoped
@@ -44,7 +58,9 @@ CodeMirror selection) and `menu.ts` (export menu and downloads).
 - `continuity.spec.ts`: concurrent-tab recovery, per-document and per-board view
   restoration, and restored selection and scroll when switching documents.
 - `split-view.spec.ts`: both split layouts, independent panes and routes, one pane per
-  draft, header commands following the active pane, and narrower fallbacks.
+  draft, header commands following the active pane, narrower fallbacks, one main landmark
+  with distinctly labelled editors, per-pane divider sizes, and releasing the hidden
+  second pane's page-level key listeners until the split reopens.
 - `source-split.spec.ts`: the adaptive diagram/source split and remembered resizes.
 
 ## Diagram
@@ -57,7 +73,8 @@ CodeMirror selection) and `menu.ts` (export menu and downloads).
 - `transition.spec.ts`: board changes fade in place, with reduced-motion support.
 - `fullscreen.spec.ts`: the fullscreen diagram.
 - `engine.spec.ts`: slow first download, module and worker startup failures with retry,
-  and restarting a stalled preview without losing edits.
+  restarting a stalled preview without losing edits, and an engine notice that stays with
+  the pane that owns it while the other pane edits.
 - `preview-queue.spec.ts`: intermediate edits are skipped while a compile is running.
 
 ## Phones and touch
@@ -72,7 +89,8 @@ CodeMirror selection) and `menu.ts` (export menu and downloads).
 
 - `export.spec.ts`: real SVG, PNG, ZIP and HTML downloads, HTML opened over `file://`
   offline with nested and cyclic navigation, remote-image embedding and fallback, export
-  defaults and remembered choices, progress, and cancellation when the source changes.
+  defaults and remembered choices, progress, cancellation when the source changes, and an
+  export button that stays disabled until the running export finishes.
 - `export-visual.spec.ts`: offline HTML at phone, short, landscape and enlarged-text sizes.
 
 ## Production build
@@ -94,6 +112,7 @@ source and preview errors, expanded tools, the reference, AI changes). `controls
 captures export choices, the filtered picker, the confirmation dialog and breadcrumb
 overflow. `export-visual.spec.ts` and `touch.spec.ts` add offline-viewer and touch
 baselines. They fix locale, timezone, reduced motion and the AI availability response.
+`playwright.config.ts` allows 0.5% differing pixels for every `toHaveScreenshot` call.
 
 The application workflow runs on `macos-15`, matching the baseline family; browser
 versions come from the pinned Playwright dependency. To review a layout change on macOS:

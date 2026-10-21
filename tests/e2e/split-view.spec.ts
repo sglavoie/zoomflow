@@ -125,3 +125,70 @@ test('the second pane can start empty and closes with the split', async ({ page 
   await page.selectOption('#layout', 'tabs');
   await expect(page.locator('#pane-empty-b')).toBeVisible();
 });
+
+test('closing the split releases the second pane\'s page-level listeners until it reopens', async ({ page }) => {
+  await page.addInitScript(() => {
+    const listeners: { type: string; signal?: AbortSignal }[] = [];
+    const add = EventTarget.prototype.addEventListener;
+    EventTarget.prototype.addEventListener = function (type: string, listener: EventListenerOrEventListenerObject | null, options?: boolean | AddEventListenerOptions) {
+      if (this === window) listeners.push({ type, signal: typeof options === 'object' ? options.signal : undefined });
+      return add.call(this, type, listener, options);
+    };
+    (window as unknown as { keyListeners: () => number }).keyListeners = () =>
+      listeners.filter(({ type, signal }) => ['keydown', 'keyup', 'blur', 'pointerdown'].includes(type) && !signal?.aborted).length;
+  });
+  await page.reload();
+  await ready(page);
+  const keyListeners = () => page.evaluate(() => (window as unknown as { keyListeners: () => number }).keyListeners());
+  await page.selectOption('#layout', 'tabs');
+  await chooseSecond(page, /Flowchart basics/);
+  const open = await keyListeners();
+  await page.selectOption('#layout', 'single');
+  await expect(page.locator('#pane-b')).toBeHidden();
+  // The second viewer's Escape/Backspace key, its viewport's Space pan keys (keydown, keyup, blur),
+  // fullscreen's Escape key, and canvas guidance's input tracking (keydown, pointerdown).
+  expect(await keyListeners()).toBe(open - 7);
+
+  await page.selectOption('#layout', 'tabs');
+  expect(await keyListeners()).toBe(open);
+  await chooseSecond(page, /Flowchart basics/);
+  // The reopened pane pans with Space + drag again.
+  const stage = page.locator('#viewer-b .zf-stage');
+  await page.locator('#viewer-b').getByRole('button', { name: 'Zoom in' }).click();
+  // Space on the zoom buttons presses them, so return focus to the canvas first.
+  await stage.focus();
+  await stage.hover({ position: { x: 40, y: 40 } });
+  await page.keyboard.down('Space');
+  await expect(stage).toHaveClass(/zf-pan-ready/);
+  await page.keyboard.up('Space');
+  await expect(stage).not.toHaveClass(/zf-pan-ready/);
+  await page.locator('#viewer-b').getByRole('button', { name: 'Fullscreen' }).click();
+  await expect(page.locator('#pane-b')).toHaveAttribute('data-fullscreen', '');
+  await page.keyboard.press('Escape');
+  await expect(page.locator('#pane-b')).not.toHaveAttribute('data-fullscreen');
+});
+
+test('split view keeps one main landmark, distinct editors and per-pane divider sizes', async ({ page }) => {
+  await expect(page.locator('#example-picker > summary')).toHaveAttribute('aria-label', 'order.d2 — choose a diagram');
+  await page.getByRole('textbox', { name: 'D2 source', exact: true }).fill('a: Changed');
+  await expect(page.locator('#example-picker > summary')).toHaveAttribute('aria-label', 'order.d2, unsaved changes — choose a diagram');
+  await page.selectOption('#layout', 'quad');
+  await page.locator('#pane-start-empty-b').click();
+  await ready(page, '-b');
+  await expect(page.getByRole('main')).toHaveCount(1);
+  await expect(page.getByRole('region', { name: 'Second live preview' })).toBeVisible();
+  await expect(page.getByRole('textbox', { name: 'D2 source', exact: true })).toBeVisible();
+  await expect(page.getByRole('textbox', { name: 'D2 source, second diagram', exact: true })).toBeVisible();
+  await expect(page.locator('#show-diagnostics')).toHaveText('Diagnostics');
+  const first = page.locator('#source-divider');
+  const second = page.locator('#source-divider-b');
+  const initial = await first.getAttribute('aria-valuenow');
+  await second.focus();
+  await page.keyboard.press('ArrowUp');
+  await page.keyboard.press('ArrowUp');
+  const changed = await second.getAttribute('aria-valuenow');
+  expect(changed).not.toBe(initial);
+  await page.reload(); await ready(page);
+  await expect(first).toHaveAttribute('aria-valuenow', initial!);
+  await expect(second).toHaveAttribute('aria-valuenow', changed!);
+});

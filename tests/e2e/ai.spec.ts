@@ -26,9 +26,8 @@ test('AI updates the current diagram and keeps the edit undoable', async ({ page
   await page.getByRole('button', { name: 'Send' }).click();
   await expect(page.locator('#ai-status')).toContainText('Diagram updated. Added a note.');
   await expect(page.locator('.zf-stage')).toContainText('Added by AI');
-  const source = page.getByRole('textbox', { name: 'D2 source', exact: true });
-  await source.focus();
-  await source.press('ControlOrMeta+z');
+  await source(page).focus();
+  await source(page).press('ControlOrMeta+z');
   await expect(page.locator('.zf-stage')).toContainText('Checkout');
 });
 
@@ -64,9 +63,8 @@ test('AI errors and stale responses leave the source alone', async ({ page }) =>
   await page.locator('#ai-assistant > summary').click();
   await page.getByRole('textbox', { name: 'Ask AI about this diagram' }).fill('Change it');
   await page.getByRole('button', { name: 'Send' }).click();
-  const source = page.getByRole('textbox', { name: 'D2 source', exact: true });
-  await source.focus();
-  await source.press('ControlOrMeta+a');
+  await source(page).focus();
+  await source(page).press('ControlOrMeta+a');
   await page.keyboard.insertText('fresh: Kept');
   release();
   await expect(page.locator('#ai-status')).toContainText('diagram changed while AI was working');
@@ -84,7 +82,7 @@ test('invalid AI D2 is reported without replacing the diagram', async ({ page })
   await page.getByRole('button', { name: 'Send' }).click();
   await expect(page.locator('#ai-status')).toContainText('AI returned invalid D2');
   await expect(page.locator('.zf-stage')).toContainText('Checkout');
-  await expect(page.getByRole('textbox', { name: 'D2 source', exact: true })).toContainText('Checkout');
+  await expect(source(page)).toContainText('Checkout');
 });
 
 test('CLI failures are shown beside the prompt', async ({ page }) => {
@@ -173,7 +171,7 @@ test('explicit AI undo restores source and is retired after subsequent edits', a
   await page.getByRole('button', { name: 'Undo AI change' }).click();
   await expect(page.locator('.zf-stage')).toContainText('Checkout');
   await send();
-  await page.getByRole('textbox', { name: 'D2 source', exact: true }).fill('mine: Later edit');
+  await source(page).fill('mine: Later edit');
   await expect(page.getByRole('button', { name: 'Undo AI change' })).toBeHidden();
   await expect(page.locator('.zf-stage')).toContainText('Later edit');
   await expect(page.locator('.zf-ai-changed')).toHaveCount(0);
@@ -321,4 +319,44 @@ test('AI deletions reveal their location and Undo on a short phone screen', asyn
   await page.locator('#ai-undo').click();
   await expect(source(page)).toHaveText('a: Keep\nb: Remove\nc: Keep', { useInnerText: true });
   await expect(page.locator('.zf-ai-changed')).toHaveCount(0);
+});
+
+test('the AI prompt sends with Command or Control+Enter', async ({ page }) => {
+  const prompts: string[] = [];
+  await page.route('**/api/ai', async (route) => {
+    prompts.push(route.request().postDataJSON().prompt);
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ reply: 'It shows checkout.', source: null }) });
+  });
+  await page.goto('/'); await previewReady(page);
+  await page.locator('#ai-assistant > summary').click();
+  const prompt = page.getByRole('textbox', { name: 'Ask AI about this diagram' });
+  await prompt.fill('What does this show?');
+  await prompt.press('Enter');
+  expect(prompts).toEqual([]);
+  await prompt.press('ControlOrMeta+Enter');
+  await expect(page.locator('#ai-status')).toContainText('It shows checkout.');
+  expect(prompts).toEqual(['What does this show?']);
+  await page.locator('#show-shortcuts').click();
+  await expect(page.getByRole('dialog', { name: 'Keyboard shortcuts' })).toContainText('Send the prompt');
+});
+
+test('mirrored AI settings check availability once per change', async ({ page }) => {
+  const checks: string[] = [];
+  await page.route('**/api/ai/status', async (route) => {
+    checks.push(route.request().postDataJSON().provider);
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ available: true }) });
+  });
+  await page.setViewportSize({ width: 1600, height: 900 });
+  await page.goto('/'); await previewReady(page);
+  await page.selectOption('#layout', 'quad');
+  await expect(page.locator('#ai-availability-b')).toContainText('ready');
+  await expect(page.locator('#ai-availability')).toContainText('ready');
+  checks.length = 0;
+  await page.locator('#ai-assistant > summary').click();
+  await page.locator('#ai-form .ai-settings summary').click();
+  await page.locator('#ai-provider').selectOption('codex');
+  await expect(page.locator('#ai-availability')).toContainText('Codex is ready');
+  await expect(page.locator('#ai-availability-b')).toContainText('Codex is ready');
+  expect(checks).toEqual(['codex']);
 });

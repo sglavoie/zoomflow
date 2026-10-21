@@ -98,7 +98,8 @@ export function setupFlowBuilder(create: (source: string, name: string) => void,
       row.append(field('Label (optional)', label), removeButton(`Remove connection ${i + 1}`, () => {
         flow.connections.splice(i, 1);
         renderConnections();
-        (connections.querySelector<HTMLButtonElement>('button') ?? addConnection).focus();
+        // Keep focus near the removed row: the next connection, else the previous one.
+        (connections.children[Math.min(i, flow.connections.length - 1)]?.querySelector<HTMLButtonElement>('button') ?? addConnection).focus();
       }));
       connections.append(row);
     });

@@ -28,11 +28,12 @@ export class DraftStore {
   private baselines = new Map<string, string>();
   constructor(private storage: Storage, writer: string = crypto.randomUUID()) { this.writer = writer; }
 
-  private versions() {
+  /** `keys` limits the scan to those documents' records. */
+  private versions(keys?: Set<string>) {
     const records: StoredVersion[] = [];
     for (let i = 0; i < this.storage.length; i++) {
       const key = this.storage.key(i)!;
-      if (!key.startsWith(prefix)) continue;
+      if (!key.startsWith(prefix) || keys && !keys.has(key.slice(prefix.length, key.lastIndexOf(':')))) continue;
       try {
         const v = JSON.parse(this.storage.getItem(key)!);
         if (typeof v.id === 'string' && typeof v.key === 'string' && Number.isFinite(v.savedAt) && v.clock &&
@@ -105,6 +106,7 @@ export class DraftStore {
   /** `second` is the document open in the split view's second pane, if any. */
   save(drafts: Draft[], current: string, second?: string) {
     const next = new Map(drafts.map((draft) => [draft.key, draft]));
+    const written = new Map<string, Version>();
     for (const key of new Set([...next.keys(), ...this.baselines.keys()])) {
       const draft = next.get(key) ?? null;
       const serialized = draft ? JSON.stringify(draft) : undefined;
@@ -119,9 +121,14 @@ export class DraftStore {
       this.pendingMigration.delete(key);
       this.pendingCopies.delete(key);
       if (serialized === undefined) this.baselines.delete(key); else this.baselines.set(key, serialized);
-      for (const previous of this.versions()) {
-        if (previous.key === key && previous.id !== version.id && dominates(clock, previous.clock) &&
-          previous.slot === `${prefix}${encodeURIComponent(key)}:${previous.id}`) this.storage.removeItem(previous.slot);
+      written.set(key, version);
+    }
+    // Reclaim ancestors only after every replacement was written, scanning storage once.
+    if (written.size) {
+      for (const previous of this.versions(new Set([...written.keys()].map(encodeURIComponent)))) {
+        const version = written.get(previous.key);
+        if (version && previous.id !== version.id && dominates(version.clock, previous.clock) &&
+          previous.slot === `${prefix}${encodeURIComponent(previous.key)}:${previous.id}`) this.storage.removeItem(previous.slot);
       }
     }
     this.storage.setItem(selectionKey, current);

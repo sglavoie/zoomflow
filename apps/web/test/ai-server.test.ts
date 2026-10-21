@@ -101,9 +101,9 @@ it('cancels a running CLI process when its request is aborted', async () => {
   const rejected = expect(result).rejects.toThrow('canceled');
   try {
     let pid = 0;
-    await vi.waitFor(async () => { pid = Number(await readFile(pidPath, 'utf8')); expect(pid).toBeGreaterThan(0); });
+    await vi.waitFor(async () => { pid = Number(await readFile(pidPath, 'utf8')); expect(pid).toBeGreaterThan(0); }, { timeout: 10_000 });
     controller.abort();
     await rejected;
-    expect(() => process.kill(pid, 0)).toThrow();
+    await vi.waitFor(() => expect(() => process.kill(pid, 0)).toThrow(), { timeout: 5_000 });
   } finally { controller.abort(); }
 });

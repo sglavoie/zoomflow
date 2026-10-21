@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { source, previewReady, chooseProjectFile } from './helpers';
+import { openDownloads } from './menu';
 
 /** Compiler and lint diagnostics: summaries, locations and navigation to source. */
 
@@ -72,4 +73,16 @@ test('diagnostics use one summary and keep the editor in place through failure a
   await expect(page.locator('#compile-error')).toBeHidden();
   await expect(page.locator('#ready-summary')).toBeHidden();
   expect((await page.locator('#editor').boundingBox())!.y).toBe(before.y);
+});
+
+test('unchanged preview and lint text is not rewritten in its live regions', async ({ page }) => {
+  await page.goto('/'); await previewReady(page);
+  await page.evaluate(() => {
+    (window as any).writes = 0;
+    const observer = new MutationObserver((records) => { (window as any).writes += records.length; });
+    for (const id of ['#preview-status', '#lint-summary']) observer.observe(document.querySelector(id)!, { childList: true, characterData: true, subtree: true });
+  });
+  await page.locator('#missing-backlink').evaluate((input: HTMLInputElement) => input.dispatchEvent(new Event('change')));
+  await openDownloads(page);
+  expect(await page.evaluate(() => (window as any).writes)).toBe(0);
 });

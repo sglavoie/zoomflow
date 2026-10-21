@@ -2,6 +2,22 @@ import type { PaneScope } from './pane-scope';
 import { AiError, aiFailure, readAiResponse } from './ai-errors';
 type Snapshot = { source: string; name: string; board: string; revision: number };
 
+/** Both panes check availability with the same settings; share a check that is still running. */
+const statusChecks = new Map<string, Promise<Record<string, unknown>>>();
+function requestStatus(body: string) {
+  let check = statusChecks.get(body);
+  if (!check) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 5000);
+    check = fetch('/api/ai/status', { method: 'POST', signal: controller.signal, headers: { 'Content-Type': 'application/json' }, body })
+      .then(readAiResponse)
+      .catch((error) => { throw controller.signal.aborted ? new AiError('The AI availability check timed out. Check that the local server and selected provider are running, then check again.', 'No availability response within 5 seconds.') : error; })
+      .finally(() => { clearTimeout(timeout); statusChecks.delete(body); });
+    statusChecks.set(body, check);
+  }
+  return check;
+}
+
 export type AiAssistantHost = {
   read: () => Snapshot;
   /** Rejects when the proposed source does not compile. */
@@ -74,18 +90,14 @@ export function setupAiAssistant({ root, part }: PaneScope, { read, validate, ap
   async function checkAvailability() {
     health?.abort();
     const controller = health = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 5000);
     checking = true;
     healthDetails();
     retry.hidden = true;
     availability.textContent = 'Checking local AI availability…';
     updateControls();
     try {
-      const response = await fetch('/api/ai/status', { method: 'POST', signal: controller.signal,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ provider: provider.value, environment: environment.value,
-          claudeConfigDir: claudeConfigDir.value }) });
-      const data = await readAiResponse(response);
+      const data = await requestStatus(JSON.stringify({ provider: provider.value, environment: environment.value,
+        claudeConfigDir: claudeConfigDir.value }));
       if (typeof data.available !== 'boolean') throw new AiError('The AI server returned an incomplete availability check. Restart the local server and check again.', 'Missing boolean available field.');
       if (health !== controller) return;
       available = data.available === true;
@@ -95,14 +107,11 @@ export function setupAiAssistant({ root, part }: PaneScope, { read, validate, ap
     } catch (error) {
       if (health !== controller) return;
       available = false;
-      const failure = controller.signal.aborted
-        ? { message: 'The AI availability check timed out. Check that the local server and selected provider are running, then check again.', details: 'No availability response within 5 seconds.' }
-        : aiFailure(error);
+      const failure = aiFailure(error);
       availability.textContent = failure.message;
       healthDetails(failure.details);
       retry.hidden = false;
     } finally {
-      clearTimeout(timeout);
       if (health === controller) { health = undefined; checking = false; updateControls(); }
     }
   }
@@ -132,6 +141,11 @@ export function setupAiAssistant({ root, part }: PaneScope, { read, validate, ap
   environment.addEventListener('change', () => void checkAvailability());
   claudeConfigDir.addEventListener('change', () => void checkAvailability());
   showProviderSettings();
+  prompt.addEventListener('keydown', (event) => {
+    if (event.key !== 'Enter' || !(event.metaKey || event.ctrlKey) || event.isComposing) return;
+    event.preventDefault();
+    form.requestSubmit();
+  });
 
   form.addEventListener('submit', async (event) => {
     event.preventDefault();

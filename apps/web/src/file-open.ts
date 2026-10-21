@@ -1,0 +1,110 @@
+import type { DocumentPane, PaneId } from './document-pane';
+import type { setupExamplePicker } from './example-picker';
+import { readDirectoryHandle, readFolderInput } from './project-files';
+import { describeError } from './text';
+
+type PickerWindow = Window & {
+  showOpenFilePicker?: (options?: object) => Promise<FileSystemFileHandle[]>;
+  showDirectoryPicker?: () => Promise<FileSystemDirectoryHandle>;
+};
+
+export type FileOpenHost = {
+  picker: () => ReturnType<typeof setupExamplePicker>;
+  activePane: () => DocumentPane;
+  fileHandles: Map<string, FileSystemFileHandle>;
+  paneRoots: Record<PaneId, HTMLElement>;
+  setActive: (pane: PaneId) => void;
+};
+
+/** Open .d2, Open folder and dropped files, which open in the active pane. */
+export function setupFileOpen({ picker, activePane, fileHandles, paneRoots, setActive }: FileOpenHost) {
+  const pickerWindow = window as PickerWindow;
+  const fileStatus = document.querySelector<HTMLElement>('#file-status')!;
+  function setFileError(message: string) {
+    fileStatus.textContent = message;
+    fileStatus.hidden = !message;
+    if (message) activePane().setActivity(message, 'error');
+  }
+  /** Whether a draft's stored file handle is the file being opened; undefined when unknown. */
+  async function sameEntries(opened: (key: string) => FileSystemFileHandle | undefined) {
+    const known = new Map<string, boolean>();
+    for (const [key, existing] of fileHandles) {
+      const handle = opened(key);
+      if (handle) known.set(key, await existing.isSameEntry(handle).catch(() => false));
+    }
+    return (key: string) => known.get(key);
+  }
+  async function openFile(file: File, handle?: FileSystemFileHandle) {
+    try {
+      if (!/\.d2$/i.test(file.name)) throw new Error('Choose a .d2 file.');
+      const source = await file.text();
+      setFileError('');
+      const key = picker().rememberFile(file.name, source, source, await sameEntries(() => handle));
+      if (handle) fileHandles.set(key, handle);
+      picker().refresh();
+      await activePane().replaceDocument(source, file.name, key);
+    }
+    catch (error) { setFileError(`Could not open file: ${describeError(error)}`); }
+  }
+  const fileInput = document.querySelector<HTMLInputElement>('#file')!;
+  fileInput.addEventListener('click', async (event) => {
+    if (!pickerWindow.showOpenFilePicker) return;
+    event.preventDefault();
+    try {
+      const [handle] = await pickerWindow.showOpenFilePicker({ types: [{ description: 'D2 source', accept: { 'text/plain': ['.d2'] } }] });
+      if (handle) await openFile(await handle.getFile(), handle);
+    } catch (error) {
+      if (!(error instanceof DOMException && error.name === 'AbortError')) setFileError(`Could not open file: ${describeError(error)}`);
+    }
+  });
+  fileInput.addEventListener('change', () => {
+    const file = fileInput.files?.[0];
+    fileInput.value = '';
+    if (file) void openFile(file);
+  });
+  async function openFolder(folder: { name: string; files: { path: string; source: string }[];
+    handles?: Record<string, FileSystemFileHandle> }) {
+    setFileError('');
+    const selection = picker().rememberFolder(folder.name, folder.files,
+      await sameEntries((key) => key.startsWith('project:') ? folder.handles?.[key.split(':').slice(2).join(':')] : undefined));
+    for (const [path, handle] of Object.entries(folder.handles ?? {})) fileHandles.set(selection.keys[path], handle);
+    picker().refresh();
+    await activePane().replaceDocument(selection.source, selection.name, selection.key);
+  }
+  const folderInput = document.querySelector<HTMLInputElement>('#folder')!;
+  async function chooseFolder() {
+    if (!pickerWindow.showDirectoryPicker) { folderInput.click(); return; }
+    try { await openFolder(await readDirectoryHandle(await pickerWindow.showDirectoryPicker())); }
+    catch (error) {
+      if (!(error instanceof DOMException && error.name === 'AbortError')) setFileError(`Could not open folder: ${describeError(error)}`);
+    }
+  }
+  document.querySelector<HTMLButtonElement>('#open-folder')!.addEventListener('click', () => void chooseFolder());
+  document.querySelector<HTMLButtonElement>('#open-folder-picker')!.addEventListener('click', () => void chooseFolder());
+  folderInput.addEventListener('change', async () => {
+    const files = folderInput.files;
+    try { if (files?.length) await openFolder(await readFolderInput(files)); }
+    catch (error) { setFileError(`Could not open folder: ${describeError(error)}`); }
+    finally { folderInput.value = ''; }
+  });
+  let dropHint: ReturnType<typeof setTimeout> | undefined;
+  document.addEventListener('dragover', (event) => {
+    if (!event.dataTransfer?.types.includes('Files')) return;
+    event.preventDefault();
+    document.body.classList.add('file-drop-active');
+    clearTimeout(dropHint);
+    dropHint = setTimeout(() => document.body.classList.remove('file-drop-active'), 160);
+  });
+  document.addEventListener('drop', (event) => {
+    if (!event.dataTransfer?.files.length) return;
+    event.preventDefault();
+    clearTimeout(dropHint);
+    document.body.classList.remove('file-drop-active');
+    // Dropping onto a pane opens the file there.
+    const pane = (['a', 'b'] as const).find((id) => event.target instanceof Node && paneRoots[id].contains(event.target));
+    if (pane) setActive(pane);
+    const file = event.dataTransfer?.files[0];
+    if (file) void openFile(file);
+  });
+  return { setFileError };
+}

@@ -78,6 +78,12 @@
           <div><dt>Find in source</dt><dd><kbd>⌘ / Ctrl</kbd> + <kbd>F</kbd></dd></div>
         </dl>
       </section>
+      <section aria-labelledby="shortcuts-ai">
+        <h3 id="shortcuts-ai">In the AI prompt</h3>
+        <dl class="shortcut-list">
+          <div><dt>Send the prompt</dt><dd><kbd>⌘ / Ctrl</kbd> + <kbd>Enter</kbd></dd></div>
+        </dl>
+      </section>
       <section aria-labelledby="shortcuts-diagram">
         <h3 id="shortcuts-diagram">In the diagram</h3>
         <dl class="shortcut-list">
@@ -101,7 +107,7 @@
     <div id="draft-conflict" role="status" hidden>Drafts changed in another tab. Your open source is unchanged. Reload to review saved versions; conflicting edits appear as recovered copies.</div>
     <div id="file-status" role="alert" hidden></div>
     <div id="engine-notice" role="status" hidden><span id="engine-message"></span><button id="retry-engine" type="button" hidden>Retry preview</button></div>
-    <div id="workspace" data-layout="single">
+    <main id="workspace" data-layout="single">
       <div id="pane-a" class="document-pane" data-pane="a">
       <div class="pane-header" hidden>
         <button id="pane-document" class="pane-document button-quiet" type="button" title="Choose a diagram for this pane"><span class="pane-document-name"></span><span class="draft-unsaved" role="img" aria-label="Unsaved changes" hidden>•</span><span class="picker-chevron" aria-hidden="true">⌄</span></button>
@@ -112,12 +118,12 @@
         <p>Choose a draft or built-in example, or start from an empty source.</p>
         <div class="pane-empty-actions"><button id="pane-choose" class="button-primary" type="button">Choose a diagram</button><button id="pane-start-empty" type="button">Start empty</button></div>
       </div>
-      <div id="mobile-view-switch" role="group" aria-label="Workspace view">
+      <div id="mobile-view-switch" data-part="mobile-view-switch" role="group" aria-label="Workspace view">
         <button id="mobile-preview" type="button" aria-pressed="true" aria-controls="preview-pane">Preview</button>
         <button id="mobile-source" type="button" aria-pressed="false" aria-controls="source-pane">Source</button>
       </div>
-      <section id="preview-pane" aria-label="Diagram and reference">
-        <main id="viewer" aria-label="Live preview"></main>
+      <section id="preview-pane" data-part="preview-pane" aria-label="Diagram and reference">
+        <section id="viewer" data-part="viewer" aria-label="Live preview"></section>
         <div id="reference-divider" role="separator" aria-label="Resize diagram and reference" aria-orientation="horizontal" aria-controls="viewer d2-reference" title="Drag to resize, double-click to reset, or use Up/Down and Home/End when focused" tabindex="0" hidden></div>
         <aside id="d2-reference" aria-labelledby="reference-title" hidden>
           <div class="reference-toolbar">
@@ -133,52 +139,52 @@
           <div id="reference-status" role="status"></div>
         </aside>
       </section>
-      <div id="source-divider" role="separator" aria-label="Resize diagram and D2 source" aria-orientation="vertical" aria-controls="preview-pane source-pane" title="Drag to resize, double-click to reset, or use Left/Right and Home/End when focused" tabindex="0"></div>
-      <section id="source-pane" aria-label="Source editor">
+      <div id="source-divider" data-part="source-divider" role="separator" aria-label="Resize diagram and D2 source" aria-orientation="vertical" aria-controls="preview-pane source-pane" title="Drag to resize, double-click to reset, or use Left/Right and Home/End when focused" tabindex="0"></div>
+      <section id="source-pane" data-part="source-pane" aria-label="Source editor">
         <div class="pane-title">
           <div>D2 source</div>
           <div class="pane-actions"><button id="clear-source" class="button-quiet" type="button" title="Clear D2 source (can be undone)">Clear</button><button id="format-source" class="button-quiet" title="Format D2 source (Shift+Alt+F)">Format</button><button id="save-file" class="button-primary" type="button" aria-describedby="draft-status recovery-info" aria-keyshortcuts="Meta+s Control+s">Save .d2</button></div>
           <span id="recovery-info" class="zf-visually-hidden"></span>
         </div>
-        <div id="work-status" role="group" aria-label="Diagram status">
+        <div id="work-status" data-part="work-status" role="group" aria-label="Diagram status">
           <div class="status-copy">
-            <span id="draft-status" role="status"></span>
-            <div id="ready-summary"><span id="preview-status" role="status">Loading preview…</span><span id="lint-summary" role="status">Lint pending…</span></div>
-            <div id="compile-error" role="alert" hidden><span id="compile-error-message"></span></div>
-            <span id="format-status" role="status" hidden></span>
-            <span id="activity-status" role="status" hidden></span>
+            <span id="draft-status" data-part="draft-status" role="status"></span>
+            <div id="ready-summary" data-part="ready-summary"><span id="preview-status" data-part="preview-status" role="status">Loading preview…</span><span id="lint-summary" data-part="lint-summary" role="status">Lint pending…</span></div>
+            <div id="compile-error" data-part="compile-error" role="alert" hidden><span id="compile-error-message"></span></div>
+            <span id="format-status" data-part="format-status" aria-hidden="true" hidden></span>
+            <span id="activity-status" data-part="activity-status" aria-hidden="true" hidden></span>
           </div>
           <div class="diagnostic-actions">
-            <button id="reveal-source" class="button-quiet" type="button" title="Reveal selected source in diagram (⌘⇧Enter or Ctrl+Shift+Enter)" aria-keyshortcuts="Meta+Shift+Enter Control+Shift+Enter" disabled>Reveal in diagram</button>
-            <button id="go-to-error" class="button-primary" type="button" hidden>Go to error</button>
-            <button id="show-diagnostics" class="button-quiet" type="button" disabled>Review diagnostics</button>
+            <button id="reveal-source" data-part="reveal-source" class="button-quiet" type="button" title="Reveal selected source in diagram (⌘⇧Enter or Ctrl+Shift+Enter)" aria-keyshortcuts="Meta+Shift+Enter Control+Shift+Enter" disabled>Reveal in diagram</button>
+            <button id="go-to-error" data-part="go-to-error" class="button-primary" type="button" hidden>Go to error</button>
+            <button id="show-diagnostics" data-part="show-diagnostics" class="button-quiet" type="button" aria-label="Review 0 diagnostics" disabled>Diagnostics</button>
           </div>
         </div>
         <div class="source-tools">
-        <details id="ai-assistant">
+        <details id="ai-assistant" data-part="ai-assistant">
           <summary>Ask AI about this diagram</summary>
-          <form id="ai-form" aria-label="AI diagram assistant">
+          <form id="ai-form" data-part="ai-form" aria-label="AI diagram assistant">
             <div class="ai-composer">
               <textarea id="ai-prompt" aria-label="Ask AI about this diagram" placeholder="Describe a change or ask about this diagram…" rows="2" required disabled></textarea>
-              <div class="ai-actions"><span id="ai-elapsed" aria-live="off"></span><button id="ai-cancel" type="button" hidden>Cancel</button><button id="ai-send" type="submit" disabled>Send</button></div>
+              <div class="ai-actions"><span id="ai-elapsed" data-part="ai-elapsed" aria-live="off"></span><button id="ai-cancel" type="button" hidden>Cancel</button><button id="ai-send" data-part="ai-send" type="submit" aria-keyshortcuts="Meta+Enter Control+Enter" title="Send (⌘Enter or Ctrl+Enter)" disabled>Send</button></div>
             </div>
-            <p id="ai-availability" role="status">Checking local AI availability…</p>
-            <button id="ai-retry" type="button" hidden>Check again</button>
+            <p id="ai-availability" data-part="ai-availability" role="status">Checking local AI availability…</p>
+            <button id="ai-retry" data-part="ai-retry" type="button" hidden>Check again</button>
             <details class="ai-settings"><summary>AI settings</summary>
               <div class="ai-provider-row">
                 <label for="ai-provider">AI</label>
                 <select id="ai-provider"><option value="claude">Claude Code</option><option value="codex">Codex</option></select>
               </div>
-              <label id="ai-claude-config" class="ai-field" for="ai-claude-config-dir">CLAUDE_CONFIG_DIR <span>Overrides the same name below</span>
+              <label id="ai-claude-config" data-part="ai-claude-config" class="ai-field" for="ai-claude-config-dir">CLAUDE_CONFIG_DIR <span>Overrides the same name below</span>
                 <input id="ai-claude-config-dir" type="text" value="~/.claude" spellcheck="false" required />
               </label>
               <label class="ai-field" for="ai-environment">Environment <span>One NAME=value per line; values are literal</span>
-                <textarea id="ai-environment" rows="2" spellcheck="false" placeholder="EXAMPLE_KEY=value"></textarea>
+                <textarea id="ai-environment" data-part="ai-environment" rows="2" spellcheck="false" placeholder="EXAMPLE_KEY=value"></textarea>
               </label>
             </details>
           </form>
         </details>
-        <details id="lint-details">
+        <details id="lint-details" data-part="lint-details">
           <summary>Lint options</summary>
           <div class="lint-controls">
             <label><input id="boundary-ports" type="checkbox" /> Check boundary ports</label>
@@ -186,16 +192,16 @@
           </div>
         </details>
         <div class="ai-feedback">
-          <div id="ai-status" role="status" aria-live="polite"></div>
-          <div class="ai-change-feedback" hidden><button id="ai-change-summary" class="button-quiet" type="button" title="Go to the first changed line"></button><button id="ai-dismiss-highlights" class="button-quiet" type="button">Dismiss highlights</button><button id="ai-undo" type="button" aria-describedby="ai-change-summary" hidden>Undo AI change</button></div>
+          <div id="ai-status" data-part="ai-status" role="status" aria-live="polite"></div>
+          <div class="ai-change-feedback" hidden><button id="ai-change-summary" data-part="ai-change-summary" class="button-quiet" type="button" title="Go to the first changed line"></button><button id="ai-dismiss-highlights" class="button-quiet" type="button">Dismiss highlights</button><button id="ai-undo" data-part="ai-undo" type="button" aria-describedby="ai-change-summary" hidden>Undo AI change</button></div>
         </div>
         </div>
-        <div id="editor"></div>
+        <div id="editor" data-part="editor"></div>
       </section>
       </div>
       <div id="pane-divider" role="separator" aria-label="Resize the two documents" aria-orientation="vertical" aria-controls="pane-a pane-b" title="Drag to resize, double-click to reset, or use Left/Right and Home/End when focused" tabindex="0" hidden></div>
       <div id="pane-b" class="document-pane" data-pane="b" hidden></div>
-    </div>
+    </main>
     <script type="module" src="/src/index.ts"></script>
   </body>
 </html>

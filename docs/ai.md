@@ -2,7 +2,8 @@
 
 The collapsed **Ask AI** panel above the editor can send the current source, active board, and
 your prompt to either Claude Code or Codex. Start the local app with `pnpm dev`,
-install and sign in to the chosen CLI, select it under **AI settings**, and click **Send**. Zoomflow
+install and sign in to the chosen CLI, select it under **AI settings**, and click **Send** or press ⌘Enter (Ctrl+Enter on Windows and
+Linux) in the prompt. Zoomflow
 runs `claude -p` or `codex exec` through a local Vite endpoint. A valid replacement
 source becomes one undoable editor edit and updates the preview; questions can
 return an answer without changing the diagram. Invalid D2 and CLI errors appear

@@ -99,3 +99,41 @@ for (const failure of ['module', 'worker'] as const) {
     await expect(page.locator('.zf-stage')).toContainText('Checkout');
   });
 }
+
+test('editing the other pane keeps a stalled pane\'s restart notice', async ({ page }) => {
+  await page.addInitScript(() => {
+    const NativeWorker = window.Worker;
+    window.Worker = class extends NativeWorker {
+      override postMessage(message: unknown, options?: StructuredSerializeOptions | Transferable[]) {
+        if ((message as { type?: string }).type === 'compile' && (window as any).holdCompile) {
+          (window as any).compileHeld = true;
+          (window as any).holdCompile = false;
+          return;
+        }
+        if (Array.isArray(options)) super.postMessage(message, options);
+        else super.postMessage(message, options);
+      }
+    };
+  });
+  await page.setViewportSize({ width: 1600, height: 900 });
+  await page.goto('/'); await previewReady(page);
+  await page.selectOption('#layout', 'quad');
+  await page.locator('#pane-start-empty-b').click();
+  await previewReady(page, 'b');
+  await page.clock.install();
+  await page.evaluate(() => { (window as any).holdCompile = true; });
+  await source(page).fill('a: Stalled first pane');
+  await expect.poll(() => page.evaluate(() => (window as any).compileHeld)).toBe(true);
+  await page.clock.fastForward(16_000);
+  const restart = page.getByRole('button', { name: 'Restart preview', exact: true });
+  await expect(restart).toBeVisible();
+  await page.getByRole('textbox', { name: 'D2 source, second diagram', exact: true }).fill('b: Second pane edit');
+  await previewReady(page, 'b');
+  await expect(page.locator('#viewer-b .zf-stage')).toContainText('Second pane edit');
+  await expect(restart).toBeVisible();
+  await expect(page.locator('#retry-engine')).toHaveAttribute('data-restart', 'true');
+  await restart.click();
+  await previewReady(page);
+  await expect(page.locator('#viewer .zf-stage')).toContainText('Stalled first pane');
+  await expect(page.locator('#engine-notice')).toBeHidden();
+});

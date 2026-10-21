@@ -12,3 +12,6 @@ export function describeError(error: unknown) {
 export function safeFilename(name: string) {
   return name.replace(/[/\\:*?"<>|\u0000-\u001f]/g, '_').trim() || 'diagram';
 }
+
+/** Live regions announce every write, so only write changed text. */
+export const setText = (element: HTMLElement, text: string) => { if (element.textContent !== text) element.textContent = text; };

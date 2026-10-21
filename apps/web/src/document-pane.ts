@@ -12,18 +12,22 @@ import { setupCanvasGuidance } from './canvas-guidance';
 import type { setupFlowBuilder } from './flow-builder';
 import type { DraftState, setupExamplePicker } from './example-picker';
 import { paneScope, type PaneId } from './pane-scope';
-import { describeError, plural } from './text';
+import { paneNotice, type EngineNotice } from './engine-notice';
+import { setupCompileError } from './compile-error';
+import { canChooseSaveFile, setupSaveFile } from './save-file';
+import { plural, setText } from './text';
 
 export type { PaneId } from './pane-scope';
-export type DocumentExport = { diagram: Diagram; render: RenderBoard; name: string; diagnostics: LintDiagnostic[] };
-type PickerWindow = Window & { showSaveFilePicker?: (options?: object) => Promise<FileSystemFileHandle> };
+export type DocumentExport = { diagram: Diagram; render: RenderBoard; name: string; diagnostics: LintDiagnostic[];
+  /** Render standalone D2 source with the document's fonts, for shared export font subsets. */
+  renderSource: (source: string) => Promise<string> };
 
 /** What the panes share: one compiler, the draft library and the page-level controls. */
 export type PaneContext = {
   compiler: ReturnType<typeof createCompiler>;
   picker: () => ReturnType<typeof setupExamplePicker>;
   flowBuilder: ReturnType<typeof setupFlowBuilder>;
-  engine: { notice: HTMLElement; message: HTMLElement; retry: HTMLButtonElement };
+  engine: EngineNotice;
   fileHandles: Map<string, FileSystemFileHandle>;
   documentRoutes: Map<string, ViewerRoute>;
   isActive: () => boolean;
@@ -38,17 +42,25 @@ export type PaneContext = {
   lintChanged: () => void;
 };
 
-/** A status message that announces errors as alerts and hides settled info after a few seconds. */
+/** A visible status line announced through polite and assertive live regions that keep their roles.
+ * Settled info hides after a few seconds. */
 function statusLine(element: HTMLElement) {
+  const regions = document.createElement('span');
+  regions.className = 'zf-visually-hidden';
+  regions.innerHTML = '<span role="status"></span><span role="alert" hidden></span>';
+  element.after(regions);
+  const [polite, assertive] = regions.children as unknown as [HTMLElement, HTMLElement];
   let timer: ReturnType<typeof setTimeout> | undefined;
   return (message: string, kind: 'info' | 'error' = 'info') => {
     clearTimeout(timer);
-    element.textContent = message;
+    setText(element, message);
     element.title = message;
     element.dataset.kind = kind;
-    element.setAttribute('role', kind === 'error' ? 'alert' : 'status');
     element.hidden = !message;
-    if (message && kind === 'info' && !message.endsWith('…')) timer = setTimeout(() => { element.hidden = true; }, 4000);
+    setText(polite, kind === 'info' ? message : '');
+    setText(assertive, kind === 'error' ? message : '');
+    assertive.hidden = !assertive.textContent;
+    if (message && kind === 'info' && !message.endsWith('…')) timer = setTimeout(() => { element.hidden = true; setText(polite, ''); }, 4000);
   };
 }
 
@@ -57,21 +69,15 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
   const scope = paneScope(id, root);
   const { part } = scope;
   const picker = () => shared.picker();
-  const pickerWindow = window as PickerWindow;
   const viewer = new Viewer(part('viewer'), { history: id === 'a', active: shared.isActive });
   const viewport = setupViewport(viewer.stage, setupFullscreen(viewer.stage, root));
-  const mobileError = document.createElement('div');
-  mobileError.id = scope.id('mobile-error');
-  mobileError.className = 'mobile-error';
-  mobileError.hidden = true;
-  mobileError.innerHTML = '<span role="status"></span><button type="button">Go to error</button>';
-  viewer.stage.parentElement!.before(mobileError);
-  const mobileErrorText = mobileError.querySelector('span')!;
-  const mobileErrorButton = mobileError.querySelector('button')!;
+  const compileError = setupCompileError(scope, viewer.stage, () => {
+    if (activeDiagnostics[0]) void openDiagnostic(activeDiagnostics[0]);
+  });
   const views = setupMobileView(root, part<HTMLButtonElement>('mobile-preview'), part<HTMLButtonElement>('mobile-source'),
     shared.tabbed, () => viewport.refresh());
   const showView = views.show;
-  const { engine } = shared;
+  const notice = paneNotice(shared.engine, id);
 
   let generation = 0;
   let documentRevision = 0;
@@ -81,7 +87,6 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
   let sourceMap: ShapeSource[] = [];
   let mappedSource: string | undefined;
   let debounce: ReturnType<typeof setTimeout> | undefined;
-  const errorBanner = part('compile-error');
   const lintSummary = part('lint-summary');
   const draftStatus = part('draft-status');
   const saveFileButton = part<HTMLButtonElement>('save-file');
@@ -93,8 +98,6 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
   const activityStatus = part('activity-status');
   const diagnosticsButton = part<HTMLButtonElement>('show-diagnostics');
   const revealButton = part<HTMLButtonElement>('reveal-source');
-  const goToError = part<HTMLButtonElement>('go-to-error');
-  const compileErrorMessage = part('compile-error-message');
   let activeDiagnostics: SourceDiagnostic[] = [];
   let previewTimer: ReturnType<typeof setTimeout> | undefined;
   const previewQueue = createPreviewQueue();
@@ -106,8 +109,8 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
       previewTimer = setTimeout(() => {
         previewTimer = undefined;
         previewStatus.dataset.state = 'updating';
-        previewStatus.textContent = 'Updating preview…';
-        lintSummary.textContent = 'Checking diagnostics…';
+        setText(previewStatus, 'Updating preview…');
+        setText(lintSummary, 'Checking diagnostics…');
         viewer.stage.dataset.previewState = 'updating';
       }, 700);
       return;
@@ -115,8 +118,8 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
     clearTimeout(previewTimer);
     previewTimer = undefined;
     previewStatus.dataset.state = state;
-    previewStatus.textContent = { loading: 'Loading preview…',
-      ready: 'Preview ready', error: 'Preview out of date', unavailable: 'Preview unavailable' }[state];
+    setText(previewStatus, { loading: 'Loading preview…',
+      ready: 'Preview ready', error: 'Preview out of date', unavailable: 'Preview unavailable' }[state]);
     if (state === 'error') viewer.stage.dataset.previewState = 'stale';
     else delete viewer.stage.dataset.previewState;
     viewer.stage.dispatchEvent(new Event('zf-sourcechange'));
@@ -124,12 +127,14 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
   const setActivity = statusLine(activityStatus);
   const setFormatStatus = statusLine(formatStatus);
   function setEditorDiagnostics(diagnostics: SourceDiagnostic[]) {
+    // Edits clear diagnostics on every keystroke; skip the work when there are none.
+    if (!diagnostics.length && !activeDiagnostics.length) return;
     activeDiagnostics = diagnostics;
     const errors = diagnostics.filter((item) => item.severity === 'error').length;
     const warnings = diagnostics.length - errors;
     part('mobile-source').textContent = errors ? `Source · ${plural(errors, 'error')}`
       : warnings ? `Source · ${plural(warnings, 'warning')}` : 'Source';
-    editor.diagnostics(diagnostics, picker().compilation(id).inputPath, documentName, canOpenDiagnostic, (item) => void openDiagnostic(item));
+    editor.diagnostics(diagnostics, picker().inputPath(id), documentName, canOpenDiagnostic, (item) => void openDiagnostic(item));
     diagnosticsButton.disabled = diagnostics.length === 0;
     diagnosticsButton.textContent = diagnostics.length ? `Diagnostics (${diagnostics.length})` : 'Diagnostics';
     diagnosticsButton.setAttribute('aria-label', `Review ${plural(diagnostics.length, 'diagnostic')}`);
@@ -151,7 +156,6 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
     revealButton.disabled = true;
     lintDocument = undefined;
     setEditorDiagnostics([]);
-    mobileError.hidden = true;
     viewer.highlightShapes([]);
     documentExport = undefined;
     shared.exportChanged();
@@ -159,7 +163,7 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
     setActivity('');
     shared.clearFileError();
     shared.setExportStatus('');
-    goToError.disabled = true;
+    compileError.invalidate();
     viewer.stage.dispatchEvent(new Event('zf-sourcechange'));
   }
   const editor = new SourceEditor(part('editor'), {
@@ -173,6 +177,7 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
     selected: () => void highlightSelection(false),
     format: () => void formatSource(),
     reveal: () => void revealSelection(),
+    label: id === 'a' ? 'D2 source' : 'D2 source, second diagram',
   });
   const flowEdit = shared.flowBuilder.attach(scope, {
     read: () => ({ source: editor.source, name: documentName }),
@@ -182,50 +187,23 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
     },
   });
 
-  saveFileButton.addEventListener('click', async () => {
-    if (!currentDocumentKey) return;
-    saveFileButton.disabled = true;
-    const key = currentDocumentKey;
-    const source = editor.source;
-    const name = documentName;
-    let saving: ReturnType<typeof setTimeout> | undefined;
-    try {
-      let handle = shared.fileHandles.get(key);
-      if (!handle && pickerWindow.showSaveFilePicker) {
-        handle = await pickerWindow.showSaveFilePicker({ suggestedName: name,
-          types: [{ description: 'D2 source', accept: { 'text/plain': ['.d2'] } }] });
+  setupSaveFile(saveFileButton, {
+    fileHandles: shared.fileHandles, picker,
+    key: () => currentDocumentKey, name: () => documentName, source: () => editor.source,
+    adopt: (saved) => {
+      if (saved.key !== currentDocumentKey) {
+        editor.copyDocument(saved.key);
+        viewport.copyDocument(saved.key);
+        const route = shared.documentRoutes.get(currentDocumentKey!);
+        if (route) shared.documentRoutes.set(saved.key, route);
       }
-      if (!handle) {
-        document.querySelector<HTMLButtonElement>('#save-source')!.click();
-        return;
-      }
-      saving = setTimeout(() => { if (currentDocumentKey === key) setActivity('Saving file…'); }, 700);
-      const writable = await handle.createWritable();
-      try { await writable.write(source); await writable.close(); }
-      catch (error) { await writable.abort(); throw error; }
-      const saved = picker().markDiskSaved(key, source, handle.name);
-      if (!saved) return; // The draft may have been removed while the file dialog was open.
-      shared.fileHandles.set(saved.key, handle);
-      if (currentDocumentKey === key) {
-        if (saved.key !== key) {
-          editor.copyDocument(saved.key);
-          viewport.copyDocument(saved.key);
-          const route = shared.documentRoutes.get(key);
-          if (route) shared.documentRoutes.set(saved.key, route);
-        }
-        currentDocumentKey = saved.key;
-        documentName = saved.name;
-        // Save identity changes do not invalidate compiled geometry or editor history.
-        picker().refresh();
-        setActivity('');
-      }
-    } catch (error) {
-      if (currentDocumentKey === key && !(error instanceof DOMException && error.name === 'AbortError')) setActivity(`Could not save file: ${describeError(error)}`, 'error');
-    } finally {
-      clearTimeout(saving);
-      if (currentDocumentKey === key && activityStatus.textContent === 'Saving file…') setActivity('');
-      saveFileButton.disabled = false;
-    }
+      currentDocumentKey = saved.key;
+      documentName = saved.name;
+      // Save identity changes do not invalidate compiled geometry or editor history.
+      picker().refresh();
+      setActivity('');
+    },
+    setActivity, activity: () => activityStatus.textContent,
   });
 
   async function replaceDocument(source: string, name: string, key: string, reset = false) {
@@ -237,8 +215,7 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
     picker().refresh();
     editor.open(key, source, reset);
     invalidateSource();
-    errorBanner.hidden = true;
-    goToError.hidden = true;
+    compileError.hide();
     clearTimeout(debounce);
     await load(source, name);
   }
@@ -272,7 +249,7 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
       setFormatStatus(editor.format(formatted) ? 'Source formatted.' : 'Source is already formatted.');
     } catch (error) {
       if (editor.view.state.doc !== document || documentRevision !== revision) return;
-      setFormatStatus(`Formatting failed: ${compilerDiagnostics(error, source, picker().compilation(id).inputPath).map((item) => item.message).join('\n')}`, 'error');
+      setFormatStatus(`Formatting failed: ${compilerDiagnostics(error, source, picker().inputPath(id)).map((item) => item.message).join('\n')}`, 'error');
     } finally { formatButton.disabled = false; }
   }
   formatButton.addEventListener('click', () => void formatSource());
@@ -297,7 +274,7 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
     setEditorDiagnostics(lintDiagnostics(result.diagnostics, editor.source, sourceMap, lintDocument.inputPath));
     const errors = result.diagnostics.filter((item) => item.severity === 'error').length;
     const warnings = result.diagnostics.length - errors;
-    lintSummary.textContent = errors || warnings ? `${plural(errors, 'lint error')}, ${plural(warnings, 'warning')}` : 'No lint issues';
+    setText(lintSummary, errors || warnings ? `${plural(errors, 'lint error')}, ${plural(warnings, 'warning')}` : 'No lint issues');
     lintSummary.dataset.empty = String(!errors && !warnings);
   }
   for (const option of [missingBacklink, boundaryPorts]) option.addEventListener('change', () => { updateLint(); shared.lintChanged(); });
@@ -310,7 +287,7 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
   async function openDiagnostic(item: SourceDiagnostic) {
     if (!canOpenDiagnostic(item)) return;
     showView('source');
-    if (item.filename === picker().compilation(id).inputPath) {
+    if (item.filename === picker().inputPath(id)) {
       if (item.range) editor.select(item.range, true);
       return;
     }
@@ -328,10 +305,6 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
   diagnosticsButton.addEventListener('click', () => {
     showView('source');
     editor.showDiagnostics();
-  });
-  mobileErrorButton.addEventListener('click', () => goToError.click());
-  goToError.addEventListener('click', () => {
-    if (activeDiagnostics[0]) void openDiagnostic(activeDiagnostics[0]);
   });
 
   async function highlightSelection(navigate: boolean) {
@@ -399,29 +372,19 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
     viewer.setBusy(true);
     viewer.setMessage('');
     setPreviewState(viewer.stage.querySelector('svg') ? 'updating' : 'loading');
-    engine.notice.hidden = true;
-    engine.retry.hidden = true;
-    engine.retry.dataset.restart = 'false';
-    engine.retry.textContent = 'Retry preview';
+    notice.hide();
     const startupTimer = !shared.compiler.ready ? setTimeout(() => {
       if (request !== generation) return;
-      engine.notice.setAttribute('role', 'status');
-      engine.message.textContent = 'Loading the diagram engine… The first download can take a moment. You can keep editing.';
-      engine.notice.hidden = false;
+      notice.show('Loading the diagram engine… The first download can take a moment. You can keep editing.', 'status');
     }, 1200) : undefined;
     try {
       const { d2 } = await shared.compiler.get();
       clearTimeout(startupTimer);
       if (request !== generation) return;
-      engine.notice.hidden = true;
+      notice.hide();
       slowTimer = setTimeout(() => {
         if (attempt !== previewAttempt) return;
-        engine.notice.setAttribute('role', 'status');
-        engine.message.textContent = 'The preview is taking longer than usual. You can keep editing, wait, or restart the engine to preview your latest source.';
-        engine.notice.hidden = false;
-        engine.retry.textContent = 'Restart preview';
-        engine.retry.dataset.restart = 'true';
-        engine.retry.hidden = false;
+        notice.show('The preview is taking longer than usual. You can keep editing, wait, or restart the engine to preview your latest source.', 'status', 'Restart preview');
       }, 15_000);
       const compiled = await compileSource(source);
       if (request !== generation) return;
@@ -441,61 +404,45 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
         lintDocument = compiled;
         defaultLint = linted;
         updateLint();
-        errorBanner.hidden = true;
-        goToError.hidden = true;
-        compileErrorMessage.textContent = '';
+        compileError.hide(true);
         void highlightSelection(false);
-        documentExport = { diagram: compiled.diagram, render, name, diagnostics };
+        const renderSource = async (glyphs: string) => {
+          const { d2: engine, fonts } = await shared.compiler.get();
+          const result = await engine.compile(glyphs, { ...fonts, layout: 'elk', themeID: 0, darkThemeID: 200 });
+          return engine.render(result.diagram, { ...result.renderOptions, noXMLTag: true });
+        };
+        documentExport = { diagram: compiled.diagram, render, name, diagnostics, renderSource };
         shared.exportChanged();
-        mobileError.hidden = true;
         setPreviewState('ready');
       }
     } catch (error) {
       if (request === generation) {
         if (error instanceof CompilerStartupError) {
           setEditorDiagnostics([]);
-          errorBanner.hidden = true;
-          goToError.hidden = true;
-          mobileError.hidden = true;
-          lintSummary.textContent = '';
-          engine.notice.setAttribute('role', 'alert');
-          engine.message.textContent = 'The diagram engine could not start. Check your connection and retry. Your source is preserved.';
-          engine.notice.hidden = false;
-          engine.retry.hidden = false;
+          compileError.hide();
+          setText(lintSummary, '');
+          notice.show('The diagram engine could not start. Check your connection and retry. Your source is preserved.', 'alert', 'Retry preview');
           setPreviewState('unavailable');
           return;
         }
-        const diagnostics = compilerDiagnostics(error, source, picker().compilation(id).inputPath);
+        const filename = picker().inputPath(id);
+        const diagnostics = compilerDiagnostics(error, source, filename);
         setEditorDiagnostics(diagnostics);
         lintDocument = undefined;
-        lintSummary.textContent = plural(diagnostics.length, 'source error');
+        setText(lintSummary, plural(diagnostics.length, 'source error'));
         const first = diagnostics[0];
-        const filename = picker().compilation(id).inputPath;
         const externalCompilerError = first.filename && first.filename !== filename ? first : undefined;
         const message = first.message.replace(/^[^:]+:\d+:\d+:\s*/, '');
-        compileErrorMessage.textContent = externalCompilerError
-          ? `Error · ${first.message}` : first.range ? `Error · Line ${first.line}, column ${first.column}: ${message}` : `Error · Source location unavailable: ${message}`;
-        goToError.textContent = externalCompilerError ? `Open ${externalCompilerError.filename}` : 'Go to error';
-        goToError.title = goToError.textContent;
-        goToError.hidden = false;
-        goToError.disabled = !canOpenDiagnostic(first);
-        errorBanner.title = compileErrorMessage.textContent!;
-        mobileErrorText.textContent = errorBanner.title;
-        mobileErrorButton.textContent = goToError.textContent;
-        mobileErrorButton.disabled = goToError.disabled;
-        mobileError.hidden = false;
-        errorBanner.hidden = false;
+        compileError.show(externalCompilerError
+          ? `Error · ${first.message}` : first.range ? `Error · Line ${first.line}, column ${first.column}: ${message}` : `Error · Source location unavailable: ${message}`,
+        externalCompilerError ? `Open ${externalCompilerError.filename}` : 'Go to error', canOpenDiagnostic(first));
         viewer.setMessage('');
         setPreviewState('error');
       }
     } finally {
       clearTimeout(startupTimer);
       clearTimeout(slowTimer);
-      if (attempt === previewAttempt && engine.retry.dataset.restart === 'true') {
-        engine.notice.hidden = true;
-        engine.retry.hidden = true;
-        engine.retry.dataset.restart = 'false';
-      }
+      if (attempt === previewAttempt && notice.offersRestart) notice.hide();
       if (request === generation) viewer.setBusy(false);
     }
   }
@@ -543,6 +490,7 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
       root.dataset.empty = 'true';
       root.querySelector('.pane-document-name')!.textContent = 'Choose a diagram';
       root.querySelector<HTMLElement>('.pane-document .draft-unsaved')!.hidden = true;
+      if (notice.owned) notice.hide();
       shared.exportChanged();
     },
     /** Restart after an engine failure or a slow preview; `restart` also abandons queued work. */
@@ -560,7 +508,7 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
     },
     renderDraftState({ dirty, recoveryAvailable, savePending, hasDraft, downloadRequested }: DraftState) {
       const handle = currentDocumentKey ? shared.fileHandles.get(currentDocumentKey) : undefined;
-      const canSave = Boolean(handle || pickerWindow.showSaveFilePicker);
+      const canSave = Boolean(handle) || canChooseSaveFile();
       saveFileButton.textContent = canSave ? 'Save .d2' : 'Download .d2';
       saveFileButton.title = `${canSave ? 'Save source to a file' : 'Download a source copy; this browser cannot write back to your file'} (⌘S or Ctrl+S)`;
       const recovery = !recoveryAvailable ? 'Browser draft unavailable' : savePending ? 'Saving browser draft…' : 'Browser draft saved';
@@ -580,6 +528,9 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
       if (label.textContent !== documentName) label.textContent = documentName;
       root.querySelector<HTMLElement>('.pane-document .draft-unsaved')!.hidden = !dirty;
     },
+    /** A closed split keeps the second pane for reopening; it releases page-level listeners meanwhile. */
+    suspend: () => viewer.suspend(),
+    resume: () => viewer.resume(),
     lintOptions: { missingBacklink, boundaryPorts },
     updateLint,
     dispose() {

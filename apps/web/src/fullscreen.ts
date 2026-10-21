@@ -25,7 +25,7 @@ export function setupFullscreen(stage: HTMLElement, pane: HTMLElement) {
   }
 
   button.addEventListener('click', () => setFullscreen(!fullscreen));
-  window.addEventListener('keydown', (event) => {
+  function onKey(event: KeyboardEvent) {
     if (!fullscreen) return;
     if (event.key === 'Escape') {
       event.preventDefault();
@@ -36,6 +36,16 @@ export function setupFullscreen(stage: HTMLElement, pane: HTMLElement) {
       event.preventDefault();
       event.stopImmediatePropagation();
     }
-  }, { capture: true });
+  }
+  // A hidden pane (closed split view) stops listening to the page until the viewer resumes.
+  let listening: AbortController | undefined;
+  const listen = () => {
+    listening?.abort();
+    listening = new AbortController();
+    window.addEventListener('keydown', onKey, { capture: true, signal: listening.signal });
+  };
+  listen();
+  stage.addEventListener('zf-resume', listen);
+  for (const type of ['zf-suspend', 'zf-destroy']) stage.addEventListener(type, () => listening?.abort());
   return area;
 }

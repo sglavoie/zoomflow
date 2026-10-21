@@ -22,7 +22,8 @@ export function paneScope(pane: PaneId, root: HTMLElement): PaneScope {
   };
 }
 
-/** Name every element in the first pane's markup by its ID, so both panes find parts the same way. */
+/** Name every element in the first pane's markup by its ID, so both panes find parts the same way.
+ * Parts that style.css targets are already named in index.html. */
 export function nameParts(root: HTMLElement) {
   for (const node of root.querySelectorAll<HTMLElement>('[id]')) node.dataset.part ??= node.id;
 }

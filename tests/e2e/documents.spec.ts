@@ -1,18 +1,25 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 import { readFileSync } from 'node:fs';
 import { selectMenuOption, downloadExport, downloadSource, openDownloads } from './menu';
-import { source, previewReady, stubAiStatus, chooseExample } from './helpers';
+import { source, previewReady, stubAiStatus, chooseExample, projectFolder } from './helpers';
 
 /** Documents: drafts, recovery, saving to disk, downloads and removal with undo. */
+
+async function draftRows(page: Page, name: string) {
+  await page.locator('#example-picker > summary').click();
+  const count = await page.locator('#draft-options .example-option').filter({ hasText: name }).count();
+  await page.keyboard.press('Escape');
+  return count;
+}
 
 test('draft recovers after reload and D2 source downloads', async ({ page }) => {
   await page.goto('/');
   await expect(page.locator('.zf-stage > svg')).toBeVisible();
-  await page.getByRole('textbox', { name: 'D2 source' }).fill('draft: Recovered');
+  await source(page).fill('draft: Recovered');
   await expect(page.locator('#draft-status')).toHaveAttribute('data-recovery', 'saved');
   await page.reload();
-  await expect(page.getByRole('textbox', { name: 'D2 source' })).toContainText('draft: Recovered');
+  await expect(source(page)).toContainText('draft: Recovered');
   await expect(page.locator('.zf-stage')).toContainText('Recovered');
   const [download] = await Promise.all([
     page.waitForEvent('download'),
@@ -22,13 +29,13 @@ test('draft recovers after reload and D2 source downloads', async ({ page }) => 
   expect(await readFile(await download.path(), 'utf8')).toBe('draft: Recovered');
   await expect(page.locator('#draft-status')).toContainText('Source download started');
   await page.reload();
-  await expect(page.getByRole('textbox', { name: 'D2 source' })).toContainText('draft: Recovered');
+  await expect(source(page)).toContainText('draft: Recovered');
   await expect(page.locator('#draft-status')).toHaveAttribute('data-recovery', 'saved');
   await page.locator('#file').setInputFiles({ name: 'custom.d2', mimeType: 'text/plain', buffer: Buffer.from('uploaded: Original') });
-  await page.getByRole('textbox', { name: 'D2 source' }).fill('uploaded: Edited');
+  await source(page).fill('uploaded: Edited');
   await page.reload();
   await expect(page.locator('#filename')).toHaveText('custom.d2');
-  await expect(page.getByRole('textbox', { name: 'D2 source' })).toContainText('uploaded: Edited');
+  await expect(source(page)).toContainText('uploaded: Edited');
   await expect(page.locator('#draft-status')).toHaveAttribute('data-recovery', 'saved');
 });
 
@@ -352,4 +359,84 @@ test('download fallback is explicit and never claims a disk save or unavailable 
   await expect(page.locator('#draft-status')).toContainText('Source download started');
   await expect(page.locator('#draft-status')).toContainText('Browser draft unavailable');
   await expect(page.locator('#draft-status')).not.toContainText('Saved to file');
+});
+
+test('a page restored from the back/forward cache keeps editing and previewing', async ({ page }) => {
+  await page.goto('/'); await previewReady(page);
+  await page.evaluate(() => {
+    window.dispatchEvent(new PageTransitionEvent('pagehide', { persisted: true }));
+    window.dispatchEvent(new PageTransitionEvent('pageshow', { persisted: true }));
+  });
+  await source(page).fill('back: Returned from history');
+  await previewReady(page);
+  await expect(page.locator('.zf-stage')).toContainText('Returned from history');
+});
+
+test('hiding the page saves the latest edit without waiting for the autosave', async ({ page }) => {
+  await page.goto('/'); await previewReady(page);
+  await page.clock.install();
+  await source(page).fill('hidden: Saved on hide');
+  const saved = await page.evaluate(() => {
+    const stored = () => Object.keys(localStorage).some((key) => key.startsWith('zoomflow.draft.v2:') && localStorage.getItem(key)!.includes('Saved on hide'));
+    const before = stored();
+    Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'hidden' });
+    document.dispatchEvent(new Event('visibilitychange'));
+    return [before, stored()];
+  });
+  expect(saved).toEqual([false, true]);
+});
+
+test('reopening an unchanged file, folder or empty draft reuses its draft', async ({ page }) => {
+  await page.goto('/'); await previewReady(page);
+  const file = { name: 'repeat.d2', mimeType: 'text/plain', buffer: Buffer.from('repeat: Same file') };
+  await page.locator('#file').setInputFiles(file); await previewReady(page);
+  await page.locator('#file').setInputFiles(file); await previewReady(page);
+  expect(await draftRows(page, 'repeat.d2')).toBe(1);
+  // A draft with unsaved changes is kept; the file opens as a new draft.
+  await source(page).fill('repeat: Edited');
+  await previewReady(page);
+  await page.locator('#file').setInputFiles(file); await previewReady(page);
+  await expect(source(page)).toHaveText('repeat: Same file');
+  expect(await draftRows(page, 'repeat.d2')).toBe(2);
+
+  await page.locator('#folder').setInputFiles(projectFolder); await previewReady(page);
+  await page.locator('#folder').setInputFiles(projectFolder); await previewReady(page);
+  await page.locator('#example-picker > summary').click();
+  await expect(page.locator('.project-group')).toHaveCount(1);
+  await page.keyboard.press('Escape');
+
+  await page.setViewportSize({ width: 1600, height: 900 });
+  await page.selectOption('#layout', 'tabs');
+  await page.locator('#pane-start-empty-b').click();
+  await previewReady(page, 'b');
+  await page.selectOption('#layout', 'single');
+  await page.selectOption('#layout', 'tabs');
+  await page.locator('#pane-start-empty-b').click();
+  await previewReady(page, 'b');
+  expect(await draftRows(page, 'untitled.d2')).toBe(1);
+});
+
+test('reopening a picked file matches its file handle', async ({ page }) => {
+  await page.addInitScript(() => {
+    const disk: Record<string, string> = { first: 'picked: First version', other: 'picked: First version' };
+    const handle = (id: string) => ({ id, kind: 'file', name: 'picked.d2',
+      getFile: async () => new File([disk[id]], 'picked.d2', { type: 'text/plain' }),
+      isSameEntry: async (other: { id?: string }) => other.id === id });
+    (window as any).disk = disk;
+    (window as any).nextHandle = 'first';
+    (window as any).showOpenFilePicker = async () => [handle((window as any).nextHandle)];
+  });
+  await page.goto('/'); await previewReady(page);
+  await page.locator('label.file-button').click(); await previewReady(page);
+  await expect(page.locator('.zf-stage')).toContainText('First version');
+  // The same file changed on disk: its unchanged draft is reused with the new contents.
+  await page.evaluate(() => { (window as any).disk.first = 'picked: Second version'; });
+  await page.locator('label.file-button').click();
+  await expect(page.locator('.zf-stage')).toContainText('Second version'); await previewReady(page);
+  expect(await draftRows(page, 'picked.d2')).toBe(1);
+  // Another file with the same name and contents is a separate draft.
+  await page.evaluate(() => { (window as any).nextHandle = 'other'; });
+  await page.locator('label.file-button').click();
+  await expect(page.locator('.zf-stage')).toContainText('First version'); await previewReady(page);
+  expect(await draftRows(page, 'picked.d2')).toBe(2);
 });

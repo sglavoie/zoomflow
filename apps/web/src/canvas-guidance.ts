@@ -37,12 +37,22 @@ export function setupCanvasGuidance(stage: HTMLElement, setGuidance: (text: stri
     update();
   });
   stage.addEventListener('pointerleave', () => { hovered = null; update(); });
-  window.addEventListener('pointerdown', (event) => { input = event.pointerType === 'touch' ? 'touch' : 'mouse'; update(); });
-  window.addEventListener('keydown', (event) => {
-    if (['Tab', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) {
-      input = 'keyboard'; update();
-    }
-  }, { capture: true });
+  // A hidden pane (closed split view) stops listening to the page until the viewer resumes.
+  let listening: AbortController | undefined;
+  const listen = () => {
+    listening?.abort();
+    listening = new AbortController();
+    const { signal } = listening;
+    window.addEventListener('pointerdown', (event) => { input = event.pointerType === 'touch' ? 'touch' : 'mouse'; update(); }, { signal });
+    window.addEventListener('keydown', (event) => {
+      if (['Tab', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) {
+        input = 'keyboard'; update();
+      }
+    }, { capture: true, signal });
+  };
+  listen();
+  stage.addEventListener('zf-resume', listen);
+  for (const type of ['zf-suspend', 'zf-destroy']) stage.addEventListener(type, () => listening?.abort());
   stage.addEventListener('focusin', update);
   stage.addEventListener('focusout', () => queueMicrotask(update));
   stage.addEventListener('zf-sourcechange', update);

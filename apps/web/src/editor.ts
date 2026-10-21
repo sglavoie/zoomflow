@@ -21,6 +21,8 @@ export type SourceEditorOptions = {
   selected: () => void;
   format: () => void;
   reveal: () => void;
+  /** Accessible name of the editable source. */
+  label?: string;
 };
 
 export class SourceEditor {
@@ -30,8 +32,10 @@ export class SourceEditor {
   private readonly diagnosticList = document.createElement('ul');
   private readonly extensions: Extension[];
   private currentKey = '';
+  private updating = false;
+  private diagnosticsRequest = 0;
   private readonly documents = new Map<string, { state: EditorState; scroll: ReturnType<EditorView['scrollSnapshot']> }>();
-  constructor(parent: HTMLElement, { source = '', panelId, changed, selected, format, reveal }: SourceEditorOptions) {
+  constructor(parent: HTMLElement, { source = '', panelId, changed, selected, format, reveal, label = 'D2 source' }: SourceEditorOptions) {
     this.extensions = [
         basicSetup, d2Language, lintGutter(), EditorView.lineWrapping, hangingIndentation, aiHighlights,
         codeFolding({ placeholderDOM: (view, unfold) => {
@@ -53,7 +57,7 @@ export class SourceEditor {
           { key: 'Shift-Alt-f', run: () => { format(); return true; } },
           { key: 'Mod-Shift-Enter', run: () => { reveal(); return true; } },
         ])),
-        EditorView.contentAttributes.of({ 'aria-label': 'D2 source', 'aria-multiline': 'true' }),
+        EditorView.contentAttributes.of({ 'aria-label': label, 'aria-multiline': 'true' }),
         EditorView.domEventHandlers({ focus: (_event, view) => {
           const { scrollTop, scrollLeft } = view.scrollDOM;
           const document = view.state.doc;
@@ -67,17 +71,20 @@ export class SourceEditor {
         EditorView.theme({
           '&': { height: '100%', backgroundColor: 'transparent', color: 'inherit' },
           '.cm-scroller': { overflow: 'auto', fontFamily: 'monospace' },
-          '.cm-gutters': { backgroundColor: 'transparent', color: '#7a899d', borderColor: 'var(--border)' },
-          '.cm-activeLine, .cm-activeLineGutter': { backgroundColor: '#8192a418' },
-          '&.cm-focused .cm-selectionBackground, .cm-selectionBackground, ::selection': { backgroundColor: '#477de544' },
+          '.cm-gutters': { backgroundColor: 'transparent', color: 'var(--subtle)', borderColor: 'var(--border)' },
+          '.cm-activeLine, .cm-activeLineGutter': { backgroundColor: 'var(--active-line)' },
+          '&.cm-focused .cm-selectionBackground, .cm-selectionBackground, ::selection': { backgroundColor: 'var(--selection)' },
           '.cm-cursor': { borderLeftColor: 'currentColor' },
           '.cm-foldPlaceholder': { minHeight: '0', padding: '0 4px', lineHeight: 'inherit',
-            fontFamily: 'inherit', fontSize: 'inherit', color: 'inherit', backgroundColor: '#8192a418' },
+            fontFamily: 'inherit', fontSize: 'inherit', color: 'inherit', backgroundColor: 'var(--active-line)' },
           '.cm-tooltip': { backgroundColor: 'Canvas', color: 'CanvasText' },
         }),
         EditorView.updateListener.of((update) => {
-          if (update.docChanged) changed();
-          else if (update.selectionSet && !this.selectingShape) selected();
+          this.updating = true;
+          try {
+            if (update.docChanged) changed();
+            else if (update.selectionSet && !this.selectingShape) selected();
+          } finally { this.updating = false; }
         }),
       ];
     this.view = new EditorView({ parent, state: EditorState.create({ doc: source, extensions: this.extensions }) });
@@ -94,6 +101,7 @@ export class SourceEditor {
       if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); dismiss(); }
       if (event.key === 'Backspace') event.stopPropagation();
     });
+    this.diagnosticList.textContent = 'No diagnostics.';
     this.panel.append(close, this.diagnosticList);
     parent.append(this.panel);
   }
@@ -174,8 +182,14 @@ export class SourceEditor {
     } finally { this.selectingShape = false; }
   }
   diagnostics(items: SourceDiagnostic[], filename: string, documentName: string, canOpen: (item: SourceDiagnostic) => boolean, open: (item: SourceDiagnostic) => void) {
-    this.view.dispatch(setDiagnostics(this.view.state, items.flatMap((item) =>
-      item.filename === filename && item.range ? [{ ...item.range, severity: item.severity, message: item.message, source: item.source }] : [])));
+    const request = ++this.diagnosticsRequest;
+    const apply = () => {
+      if (request !== this.diagnosticsRequest) return;
+      this.view.dispatch(setDiagnostics(this.view.state, items.flatMap((item) =>
+        item.filename === filename && item.range ? [{ ...item.range, severity: item.severity, message: item.message, source: item.source }] : [])));
+    };
+    // Edits clear diagnostics from the update listener; dispatch after that update, not inside it.
+    if (this.updating) setTimeout(apply); else apply();
     this.diagnosticList.replaceChildren();
     for (const item of items) {
       const row = document.createElement('li');
@@ -199,5 +213,5 @@ export class SourceEditor {
     this.panel.hidden = false;
     (this.diagnosticList.querySelector('button') ?? this.panel.querySelector('button'))?.focus();
   }
-  destroy() { this.view.destroy(); }
+  destroy() { ++this.diagnosticsRequest; this.view.destroy(); }
 }

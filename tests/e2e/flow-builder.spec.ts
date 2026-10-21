@@ -1,11 +1,11 @@
 import { expect, test, type Page } from '@playwright/test';
+import { source } from './helpers';
 
 const ready = (page: Page) => expect(page.locator('#preview-status')).toHaveText('Preview ready');
 
 test('creates, revisits, edits and recovers a flow without typing diagram syntax', async ({ page }) => {
   await page.goto('/'); await ready(page);
-  const source = page.getByRole('textbox', { name: 'D2 source', exact: true });
-  await source.fill('original: Keep my work');
+  await source(page).fill('original: Keep my work');
   await ready(page);
   await page.getByRole('button', { name: 'New flow', exact: true }).click();
   const dialog = page.getByRole('dialog', { name: 'Create a flow' });
@@ -26,14 +26,14 @@ test('creates, revisits, edits and recovers a flow without typing diagram syntax
   await page.getByRole('button', { name: 'Apply changes' }).click();
   await ready(page);
   await expect(page.locator('.zf-stage')).toContainText('Request time off');
-  await source.focus();
+  await source(page).focus();
   await page.keyboard.press('ControlOrMeta+z');
   await ready(page);
   await expect(page.locator('.zf-stage')).toContainText('Submit holiday request');
   await page.locator('#example-picker summary').click();
   await page.locator('#example-options .example-option').first().click();
   await ready(page);
-  await expect(source).toContainText('original: Keep my work');
+  await expect(source(page)).toContainText('original: Keep my work');
   await expect(page.getByRole('button', { name: 'Edit flow', exact: true })).toBeHidden();
 });
 
@@ -63,7 +63,7 @@ test('adds steps and branches, validates names, removes dangling connections and
   await page.keyboard.press('Escape');
   await expect(page.getByRole('button', { name: 'Edit flow', exact: true })).toBeFocused();
   await expect(page.locator('.cm-content')).toHaveText(before, { useInnerText: true });
-  await page.getByRole('textbox', { name: 'D2 source', exact: true }).fill(before + '\nstep_1.style.fill: red');
+  await source(page).fill(before + '\nstep_1.style.fill: red');
   await expect(page.getByRole('button', { name: 'Edit flow', exact: true })).toBeHidden();
 });
 
@@ -82,4 +82,20 @@ test('works on a phone and keeps modal controls inside the viewport', async ({ p
   await expect(page.getByLabel('Step 2 name')).toHaveValue('A name with "quotes": and -> arrows');
   await page.getByRole('button', { name: 'Cancel', exact: true }).click();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+});
+
+test('removing a connection keeps focus on the neighbouring connection', async ({ page }) => {
+  await page.goto('/'); await ready(page);
+  await page.getByRole('button', { name: 'New flow', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: 'Create a flow' });
+  await dialog.getByRole('button', { name: 'Approval with Yes / No' }).click();
+  const remove = dialog.getByRole('button', { name: /^Remove connection/ });
+  const count = await remove.count();
+  expect(count).toBeGreaterThan(2);
+  await dialog.getByRole('button', { name: 'Remove connection 2', exact: true }).click();
+  await expect(dialog.getByRole('button', { name: 'Remove connection 2', exact: true })).toBeFocused();
+  await dialog.getByRole('button', { name: `Remove connection ${count - 1}`, exact: true }).click();
+  await expect(dialog.getByRole('button', { name: `Remove connection ${count - 2}`, exact: true })).toBeFocused();
+  while (await remove.count()) await remove.first().click();
+  await expect(dialog.getByRole('button', { name: 'Add connection', exact: true })).toBeFocused();
 });
