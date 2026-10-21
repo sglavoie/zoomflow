@@ -3,6 +3,7 @@ import type { Draft } from './draft-store';
 import { setupDocumentActions } from './document-actions';
 import { createDraftLibrary, isOwnDraft } from './draft-library';
 import { draftRow, projectGroup, type ProjectGroup } from './picker-rows';
+import { setText } from './text';
 
 import type { PaneId } from './pane-scope';
 
@@ -91,11 +92,17 @@ export function setupExamplePicker({ readSource, open, onState, forget, checkpoi
         downloadRequested: downloadRequested[pane], identity: draft });
       refreshRows.get(draft.key)?.();
     }
-    for (const [id, group] of projectGroups) {
-      const count = [...drafts.values()].filter((item) => item.projectId === id && item.source !== item.baseline).length;
-      const indicator = group.section.querySelector<HTMLElement>('.project-unsaved')!;
-      indicator.textContent = `${count} unsaved`;
-      indicator.hidden = count === 0;
+    if (projectGroups.size) {
+      const unsaved = new Map<string, number>();
+      for (const item of drafts.values()) {
+        if (item.projectId && item.source !== item.baseline) unsaved.set(item.projectId, (unsaved.get(item.projectId) ?? 0) + 1);
+      }
+      for (const [id, group] of projectGroups) {
+        const count = unsaved.get(id) ?? 0;
+        const indicator = group.section.querySelector<HTMLElement>('.project-unsaved')!;
+        setText(indicator, `${count} unsaved`);
+        indicator.hidden = count === 0;
+      }
     }
     fileHeading.hidden = fileOptions.childElementCount === 0;
   }
@@ -121,14 +128,15 @@ export function setupExamplePicker({ readSource, open, onState, forget, checkpoi
     const query = search.value.trim().toLocaleLowerCase();
     search.hidden = drafts.size <= 10 && !query;
     let matches = 0;
+    const visibleProjects = new Set<string>();
     for (const item of drafts.values()) {
       const visible = !query || `${item.name} ${item.title} ${item.path ?? ''} ${item.description}`.toLocaleLowerCase().includes(query);
       rows.get(item.key)!.hidden = !visible;
       if (visible) matches++;
+      if (visible && item.projectId) visibleProjects.add(item.projectId);
     }
     for (const [id, group] of projectGroups) {
-      const visible = [...drafts.values()].some(item => item.projectId === id && !rows.get(item.key)!.hidden);
-      group.section.hidden = !visible;
+      group.section.hidden = !visibleProjects.has(id);
       if (query) group.files.hidden = false;
       else group.files.hidden = currentDraft()?.projectId !== id;
       group.toggle.setAttribute('aria-expanded', String(!group.files.hidden));

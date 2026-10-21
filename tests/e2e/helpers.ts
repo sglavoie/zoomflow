@@ -1,6 +1,18 @@
 import { expect, type Page } from '@playwright/test';
 import { fileURLToPath } from 'node:url';
 
+/**
+ * Whether to compare against the checked-in screenshot baselines. They are Chromium
+ * captures from macOS, so other engines and platforms skip only the pixel comparison
+ * (behavioral assertions still run). Set ZOOMFLOW_SKIP_VISUAL=1 to skip them on macOS
+ * versions that render text differently.
+ */
+export function comparesVisuals(browserName: string) {
+  return browserName === 'chromium' && process.platform === 'darwin' && process.env.ZOOMFLOW_SKIP_VISUAL !== '1';
+}
+
+export const visualSkipReason = 'Screenshot baselines are Chromium captures from macOS; set ZOOMFLOW_SKIP_VISUAL=1 to skip them.';
+
 export const projectFolder = fileURLToPath(new URL('../../fixtures/browser-project', import.meta.url));
 
 export const source = (page: Page) => page.getByRole('textbox', { name: 'D2 source', exact: true });

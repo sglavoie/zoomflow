@@ -169,7 +169,6 @@ const reference = setupReference(() => {
   return { preview: pane.scope.part('preview-pane'), source: pane.scope.part('source-pane'),
     showPreview: () => pane.showView('preview'), showSource: () => pane.showView('source') };
 });
-document.querySelector('#toggle-reference')!.addEventListener('click', () => activePane().showView('preview'));
 
 function wirePaneHeader(id: PaneId) {
   const button = (name: string) => paneScope(id, paneRoots[id]).part<HTMLButtonElement>(name);

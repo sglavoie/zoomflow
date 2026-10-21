@@ -9,14 +9,19 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: diagrams-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   diagrams:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
-      # Reads the pnpm version from packageManager in package.json.
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      # Reads the pnpm version from packageManager in package.json (pnpm 12 needs v6.1+).
+      - uses: pnpm/action-setup@v6.1.0
+      - uses: actions/setup-node@v7
         with:
           node-version-file: .node-version
           cache: pnpm
@@ -26,14 +31,15 @@ jobs:
       - name: Build CLI
         run: pnpm --filter cli build
       - name: Lint diagram boundaries
-        # Replace this valid fixture with your project's entry diagrams.
+        # Example: this repository lints a valid fixture. When copying the workflow,
+        # point this step and the exports below at your project's entry diagrams.
         # A lint error exits 1 and fails the job; warnings exit 0.
         run: pnpm zoomflow lint fixtures/lint/imported.d2 --boundary-ports
       - name: Export diagrams
         run: |
           pnpm zoomflow export fixtures/order.d2 --all --format svg -o artifacts/order-svg.zip
           pnpm zoomflow export fixtures/order.d2 --all --format html -o artifacts/order.html
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: diagrams
           path: artifacts/

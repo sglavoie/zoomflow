@@ -133,25 +133,25 @@ test('missing board link has a dashed outline and names its target in the viewer
   await expect(page.locator('#filename')).toHaveText('missing-links.d2');
   await board(page, 'root');
 
-  async function missing(target: string, current: string) {
+  async function missing(target: string, current: string, label: string) {
     const link = page.locator(`.zf-stage a[href="${target}"]`);
     await expect(link).toHaveAttribute('data-missing', '');
     await expect(link).toHaveCSS('outline-style', 'dashed');
     await expect(link).toHaveCSS('outline-width', '2px');
     await link.click();
     await expect(page.locator('.zf-message')).toBeVisible();
-    await expect(page.locator('.zf-message')).toHaveText(`Missing board: ${target}`);
+    await expect(page.locator('.zf-message')).toHaveText(`Missing board: ${label}`);
     await expect(page.locator('.zf-stage')).toHaveAttribute('data-board', current);
     await expect(link).toHaveCSS('outline-style', 'dashed');
     await link.focus();
     await page.keyboard.press('Enter');
-    await expect(page.locator('.zf-message')).toHaveText(`Missing board: ${target}`);
+    await expect(page.locator('.zf-message')).toHaveText(`Missing board: ${label}`);
   }
   async function checkLinks() {
-    await missing('root.layers.missing', 'root');
+    await missing('root.layers.missing', 'root', 'Root > missing');
     await page.locator('.zf-stage a[href="root.layers.child"]').click();
     await expect(page.locator('.zf-stage')).toHaveAttribute('data-board', 'root.layers.child');
-    await missing('root.layers.child.layers.absent', 'root.layers.child');
+    await missing('root.layers.child.layers.absent', 'root.layers.child', 'Root > child > absent');
     await page.locator('.zf-stage a[href="root"]').click();
     await expect(page.locator('.zf-stage')).toHaveAttribute('data-board', 'root');
   }
@@ -297,17 +297,26 @@ for (const offline of [false, true]) {
       (window as unknown as { renders: number }).renders = 0;
       element.addEventListener('zf-boardchange', () => { (window as unknown as { renders: number }).renders++; });
     });
-    const renders = () => page.evaluate(() => new Promise<number>((resolve) =>
-      setTimeout(() => resolve((window as unknown as { renders: number }).renders), 300)));
+    const renders = () => page.evaluate(() => (window as unknown as { renders: number }).renders);
+    // Wait for the expected render, then let a few frames pass to catch a duplicate.
+    const rendersOnce = async (count: number) => {
+      await expect.poll(renders).toBe(count);
+      await page.evaluate(() => new Promise((resolve) => {
+        let frames = 3;
+        const next = () => (--frames ? requestAnimationFrame(next) : setTimeout(resolve, 50));
+        requestAnimationFrame(next);
+      }));
+      expect(await renders()).toBe(count);
+    };
     await page.goBack();
     await expect(stage).toHaveAttribute('data-board', 'root.layers.checkout');
-    expect(await renders()).toBe(1);
+    await rendersOnce(1);
     await page.goBack();
     await expect(stage).toHaveAttribute('data-board', 'root');
-    expect(await renders()).toBe(2);
+    await rendersOnce(2);
     await page.goForward();
     await expect(stage).toHaveAttribute('data-board', 'root.layers.checkout');
-    expect(await renders()).toBe(3);
+    await rendersOnce(3);
   });
 
   test(`unknown deep links name the missing board ${offline ? 'in offline HTML' : 'in the viewer'}`, async ({ page, context }, info) => {

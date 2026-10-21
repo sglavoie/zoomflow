@@ -1,6 +1,7 @@
 import { examples } from './examples';
 import { DraftStore, type Draft } from './draft-store';
 import type { PaneId } from './pane-scope';
+import { setText } from './text';
 
 export const exampleSource = (key: string) => examples.find((example) => example.name === key)?.source;
 /** The draft differs from a bundled example, so only the browser or a file keeps it. */
@@ -22,6 +23,8 @@ export function createDraftLibrary(changed: () => void) {
   let savePending = false;
   let storedSecond: string | undefined;
   let saveTimer: ReturnType<typeof setTimeout> | undefined;
+  let conflictShown = false;
+  const conflictMessage = 'Drafts changed in another tab. Your open source is unchanged. Reload to review saved versions; conflicting edits appear as recovered copies.';
 
   try {
     store = new DraftStore(localStorage);
@@ -42,12 +45,30 @@ export function createDraftLibrary(changed: () => void) {
     if (saved.current && drafts.has(saved.current)) current.a = saved.current;
     if (saved.second !== current.a && saved.second && drafts.has(saved.second)) storedSecond = saved.second;
   } catch { recoveryAvailable = false; }
-  function checkConflicts() {
-    try { conflictNotice.hidden = !store?.hasConcurrentChanges(); }
-    catch { /* Saving reports storage failures beside the save control. */ }
+  /** The notice stays rendered so screen readers announce its text when a conflict appears.
+   * `documents` limits the check to those documents' records. */
+  function checkConflicts(documents?: Set<string>) {
+    try {
+      conflictShown = Boolean(store?.hasConcurrentChanges(documents));
+      setText(conflictNotice, conflictShown ? conflictMessage : '');
+    } catch { /* Saving reports storage failures beside the save control. */ }
   }
+  // Each save in another tab writes several keys; check the changed documents once per burst.
+  let changedDocuments: Set<string> | undefined;
+  let everyDocument = false;
+  let conflictTimer: ReturnType<typeof setTimeout> | undefined;
   window.addEventListener('storage', (event) => {
-    if (DraftStore.isDraftEvent(event.key)) checkConflicts();
+    if (!DraftStore.isDraftEvent(event.key)) return;
+    if (event.key === null) everyDocument = true;
+    else (changedDocuments ??= new Set()).add(DraftStore.documentOf(event.key));
+    clearTimeout(conflictTimer);
+    conflictTimer = setTimeout(() => {
+      // Only a full check can end a conflict that is already shown.
+      const documents = everyDocument || conflictShown ? undefined : changedDocuments;
+      changedDocuments = undefined;
+      everyDocument = false;
+      checkConflicts(documents);
+    }, 100);
   });
   function persist() {
     clearTimeout(saveTimer);
@@ -56,7 +77,7 @@ export function createDraftLibrary(changed: () => void) {
       if (!store) store = new DraftStore(localStorage);
       store.save([...drafts.values()].filter(isOwnDraft), current.a!, current.b);
       // Only another tab's writes, announced by storage events, start a conflict; a save can end one.
-      if (!conflictNotice.hidden) checkConflicts();
+      if (conflictShown) checkConflicts();
       recoveryAvailable = true;
     } catch { recoveryAvailable = false; }
     changed();

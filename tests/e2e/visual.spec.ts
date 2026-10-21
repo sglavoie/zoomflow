@@ -1,11 +1,11 @@
 import { expect, test } from '@playwright/test';
-import { source } from './helpers';
+import { comparesVisuals, source, visualSkipReason } from './helpers';
 
 // Keep visual coverage small and intentional. Behavioral tests still run in all browsers.
 test.use({ reducedMotion: 'reduce', locale: 'en-US', timezoneId: 'UTC' });
 for (const mobile of [false, true]) for (const theme of ['light', 'dark'] as const) {
   test(`${mobile ? 'phone' : 'desktop'} ${theme} workspace`, async ({ page, browserName }) => {
-    test.skip(browserName !== 'chromium', 'The visual baseline uses pinned Chromium; other engines have behavioral coverage.');
+    test.skip(!comparesVisuals(browserName), visualSkipReason);
     await page.setViewportSize(mobile ? { width: 390, height: 844 } : { width: 1440, height: 900 });
     await page.emulateMedia({ colorScheme: theme });
     // Availability depends on local CLIs, so keep that external response deterministic.

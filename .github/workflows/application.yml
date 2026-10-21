@@ -14,16 +14,51 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  application:
+  checks:
+    # Typechecking, lint and unit tests do not depend on screenshot baselines, so they
+    # run on the cheaper Linux runner. CLI integration tests need native D2 and Chromium.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      # Reads the pnpm version from packageManager in package.json (pnpm 12 needs v6.1+).
+      - uses: pnpm/action-setup@v6.1.0
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - name: Install workspace
+        run: pnpm install --frozen-lockfile
+      - name: Read Playwright version
+        id: playwright
+        run: echo "version=$(node -p "require('@playwright/test/package.json').version")" >> "$GITHUB_OUTPUT"
+      - name: Cache Playwright browsers
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ runner.arch }}-${{ steps.playwright.outputs.version }}-chromium
+      # Linux needs system libraries even when the browser itself is cached; a cached
+      # browser is not downloaded again.
+      - name: Install Chromium for CLI tests
+        run: pnpm exec playwright install --with-deps chromium
+      - uses: ./.github/actions/setup-d2
+      - name: Typecheck
+        run: pnpm typecheck
+      - name: Lint
+        run: pnpm lint
+      - name: Unit and CLI integration tests
+        run: pnpm test:unit
+
+  browser:
     # Checked-in PNG and workspace baselines are macOS captures. Keep the runner
     # pinned and review baseline changes when upgrading Playwright or the OS.
     runs-on: macos-15
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
-      # Reads the pnpm version from packageManager in package.json.
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      # Reads the pnpm version from packageManager in package.json (pnpm 12 needs v6.1+).
+      - uses: pnpm/action-setup@v6.1.0
+      - uses: actions/setup-node@v7
         with:
           node-version-file: .node-version
           cache: pnpm
@@ -34,7 +69,7 @@ jobs:
         run: echo "version=$(node -p "require('@playwright/test/package.json').version")" >> "$GITHUB_OUTPUT"
       - name: Cache Playwright browsers
         id: playwright-cache
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/Library/Caches/ms-playwright
           key: playwright-${{ runner.os }}-${{ runner.arch }}-${{ steps.playwright.outputs.version }}
@@ -42,19 +77,12 @@ jobs:
       - name: Install browsers
         if: steps.playwright-cache.outputs.cache-hit != 'true'
         run: pnpm exec playwright install chromium firefox webkit
-      - uses: ./.github/actions/setup-d2
-      - name: Typecheck
-        run: pnpm typecheck
-      - name: Lint
-        run: pnpm lint
-      - name: Unit and CLI integration tests
-        run: pnpm test:unit
       - name: Production build
         run: pnpm build
       - name: Browser and visual regression tests
         # CI=true adds the production smoke project, which serves the build above.
         run: pnpm exec playwright test --reporter=github,html
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: failure()
         with:
           name: browser-failures

@@ -1,6 +1,6 @@
 import { D2 } from '@d2lang/d2';
 import { afterAll, beforeAll, expect, it } from 'vitest';
-import { lint } from '@zoomflow/core';
+import { boardKey, lint } from '@zoomflow/core';
 import { referenceTopics } from '../src/reference-data';
 
 let d2: D2;
@@ -14,6 +14,6 @@ it.each(referenceTopics)('compiles and renders the $title reference example', as
   expect(await d2.render(compiled.diagram, compiled.renderOptions)).toContain('<svg');
   for (const layer of compiled.diagram.layers ?? []) {
     if (!layer) continue;
-    expect(await d2.render(compiled.diagram, { ...compiled.renderOptions, target: `layers.${layer.name}` })).toContain('<svg');
+    expect(await d2.render(compiled.diagram, { ...compiled.renderOptions, target: `layers.${boardKey(layer.name)}` })).toContain('<svg');
   }
 });

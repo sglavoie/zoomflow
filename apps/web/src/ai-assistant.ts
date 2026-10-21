@@ -20,7 +20,8 @@ function requestStatus(body: string) {
 
 export type AiAssistantHost = {
   read: () => Snapshot;
-  /** Rejects when the proposed source does not compile. */
+  /** Rejects when the proposed source does not compile; an `AiError` rejection reports its own message,
+   * for example when the diagram engine cannot check the source at all. */
   validate: (source: string) => Promise<void>;
   /** Apply proposed source and return a summary of the change. */
   apply: (source: string) => string;
@@ -178,7 +179,10 @@ export function setupAiAssistant({ root, part }: PaneScope, { read, validate, ap
           throw new Error('The diagram changed while AI was working. Your edits were kept; send the prompt again.');
         }
         try { await validate(data.source); }
-        catch (error) { throw new AiError('AI returned invalid D2. Your source is unchanged; try a smaller change or rephrase the request.', String(error)); }
+        catch (error) {
+          if (error instanceof AiError) throw error;
+          throw new AiError('AI returned invalid D2. Your source is unchanged; try a smaller change or rephrase the request.', String(error));
+        }
         controller.signal.throwIfAborted();
         if (!unchanged()) {
           throw new Error('The diagram changed while AI was working. Your edits were kept; send the prompt again.');
@@ -226,6 +230,8 @@ export function setupAiAssistant({ root, part }: PaneScope, { read, validate, ap
   });
   return {
     sourceChanged() { undoRevision = undefined; undoButton.hidden = true; changeFeedback.hidden = true; },
+    /** Abandon a running request, for example when its document closes. */
+    cancel() { active?.abort(); },
     dispose() { active?.abort(); health?.abort(); resize.disconnect(); tools.removeEventListener('scroll', updateOverflow); },
   };
 }

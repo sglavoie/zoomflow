@@ -1,3 +1,5 @@
+import { setText } from './text';
+
 /** Native modal semantics, shared copy layout and a keyboard-reachable undo notice. */
 export function setupDocumentActions(returnFocus: () => void) {
   const dialog = document.createElement('dialog');
@@ -8,8 +10,9 @@ export function setupDocumentActions(returnFocus: () => void) {
   const [cancel, confirm] = [...dialog.querySelectorAll('button')];
   const notice = document.createElement('div');
   notice.id = 'document-undo';
-  notice.hidden = true;
-  notice.innerHTML = '<span role="status"></span><button type="button">Undo</button><button type="button" class="button-quiet" aria-label="Dismiss undo notice">Dismiss</button>';
+  // The status stays rendered so its message is announced; the notice collapses while it is empty.
+  notice.innerHTML = '<span role="status"></span><button type="button" hidden>Undo</button><button type="button" class="button-quiet" aria-label="Dismiss undo notice" hidden>Dismiss</button>';
+  const status = notice.querySelector('span')!;
   const [undo, dismiss] = [...notice.querySelectorAll('button')];
   document.body.append(dialog, notice);
   let resolve: ((confirmed: boolean) => void) | undefined;
@@ -19,7 +22,8 @@ export function setupDocumentActions(returnFocus: () => void) {
     clearTimeout(timer);
     pending = undefined;
     if (notice.contains(document.activeElement)) returnFocus();
-    notice.hidden = true;
+    setText(status, '');
+    undo.hidden = dismiss.hidden = true;
   };
   cancel.onclick = () => dialog.close('cancel');
   confirm.onclick = () => dialog.close('confirm');
@@ -57,8 +61,8 @@ export function setupDocumentActions(returnFocus: () => void) {
     offerUndo(message: string, action: () => void) {
       expire();
       pending = action;
-      notice.querySelector('span')!.textContent = message;
-      notice.hidden = false;
+      setText(status, message);
+      undo.hidden = dismiss.hidden = false;
       schedule();
     },
     expire,

@@ -1,5 +1,7 @@
 /** Shared by the live viewer and serialized offline runtime. Call after mounting the SVG. */
-export function decorateLinks(svg: Element, boards: Map<string, { name: string; parent?: string }>, current: string) {
+export function decorateLinks(svg: Element, boards: Map<string, { name: string; parent?: string }>, current: string,
+  /** Name a missing board target; defaults to its raw ID. */
+  describe: (target: string) => string = (target) => target) {
   const ns = 'http://www.w3.org/2000/svg';
   const touch = matchMedia('(pointer: coarse)').matches;
   const cues: { link: SVGAElement; shape: SVGGraphicsElement; badge: SVGGElement; hit: SVGRectElement;
@@ -16,7 +18,7 @@ export function decorateLinks(svg: Element, boards: Map<string, { name: string; 
     const name = link.querySelector('text')?.textContent?.trim() || href;
     const direction = target ? ancestor(href, current) ? 'parent' : ancestor(current, href) ? 'child' : 'peer' : undefined;
     const label = external ? `Open external link: ${name}${href.startsWith('mailto:') ? ' (email)' : ' (new tab)'}`
-      : target ? direction === 'parent' ? `Return to ${target.name}` : direction === 'child' ? `Open ${target.name} board` : `Visit ${target.name} board` : `Missing board: ${href}`;
+      : target ? direction === 'parent' ? `Return to ${target.name}` : direction === 'child' ? `Open ${target.name} board` : `Visit ${target.name} board` : `Missing board: ${describe(href)}`;
     link.dataset.linkKind = external ? 'external' : 'board';
     if (direction) link.dataset.linkDirection = direction;
     link.setAttribute('aria-label', label);
@@ -75,10 +77,12 @@ export function decorateLinks(svg: Element, boards: Map<string, { name: string; 
       }
     }
   }
+  let attached = false;
   function updateGeometry() {
     // Hidden mobile previews have no measurable SVG bounds. Associate their
-    // badges when the preview becomes visible, before sizing the touch targets.
-    attachCues();
+    // badges once the SVG first becomes visible, before sizing the touch targets.
+    if (!attached && svg.getClientRects().length) { attachCues(); attached = true; }
+    if (!cues.length) return;
     // Size badges in screen pixels, independently of diagram fit and zoom.
     for (const cue of cues) {
       const matrix = cue.link.getScreenCTM();
@@ -128,7 +132,16 @@ export function decorateLinks(svg: Element, boards: Map<string, { name: string; 
       rect.cue.hit.setAttribute('height', String(Math.max(0, end.y - start.y)));
     }
   }
-  svg.addEventListener('zf-viewportchange', updateGeometry);
+  // Viewport changes fire on every pointermove and wheel event: measure once per frame.
+  let frame = 0;
+  svg.addEventListener('zf-viewportchange', () => {
+    if (frame) return;
+    frame = requestAnimationFrame(() => {
+      frame = 0;
+      // A replaced board's SVG is detached; skip its last pending frame.
+      if (svg.isConnected) updateGeometry();
+    });
+  });
   updateGeometry();
   if (!svg.querySelector('a[data-link-kind]')) return;
   const hint = document.createElement('div');

@@ -33,7 +33,7 @@ export function parentContext(board: Board, boards: ReadonlyMap<string, Board>):
   if (!parent || board.kind !== 'layers') return [];
   const labels = new Map(parent.diagram.shapes.map((shape) => [shape.id, ('label' in shape && shape.label) || shape.id]));
   return parent.diagram.shapes.flatMap((shape) => {
-    const link = classifyHref(shape.link, parent.id);
+    const link = classifyHref(shape.link);
     if (!('target' in link) || link.target !== board.id) return [];
     const neighbours = boundaryNeighbours(parent.diagram, shape.id);
     if (!neighbours.in.size && !neighbours.out.size) return [];

@@ -1,5 +1,5 @@
 import { expect, it, vi } from 'vitest';
-import { CompilerStartupError, createCompiler } from '../src/compiler';
+import { CompilerStartupError, createCompiler, isEngineUnavailable } from '../src/compiler';
 
 it('shares initialization, retries failures, and caches only successful resources', async () => {
   const resources = { d2: { compile: vi.fn(), render: vi.fn(), dispose: vi.fn() }, fonts: {} };
@@ -33,4 +33,12 @@ it('restarts the worker and does not let obsolete startup replace the new resour
   compiler.restart();
   expect(fresh.d2.dispose).toHaveBeenCalledOnce();
   expect(compiler.ready).toBe(false);
+});
+
+it('tells engine failures apart from source errors', () => {
+  expect(isEngineUnavailable(new CompilerStartupError(new Error('Worker unavailable')))).toBe(true);
+  expect(isEngineUnavailable(new Error('D2 instance has been disposed'))).toBe(true);
+  expect(isEngineUnavailable(new Error('Workspace closed'))).toBe(true);
+  expect(isEngineUnavailable(new Error('example.d2:1:9: maps must be terminated with }'))).toBe(false);
+  expect(isEngineUnavailable('D2 instance has been disposed')).toBe(false);
 });

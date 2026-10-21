@@ -83,6 +83,15 @@ steps: {first: {Step}}`, { layout: 'elk' });
     expect(Object.keys(unzipSync(exportBoardsZip(boards)))).toHaveLength(boards.length);
   });
 
+  it('zips substituted board contents and rejects duplicate paths', () => {
+    const board = (path: string, svg: string): ExportBoard => ({ id: path, name: path, hash: '#/', path, empty: false, svg, parentContext: [], missingLinks: [] });
+    const png = new Uint8Array([137, 80, 78, 71]);
+    const files = unzipSync(exportBoardsZip([board('root.png', '<svg/>'), board('a.png', '')], (item) => item.id === 'root.png' ? png : 'text'));
+    expect(files['root.png']).toEqual(png);
+    expect(strFromU8(files['a.png'])).toBe('text');
+    expect(() => exportBoardsZip([board('a.svg', ''), board('a.svg', '')])).toThrow('Duplicate export path: a.svg');
+  });
+
   it('renders with bounded concurrency in tree order and can skip empty boards', async () => {
     const compiled = await d2.compile('r\nlayers: {a: {x}; b: {}; c: {y}; d: {z}}', { layout: 'elk' });
     let active = 0, peak = 0;

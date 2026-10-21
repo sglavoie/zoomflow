@@ -1,8 +1,9 @@
-import { classifyHref, indexBoards, parentContext, type Board, type Diagram, type LintDiagnostic, type ShapeSource } from '@zoomflow/core';
+import { boardLabel, classifyHref, indexBoards, parentContext, shapeClass, type Board, type Diagram, type LintDiagnostic, type ShapeSource } from '@zoomflow/core';
 import { restoreMissingLinks } from './missing-links';
 import { decorateLinks } from './link-cues';
 import { renderParentContext, resolveRouteHash, routeFallbackNotice, simplifyTrail } from './navigation';
 import { setupBreadcrumbs } from './breadcrumbs';
+import { sanitizeSvg } from './sanitize';
 
 export type RenderBoard = (target: string) => Promise<string>;
 export type ViewerRoute = { hash: string; trail?: unknown };
@@ -179,32 +180,21 @@ export class Viewer {
     const element = document.importNode(doc.documentElement, true) as unknown as SVGElement;
     element.setAttribute('preserveAspectRatio', 'xMidYMid meet');
     // File content can contain labels and links; never insert executable markup.
-    element.querySelectorAll('script, foreignObject').forEach((node) => node.remove());
-    for (const node of [element, ...element.querySelectorAll('*')]) {
-      for (const attribute of [...node.attributes]) {
-        if (/^on/i.test(attribute.name) ||
-          (/href$/i.test(attribute.name) && /^\s*(javascript|vbscript):/i.test(attribute.value))) node.removeAttributeNode(attribute);
-      }
-    }
+    sanitizeSvg(element);
     restoreMissingLinks(element, this.diagnostics.filter((item) => item.board === board.id));
-    for (const link of element.querySelectorAll('a')) {
-      const href = link.getAttribute('href') ?? link.getAttribute('xlink:href') ?? '';
-      const action = classifyHref(href, board.id);
+    for (const link of [...element.querySelectorAll('a')]) {
+      const action = classifyHref(link.getAttribute('href') ?? link.getAttribute('xlink:href') ?? '');
+      // An unusable link is not a control: keep its shape, drop the anchor.
+      if (action.kind === 'invalid') { link.replaceWith(...link.childNodes); continue; }
       link.setAttribute('tabindex', '0');
       link.setAttribute('role', 'link');
       if (action.kind === 'external') {
         link.setAttribute('target', '_blank');
         link.setAttribute('rel', 'noopener noreferrer');
-      } else if (action.kind !== 'invalid' && !this.boards.has(action.target)) link.setAttribute('data-missing', '');
-      else if (action.kind === 'invalid') {
-        link.removeAttribute('href');
-        link.removeAttribute('xlink:href');
-      }
+      } else if (!this.boards.has(action.target)) link.setAttribute('data-missing', '');
     }
     for (const shape of board.diagram.shapes) {
-      // D2 uses padded URL-safe base64, including for non-ASCII identifiers.
-      const encoded = btoa(Array.from(new TextEncoder().encode(shape.id), (byte) => String.fromCharCode(byte)).join(''))
-        .replace(/\+/g, '-').replace(/\//g, '_');
+      const encoded = shapeClass(shape.id);
       const group = [...element.querySelectorAll('g')].find((node) => node.classList.contains(encoded));
       if (group) {
         group.dataset.shapeId = shape.id;
@@ -223,11 +213,11 @@ export class Viewer {
     const link = event.target instanceof Element ? event.target.closest('a') : null;
     if (!link) return;
     const href = link.getAttribute('href') ?? link.getAttribute('xlink:href') ?? '';
-    const action = classifyHref(href, this.current);
+    const action = classifyHref(href);
     if (action.kind === 'external') return;
     event.preventDefault();
     if (action.kind === 'invalid') return;
-    if (!this.boards.has(action.target)) { this.setMessage(`Missing board: ${action.target}`, true); return; }
+    if (!this.boards.has(action.target)) { this.setMessage(`Missing board: ${boardLabel(action.target, this.boards)}`, true); return; }
     void this.navigate(action.target);
   }
 
@@ -273,7 +263,7 @@ export class Viewer {
       const keepFocus = document.activeElement === active;
       const sameBoard = id === this.current;
       this.stage.replaceChildren(content);
-      decorateLinks(content, this.boards, board.id);
+      decorateLinks(content, this.boards, board.id, (target) => boardLabel(target, this.boards));
       this.syncBackground(this.stage);
       if (fade) void this.fadeIn(content);
       this.current = id;

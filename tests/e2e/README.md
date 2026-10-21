@@ -2,9 +2,10 @@
 
 Playwright starts the Vite app and runs the behavioral specs in Chromium, Firefox and
 WebKit. `production.spec.ts` runs only in its own project (see below), and screenshot
-comparisons run in Chromium only: `visual.spec.ts` and `controls-visual.spec.ts` skip
-other engines, while `export-visual.spec.ts` and `touch.spec.ts` check layout in every
-engine but compare baselines in Chromium. Install browsers with
+comparisons run in Chromium on macOS only: `visual.spec.ts` and `controls-visual.spec.ts`
+skip elsewhere, while `export.spec.ts`, `export-visual.spec.ts` and `touch.spec.ts` run
+their behavioral checks in every engine but compare baselines only in Chromium on macOS
+(see [Visual baselines](#visual-baselines)). Install browsers with
 `pnpm exec playwright install` and run `pnpm test:e2e` from the workspace root.
 
 The dev server listens on port 4173 and the production preview on 4174. To run separate
@@ -35,7 +36,8 @@ CodeMirror selection) and `menu.ts` (export menu and downloads).
 - `shortcuts.spec.ts`: the shortcuts dialog and D2 comment toggling.
 - `reference.spec.ts`: reference shortcuts, source and selection preservation, focus
   restoration, search, copy feedback, resizing, offline use, narrow and dark layouts, and
-  tablet pane switching. `apps/web/test/reference.test.ts` compiles every bundled example.
+  tablet pane switching. `apps/web/test/reference.test.ts` compiles and renders every
+  reference snippet, and `apps/web/test/examples.test.ts` covers the bundled examples.
 - `flow-builder.spec.ts`: building flows from the form and editing them again, and focus
   that moves to the neighbouring connection after a removal.
 - `ai.spec.ts`: AI edits and undo, availability checks and timeouts, cancellation,
@@ -111,11 +113,25 @@ ZOOMFLOW_PRODUCTION_E2E=1 pnpm exec playwright test --project=production
 source and preview errors, expanded tools, the reference, AI changes). `controls-visual.spec.ts`
 captures export choices, the filtered picker, the confirmation dialog and breadcrumb
 overflow. `export-visual.spec.ts` and `touch.spec.ts` add offline-viewer and touch
-baselines. They fix locale, timezone, reduced motion and the AI availability response.
-`playwright.config.ts` allows 0.5% differing pixels for every `toHaveScreenshot` call.
+baselines, and `export.spec.ts` compares the downloaded root PNG. They fix locale,
+timezone, reduced motion and the AI availability response. `playwright.config.ts`
+allows 0.5% differing pixels for every `toHaveScreenshot` call, and the PNG download
+uses the same tolerance.
 
-The application workflow runs on `macos-15`, matching the baseline family; browser
-versions come from the pinned Playwright dependency. To review a layout change on macOS:
+Every baseline is a Chromium capture from macOS (`*-chromium-darwin.png`). The
+`comparesVisuals` helper in `helpers.ts` gates each comparison: screenshot assertions
+run only in Chromium on macOS, so Linux and Windows runs skip them automatically. On a
+macOS version that renders text differently from the baselines, skip them explicitly:
+
+```sh
+ZOOMFLOW_SKIP_VISUAL=1 pnpm test:e2e
+```
+
+Purely visual tests are then reported as skipped; tests that mix behavior with a
+screenshot still run their other assertions.
+
+The application workflow runs the browser suite on `macos-15`, matching the baseline
+family; browser versions come from the pinned Playwright dependency. To review a layout change on macOS:
 
 ```sh
 pnpm exec playwright test tests/e2e/visual.spec.ts --project=chromium --update-snapshots
@@ -124,4 +140,5 @@ pnpm exec playwright test tests/e2e/visual.spec.ts --project=chromium
 
 Inspect changed PNGs before committing them. CI never updates baselines; failures upload
 `playwright-report` and `test-results`. Other macOS versions render text slightly
-differently, so some baselines fail locally on newer systems even without changes.
+differently, so some baselines fail locally on newer systems even without changes; use
+`ZOOMFLOW_SKIP_VISUAL=1` there.

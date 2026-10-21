@@ -2,7 +2,10 @@ import { afterEach, expect, it, vi } from 'vitest';
 import { chmod, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { providerStatus, runAi } from '../ai-server';
+import { createServer, request as httpRequest, type ServerResponse } from 'node:http';
+import type { AddressInfo } from 'node:net';
+import { Readable } from 'node:stream';
+import { handle, providerStatus, readBody, runAi } from '../ai-server';
 
 const originalPath = process.env.PATH;
 let fakeBin: string | undefined;
@@ -106,4 +109,52 @@ it('cancels a running CLI process when its request is aborted', async () => {
     await rejected;
     await vi.waitFor(() => expect(() => process.kill(pid, 0)).toThrow(), { timeout: 5_000 });
   } finally { controller.abort(); }
+});
+
+/** A response stand-in that records what `send` writes. */
+function fakeResponse() {
+  const sent: { status?: number; body?: string } = {};
+  const response = { destroyed: false, writableEnded: false,
+    writeHead(status: number) { sent.status = status; return response; },
+    end(body: string) { sent.body = body; response.writableEnded = true; } };
+  return { response: response as unknown as ServerResponse, sent };
+}
+
+it('keeps multi-byte characters that are split across body chunks', async () => {
+  const body = Buffer.from(JSON.stringify({ source: 'café: Café 🚀' }));
+  const accent = body.indexOf(Buffer.from('é'));
+  const rocket = body.indexOf(Buffer.from('🚀'));
+  const chunks = [body.subarray(0, accent + 1), body.subarray(accent + 1, rocket + 2), body.subarray(rocket + 2)];
+  const { response, sent } = fakeResponse();
+  await expect(readBody(Readable.from(chunks), response, body.length, 'Too large.')).resolves.toBe(body.toString('utf8'));
+  expect(sent.status).toBeUndefined();
+});
+
+it('limits request bodies by bytes rather than characters', async () => {
+  const { response, sent } = fakeResponse();
+  // Three characters, six bytes.
+  await expect(readBody(Readable.from([Buffer.from('ééé')]), response, 5, 'Too large.')).resolves.toBeUndefined();
+  expect(sent).toEqual({ status: 413, body: JSON.stringify({ error: 'Too large.' }) });
+});
+
+it('answers non-JSON requests with 415 and other methods with 405', async () => {
+  const server = createServer((request, response) => void handle(request, response));
+  await new Promise<void>((done) => server.listen(0, '127.0.0.1', done));
+  const { port } = server.address() as AddressInfo;
+  const call = (method: string, path: string, contentType?: string) => new Promise<{ status: number; error: string }>((done, fail) => {
+    const outgoing = httpRequest({ host: '127.0.0.1', port, method, path, headers: contentType ? { 'Content-Type': contentType } : {} }, (incoming) => {
+      let text = '';
+      incoming.setEncoding('utf8');
+      incoming.on('data', (chunk: string) => { text += chunk; });
+      incoming.on('end', () => done({ status: incoming.statusCode ?? 0, error: (JSON.parse(text) as { error?: string }).error ?? '' }));
+    });
+    outgoing.on('error', fail);
+    outgoing.end(method === 'POST' ? 'provider=codex' : undefined);
+  });
+  try {
+    await expect(call('POST', '/api/ai/status', 'text/plain')).resolves.toEqual({ status: 415, error: 'Send JSON to check a provider.' });
+    await expect(call('PUT', '/api/ai/status', 'application/json')).resolves.toEqual({ status: 405, error: 'Use POST to check a provider.' });
+    await expect(call('POST', '/api/ai', 'text/plain')).resolves.toEqual({ status: 415, error: 'Send the AI request as JSON.' });
+    await expect(call('GET', '/api/ai')).resolves.toEqual({ status: 405, error: 'Send a JSON POST request.' });
+  } finally { await new Promise((done) => server.close(done)); }
 });

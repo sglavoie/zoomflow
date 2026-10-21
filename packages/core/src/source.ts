@@ -1,4 +1,4 @@
-import { indexBoards, type Diagram } from './index';
+import { boardKey, indexBoards, type Diagram } from './index';
 
 export interface SourceRange { from: number; to: number }
 export interface ShapeSource extends SourceRange { board: string; shape: string }
@@ -6,8 +6,7 @@ export interface ShapeSource extends SourceRange { board: string; shape: string 
 /** The pinned d2.js compiler emits UTF-16 offsets, like CodeMirror. */
 export function parseSourceRange(range: string, source: string, filename = 'index'): SourceRange | undefined {
   const match = /^(.*),\d+:\d+:(\d+)-\d+:\d+:(\d+)$/.exec(range);
-  if (match?.[1] !== filename) return;
-  if (!match) return;
+  if (!match || match[1] !== filename) return;
   const from = Number(match[2]), to = Number(match[3]);
   if (from > to || to > source.length) return;
   return { from, to };
@@ -48,7 +47,7 @@ function visitShapeReferences(diagram: Diagram, graph: unknown, visitor: (board:
       }
     }
     for (const group of ['layers', 'scenarios', 'steps'] as const) {
-      for (const child of node[group] ?? []) visit(child, `${id}.${group}.${child.name}`);
+      for (const child of node[group] ?? []) visit(child, `${id}.${group}.${boardKey(child.name ?? '')}`);
     }
   }
   visit(graph as SourceGraph, 'root');

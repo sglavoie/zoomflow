@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process';
-import { mkdtemp, readFile, rm, writeFile, mkdir } from 'node:fs/promises';
+import { chmod, mkdtemp, readFile, rm, writeFile, mkdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -7,6 +7,8 @@ import { promisify } from 'node:util';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { unzipSync, strFromU8 } from 'fflate';
 import { chromium, type Browser } from '@playwright/test';
+import type { Diagram } from '@zoomflow/core';
+import { stageIcons } from '../src/index';
 
 const exec = promisify(execFile);
 const repo = fileURLToPath(new URL('../../../', import.meta.url));
@@ -141,12 +143,12 @@ describe.concurrent('zoomflow CLI', () => {
     const page = await browser.newPage({ offline: true });
     try {
       await page.goto(pathToFileURL(output).href);
-      for (const [target, board] of [['root.layers.missing', 'root'], ['root.layers.child.layers.absent', 'root.layers.child']]) {
+      for (const [target, board, label] of [['root.layers.missing', 'root', 'Root > missing'], ['root.layers.child.layers.absent', 'root.layers.child', 'Root > child > absent']]) {
         if (board !== 'root') await page.locator(`.zf-stage a[href="${board}"]`).click();
         const link = page.locator(`.zf-stage a[href="${target}"]`);
         expect(await link.evaluate((node) => getComputedStyle(node).outlineStyle)).toBe('dashed');
         await link.click();
-        expect(await page.locator('.zf-message').textContent()).toBe(`Missing board: ${target}`);
+        expect(await page.locator('.zf-message').textContent()).toBe(`Missing board: ${label}`);
         expect(await page.locator('.zf-message').isVisible()).toBe(true);
         expect(await page.locator('.zf-stage').getAttribute('data-board')).toBe(board);
       }
@@ -165,10 +167,45 @@ describe.concurrent('zoomflow CLI', () => {
     expect(await readFile(join(root, 'nested', 'input.svg'), 'utf8')).toContain('data:image/svg+xml;base64,');
   });
 
+  it('defaults --root to the input directory and skips unreadable folders with a warning', async () => {
+    // Its own directory: other cases lint inputs directly under the shared temp folder.
+    const home = await mkdtemp(join(tmpdir(), 'zoomflow-cli-home-'));
+    const project = join(home, 'project');
+    await mkdir(join(home, 'locked'), { recursive: true });
+    await mkdir(join(project, 'private'), { recursive: true });
+    await writeFile(join(project, 'a.d2'), '...@nodes\nx -> y');
+    await writeFile(join(project, 'nodes.d2'), 'n');
+    await Promise.all([chmod(join(home, 'locked'), 0o000), chmod(join(project, 'private'), 0o000)]);
+    try {
+      const result = await run(['lint', 'project/a.d2', '--json'], { cwd: home });
+      success(result);
+      expect(JSON.parse(result.stdout).diagnostics).toEqual([]);
+      expect(result.stderr).toBe(`zoomflow: skipping unreadable folder ${join('project', 'private')}\n`);
+      const locked = await run(['lint', join(project, 'a.d2'), '--root', join(home, 'locked')]);
+      expect(locked.code).toBe(2);
+      expect(locked.stderr).toBe('zoomflow: Input must be inside --root.\n');
+    } finally {
+      await Promise.all([chmod(join(home, 'locked'), 0o755), chmod(join(project, 'private'), 0o755)]);
+      await rm(home, { recursive: true, force: true });
+    }
+  });
+
+  it('names a local icon whose path is not valid URL encoding', async () => {
+    const shape = { link: '', icon: './bad%E0%A4%A.svg' };
+    const diagram = { name: '', shapes: [shape], connections: [], root: { link: '' } } as unknown as Diagram;
+    await expect(stageIcons(diagram, join(temp, 'icons.d2'), temp, join(temp, 'icon-stage')))
+      .rejects.toThrow('Local image path is not valid URL encoding: ./bad%E0%A4%A.svg');
+  });
+
   it('reports usage concisely and prints the version', async () => {
     const version = await run(['--version']);
     success(version);
     expect(version.stdout).toBe('zoomflow 0.0.0\n');
+    expect((await run(['-v'])).stdout).toBe('zoomflow 0.0.0\n');
+    const help = await run(['-h']);
+    success(help);
+    expect(help.stdout).toContain("--root bounds local imports and images (default: the input file's directory)");
+    expect(help.stdout).toContain('  zoomflow -h | --help | -v | --version\n');
     const cases = [[['lint'], 'lint takes exactly one .d2 file.'], [['lint', 'a.d2', 'b.d2'], 'lint takes exactly one .d2 file.'],
       [[], 'Missing command.'], [['build', 'a.d2'], 'Unknown command: build'], [['--bogus'], "Unknown option '--bogus'"]] as const;
     const results = await Promise.all(cases.map(([args]) => run([...args])));

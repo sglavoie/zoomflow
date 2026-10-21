@@ -1,9 +1,10 @@
-import type { ExportBoard } from '@zoomflow/core';
+import { boardLabel, classifyHref, type ExportBoard, shapeClass } from '@zoomflow/core';
 import { restoreMissingLinks } from './missing-links';
 import { renderParentContext, resolveRouteHash, routeFallbackNotice, simplifyTrail } from './navigation';
 import { setupViewport } from './viewport';
 import { decorateLinks } from './link-cues';
 import { setupBreadcrumbs } from './breadcrumbs';
+import { sanitizeSvg } from './sanitize';
 
 const placeholder = 'data:image/svg+xml;base64,' + btoa('<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64"><rect width="64" height="64" fill="#eee"/><path d="M8 8L56 56M56 8L8 56" stroke="#999" stroke-width="3"/></svg>');
 
@@ -22,7 +23,7 @@ export async function prepareExportSvg(svg: string, dark?: boolean): Promise<{ s
   const doc = new DOMParser().parseFromString(svg, 'image/svg+xml');
   if (doc.querySelector('parsererror') || doc.documentElement.localName !== 'svg') throw new Error('Invalid SVG from renderer');
   const root = doc.documentElement;
-  root.querySelectorAll('script, foreignObject').forEach((node) => node.remove());
+  sanitizeSvg(root);
   const warnings: string[] = [];
   const resources = new Map<string, Promise<string>>();
   function embed(url: string): Promise<string> {
@@ -52,9 +53,7 @@ export async function prepareExportSvg(svg: string, dark?: boolean): Promise<{ s
   }
   for (const node of [root, ...root.querySelectorAll('*')]) {
     for (const attribute of [...node.attributes]) {
-      if (/^on/i.test(attribute.name) || (/href$/i.test(attribute.name) && /^\s*(javascript|vbscript):/i.test(attribute.value))) {
-        node.removeAttributeNode(attribute);
-      } else if (/href$/i.test(attribute.name) && node.localName !== 'a') {
+      if (/href$/i.test(attribute.name) && node.localName !== 'a') {
         attribute.value = await embed(attribute.value);
       } else if (attribute.value.includes('url(')) attribute.value = await css(attribute.value);
     }
@@ -91,9 +90,12 @@ export async function rasterizeSvg(svg: string): Promise<Blob> {
 // It consumes the same board IDs, hashes, parent and visited-trail model as Viewer.
 function offlineViewer(restoreLinks: typeof restoreMissingLinks, normalizeTrail: typeof simplifyTrail,
   renderContext: typeof renderParentContext, makeViewport: typeof setupViewport, decorate: typeof decorateLinks,
-  makeBreadcrumbs: typeof setupBreadcrumbs, resolveRoute: typeof resolveRouteHash, fallbackNotice: typeof routeFallbackNotice) {
+  makeBreadcrumbs: typeof setupBreadcrumbs, resolveRoute: typeof resolveRouteHash, fallbackNotice: typeof routeFallbackNotice,
+  sanitize: typeof sanitizeSvg, classify: typeof classifyHref, classOf: typeof shapeClass, label: typeof boardLabel) {
   const boards: ExportBoard[] = JSON.parse(document.getElementById('zoomflow-data')!.textContent!);
   const byId = new Map(boards.map((board) => [board.id, board]));
+  // boardLabel reads only `name` and `parent`, which export boards share with live ones.
+  const describe = (id: string) => label(id, byId as unknown as Parameters<typeof boardLabel>[1]);
   const stage = document.querySelector<HTMLElement>('.zf-stage')!;
   const crumbs = document.querySelector<HTMLElement>('.zf-breadcrumbs')!;
   const breadcrumbs = makeBreadcrumbs(crumbs);
@@ -123,30 +125,32 @@ function offlineViewer(restoreLinks: typeof restoreMissingLinks, normalizeTrail:
     }
     else {
       const doc = new DOMParser().parseFromString(board.svg, 'image/svg+xml');
-      const svg = document.importNode(doc.documentElement, true);
-      svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
-      svg.querySelectorAll('script, foreignObject').forEach((node) => node.remove());
-      for (const node of [svg, ...svg.querySelectorAll('*')]) {
-        for (const attr of [...node.attributes]) {
-          if (/^on/i.test(attr.name) || (/href$/i.test(attr.name) && /^\s*(javascript|vbscript):/i.test(attr.value))) node.removeAttributeNode(attr);
+      if (doc.querySelector('parsererror') || doc.documentElement.localName !== 'svg') {
+        stage.textContent = 'This board could not be displayed.';
+        stage.style.backgroundColor = '';
+        message.setAttribute('role', 'alert');
+        message.textContent = `Invalid SVG for ${board.name}`;
+      } else {
+        const svg = document.importNode(doc.documentElement, true);
+        svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+        sanitize(svg);
+        restoreLinks(svg, board.missingLinks ?? [], classOf);
+        for (const link of [...svg.querySelectorAll('a')]) {
+          const action = classify(link.getAttribute('href') ?? link.getAttribute('xlink:href') ?? '');
+          // An unusable link is not a control: keep its shape, drop the anchor.
+          if (action.kind === 'invalid') { link.replaceWith(...link.childNodes); continue; }
+          link.setAttribute('tabindex', '0');
+          link.setAttribute('role', 'link');
+          if (action.kind === 'external') {
+            link.setAttribute('target', '_blank');
+            link.setAttribute('rel', 'noopener noreferrer');
+          } else if (!byId.has(action.target)) link.setAttribute('data-missing', '');
         }
+        stage.replaceChildren(svg);
+        decorate(svg, byId, board.id, describe);
+        const background = svg.querySelector('svg > rect');
+        stage.style.backgroundColor = background ? getComputedStyle(background).fill : '';
       }
-      restoreLinks(svg, board.missingLinks ?? []);
-      for (const link of svg.querySelectorAll('a')) {
-        const href = link.getAttribute('href') ?? link.getAttribute('xlink:href') ?? '';
-        link.setAttribute('tabindex', '0');
-        link.setAttribute('role', 'link');
-        if (/^(https?:|mailto:)/i.test(href)) {
-          link.setAttribute('target', '_blank');
-          link.setAttribute('rel', 'noopener noreferrer');
-        } else if (href === 'root' || href.startsWith('root.')) {
-          if (!byId.has(href)) link.setAttribute('data-missing', '');
-        } else { link.removeAttribute('href'); link.removeAttribute('xlink:href'); }
-      }
-      stage.replaceChildren(svg);
-      decorate(svg, byId, board.id);
-      const background = svg.querySelector('svg > rect');
-      stage.style.backgroundColor = background ? getComputedStyle(background).fill : '';
     }
     stage.dataset.board = board.id;
     stage.dispatchEvent(new Event('zf-boardchange'));
@@ -171,12 +175,13 @@ function offlineViewer(restoreLinks: typeof restoreMissingLinks, normalizeTrail:
   function follow(event: MouseEvent | KeyboardEvent) {
     const link = event.target instanceof Element ? event.target.closest('a') : null;
     if (!link) return;
-    const href = link.getAttribute('href') ?? link.getAttribute('xlink:href') ?? '';
-    if (/^(https?:|mailto:)/i.test(href)) return;
+    const action = classify(link.getAttribute('href') ?? link.getAttribute('xlink:href') ?? '');
+    if (action.kind === 'external') return;
     event.preventDefault();
-    const board = byId.get(href);
+    if (action.kind === 'invalid') return;
+    const board = byId.get(action.target);
     if (board) show(board, [...trail, board.id]);
-    else if (href) { message.setAttribute('role', 'alert'); message.textContent = `Missing board: ${href}`; }
+    else { message.setAttribute('role', 'alert'); message.textContent = `Missing board: ${describe(action.target)}`; }
   }
   stage.addEventListener('click', follow);
   stage.addEventListener('keydown', (event) => { if (event.key === 'Enter') follow(event); });
@@ -194,5 +199,5 @@ function offlineViewer(restoreLinks: typeof restoreMissingLinks, normalizeTrail:
 }
 
 export function offlineViewerScript(): string {
-  return `(${offlineViewer.toString()})(${restoreMissingLinks.toString()}, ${simplifyTrail.toString()}, ${renderParentContext.toString()}, ${setupViewport.toString()}, ${decorateLinks.toString()}, ${setupBreadcrumbs.toString()}, ${resolveRouteHash.toString()}, ${routeFallbackNotice.toString()});`;
+  return `(${offlineViewer.toString()})(${restoreMissingLinks.toString()}, ${simplifyTrail.toString()}, ${renderParentContext.toString()}, ${setupViewport.toString()}, ${decorateLinks.toString()}, ${setupBreadcrumbs.toString()}, ${resolveRouteHash.toString()}, ${routeFallbackNotice.toString()}, ${sanitizeSvg.toString()}, ${classifyHref.toString()}, ${shapeClass.toString()}, ${boardLabel.toString()});`;
 }

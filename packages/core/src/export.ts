@@ -76,11 +76,14 @@ export async function renderExportBoards(diagram: Diagram, render: (target: stri
   return result;
 }
 
-export function exportBoardsZip(boards: readonly ExportBoard[]): Uint8Array<ArrayBuffer> {
+/** Zip one file per board; `contents` substitutes other renders, such as PNGs, for the SVG. */
+export function exportBoardsZip(boards: readonly ExportBoard[],
+  contents: (board: ExportBoard) => string | Uint8Array = (board) => board.svg): Uint8Array<ArrayBuffer> {
   const files: Record<string, Uint8Array> = Object.create(null);
   for (const board of boards) {
-    if (files[board.path]) throw new Error(`Duplicate export path: ${board.path}`);
-    files[board.path] = strToU8(board.svg);
+    if (board.path in files) throw new Error(`Duplicate export path: ${board.path}`);
+    const data = contents(board);
+    files[board.path] = typeof data === 'string' ? strToU8(data) : data;
   }
   return new Uint8Array(zipSync(files));
 }

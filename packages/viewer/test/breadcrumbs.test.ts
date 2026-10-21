@@ -1,0 +1,99 @@
+// @vitest-environment happy-dom
+import { afterEach, describe, expect, it } from 'vitest';
+import { setupBreadcrumbs } from '../src/breadcrumbs';
+
+let cleanup: (() => void) | undefined;
+afterEach(() => { cleanup?.(); cleanup = undefined; document.body.replaceChildren(); });
+
+function mount(names: string[]) {
+  const container = document.createElement('nav');
+  document.body.append(container);
+  const crumbs = setupBreadcrumbs(container);
+  cleanup = crumbs.destroy;
+  const activated: string[] = [];
+  crumbs.render(names.map((name) => ({ name, activate: () => activated.push(name) })));
+  const visible = () => [...container.children].filter((node) => !node.classList.contains('zf-ancestor-menu'));
+  const menu = container.querySelector<HTMLElement>('.zf-ancestor-menu')!;
+  const toggle = container.querySelector<HTMLButtonElement>('.zf-ancestor-toggle');
+  return { container, crumbs, activated, visible, menu, toggle };
+}
+
+const key = (target: Element, name: string) =>
+  target.dispatchEvent(new KeyboardEvent('keydown', { key: name, bubbles: true, cancelable: true }));
+
+describe('setupBreadcrumbs', () => {
+  it('shows short trails in full with separators and marks the current board', () => {
+    const { visible, toggle, activated } = mount(['Root', 'checkout', 'charge']);
+    expect(toggle).toBeNull();
+    expect(visible().map((node) => node.textContent)).toEqual(['Root', '/', 'checkout', '/', 'charge']);
+    const buttons = visible().filter((node) => node.localName === 'button') as HTMLButtonElement[];
+    expect(buttons.map((node) => node.getAttribute('aria-current'))).toEqual([null, null, 'page']);
+    expect(visible().filter((node) => node.localName === 'span').every((node) => node.getAttribute('aria-hidden') === 'true')).toBe(true);
+    buttons[1].click();
+    expect(activated).toEqual(['checkout']);
+  });
+
+  it('collapses the middle of long trails behind an Earlier boards menu', () => {
+    const { visible, toggle, menu } = mount(['Root', 'a', 'b', 'c', 'd', 'e']);
+    expect(visible().map((node) => node.textContent)).toEqual(['Root', '/', '…', '/', 'd', '/', 'e']);
+    expect(toggle!.getAttribute('aria-label')).toBe('Earlier boards');
+    expect(toggle!.getAttribute('aria-controls')).toBe(menu.id);
+    expect(toggle!.getAttribute('aria-expanded')).toBe('false');
+    expect(menu.hidden).toBe(true);
+    expect([...menu.querySelectorAll('button')].map((node) => node.textContent)).toEqual(['a', 'b', 'c']);
+  });
+
+  it('opens the menu with focus on the first board, cycles with arrows and closes on Escape', () => {
+    const { toggle, menu } = mount(['Root', 'a', 'b', 'c', 'd']);
+    toggle!.click();
+    expect(menu.hidden).toBe(false);
+    expect(toggle!.getAttribute('aria-expanded')).toBe('true');
+    const items = [...menu.querySelectorAll('button')];
+    expect(document.activeElement).toBe(items[0]);
+    key(items[0], 'ArrowUp');
+    expect(document.activeElement).toBe(items[1]);
+    key(items[1], 'ArrowDown');
+    expect(document.activeElement).toBe(items[0]);
+    key(items[0], 'End');
+    expect(document.activeElement).toBe(items[1]);
+    key(items[1], 'Home');
+    expect(document.activeElement).toBe(items[0]);
+    const escapeKey = new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true });
+    items[0].dispatchEvent(escapeKey);
+    expect(escapeKey.defaultPrevented).toBe(true);
+    expect(menu.hidden).toBe(true);
+    expect(toggle!.getAttribute('aria-expanded')).toBe('false');
+    expect(document.activeElement).toBe(toggle);
+  });
+
+  it('activates a collapsed board and closes the menu', () => {
+    const { toggle, menu, activated } = mount(['Root', 'a', 'b', 'c', 'd']);
+    toggle!.click();
+    menu.querySelectorAll('button')[1].click();
+    expect(activated).toEqual(['b']);
+    expect(menu.hidden).toBe(true);
+  });
+
+  it('closes on a click outside and stops listening after destroy', () => {
+    const { toggle, menu, crumbs, container } = mount(['Root', 'a', 'b', 'c', 'd']);
+    const outside = document.createElement('button');
+    document.body.append(outside);
+    toggle!.click();
+    outside.click();
+    expect(menu.hidden).toBe(true);
+    toggle!.click();
+    crumbs.destroy();
+    expect(container.contains(menu)).toBe(false);
+    outside.click();
+    // The detached menu keeps its state because the document listener is gone.
+    expect(menu.hidden).toBe(false);
+  });
+
+  it('rerenders without keeping the previous menu entries', () => {
+    const { crumbs, container } = mount(['Root', 'a', 'b', 'c', 'd']);
+    crumbs.render([{ name: 'Root', activate: () => {} }]);
+    expect(container.querySelector('.zf-ancestor-toggle')).toBeNull();
+    expect(container.querySelector('.zf-ancestor-menu')!.childElementCount).toBe(0);
+    expect(container.querySelector('button')!.getAttribute('aria-current')).toBe('page');
+  });
+});

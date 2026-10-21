@@ -1,7 +1,6 @@
 import { D2 } from '@d2lang/d2';
-import { boardLabel, exportBoardsHtml, exportGlyphSource, indexBoards, lint, renderExportBoards, type Diagram } from '@zoomflow/core';
+import { boardLabel, exportBoardsHtml, exportBoardsZip, exportGlyphSource, indexBoards, lint, renderExportBoards, shapeClass, type Diagram } from '@zoomflow/core';
 import { offlineViewerScript, offlineViewerStyle } from '@zoomflow/viewer';
-import { strToU8, zipSync } from 'fflate';
 import { execFile } from 'node:child_process';
 import { copyFile, lstat, mkdir, mkdtemp, readFile, readdir, rename, rm, writeFile } from 'node:fs/promises';
 import { availableParallelism, tmpdir } from 'node:os';
@@ -20,9 +19,7 @@ const fontArgs = Object.entries({
  * This matches renderer-generated tags, not authored D2 or arbitrary HTML.
  */
 function htmlLinks(svg: string, diagram: Diagram): string {
-  const links = new Map(diagram.shapes.map((shape) => [
-    Buffer.from(shape.id).toString('base64').replace(/\+/g, '-').replace(/\//g, '_'), shape.link,
-  ]));
+  const links = new Map(diagram.shapes.map((shape) => [shapeClass(shape.id), shape.link]));
   return svg.replace(/(<a\b[^>]*>)(\s*<g\b[^>]*\bclass="([^"]*)")/g, (match, anchor: string, group: string, classes: string) => {
     const link = classes.split(/\s+/).map((name) => links.get(name)).find(Boolean);
     if (!link) return match;
@@ -33,15 +30,16 @@ function htmlLinks(svg: string, diagram: Diagram): string {
 const usage = `Usage:
   zoomflow export file.d2 [--all] [--format svg|png|html] [-o output] [--root directory]
   zoomflow lint file.d2 [--boundary-ports] [--missing-backlink] [--json] [--root directory]
-  zoomflow --help | --version`;
+  zoomflow -h | --help | -v | --version`;
 const help = `${usage}
 
 SVG/PNG export the root board by default; --all creates a ZIP of every board.
 HTML always includes every board in one navigable, self-contained file.
 Default output: file.svg, file.png, file.html, or file-svg.zip / file-png.zip;
  -o must use the same extension.
---root bounds local imports (default: cwd if it contains the input, otherwise
- the input directory). Local zoomflow.d2 files override the bundled stdlib.
+--root bounds local imports and images (default: the input file's directory);
+ pass it to import from parent folders. Unreadable folders are skipped with a
+ warning. Local zoomflow.d2 files override the bundled stdlib.
 Export requires D2 v0.9.0 on PATH. Lint uses the bundled D2 compiler.
 Boundary ports are optional; --boundary-ports checks explicit zf-in/zf-out contracts.
 Exit codes: 0 success (warnings allowed), 1 lint errors, 2 usage/compile/export failure.
@@ -59,7 +57,11 @@ async function sources(root: string): Promise<Record<string, string>> {
   const files: Record<string, string> = Object.create(null);
   const library = await readFile(new URL('../../../stdlib/zoomflow.d2', import.meta.url), 'utf8');
   async function visit(directory: string) {
-    const entries = await readdir(directory, { withFileTypes: true });
+    const entries = await readdir(directory, { withFileTypes: true }).catch((error: { code?: string }) => {
+      if (directory === root || (error.code !== 'EACCES' && error.code !== 'EPERM')) throw error;
+      process.stderr.write(`zoomflow: skipping unreadable folder ${within(process.cwd(), directory) ? relative(process.cwd(), directory) || '.' : directory}\n`);
+    });
+    if (!entries) return;
     const prefix = relative(root, directory).split(sep).join('/');
     const key = (name: string) => prefix ? `${prefix}/${name}` : name;
     // D2 resolves imports relative to their importing file, including nested imports.
@@ -76,15 +78,18 @@ async function sources(root: string): Promise<Record<string, string>> {
   return files;
 }
 
-/** D2 resolves local icons against the entry file, so preserve that layout. */
-async function stageIcons(diagram: Diagram, input: string, root: string, temp: string) {
+/** D2 resolves local icons against the entry file, so preserve that layout. Exported for tests. */
+export async function stageIcons(diagram: Diagram, input: string, root: string, temp: string) {
   const copied = new Set<string>();
   for (const board of indexBoards(diagram).values()) {
     for (const shape of [board.diagram.root, ...board.diagram.shapes]) {
       // The compiler serializes Go's url.URL as an object, despite its loose TS type.
       const icon = shape.icon as string | { Scheme?: string; Host?: string; Path?: string } | undefined;
       if (!icon || (typeof icon === 'object' && (icon.Scheme || icon.Host))) continue;
-      const path = typeof icon === 'string' ? decodeURIComponent(icon) : icon.Path;
+      let path = typeof icon === 'string' ? undefined : icon.Path;
+      if (typeof icon === 'string') {
+        try { path = decodeURIComponent(icon); } catch { throw new Error(`Local image path is not valid URL encoding: ${icon}`); }
+      }
       if (!path || /^(?:[a-z][\w+.-]*:|\/\/|#)/i.test(path)) continue;
       const asset = resolve(dirname(input), path);
       if (copied.has(asset)) continue;
@@ -162,7 +167,7 @@ export async function main(args = process.argv.slice(2)): Promise<number> {
     const input = resolve(filename);
     if (extname(input) !== '.d2') throw new Error('Input must be a .d2 file.');
     if (!(await regularFile(input, filename))) throw new Error('Input must be a regular file; symlinks are not followed.');
-    const root = resolve(values.root ?? (within(process.cwd(), input) ? process.cwd() : dirname(input)));
+    const root = resolve(values.root ?? dirname(input));
     if (!within(root, input)) throw new Error('Input must be inside --root.');
     shown = (path) => {
       const rel = relative(process.cwd(), join(root, path));
@@ -241,12 +246,8 @@ export async function main(args = process.argv.slice(2)): Promise<number> {
               .then((result) => result.stdout, () => undefined) : undefined;
             await save(output, exportBoardsHtml(exported, { title: basename(input, '.d2'), script: offlineViewerScript(), style: offlineViewerStyle, glyphs }));
           } else {
-            const archive: Record<string, Uint8Array> = Object.create(null);
-            exported.forEach((board) => {
-              const target = boards.get(board.id)!.target;
-              archive[board.path.replace(/\.svg$/, `.${format}`)] = format === 'png' ? binaries.get(target)! : strToU8(board.svg);
-            });
-            await save(output, zipSync(archive));
+            const files = exported.map((board) => ({ ...board, path: board.path.replace(/\.svg$/, `.${format}`) }));
+            await save(output, exportBoardsZip(files, (board) => format === 'png' ? binaries.get(boards.get(board.id)!.target)! : board.svg));
           }
         }
         const dangling = diagnostics.filter((item) => item.rule === 'dangling-link').length;

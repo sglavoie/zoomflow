@@ -40,3 +40,9 @@ it('maps every order fixture shape despite fractional graph positions', async ()
     }
   }
 });
+
+it('rejects malformed ranges without throwing', () => {
+  expect(parseSourceRange('', 'a')).toBeUndefined();
+  expect(parseSourceRange('index', 'a')).toBeUndefined();
+  expect(parseSourceRange('index,0:0:0-0:1:1', 'a')).toEqual({ from: 0, to: 1 });
+});

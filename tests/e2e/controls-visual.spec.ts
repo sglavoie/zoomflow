@@ -1,9 +1,10 @@
 import { expect, test } from '@playwright/test';
 import { readFileSync } from 'node:fs';
+import { comparesVisuals, visualSkipReason } from './helpers';
 
 test.use({ reducedMotion: 'reduce', locale: 'en-US', timezoneId: 'UTC' });
 for (const theme of ['light', 'dark'] as const) test(`polished controls in ${theme}`, async ({ page, browserName }) => {
-  test.skip(browserName !== 'chromium', 'Visual baselines use Chromium; all engines have behavioral coverage.');
+  test.skip(!comparesVisuals(browserName), visualSkipReason);
   await page.setViewportSize({ width: 390, height: 844 });
   await page.emulateMedia({ colorScheme: theme });
   await page.clock.setFixedTime(new Date('2026-10-19T12:00:00Z'));

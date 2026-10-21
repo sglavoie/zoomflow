@@ -5,6 +5,13 @@ export class CompilerStartupError extends Error {
   constructor(cause: unknown) { super('The diagram engine could not start.', { cause }); }
 }
 
+/** The engine could not run a request: it failed to start, restarted or was closed mid-request.
+ * Such failures say nothing about the source being compiled. */
+export function isEngineUnavailable(error: unknown) {
+  return error instanceof CompilerStartupError
+    || error instanceof Error && /^(Workspace closed|D2 instance has been disposed)$/.test(error.message);
+}
+
 type Resources = { d2: D2; fonts: Awaited<ReturnType<typeof diagramFonts>> };
 
 /** Cache successful startup, but allow a failed module, worker or font load to retry. */

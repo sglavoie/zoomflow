@@ -2,7 +2,8 @@ import { indexShapeSources, parseSourceRange, lint, type CompileResponse, type S
 import { Viewer, setupViewport, type RenderBoard, type ViewerRoute } from '@zoomflow/viewer';
 import { SourceEditor } from './editor';
 import { compilerDiagnostics, lintDiagnostics, type SourceDiagnostic } from './diagnostics';
-import { CompilerStartupError, type createCompiler } from './compiler';
+import { CompilerStartupError, isEngineUnavailable, type createCompiler } from './compiler';
+import { AiError } from './ai-errors';
 import { createPreviewQueue } from './preview-queue';
 import { setupFullscreen } from './fullscreen';
 import { setupAiAssistant } from './ai-assistant';
@@ -15,7 +16,7 @@ import { paneScope, type PaneId } from './pane-scope';
 import { paneNotice, type EngineNotice } from './engine-notice';
 import { setupCompileError } from './compile-error';
 import { canChooseSaveFile, setupSaveFile } from './save-file';
-import { plural, setText } from './text';
+import { describeError, plural, setText } from './text';
 
 export type { PaneId } from './pane-scope';
 export type DocumentExport = { diagram: Diagram; render: RenderBoard; name: string; diagnostics: LintDiagnostic[];
@@ -259,7 +260,13 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
   });
   ai = setupAiAssistant(scope, {
     read: () => ({ source: editor.source, name: documentName, board: viewer.currentBoard?.id ?? 'root', revision: documentRevision }),
-    validate: async (source) => { await compileSource(source); },
+    validate: async (source) => {
+      try { await compileSource(source); }
+      catch (error) {
+        if (!isEngineUnavailable(error)) throw error;
+        throw new AiError('The diagram engine is unavailable, so the AI change could not be checked. Your source is unchanged; retry the preview, then send again.', describeError(error));
+      }
+    },
     apply: (source) => editor.applyAi(source),
     onStatus: (message, kind) => setActivity(message, kind),
     undo: () => editor.undo(),
@@ -481,9 +488,16 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
     /** Leave the pane without a document, for example when its draft is removed. */
     close() {
       clearTimeout(debounce);
+      clearTimeout(previewTimer);
+      previewTimer = undefined;
+      // Like opening another document: pending format and AI results no longer apply.
+      ++documentRevision;
+      ai?.cancel();
+      ai?.sourceChanged();
       ++generation;
       previewQueue.invalidate();
       viewer.cancelPendingRender();
+      viewer.setBusy(false);
       currentDocumentKey = undefined;
       documentName = '';
       documentExport = undefined;

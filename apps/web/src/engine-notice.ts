@@ -1,7 +1,8 @@
 import type { PaneId } from './pane-scope';
 import { setText } from './text';
 
-/** The page-level engine notice; `owner` is the pane whose preview shows it. */
+/** The page-level engine notice; `owner` is the pane whose preview shows it.
+ * The notice stays rendered so screen readers announce its message; it collapses while empty. */
 export type EngineNotice = { notice: HTMLElement; message: HTMLElement; retry: HTMLButtonElement; owner?: PaneId };
 
 export function findEngineNotice(): EngineNotice {
@@ -20,7 +21,6 @@ export function paneNotice(engine: EngineNotice, id: PaneId) {
       engine.owner = id;
       engine.notice.setAttribute('role', role);
       setText(engine.message, message);
-      engine.notice.hidden = false;
       engine.retry.hidden = !retry;
       engine.retry.textContent = retry ?? 'Retry preview';
       engine.retry.dataset.restart = String(retry === 'Restart preview');
@@ -29,7 +29,7 @@ export function paneNotice(engine: EngineNotice, id: PaneId) {
     hide() {
       if (engine.owner && engine.owner !== id) return;
       engine.owner = undefined;
-      engine.notice.hidden = true;
+      setText(engine.message, '');
       engine.retry.hidden = true;
       engine.retry.dataset.restart = 'false';
       engine.retry.textContent = 'Retry preview';

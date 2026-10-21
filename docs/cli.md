@@ -1,6 +1,5 @@
 # Command line and CI
 
-
 Install [D2 v0.9.0](https://d2lang.com/tour/install/) on `PATH` for headless
 exports (`brew install d2` on macOS), then build the CLI:
 
@@ -14,8 +13,8 @@ pnpm zoomflow export fixtures/order.d2 --all --format html -o artifacts/order.ht
 ```
 
 The workspace installs the `zoomflow` executable (`pnpm exec zoomflow`);
-`pnpm zoomflow` is a root-workspace shortcut. Run `pnpm zoomflow --help` for options
-and `--version` for the version. Rebuild after source changes.
+`pnpm zoomflow` is a root-workspace shortcut. Run `pnpm zoomflow --help` (`-h`) for
+options and `--version` (`-v`) for the version. Rebuild after source changes.
 Without `--all`, SVG/PNG exports contain only the root board. With `--all`, they
 produce a ZIP using the same board paths as browser exports. ZIP entry names keep
 board names, including Unicode; only characters and names that archives or common
@@ -44,12 +43,14 @@ trail, for example `Root > checkout`; `--json` keeps the raw board IDs and D2
 ranges. Compile errors print one `path:line:column: message` per line. Wrong
 arguments print the short usage and point to `--help`.
 
-Both commands snapshot `.d2` files under a project root: the working directory if
-it contains the input, otherwise the input's directory. Set `--root path` to
-include parent-relative imports or to narrow a large workspace. Imports must
+Both commands snapshot `.d2` files under a project root, which defaults to the
+input file's directory regardless of the working directory. Set `--root path` to
+include imports from parent folders; the input must be inside it. Imports must
 remain within that root; hidden directories, `node_modules`, `dist`, `coverage`,
-and symlinks are excluded. The bundled `zoomflow.d2` is available beside each
-source file, with a local file of that name taking precedence. Export stages the
+and symlinks are excluded. Subfolders that cannot be read (permission denied) are
+skipped with a `zoomflow: skipping unreadable folder …` warning on stderr; an
+unreadable root itself is an error. The bundled `zoomflow.d2` is available beside
+each source file, with a local file of that name taking precedence. Export stages the
 same source snapshot in a temporary directory, then runs native D2 with ELK,
 asset bundling and one explicit board target per process, running up to one
 process per available CPU and skipping empty boards in HTML. D2's progress output
@@ -75,13 +76,15 @@ baselines described in the [browser test guide](../tests/e2e/README.md).
 
 ## Application checks
 
-The [application workflow](../.github/workflows/application.yml) runs typechecking, linting,
-unit and CLI integration tests, the production build, and the browser suite on a
-pinned macOS runner. Chromium workspace screenshots cover desktop and phone layouts
+The [application workflow](../.github/workflows/application.yml) runs two jobs. On
+`ubuntu-24.04`, it typechecks, lints, and runs the unit and CLI integration tests with
+the pinned native D2 and Playwright's Chromium (installed with its system libraries).
+On a pinned `macos-15` runner, matching the screenshot baselines, it runs the production
+build and the browser suite in Chromium, Firefox and WebKit. Chromium workspace screenshots cover desktop and phone layouts
 in both themes, compilation errors, expanded tools, the reference panel, and AI change
 highlights. Further Chromium baselines cover export, picker, confirmation and breadcrumb
-controls, the touch canvas, and the offline HTML viewer at phone, short, landscape and
-enlarged-text sizes.
+controls, the touch canvas, the downloaded root PNG, and the offline HTML viewer at phone,
+short, landscape and enlarged-text sizes.
 Failures upload screenshots, diffs, and traces. See [browser test guidance](../tests/e2e/README.md)
 for deliberate baseline updates.
 

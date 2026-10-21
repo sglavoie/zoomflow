@@ -1,4 +1,5 @@
 import type { PaneScope } from './pane-scope';
+import { setText } from './text';
 
 /** The source pane's compile error banner and its copy above the phone preview.
  * Both offer one action that goes to the error. */
@@ -26,16 +27,17 @@ export function setupCompileError(scope: PaneScope, stage: HTMLElement, goToErro
       banner.hidden = true;
       action.hidden = true;
       mobile.hidden = true;
-      if (clear) message.textContent = '';
+      if (clear) setText(message, '');
     },
     show(text: string, label: string, enabled: boolean) {
-      message.textContent = text;
+      // The banner is an alert: rewriting unchanged text on each compile would announce it again.
+      setText(message, text);
       action.textContent = label;
       action.title = label;
       action.hidden = false;
       action.disabled = !enabled;
       banner.title = text;
-      mobileText.textContent = text;
+      setText(mobileText, text);
       mobileAction.textContent = label;
       mobileAction.disabled = !enabled;
       mobile.hidden = false;

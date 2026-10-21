@@ -183,7 +183,9 @@ export function setupViewport(stage: HTMLElement, host: HTMLElement) {
     const targets = focusTargets();
     const focused = targets.find((node) => node === document.activeElement);
     stage.tabIndex = focused ? -1 : 0;
-    stage.setAttribute('aria-description', 'Use arrow keys to move between shapes. Enter activates a shape. Tab leaves the diagram.');
+    stage.setAttribute('aria-description', (targets.length
+      ? 'Use arrow keys to move between shapes. Enter activates a shape. Plus and minus zoom; 0 fits the diagram. While zoomed, Shift plus arrow keys pan.'
+      : 'Plus and minus zoom; 0 fits the diagram. While zoomed, arrow keys pan.') + ' Tab leaves the diagram.');
     for (const node of targets) node.setAttribute('tabindex', node === focused ? '0' : '-1');
   }
   stage.addEventListener('focusin', (event) => {
@@ -193,11 +195,36 @@ export function setupViewport(stage: HTMLElement, host: HTMLElement) {
     for (const node of targets) node.setAttribute('tabindex', node === target ? '0' : '-1');
     if (target) reveal([target]);
   }, { signal });
+  const panStep = 64;
   stage.addEventListener('keydown', (event) => {
-    if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey ||
-      !['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End'].includes(event.key)) return;
+    // Leave modified keys to the browser (page zoom, history) and the host app.
+    if (event.altKey || event.ctrlKey || event.metaKey || event.isComposing) return;
+    // Mirror the zoom buttons. `+` needs Shift on many layouts, so accept it with Shift.
+    const zoomKey = ({ '+': 'in', '=': 'in', '-': 'out', '_': 'out', '0': 'fit' } as Record<string, string>)[event.key];
+    if (zoomKey) {
+      if (!svg || !base) return;
+      event.preventDefault();
+      event.stopPropagation();
+      if (zoomKey === 'fit') { setBox({ ...base }); return; }
+      // Keep a focused shape in place; otherwise zoom about the view's center like the buttons.
+      const focused = focusTargets().find((node) => node === document.activeElement)?.getBoundingClientRect();
+      zoom(zoomKey === 'in' ? 1.5 : 1 / 1.5, focused && (focused.left + focused.right) / 2, focused && (focused.top + focused.bottom) / 2);
+      return;
+    }
+    if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End'].includes(event.key)) return;
     const targets = focusTargets();
-    if (!targets.length) return;
+    // Shift+Arrow always pans a zoomed view. Plain arrows pan from the stage itself only
+    // when there is no shape to move to; otherwise they enter and move between shapes.
+    if (event.key.startsWith('Arrow') && (event.shiftKey || event.target === stage && !targets.length)) {
+      if (!svg || Math.abs(scale() - 1) <= zoomEpsilon) return;
+      event.preventDefault();
+      event.stopPropagation();
+      const horizontal = event.key === 'ArrowLeft' || event.key === 'ArrowRight';
+      const sign = event.key === 'ArrowLeft' || event.key === 'ArrowUp' ? 1 : -1;
+      pan(horizontal ? sign * panStep : 0, horizontal ? 0 : sign * panStep);
+      return;
+    }
+    if (event.shiftKey || !targets.length) return;
     event.preventDefault();
     event.stopPropagation();
     const active = targets.find((node) => node === document.activeElement);

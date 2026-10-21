@@ -1,6 +1,7 @@
 import { referenceTopics } from './reference-data';
 import { d2HighlightRanges } from './d2-language';
 import { plural } from './text';
+import { setupSplit } from './source-split';
 
 /** Build text nodes only, preserving exact copy text and syntax colors under matches. */
 function renderMatches(element: HTMLElement, source: string, terms: string[], syntax = false) {
@@ -49,29 +50,12 @@ export function setupReference(host: () => ReferenceHost) {
   const status = document.querySelector<HTMLElement>('#reference-status')!;
   let returnFocus: HTMLElement | SVGElement | undefined;
   let scrollTop = 0;
-  const defaultShare = 60;
-  let diagramShare = defaultShare;
-  let drag: { pointer: number; offset: number } | undefined;
-  const storageKey = 'zoomflow.reference.diagram-share';
-  try {
-    const stored = Number(localStorage.getItem(storageKey));
-    if (Number.isFinite(stored) && stored >= 25 && stored <= 75) diagramShare = stored;
-  } catch { /* The reference also works when storage is unavailable. */ }
-
-  function setShare(value: number) {
-    diagramShare = Math.max(25, Math.min(75, value));
-    preview.style.setProperty('--diagram-share', `${diagramShare}fr`);
-    preview.style.setProperty('--reference-share', `${100 - diagramShare}fr`);
-    divider.setAttribute('aria-valuenow', String(Math.round(diagramShare)));
-    divider.setAttribute('aria-valuetext', `Diagram ${Math.round(diagramShare)}%, reference ${Math.round(100 - diagramShare)}%`);
-  }
-  function saveShare() {
-    try { localStorage.setItem(storageKey, String(diagramShare)); }
-    catch { /* Resizing does not depend on storage. */ }
-  }
-  divider.setAttribute('aria-valuemin', '25');
-  divider.setAttribute('aria-valuemax', '75');
-  setShare(diagramShare);
+  // The diagram/reference split shares the workspace dividers' drag, keyboard and size guard.
+  const split = setupSplit(divider, () => panel.hidden ? undefined : {
+    container: preview, storageKey: 'zoomflow.reference.diagram-share', properties: ['--diagram-share', '--reference-share'],
+    minimum: 120, defaultShare: () => 60, rows: true,
+    describe: (share) => `Diagram ${Math.round(share)}%, reference ${Math.round(100 - share)}%`,
+  });
 
   const cards = referenceTopics.map((topic) => {
     const card = document.createElement('section');
@@ -150,17 +134,20 @@ export function setupReference(host: () => ReferenceHost) {
     if (open) {
       returnFocus = (active instanceof HTMLElement || active instanceof SVGElement) && active !== document.body ? active : toggle;
       move(host());
-    } else scrollTop = content.scrollTop;
+    } else {
+      scrollTop = content.scrollTop;
+      split.endDrag();
+    }
     panel.hidden = !open;
     divider.hidden = !open;
     preview.classList.toggle('reference-open', open);
     toggle.setAttribute('aria-expanded', String(open));
     if (open) {
+      split.refresh();
       target.showPreview();
       search.focus({ preventScroll: true });
       content.scrollTop = scrollTop;
     } else {
-      if (drag) finishDrag();
       if (active instanceof Node && (panel.contains(active) || active === divider)) {
         if (returnFocus && target.source.contains(returnFocus)) target.showSource();
         (returnFocus?.isConnected ? returnFocus : toggle).focus({ preventScroll: true });
@@ -174,7 +161,7 @@ export function setupReference(host: () => ReferenceHost) {
     preview = next.preview;
     preview.append(divider, panel);
     preview.classList.toggle('reference-open', !panel.hidden);
-    setShare(diagramShare);
+    split.refresh();
   }
   toggle.setAttribute('aria-keyshortcuts', 'Meta+Shift+/ Control+Shift+/');
   toggle.addEventListener('click', () => {
@@ -182,6 +169,8 @@ export function setupReference(host: () => ReferenceHost) {
     // opening/closing from a button has the same return target in every browser.
     toggle.focus({ preventScroll: true });
     setOpen(Boolean(panel.hidden));
+    // On phones the toggle always lands on Preview, where the reference lives.
+    host().showPreview();
   });
   close.addEventListener('click', () => {
     close.focus({ preventScroll: true });
@@ -207,46 +196,8 @@ export function setupReference(host: () => ReferenceHost) {
     }
   });
 
-  divider.addEventListener('keydown', (event) => {
-    const next = event.key === 'ArrowUp' ? diagramShare - 5
-      : event.key === 'ArrowDown' ? diagramShare + 5
-      : event.key === 'Home' ? 25 : event.key === 'End' ? 75 : undefined;
-    if (next !== undefined) {
-      event.preventDefault();
-      setShare(next);
-      saveShare();
-    } else if (event.key === 'Escape' || event.key === 'Backspace') {
-      event.preventDefault();
-      event.stopPropagation();
-      if (event.key === 'Escape') setOpen(false);
-    }
-  });
-  divider.addEventListener('pointerdown', (event) => {
-    if (event.button !== 0 || drag) return;
-    event.preventDefault();
-    divider.focus({ preventScroll: true });
-    drag = { pointer: event.pointerId, offset: event.clientY - divider.getBoundingClientRect().top };
-    divider.setPointerCapture(event.pointerId);
-  });
-  divider.addEventListener('pointermove', (event) => {
-    if (drag?.pointer !== event.pointerId) return;
-    const bounds = preview.getBoundingClientRect();
-    const available = bounds.height - divider.getBoundingClientRect().height;
-    if (available > 0) setShare((event.clientY - bounds.top - drag.offset) / available * 100);
-  });
-  function finishDrag() {
-    const pointer = drag?.pointer;
-    drag = undefined;
-    if (pointer !== undefined && divider.hasPointerCapture(pointer)) divider.releasePointerCapture(pointer);
-    saveShare();
-  }
-  divider.addEventListener('pointerup', finishDrag);
-  divider.addEventListener('pointercancel', finishDrag);
-  divider.addEventListener('lostpointercapture', finishDrag);
-  divider.addEventListener('dblclick', () => {
-    setShare(defaultShare);
-    saveShare();
-  });
+  // The split handles resize keys and keeps Escape/Backspace from the viewer; Escape also closes.
+  divider.addEventListener('keydown', (event) => { if (event.key === 'Escape') setOpen(false); });
   return {
     /** Close the reference and return it to the given pane, for example when its pane closes. */
     reset(next: ReferenceHost) {

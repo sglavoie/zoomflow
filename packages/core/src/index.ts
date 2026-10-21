@@ -15,6 +15,23 @@ export interface Board {
   diagram: Diagram;
 }
 
+/** Quote a board name as the pinned D2 compiler does in the link IDs it emits:
+ * key specials, `--`, a trailing `-` or edge whitespace force double quotes.
+ * Names containing a quote or backslash never survive as compiled links, so escaping them is moot.
+ */
+export function boardKey(name: string): string {
+  return name === '' || /["'.:;|*&()<>@#$\\{}[\]]|--|-$|^\s|\s$/.test(name)
+    ? `"${name.replace(/["\\]/g, '\\$&')}"` : name;
+}
+
+/** D2's shape class: padded URL-safe base64 of the HTML-escaped ID's UTF-8 bytes.
+ * Self-contained because the offline viewer embeds its source. */
+export function shapeClass(id: string): string {
+  const escaped = id.replace(/[<>&'"]/g, (char) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', "'": '&#39;', '"': '&#34;' })[char]!);
+  return btoa(Array.from(new TextEncoder().encode(escaped), (byte) => String.fromCharCode(byte)).join(''))
+    .replace(/\+/g, '-').replace(/\//g, '_');
+}
+
 /** Enumerate the board tree, never the potentially cyclic graph of links. */
 export function indexBoards(diagram: Diagram): Map<string, Board> {
   const boards = new Map<string, Board>();
@@ -24,7 +41,7 @@ export function indexBoards(diagram: Diagram): Map<string, Board> {
     for (const group of ['layers', 'scenarios', 'steps'] as const) {
       for (const child of node[group] ?? []) {
         if (!child) continue;
-        const segment = `${group}.${child.name}`;
+        const segment = `${group}.${boardKey(child.name)}`;
         const route = group === 'layers' ? '' : `@${group}/`;
         visit(child, `${id}.${segment}`, target ? `${target}.${segment}` : segment,
           `${hash === '#/' ? '#' : hash}/${route}${encodeURIComponent(child.name)}`, group, id);
@@ -36,17 +53,13 @@ export function indexBoards(diagram: Diagram): Map<string, Board> {
 }
 
 export type ClassifiedHref =
-  | { kind: 'drill' | 'switch' | 'up'; target: string }
+  | { kind: 'board'; target: string }
   | { kind: 'external'; url: string }
   | { kind: 'invalid'; href: string };
 
 /** D2 emits absolute board IDs; ancestor links include `_` after compilation. */
-export function classifyHref(href: string, current = 'root'): ClassifiedHref {
-  if (href === 'root' || /^root\.(layers|scenarios|steps)\..+/.test(href)) {
-    const kind = current !== href && current.startsWith(`${href}.`) ? 'up'
-      : /\.(scenarios|steps)\./.test(href) ? 'switch' : 'drill';
-    return { kind, target: href };
-  }
+export function classifyHref(href: string): ClassifiedHref {
+  if (href === 'root' || /^root\.(layers|scenarios|steps)\..+/.test(href)) return { kind: 'board', target: href };
   try {
     const url = new URL(href);
     if (['https:', 'http:', 'mailto:'].includes(url.protocol)) return { kind: 'external', url: href };

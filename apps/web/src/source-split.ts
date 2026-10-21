@@ -117,5 +117,7 @@ export function setupSplit(divider: HTMLElement, axis: () => SplitAxis | undefin
     setShare(current.defaultShare());
     try { localStorage.removeItem(current.storageKey); } catch { /* Reset works without storage. */ }
   });
-  return { refresh };
+  /** Finish a drag in progress, for example before the divider hides. */
+  const endDrag = () => { if (drag) finishDrag(); };
+  return { refresh, endDrag };
 }

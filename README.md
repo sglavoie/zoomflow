@@ -24,15 +24,15 @@ use **Retry preview** to try again without losing your source.
    diagram syntax. Start with a simple flow or an approval with Yes/No branches.
    Use **Edit flow** above the preview to keep editing in the form. Or change the
    D2 source on the right and watch the preview update. Use the
-   filename menu for eight examples, **Open .d2** for a file, or **Open folder** for
+   filename menu for built-in examples, **Open .d2** for a file, or **Open folder** for
    a project with relative imports. **D2 reference** contains searchable examples.
 2. **Explore:** click **Checkout** in the default diagram, then **Charge** to drill
    deeper. Use breadcrumbs to return, or zoom and drag to inspect the diagram.
    Click an ordinary shape to select its source. On narrow screens, switch between
    **Preview** and **Source**.
 3. **Keep and share:** use **Save .d2** (⌘S / Ctrl+S) for source. In **Export**, choose
-   SVG or PNG for the current board, ZIP for every board, or **Single-file HTML**
-   for offline drill-down navigation.
+   **Interactive diagram (HTML)** for one file with offline drill-down navigation,
+   **Current board image** as SVG or PNG, or **All boards as SVG (ZIP)**.
 
 Edits have browser recovery backups, but save a disk copy to keep them. Browsers
 without direct file access offer **Download .d2**. Syntax errors retain the last

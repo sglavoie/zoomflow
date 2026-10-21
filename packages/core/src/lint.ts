@@ -1,5 +1,5 @@
 import type { CompileResponse } from '@d2lang/d2';
-import { classifyHref, indexBoards, type Board } from './index';
+import { boardKey, classifyHref, indexBoards, type Board } from './index';
 import { boundaryNeighbours } from './context';
 import { shapeRanges } from './source';
 
@@ -70,8 +70,21 @@ function keySegment(value: AstValue): string {
   // Preserve quoted literal dots so they cannot alias a container path.
   return value.unquoted_string ? text : JSON.stringify(text);
 }
+/** Re-quote an authored board path the way D2 quotes compiled links (`layers."a b"` is `layers.a b`). */
+function canonicalLink(href: string): string {
+  const segments: string[] = [];
+  const pattern = /\s*(?:"((?:[^"\\]|\\.)*)"|'([^']*)'|([^."']*[^."'\s]|))\s*(\.|$)/y;
+  for (let match = pattern.exec(href); match; match = pattern.exec(href)) {
+    segments.push(match[1]?.replace(/\\(.)/g, '$1') ?? match[2] ?? match[3]);
+    if (match[4]) continue;
+    // URLs and other non-board text keep their authored form.
+    if (pattern.lastIndex !== href.length || !['_', 'root', 'layers', 'scenarios', 'steps'].includes(segments[0])) break;
+    return segments.map(boardKey).join('.');
+  }
+  return href;
+}
 function boardTarget(href: string, board: Board, boards: Map<string, Board>): string | undefined {
-  const classified = classifyHref(href, board.id);
+  const classified = classifyHref(href);
   if ('target' in classified) return classified.target;
   if (classified.kind === 'external') return;
   let base = board;
@@ -105,7 +118,7 @@ export function lint(compiled: Pick<CompileResponse, 'diagram' | 'graph'>, optio
   const boards = indexBoards(compiled.diagram);
   const diagnostics: LintDiagnostic[] = [];
   const boundaries: BoundaryEvaluation[] = [];
-  const incoming = new Set<string>();
+  const links = new Map<string, Set<string>>();
   const linkKeys = new Set<string>();
   const boardRanges = new Map<string, string>();
   const label = (id: string) => boardLabel(id, boards);
@@ -115,7 +128,11 @@ export function lint(compiled: Pick<CompileResponse, 'diagram' | 'graph'>, optio
   function checkLink(href: string, board: Board, shape?: string, range?: string) {
     const target = boardTarget(href, board, boards);
     if (!target) return;
-    if (boards.has(target)) { if (target !== board.id) incoming.add(target); return; }
+    if (boards.has(target)) {
+      if (!links.has(board.id)) links.set(board.id, new Set());
+      links.get(board.id)!.add(target);
+      return;
+    }
     const key = JSON.stringify([board.id, shape, target]);
     if (linkKeys.has(key)) return;
     linkKeys.add(key);
@@ -127,7 +144,7 @@ export function lint(compiled: Pick<CompileResponse, 'diagram' | 'graph'>, optio
     // Leave resolution unchanged, including when a child and ancestor share a name.
     for (let ancestor = board.parent && boards.get(board.parent), up = '_'; ancestor;
       ancestor = ancestor.parent && boards.get(ancestor.parent), up += '._') {
-      if (childPath === `${ancestor.kind}.${ancestor.name}`) {
+      if (childPath === `${ancestor.kind}.${boardKey(ancestor.name)}`) {
         hint = ` Did you mean the ${up === '_' ? 'parent' : 'ancestor'} board "${ancestor.name}"? Use link: ${up}.`;
         break;
       }
@@ -148,7 +165,7 @@ export function lint(compiled: Pick<CompileResponse, 'diagram' | 'graph'>, optio
     const found = boards.get(id);
     if (!found) return;
     const board: Board = found;
-    const links = new Map<string, { href: string; range?: string }>();
+    const authored = new Map<string, { href: string; range?: string }>();
     function visitMap(map: AstMap | undefined, scope: string[] = []) {
       for (const node of map?.nodes ?? []) {
         const entry = node.map_key;
@@ -161,7 +178,7 @@ export function lint(compiled: Pick<CompileResponse, 'diagram' | 'graph'>, optio
             const key = child.map_key;
             const name = stringValue(key?.key?.path?.[0]);
             const range = scalarRange(key?.key?.path?.[0]);
-            if (name && range) boardRanges.set(`${id}.${names[0]}.${name}`, range);
+            if (name && range) boardRanges.set(`${id}.${names[0]}.${boardKey(name)}`, range);
           }
           continue; // Each child has its own compiler-expanded graph AST.
         }
@@ -169,36 +186,46 @@ export function lint(compiled: Pick<CompileResponse, 'diagram' | 'graph'>, optio
         if (names.at(-1) === 'link') {
           const owner = fullPath.slice(0, -1).join('.');
           const value = stringValue(entry.value) !== undefined ? entry.value : entry.primary;
-          links.set(owner, { href: stringValue(value) ?? '', range: scalarRange(value) ?? entry.range });
+          authored.set(owner, { href: stringValue(value) ?? '', range: scalarRange(value) ?? entry.range });
         } else if (entry.edges?.length) {
           // Connection links do not establish boundary ownership.
           for (const item of entry.value?.map?.nodes ?? []) {
             const key = item.map_key;
             if (stringValue(key?.key?.path?.[0]) === 'link') {
               const value = stringValue(key?.value) !== undefined ? key?.value : key?.primary;
-              checkLink(stringValue(value) ?? '', board, undefined, scalarRange(value));
+              checkLink(canonicalLink(stringValue(value) ?? ''), board, undefined, scalarRange(value));
             }
           }
         } else visitMap(entry.value?.map, fullPath);
       }
     }
     visitMap(graph.ast);
-    for (const [shape, link] of links) {
+    for (const [shape, link] of authored) {
+      // Only recover links D2 dropped; a kept link was already checked in its compiled form.
       // Skip templates and removed objects; a board-level link has no shape.
-      if (!shape || board.diagram.shapes.some((item) => item.id === shape)) {
-        checkLink(link.href, board, shape || undefined, link.range);
-      }
+      const compiled = shape ? board.diagram.shapes.find((item) => item.id === shape) : board.diagram.root;
+      if (compiled && !compiled.link) checkLink(canonicalLink(link.href), board, shape || undefined, link.range);
     }
     for (const group of ['layers', 'scenarios', 'steps'] as const) {
-      for (const child of graph[group] ?? []) visitGraph(child, `${id}.${group}.${child.name}`);
+      for (const child of graph[group] ?? []) visitGraph(child, `${id}.${group}.${boardKey(child.name ?? '')}`);
     }
   }
   visitGraph(compiled.graph as LintGraph, 'root');
 
+  // Layers are reachable only by following links from root; like D2's own viewer,
+  // a reachable board's scenarios and steps are reachable without a link.
+  const reachable = new Set(['root']);
+  for (const id of reachable) {
+    const next = [...links.get(id) ?? []];
+    for (const board of boards.values()) if (board.parent === id && board.kind !== 'layers') next.push(board.id);
+    for (const target of next) reachable.add(target);
+  }
+  const linked = new Set([...links].flatMap(([source, targets]) => [...targets].filter((target) => target !== source)));
   for (const board of boards.values()) {
-    if (board.kind === 'layers' && !incoming.has(board.id)) diagnostics.push({
+    if (board.kind === 'layers' && !reachable.has(board.id)) diagnostics.push({
       rule: 'orphan-board', severity: 'warning', board: board.id, range: boardRanges.get(board.id),
-      message: `Layer "${label(board.id)}" has no incoming board link.`,
+      message: linked.has(board.id) ? `Layer "${label(board.id)}" is linked only from boards unreachable from the root.`
+        : `Layer "${label(board.id)}" has no incoming board link.`,
     });
     if (options.missingBacklink && board.parent && ![
       ...board.diagram.shapes, ...board.diagram.connections, board.diagram.root,

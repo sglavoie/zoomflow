@@ -1,4 +1,5 @@
 import type { PaneScope } from './pane-scope';
+import { plural, setText } from './text';
 import { flowFilename, flowSource, flowTemplate, readFlow, type Flow, type FlowStep } from './flow-model';
 
 type FlowTarget = { read: () => { source: string; name: string }; update: (source: string) => void };
@@ -53,7 +54,7 @@ export function setupFlowBuilder(create: (source: string, name: string) => void,
   let target: FlowTarget = { read, update: () => {} };
 
   function announce() {
-    feedback.textContent = `${flow.steps.length} steps · ${flow.connections.length} connections`;
+    setText(feedback, `${plural(flow.steps.length, 'step')} · ${plural(flow.connections.length, 'connection')}`);
     addConnection.disabled = flow.steps.length < 2;
     error.hidden = true;
   }

@@ -7,6 +7,12 @@ const prefix = 'zoomflow.draft.v2:';
 const selectionKey = 'zoomflow.selection.v2';
 const secondSelectionKey = 'zoomflow.selection.v2:second';
 const legacyKey = 'zoomflow.drafts.v1';
+/** Draft fields are primitives, so a shallow comparison finds the edited drafts without serializing each one. */
+const sameDraft = (a: Draft, b: Draft) => {
+  for (const key in a) if (a[key as keyof Draft] !== b[key as keyof Draft]) return false;
+  for (const key in b) if (a[key as keyof Draft] !== b[key as keyof Draft]) return false;
+  return true;
+};
 const dominates = (a: Clock, b: Clock) => Object.entries(b).every(([writer, count]) => (a[writer] ?? 0) >= count);
 function validDraft(value: unknown): value is Draft {
   const d = value as Draft | null;
@@ -25,7 +31,8 @@ export class DraftStore {
   private pendingCopies = new Set<string>();
   private pendingMigration = new Set<string>();
   private observed = new Map<string, Clock>();
-  private baselines = new Map<string, string>();
+  /** A copy of each document as last saved or loaded; callers edit their drafts in place. */
+  private baselines = new Map<string, Draft>();
   constructor(private storage: Storage, writer: string = crypto.randomUUID()) { this.writer = writer; }
 
   /** `keys` limits the scan to those documents' records. */
@@ -33,7 +40,7 @@ export class DraftStore {
     const records: StoredVersion[] = [];
     for (let i = 0; i < this.storage.length; i++) {
       const key = this.storage.key(i)!;
-      if (!key.startsWith(prefix) || keys && !keys.has(key.slice(prefix.length, key.lastIndexOf(':')))) continue;
+      if (!key.startsWith(prefix) || keys && !keys.has(DraftStore.documentOf(key))) continue;
       try {
         const v = JSON.parse(this.storage.getItem(key)!);
         if (typeof v.id === 'string' && typeof v.key === 'string' && Number.isFinite(v.savedAt) && v.clock &&
@@ -95,7 +102,7 @@ export class DraftStore {
     for (const [key, draft] of canonical) drafts.set(key, draft);
     for (const key of deleted) drafts.delete(key);
     for (const draft of drafts.values()) {
-      this.baselines.set(draft.key, JSON.stringify(draft));
+      this.baselines.set(draft.key, { ...draft });
       // Make a generated copy durable before its original can be restored or removed.
       if (draft.recoveredFrom && !canonical.has(draft.key)) this.pendingCopies.add(draft.key);
     }
@@ -109,8 +116,9 @@ export class DraftStore {
     const written = new Map<string, Version>();
     for (const key of new Set([...next.keys(), ...this.baselines.keys()])) {
       const draft = next.get(key) ?? null;
-      const serialized = draft ? JSON.stringify(draft) : undefined;
-      if (serialized === this.baselines.get(key) && !this.pendingMigration.has(key) && !this.pendingCopies.has(key)) continue;
+      const baseline = this.baselines.get(key);
+      const unchanged = draft ? baseline !== undefined && sameDraft(draft, baseline) : baseline === undefined;
+      if (unchanged && !this.pendingMigration.has(key) && !this.pendingCopies.has(key)) continue;
       const clock = { ...this.clocks.get(key) };
       if (!draft) for (const [writer, count] of Object.entries(this.observed.get(key) ?? {})) clock[writer] = Math.max(clock[writer] ?? 0, count);
       clock[this.writer] = (clock[this.writer] ?? 0) + 1;
@@ -120,7 +128,7 @@ export class DraftStore {
       this.clocks.set(key, clock);
       this.pendingMigration.delete(key);
       this.pendingCopies.delete(key);
-      if (serialized === undefined) this.baselines.delete(key); else this.baselines.set(key, serialized);
+      if (draft) this.baselines.set(key, { ...draft }); else this.baselines.delete(key);
       written.set(key, version);
     }
     // Reclaim ancestors only after every replacement was written, scanning storage once.
@@ -136,8 +144,9 @@ export class DraftStore {
     else this.storage.removeItem(secondSelectionKey);
   }
 
-  hasConcurrentChanges() {
-    return this.versions().some((record) => {
+  /** `documents` limits the check to the records named by `DraftStore.documentOf`. */
+  hasConcurrentChanges(documents?: Set<string>) {
+    return this.versions(documents).some((record) => {
       if (!this.clocks.has(record.key)) return false;
       const known = { ...this.observed.get(record.key) };
       for (const [writer, count] of Object.entries(this.clocks.get(record.key)!)) known[writer] = Math.max(known[writer] ?? 0, count);
@@ -145,4 +154,6 @@ export class DraftStore {
     });
   }
   static isDraftEvent(key: string | null) { return key === null || key.startsWith(prefix); }
+  /** The encoded document a draft storage key belongs to, as `hasConcurrentChanges` accepts it. */
+  static documentOf(storageKey: string) { return storageKey.slice(prefix.length, storageKey.lastIndexOf(':')); }
 }

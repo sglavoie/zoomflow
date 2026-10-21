@@ -160,4 +160,29 @@ describe('draft recovery across tabs', () => {
     expect(new DraftStore(storage, 'reload').load().drafts.filter((d) => d.source === 'changed')).toHaveLength(2);
   });
 
+  test('in-place edits are saved and unchanged drafts are not rewritten', () => {
+    const storage = new MemoryStorage();
+    const store = new DraftStore(storage, 'a'); store.load();
+    const items = [draft('order', 'one'), draft('other', 'two')];
+    store.save(items, 'order');
+    const written: string[] = [];
+    const setItem = storage.setItem.bind(storage);
+    storage.setItem = (key, value) => { written.push(key); setItem(key, value); };
+    store.save(items.map((item) => ({ ...item, updatedAt: undefined })), 'order');
+    expect(written.filter((key) => key.startsWith('zoomflow.draft.v2:'))).toEqual([]);
+    items[1].source = 'edited in place';
+    store.save(items, 'order');
+    expect(written.filter((key) => key.startsWith('zoomflow.draft.v2:'))).toHaveLength(1);
+    expect(new DraftStore(storage, 'reload').load().drafts.find((d) => d.key === 'other')?.source).toBe('edited in place');
+  });
+  test('conflict checks can be limited to the documents another tab changed', () => {
+    const storage = new MemoryStorage();
+    const a = new DraftStore(storage, 'a'), b = new DraftStore(storage, 'b'); a.load(); b.load();
+    a.save([draft('order', 'first'), draft('other', 'keep')], 'order');
+    b.save([draft('order', 'second')], 'order');
+    const changed = [...storage.data.keys()].find((key) => key.endsWith(':b-1'))!;
+    expect(DraftStore.documentOf(changed)).toBe('order');
+    expect(a.hasConcurrentChanges(new Set([DraftStore.documentOf(changed)]))).toBe(true);
+    expect(a.hasConcurrentChanges(new Set(['other']))).toBe(false);
+  });
 });

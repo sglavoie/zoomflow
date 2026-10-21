@@ -23,13 +23,12 @@ additions. Continue editing those diagrams in the source editor.
 
 ## Workspace and drafts
 
-Navigable, drill-down diagrams built on D2. The framework-free Vite app opens
-local `.d2` files or a folder of related D2 files and starts with `fixtures/order.d2` as an example.
-Click the filename dropdown to explore eight built-in templates: order drill-down,
-flowchart basics, service architecture, sequence diagrams, SQL schemas, layers /
-scenarios / steps, state transitions with boundary ports, and a guided lint repair.
-Every example includes source comments and compiles without imports or remote
-assets. The lint repair intentionally reports one error and one warning until fixed.
+The workspace opens local `.d2` files or a folder of related D2 files and starts
+with `fixtures/order.d2` as an example. Click the filename dropdown to explore the
+built-in templates: order drill-down, flowchart basics, service architecture,
+sequence diagrams, SQL schemas, layers / scenarios / steps, state transitions
+with boundary ports, and a guided lint repair. Every example includes source
+comments and compiles without imports or remote assets. The lint repair intentionally reports one error and one warning until fixed.
 First-time opens start at the root board. Returning to an open document restores its
 last board and breadcrumb trail, with zoom and pan remembered separately for each board
 during the page session. Restoring an example resets its saved view. Source edits and
@@ -92,9 +91,6 @@ access, **Save .d2** writes the active project file to its original folder. Othe
 browsers offer a Save dialog or source download. **Export → Download project .zip**
 keeps all project sources and their relative paths together. Local image assets are
 not yet loaded with folder projects.
-
-
-
 
 ## Explore a diagram
 
@@ -255,19 +251,22 @@ theme; see [stdlib conventions and examples](../stdlib/README.md).
 
 ## Export
 
-Export presents choices by outcome: **Interactive diagram (HTML)**, **Current board
-image (SVG or PNG)**, and **All boards as SVG (ZIP)**, with an explanation beside
-each choice. The last selection is remembered. Use Download SVG/PNG/ZIP/HTML for the current board as SVG or PNG, all boards as a ZIP
-of SVGs, or one navigable HTML file. The HTML opens directly from disk without a
-server or network connection and includes every board, including cyclic links.
+Export presents four choices by outcome, each with an explanation:
+**Interactive diagram (HTML)** for one navigable file with every board, **Current
+board image (SVG)** and **Current board image (PNG)** for the board on screen, and
+**All boards as SVG (ZIP)** for every board as a separate SVG. The button names the
+download: **Download HTML**, **Download SVG**, **Download PNG** or **Download SVG
+ZIP**. The HTML opens directly from disk without a server or network connection
+and includes every board, including cyclic links.
 The export menu names the current board for SVG/PNG, or shows the total board count
 for ZIP/HTML, and explains that HTML preserves offline drill-down navigation.
 Until you choose a format, multi-board diagrams default to interactive HTML and
 single-board diagrams default to SVG. An explicit format choice takes precedence
 and is remembered when browser storage is available. One scope statement beside
 Download identifies the current board or the whole diagram.
-Exports preserve the selected theme. Remote images are embedded when accessible;
-failed fetches produce a placeholder and a visible warning. ZIP paths follow the
+SVG, PNG and ZIP exports keep the theme shown in the workspace; interactive HTML
+follows its reader's light or dark color scheme. Remote images are embedded when
+accessible; failed fetches produce a placeholder and a visible warning. ZIP paths follow the
 board tree (`root.svg`, `checkout.svg`, `checkout/charge.svg`); scenarios and steps
 use `@scenarios/` and `@steps/` directories. PNG uses the board's native dimensions
 and has a 64 megapixel limit.
@@ -277,14 +276,15 @@ Bold, Italic and Semibold fonts, with embedded font subsets in SVG and HTML.
 Single-file HTML shares one subset per face across its boards.
 See [font assets, license and renderer wiring](../fonts/README.md).
 
-
 ## Mobile editing and keyboard controls
 
 Expanded tools scroll independently to leave room for the source editor. The mobile
 workspace follows the visible viewport when the software keyboard opens.
 
 The diagram is one Tab stop. Use arrow keys to move spatially between shapes,
-Home/End for the first/last shape, and Tab to leave for the canvas controls. Focused
+Home/End for the first/last shape, and Tab to leave for the canvas controls. Press +
+or − to zoom (around the focused shape) and 0 to fit. While zoomed, Shift+arrows pan;
+on a board without focusable shapes, plain arrows pan too. Focused
 shapes are brought into view. Unlinked shapes with source locations are
 keyboard-focusable: press Enter or Space
 to select their source. Alt+Enter selects a linked shape’s source without navigating.

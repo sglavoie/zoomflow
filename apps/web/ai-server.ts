@@ -17,7 +17,10 @@ const schema = {
   properties: { reply: { type: 'string' }, source: { type: ['string', 'null'] } },
   required: ['reply', 'source'],
 };
-const MAX_REQUEST = 200_000;
+// Request limits count UTF-8 bytes. They leave room for the field limits below in characters:
+// non-ASCII source can take up to three bytes per character, and JSON escaping adds more.
+const MAX_REQUEST = 1_000_000;
+const MAX_STATUS_REQUEST = 64_000;
 const MAX_OUTPUT = 500_000;
 const TIMEOUT_MS = 180_000;
 const exec = promisify(execFile);
@@ -184,17 +187,23 @@ function send(response: ServerResponse, status: number, data: object) {
 
 const message = (error: unknown) => error instanceof Error ? error.message : String(error);
 
-/** Read a request body up to `limit` characters; answers 413 and returns undefined beyond it. */
-async function readBody(request: IncomingMessage, response: ServerResponse, limit: number, tooLarge: string) {
-  let body = '';
+/** Read a UTF-8 request body up to `limit` bytes; answers 413 and returns undefined beyond it.
+ * Chunks are joined as bytes, so a character split across chunks stays intact. */
+export async function readBody(request: AsyncIterable<Buffer | string>, response: ServerResponse, limit: number, tooLarge: string) {
+  const chunks: Buffer[] = [];
+  let size = 0;
   for await (const chunk of request) {
-    body += chunk;
-    if (body.length > limit) { send(response, 413, { error: tooLarge }); return undefined; }
+    const bytes = typeof chunk === 'string' ? Buffer.from(chunk) : chunk;
+    size += bytes.length;
+    if (size > limit) { send(response, 413, { error: tooLarge }); return undefined; }
+    chunks.push(bytes);
   }
-  return body;
+  return Buffer.concat(chunks).toString('utf8');
 }
 
-async function handle(request: IncomingMessage, response: ServerResponse) {
+const isJson = (request: IncomingMessage) => request.headers['content-type']?.startsWith('application/json') === true;
+
+export async function handle(request: IncomingMessage, response: ServerResponse) {
   const host = request.headers.host ?? '';
   const origin = request.headers.origin;
   if (!/^(localhost|127\.0\.0\.1|\[::1\])(?::\d+)?$/.test(host) || (origin && origin !== `http://${host}`)) {
@@ -203,21 +212,21 @@ async function handle(request: IncomingMessage, response: ServerResponse) {
   }
   if (request.url?.split('?')[0] === '/api/ai/status') {
     if (request.method === 'GET') send(response, 200, { available: true });
-    else if (request.method === 'POST' && request.headers['content-type']?.startsWith('application/json')) {
+    else if (request.method !== 'POST') send(response, 405, { error: 'Use POST to check a provider.' });
+    else if (!isJson(request)) send(response, 415, { error: 'Send JSON to check a provider.' });
+    else {
       try {
-        const body = await readBody(request, response, 16_000, 'Status request is too large.');
+        const body = await readBody(request, response, MAX_STATUS_REQUEST, 'Status request is too large.');
         if (body === undefined) return;
         const payload: unknown = JSON.parse(body);
         if (!isStatusRequest(payload)) { send(response, 400, { error: 'Invalid provider status request.' }); return; }
         send(response, 200, await providerStatus(payload));
       } catch (error) { send(response, 400, { error: message(error) }); }
-    } else send(response, 405, { error: 'Use POST to check a provider.' });
+    }
     return;
   }
-  if (request.method !== 'POST' || !request.headers['content-type']?.startsWith('application/json')) {
-    send(response, 405, { error: 'Send a JSON POST request.' });
-    return;
-  }
+  if (request.method !== 'POST') { send(response, 405, { error: 'Send a JSON POST request.' }); return; }
+  if (!isJson(request)) { send(response, 415, { error: 'Send the AI request as JSON.' }); return; }
   try {
     const body = await readBody(request, response, MAX_REQUEST, 'Request is too large.');
     if (body === undefined) return;

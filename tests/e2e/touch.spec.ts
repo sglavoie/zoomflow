@@ -1,12 +1,12 @@
 import { expect, test } from '@playwright/test';
-import { source, previewReady } from './helpers';
+import { comparesVisuals, source, previewReady } from './helpers';
 
 test.use({ hasTouch: true, viewport: { width: 390, height: 844 }, colorScheme: 'light', reducedMotion: 'reduce', locale: 'en-US', timezoneId: 'UTC' });
 
 test('the touch canvas exposes readable cues and a zoom hint before any gesture', async ({ page, browserName }) => {
   await page.goto('/'); await previewReady(page);
   await expect(page.locator('.zf-pan-hint')).toHaveText('Tap Checkout to explore · Pinch to zoom');
-  if (browserName === 'chromium') await expect(page).toHaveScreenshot('touch-canvas.png');
+  if (comparesVisuals(browserName)) await expect(page).toHaveScreenshot('touch-canvas.png');
   await page.setViewportSize({ width: 844, height: 390 });
   for (const badge of await page.locator('.appendix-icon circle').all()) {
     expect((await badge.boundingBox())!.width).toBeGreaterThanOrEqual(23.9);

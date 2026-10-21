@@ -121,7 +121,7 @@ it('locates boundary diagnostics at the shape or port and names boards by their 
 });
 
 it('does not require boundary ports for sibling links or scenario switches', async () => {
-  const result = strictLint(await compile('a -> b\nb.link: scenarios.alt\nscenarios.alt: {c}\nlayers: {A: {a -> b; b.link: _.layers.B}; B: {back.link: _.layers.A}}'));
+  const result = strictLint(await compile('a -> b\nb.link: scenarios.alt\nscenarios.alt: {c}\nlayers: {A: {a -> b; b.link: _.layers.B}; B: {back.link: _.layers.A}}\nc.link: layers.A'));
   expect(result.diagnostics).toEqual([]);
   expect(result.boundaries).toEqual([]);
 });
@@ -164,4 +164,33 @@ layers.A: {
   expect(result.diagnostics.find((item) => item.shape === 'unrelated')?.message).not.toContain('Did you mean');
   const valid = await compile(source.replace('unrelated.link: layers.absent', 'layers.A: {valid}'));
   expect(lint(valid).diagnostics).toEqual([]);
+});
+
+it('resolves quoted board names in authored links as the compiler does', async () => {
+  const result = lint(await compile(`x: {link: layers."a b"}
+y: {link: layers."c.d"}
+z.link: layers."c.d".layers."e f"
+gone: {link: layers."a b".layers.absent}
+layers: {"a b": {back.link: _}; "c.d": {w.link: layers."e f"; layers: {"e f": {v}}}}`));
+  expect(result.diagnostics).toEqual([expect.objectContaining({ rule: 'dangling-link', shape: 'gone',
+    target: 'root.layers.a b.layers.absent', message: 'Link targets missing board "Root > a b > absent".' })]);
+});
+
+it('flags layers unreachable from root, including linked cycles, but not scenarios of reachable boards', async () => {
+  const result = lint(await compile(`open.link: layers.A
+alt.link: scenarios.alt
+layers: {
+  A: {b.link: _.layers.B}
+  B: {a.link: _.layers.A}
+  C: {d.link: _.layers.D}
+  D: {c.link: _.layers.C}
+}
+scenarios: {alt: {deep.link: layers.E; layers: {E: {x}}}}
+steps: {one: {more.link: layers.F; layers: {F: {y}}}}`));
+  const orphans = result.diagnostics.filter((item) => item.rule === 'orphan-board');
+  expect(orphans.map((item) => item.board)).toEqual(['root.layers.C', 'root.layers.D']);
+  expect(orphans[0].message).toBe('Layer "Root > C" is linked only from boards unreachable from the root.');
+  expect(orphans[0].range).toMatch(/^index,/);
+  const unlinked = lint(await compile('layers: {lonely: {x}}')).diagnostics;
+  expect(unlinked.map((item) => item.message)).toEqual(['Layer "Root > lonely" has no incoming board link.']);
 });
