@@ -29,13 +29,13 @@ self.onmessage = async () => {
   } catch (error) { self.postMessage({ error: String(error), stack: error.stack }); }
 };`;
 const server = createServer((request, response) => {
-  const file = files.get(request.url);
+  const file = files.get(request.url ?? '');
   if (file) { response.writeHead(200, { 'content-type': file[1] }); response.end(readFileSync(file[0])); }
   else if (request.url === '/explicit-worker.js') { response.writeHead(200, { 'content-type': 'text/javascript' }); response.end(explicitWorker); }
   else { response.writeHead(200, { 'content-type': 'text/html' }); response.end('<!doctype html><title>D2 startup reproducer</title>'); }
 });
-await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
-const url = `http://127.0.0.1:${server.address().port}`;
+await new Promise(resolve => server.listen(0, '127.0.0.1', () => resolve(undefined)));
+const url = `http://127.0.0.1:${/** @type {import('node:net').AddressInfo} */ (server.address()).port}`;
 let failed = false;
 try {
   for (const [name, engine] of Object.entries({ chromium, firefox, webkit })) {
@@ -52,7 +52,8 @@ try {
         await page.goto(url);
         const result = await page.evaluate(async mode => {
           if (mode === 'package') {
-            const { D2 } = await import('/d2.js');
+            const d2Module = '/d2.js';
+            const { D2 } = await import(d2Module);
             const d2 = new D2();
             try { return { shapes: (await d2.compile('a -> b', { layout: 'elk' })).diagram.shapes.length }; }
             catch (error) { return { error: String(error) }; }

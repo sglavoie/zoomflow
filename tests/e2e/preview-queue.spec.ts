@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { source } from './helpers';
 
 test('a busy compiler skips superseded previews and compiles the latest edit next', async ({ page }) => {
   // Hold a real compilation at its boundary, without relying on machine speed.
@@ -20,19 +21,19 @@ test('a busy compiler skips superseded previews and compiles the latest edit nex
       };
     `) });
   });
+  await page.clock.install(); // Step past the 350 ms edit debounce without real waits.
   await page.goto('/');
   await expect(page.locator('#preview-status')).toHaveText('Preview ready');
   await page.evaluate(() => {
     const probe = (window as any).previewProbe;
     probe.inputs = []; probe.hold = true;
   });
-  const source = page.getByRole('textbox', { name: 'D2 source', exact: true });
-  await source.fill('first: Running');
+  await source(page).fill('first: Running');
   await expect.poll(() => page.evaluate(() => typeof (window as any).previewProbe.release)).toBe('function');
-  await source.fill('second: Superseded');
-  await page.waitForTimeout(450); // Pass the production 350 ms debounce while first is held.
-  await source.fill('latest: Keep this');
-  await page.waitForTimeout(450);
+  await source(page).fill('second: Superseded');
+  await page.clock.runFor(450); // Pass the debounce while first is held.
+  await source(page).fill('latest: Keep this');
+  await page.clock.runFor(450);
   expect(await page.evaluate(() => (window as any).previewProbe.inputs)).toEqual(['first: Running']);
   await page.evaluate(() => (window as any).previewProbe.release());
   await expect(page.locator('.zf-stage')).toContainText('Keep this');

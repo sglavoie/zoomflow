@@ -21,21 +21,32 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
+      # Reads the pnpm version from packageManager in package.json.
+      - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: '26'
+          node-version-file: .node-version
+          cache: pnpm
       - name: Install workspace
-        run: |
-          npm install --global pnpm@12.6.0
-          pnpm install --frozen-lockfile
-      - name: Install browsers and native D2
-        run: |
-          pnpm exec playwright install chromium firefox webkit
-          curl --fail --silent --show-error --location https://d2lang.com/install.sh -o "$RUNNER_TEMP/install-d2.sh"
-          sh "$RUNNER_TEMP/install-d2.sh" --version v0.9.0 --method standalone --prefix "$RUNNER_TEMP/d2"
-          echo "$RUNNER_TEMP/d2/bin" >> "$GITHUB_PATH"
+        run: pnpm install --frozen-lockfile
+      - name: Read Playwright version
+        id: playwright
+        run: echo "version=$(node -p "require('@playwright/test/package.json').version")" >> "$GITHUB_OUTPUT"
+      - name: Cache Playwright browsers
+        id: playwright-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/Library/Caches/ms-playwright
+          key: playwright-${{ runner.os }}-${{ runner.arch }}-${{ steps.playwright.outputs.version }}
+      # macOS needs no system dependencies, so a cache hit skips installation entirely.
+      - name: Install browsers
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        run: pnpm exec playwright install chromium firefox webkit
+      - uses: ./.github/actions/setup-d2
       - name: Typecheck
         run: pnpm typecheck
+      - name: Lint
+        run: pnpm lint
       - name: Unit and CLI integration tests
         run: pnpm test:unit
       - name: Production build

@@ -54,6 +54,7 @@ good preview; **Go to error** and **Diagnostics** lead back to the relevant sour
 
 ```sh
 pnpm typecheck
+pnpm lint
 pnpm test:unit
 pnpm test:e2e
 pnpm build

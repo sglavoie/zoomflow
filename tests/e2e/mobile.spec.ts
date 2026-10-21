@@ -19,7 +19,7 @@ test('mobile source view gives the editor room with secondary controls collapsed
   await page.locator('#ai-assistant > summary').click();
   await page.locator('.ai-settings summary').click();
   expect((await editor.boundingBox())!.height).toBeGreaterThanOrEqual(320);
-  await page.getByRole('textbox', { name: 'D2 source' }).fill('mobile: Editable');
+  await source(page).fill('mobile: Editable');
   await expect(page.locator('.zf-stage')).toContainText('Editable');
 });
 
@@ -29,7 +29,7 @@ test('selecting a shape on a phone reveals its source', async ({ page }) => {
   await expect(page.locator('.zf-stage [data-shape-id="Browse"]')).toBeVisible();
   await page.locator('.zf-stage [data-shape-id="Browse"]').click();
   await expect(page.locator('#mobile-source')).toHaveAttribute('aria-pressed', 'true');
-  await expect(page.getByRole('textbox', { name: 'D2 source' })).toBeFocused();
+  await expect(source(page)).toBeFocused();
   await page.locator('#mobile-preview').click();
   await expect(page.locator('.zf-stage > svg')).toBeVisible();
 });
@@ -45,7 +45,7 @@ test('mobile first fit fills the canvas and diagnostics lead to the source', asy
   });
   expect(coverage).toBeGreaterThan(0.8);
   await page.locator('#mobile-source').click();
-  await page.getByRole('textbox', { name: 'D2 source' }).fill('broken: {');
+  await source(page).fill('broken: {');
   await expect(page.locator('#preview-status')).toHaveText('Preview out of date');
   await page.locator('#mobile-preview').click();
   await expect(page.locator('.zf-stage')).toHaveAttribute('data-preview-state', 'stale');

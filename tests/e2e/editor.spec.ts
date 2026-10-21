@@ -2,19 +2,18 @@ import { expect, test, type Page } from '@playwright/test';
 import { selectMenuOption } from './menu';
 import { source, previewReady, stubAiStatus } from './helpers';
 
-const sourceInput = (page: Page) => page.getByRole('textbox', { name: 'D2 source', exact: true });
 async function ready(page: Page, id = 'root') {
   await expect(page.locator('.zf-stage')).toHaveAttribute('data-board', id);
   await expect(page.locator('#viewer')).toHaveAttribute('aria-busy', 'false');
 }
-async function replace(page: Page, source: string) {
-  await sourceInput(page).focus();
-  await sourceInput(page).press('ControlOrMeta+a');
-  await page.keyboard.insertText(source);
+async function replace(page: Page, text: string) {
+  await source(page).focus();
+  await source(page).press('ControlOrMeta+a');
+  await page.keyboard.insertText(text);
 }
 async function findSource(page: Page, text: string) {
-  await sourceInput(page).click();
-  await sourceInput(page).press('ControlOrMeta+f');
+  await source(page).click();
+  await source(page).press('ControlOrMeta+f');
   const search = page.locator('.cm-search input[name="search"]');
   await page.getByLabel('match case', { exact: true }).check();
   await search.fill('');
@@ -30,8 +29,8 @@ test('live edits retain the last good render on syntax errors and recover with d
   await page.locator('.zf-stage a[href="root.layers.checkout"]').click();
   await ready(page, 'root.layers.checkout');
   const before = await page.locator('.zf-stage').innerHTML();
-  await sourceInput(page).focus();
-  await sourceInput(page).press('ControlOrMeta+End');
+  await source(page).focus();
+  await source(page).press('ControlOrMeta+End');
   // Appending by keyboard exercises CodeMirror input and the debounce path.
   await page.keyboard.insertText('\nbroken: {');
   await expect(page.locator('#compile-error')).toContainText('maps must be terminated');
@@ -40,8 +39,8 @@ test('live edits retain the last good render on syntax errors and recover with d
   expect(await page.locator('.zf-stage').innerHTML()).toBe(before);
   await ready(page, 'root.layers.checkout');
   // Editing keys must stay inside CodeMirror, even while a nested board is open.
-  await sourceInput(page).press('Backspace');
-  await sourceInput(page).press('Escape');
+  await source(page).press('Backspace');
+  await source(page).press('Escape');
   await expect(page.locator('.zf-stage')).toHaveAttribute('data-board', 'root.layers.checkout');
   await replace(page, 'fresh: Recovered');
   await expect(page.locator('.zf-stage')).toContainText('Recovered');
@@ -75,10 +74,10 @@ test('explicit reveal opens the selected source board, linked shapes still drill
   await ready(page);
   await findSource(page, 'Capture');
   await ready(page);
-  await sourceInput(page).press('ControlOrMeta+Shift+Enter');
+  await source(page).press('ControlOrMeta+Shift+Enter');
   await ready(page, 'root.layers.checkout.layers.charge');
   await expect(page.locator('.zf-stage [data-shape-id="Capture"]')).toHaveClass(/zf-source-selected/);
-  await sourceInput(page).focus();
+  await source(page).focus();
   await page.keyboard.insertText('Captured');
   await expect(page.locator('.zf-stage [data-shape-id="Captured"]')).toBeVisible();
   await ready(page, 'root.layers.checkout.layers.charge');
@@ -91,7 +90,7 @@ test('explicit reveal opens the selected source board, linked shapes still drill
   await checkout.click();
   await ready(page, 'root.layers.checkout');
   await page.locator('#file').setInputFiles({ name: 'new.d2', mimeType: 'text/plain', buffer: Buffer.from('new: New document') });
-  await expect(sourceInput(page)).toHaveText('new: New document');
+  await expect(source(page)).toHaveText('new: New document');
   await expect(page.locator('.zf-stage')).toContainText('New document');
   await ready(page);
 });
@@ -165,10 +164,10 @@ test('formats nested boards with D2 rules, refreshes navigation, and supports un
   await page.locator('.zf-stage a[href="root.layers.checkout.layers.charge.layers.capture"]').click();
   await ready(page, 'root.layers.checkout.layers.charge.layers.capture');
   await expect(page.locator('.zf-stage')).toContainText('New again');
-  await sourceInput(page).focus();
-  await sourceInput(page).press('ControlOrMeta+z');
+  await source(page).focus();
+  await source(page).press('ControlOrMeta+z');
   expect(await editorSource(page)).toBe(misaligned);
-  await sourceInput(page).press('Shift+Alt+f');
+  await source(page).press('Shift+Alt+f');
   await expect(page.locator('#format-status')).toHaveText('Source formatted.');
   expect(await editorSource(page)).toBe(formatted);
   await page.getByRole('button', { name: 'Format', exact: true }).click();

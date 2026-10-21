@@ -1,0 +1,61 @@
+{
+  "$schema": "./node_modules/@biomejs/biome/configuration_schema.json",
+  "vcs": { "enabled": true, "clientKind": "git", "useIgnoreFile": true },
+  "files": { "includes": ["**", "!**/dist", "!vendor"] },
+  // Lint only. The formatter would rewrite most files: the code keeps related
+  // statements on one line and uses lines well beyond any fixed width.
+  "formatter": { "enabled": false },
+  "assist": { "enabled": false },
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "preset": "recommended",
+      "style": {
+        // Non-null assertions after explicit DOM and layout checks are the house style.
+        "noNonNullAssertion": "off",
+        "useTemplate": "off",
+        // Stylesheets are ordered by component, not by selector specificity.
+        "noDescendingSpecificity": "off"
+      },
+      "complexity": {
+        // `[hidden]` and selected-state overrides must win over component styles.
+        "noImportantStyles": "off",
+        // Explicit null guards (`!matrix || !matrix.a`) read more clearly than optional chains.
+        "useOptionalChain": "off"
+      },
+      "suspicious": {
+        // Browser tests reach into page globals through `window as any`.
+        "noExplicitAny": "off",
+        // Chained and memoizing assignments (`const job = active = pending`,
+        // `return loaded ??= load()`) and expression-bodied forEach callbacks are deliberate.
+        "noAssignInExpressions": "off",
+        "useIterableCallbackReturn": "off",
+        // D2 reference snippets contain literal `${...}` variable syntax.
+        "noTemplateCurlyInString": "off"
+      }
+    }
+  },
+  "overrides": [
+    {
+      // Filename sanitizers and d2 log filters match control characters on purpose.
+      "includes": ["apps/web/src/text.ts", "apps/web/src/flow-model.ts", "packages/core/src/export.ts", "packages/cli/src/index.ts"],
+      "linter": { "rules": { "suspicious": { "noControlCharactersInRegex": "off" } } }
+    },
+    {
+      // Custom widgets (focusable separators, live regions, menus) are scripted and
+      // covered by browser tests; buttons outside forms need no explicit type.
+      "includes": ["**/*.html"],
+      "linter": {
+        "rules": {
+          "a11y": {
+            "useSemanticElements": "off",
+            "useAriaPropsForRole": "off",
+            "useAriaPropsSupportedByRole": "off",
+            "noNoninteractiveTabindex": "off",
+            "useButtonType": "off"
+          }
+        }
+      }
+    }
+  ]
+}

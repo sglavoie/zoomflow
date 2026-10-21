@@ -3,15 +3,6 @@ import { pathToFileURL } from 'node:url';
 import { openDownloads } from './menu';
 import { source, previewReady, chooseExample } from './helpers';
 
-async function ready(page: Page) {
-  await expect(page.locator('#preview-status')).toHaveText('Preview ready');
-  await expect(page.locator('#viewer')).toHaveAttribute('aria-busy', 'false');
-}
-async function choose(page: Page, name: RegExp) {
-  await page.locator('#example-picker summary').click();
-  await page.locator('.example-option').filter({ hasText: name }).click();
-  await ready(page);
-}
 async function saved(page: Page) {
   await expect(page.locator('#draft-status')).toHaveAttribute('data-recovery', 'saved');
 }
@@ -28,40 +19,40 @@ async function expectView(page: Page, expected: string) {
 }
 
 test('concurrent tabs keep both versions and unrelated drafts after reload', async ({ page, context }) => {
-  await page.goto('/'); await ready(page);
-  const other = await context.newPage(); await other.goto('/'); await ready(other);
+  await page.goto('/'); await previewReady(page);
+  const other = await context.newPage(); await other.goto('/'); await previewReady(other);
   await source(page).fill('a: First tab'); await saved(page);
   await other.locator('#file').setInputFiles({ name: 'other.d2', mimeType: 'text/plain', buffer: Buffer.from('other: Unrelated') });
-  await ready(other);
-  await choose(other, /Order flow/);
+  await previewReady(other);
+  await chooseExample(other, /Order flow/);
   await source(other).fill('b: Second tab'); await saved(other);
   await expect(page.locator('#draft-conflict')).toBeVisible();
-  await page.reload(); await ready(page);
-  await choose(page, /Order flow \(recovered\)/);
+  await page.reload(); await previewReady(page);
+  await chooseExample(page, /Order flow \(recovered\)/);
   await expect(source(page)).toHaveText('a: First tab');
-  await choose(page, /^Order flowModified/);
+  await chooseExample(page, /^Order flow Modified/);
   await expect(source(page)).toHaveText('b: Second tab');
-  await choose(page, /other.d2/);
+  await chooseExample(page, /other.d2/);
   await expect(source(page)).toHaveText('other: Unrelated');
 });
 
 test('project recovery copies keep imports and do not replace the canonical project file', async ({ page, context }) => {
-  await page.goto('/'); await ready(page);
+  await page.goto('/'); await previewReady(page);
   await page.locator('#folder').setInputFiles('fixtures/browser-project');
-  await ready(page);
+  await previewReady(page);
   const original = await source(page).innerText();
-  const other = await context.newPage(); await other.goto('/'); await ready(other);
-  await source(page).fill(`${original}\nfirst: First tab`); await ready(page); await saved(page);
-  await source(other).fill(`${original}\nsecond: Second tab`); await ready(other); await saved(other);
-  await page.reload(); await ready(page);
-  await choose(page, /main.d2 \(recovered\)/);
+  const other = await context.newPage(); await other.goto('/'); await previewReady(other);
+  await source(page).fill(`${original}\nfirst: First tab`); await previewReady(page); await saved(page);
+  await source(other).fill(`${original}\nsecond: Second tab`); await previewReady(other); await saved(other);
+  await page.reload(); await previewReady(page);
+  await chooseExample(page, /main.d2 \(recovered\)/);
   await expect(source(page)).toContainText('First tab');
   await expect(page.locator('.zf-stage')).toContainText('First tab');
   await expect(page.locator('#compile-error')).toBeHidden();
 });
 
 test('documents restore boards, breadcrumbs, zoom and pan; returning to a board restores its view', async ({ page }) => {
-  await page.goto('/'); await ready(page);
+  await page.goto('/'); await previewReady(page);
   await page.getByRole('button', { name: 'Zoom in', exact: true }).click();
   const stage = page.locator('.zf-stage');
   const bounds = (await stage.boundingBox())!;
@@ -77,10 +68,10 @@ test('documents restore boards, breadcrumbs, zoom and pan; returning to a board 
   await page.getByRole('button', { name: 'Zoom in', exact: true }).click();
   await page.getByRole('button', { name: 'Zoom in', exact: true }).click();
   const childBox = await stage.locator(':scope > svg').getAttribute('viewBox');
-  await choose(page, /Flowchart basics/);
+  await chooseExample(page, /Flowchart basics/);
   await expect(stage).toHaveAttribute('data-board', 'root');
   await expect(page.locator('.zf-zoom-controls span')).toHaveText('Fit');
-  await choose(page, /Order flow/);
+  await chooseExample(page, /Order flow/);
   await expect(stage).toHaveAttribute('data-board', 'root.layers.checkout');
   await expect(page.locator('.zf-zoom-controls span')).toHaveText('225%');
   await expectView(page, childBox!);
@@ -96,7 +87,7 @@ test('documents restore boards, breadcrumbs, zoom and pan; returning to a board 
 
 test('mobile preview exposes the error and opens its source in one tap', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto('/'); await ready(page);
+  await page.goto('/'); await previewReady(page);
   await page.locator('#mobile-source').click();
   await source(page).fill('a: Good\nbroken: {');
   await expect(page.locator('#compile-error')).toBeVisible();
@@ -106,7 +97,7 @@ test('mobile preview exposes the error and opens its source in one tap', async (
   await expect(page.locator('.zf-stage > svg')).toBeVisible();
   await page.locator('#mobile-error button').click();
   await expect(source(page)).toBeFocused();
-  await source(page).fill('a: Fixed'); await ready(page);
+  await source(page).fill('a: Fixed'); await previewReady(page);
   await expect(page.locator('#mobile-source')).toHaveText('Source');
   await page.locator('#mobile-preview').click();
   await expect(page.locator('#mobile-error')).toBeHidden();
@@ -114,7 +105,7 @@ test('mobile preview exposes the error and opens its source in one tap', async (
 
 test('workspace is compact and stable, zoom explains its baseline, export describes its scope', async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
-  await page.goto('/'); await ready(page);
+  await page.goto('/'); await previewReady(page);
   const pane = (await page.locator('#source-pane').boundingBox())!;
   const editor = (await page.locator('#editor').boundingBox())!;
   expect(editor.y - pane.y).toBeLessThan(145);
@@ -143,7 +134,7 @@ test('workspace is compact and stable, zoom explains its baseline, export descri
 });
 
 test('offline HTML restores each board view and explains zoom', async ({ page, context }, info) => {
-  await page.goto('/'); await ready(page);
+  await page.goto('/'); await previewReady(page);
   await openDownloads(page);
   await page.locator('#export-format input[value="html"]').check();
   const pending = page.waitForEvent('download');

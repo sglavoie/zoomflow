@@ -5,10 +5,24 @@ export const projectFolder = fileURLToPath(new URL('../../fixtures/browser-proje
 
 export const source = (page: Page) => page.getByRole('textbox', { name: 'D2 source', exact: true });
 
-/** The first pane shows a finished preview of its current source. */
-export async function previewReady(page: Page) {
-  await expect(page.locator('#preview-status')).toHaveText('Preview ready');
-  await expect(page.locator('#viewer')).toHaveAttribute('aria-busy', 'false');
+/** A pane (the first by default) shows a finished preview of its current source. */
+export async function previewReady(page: Page, pane: 'a' | 'b' = 'a') {
+  const suffix = pane === 'b' ? '-b' : '';
+  await expect(page.locator(`#preview-status${suffix}`)).toHaveText('Preview ready');
+  await expect(page.locator(`#viewer${suffix}`)).toHaveAttribute('aria-busy', 'false');
+}
+
+/** The viewer (live or offline HTML) shows board `id` and is not still rendering it. */
+export async function board(page: Page, id: string) {
+  await expect(page.locator('.zf-stage')).toHaveAttribute('data-board', id);
+  // Offline HTML may never set aria-busy, so wait only for a busy viewer to settle.
+  await expect(page.locator('#viewer')).not.toHaveAttribute('aria-busy', 'true');
+}
+
+/** Follow the stage link to board `id`. */
+export async function drill(page: Page, id: string) {
+  await page.locator(`.zf-stage a[href="${id}"]`).click();
+  await board(page, id);
 }
 
 /** Keep AI availability independent of the provider CLIs installed on this machine. */

@@ -6,9 +6,22 @@
     "allowImportingTsExtensions": true,
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noImplicitOverride": true,
+    "allowJs": true,
+    "checkJs": true,
     "noEmit": true,
     "skipLibCheck": true,
     "types": ["node"]
   },
-  "include": ["packages/**/*.ts", "apps/**/*.ts", "tests/**/*.ts", "*.config.ts"]
+  "include": [
+    "packages/**/*.ts",
+    "apps/**/*.ts",
+    "tests/**/*.ts",
+    "*.config.ts",
+    "packages/cli/bin/*.mjs",
+    "packages/cli/build.mjs",
+    "spike/*.mjs"
+  ]
 }

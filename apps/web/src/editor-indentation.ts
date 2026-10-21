@@ -1,5 +1,5 @@
 import { countColumn } from '@codemirror/state';
-import { Decoration, type DecorationSet, EditorView, ViewPlugin, type ViewUpdate } from '@codemirror/view';
+import { Decoration, type DecorationSet, type EditorView, ViewPlugin, type ViewUpdate } from '@codemirror/view';
 
 /** Preserve the leading whitespace's visual column on wrapped lines. Only
  * decorate rendered lines so large documents don't slow down scrolling. */

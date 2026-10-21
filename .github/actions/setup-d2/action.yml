@@ -1,0 +1,27 @@
+name: Set up D2
+description: Install the pinned native D2 release from GitHub, verified by SHA-256.
+
+runs:
+  using: composite
+  steps:
+    - name: Install D2 v0.9.0
+      shell: bash
+      run: |
+        set -euo pipefail
+        version=v0.9.0
+        # Checksums from the release's SHA256SUMS file. Update them with the version.
+        case "$RUNNER_OS-$RUNNER_ARCH" in
+          Linux-X64) asset=linux-amd64; sha256=5669ddc46b99e942cc96078f4a4e36d5e62103348f4c05179ede27802fdd87a9 ;;
+          Linux-ARM64) asset=linux-arm64; sha256=ac2c028697199479acb321db1e3d68caee9f2ba492ed73caa3cd13f3829bf913 ;;
+          macOS-X64) asset=macos-amd64; sha256=cad39576a480d6bb02ea142fef1726647914b0d2da51ccc9b30b660a2b1babf0 ;;
+          macOS-ARM64) asset=macos-arm64; sha256=eaf6c0c143e56dd9fa97bfb6df25ea9c1ebce40245f056a0768cf1a6c15d3064 ;;
+          *) echo "::error::No pinned D2 $version asset for $RUNNER_OS $RUNNER_ARCH"; exit 1 ;;
+        esac
+        archive="$RUNNER_TEMP/d2-$version-$asset.tar.gz"
+        curl --fail --silent --show-error --location --retry 3 \
+          "https://github.com/terrastruct/d2/releases/download/$version/d2-$version-$asset.tar.gz" -o "$archive"
+        echo "$sha256  $archive" | shasum -a 256 --check --strict
+        mkdir -p "$RUNNER_TEMP/d2"
+        tar -xzf "$archive" -C "$RUNNER_TEMP/d2" --strip-components=1
+        echo "$RUNNER_TEMP/d2/bin" >> "$GITHUB_PATH"
+        "$RUNNER_TEMP/d2/bin/d2" --version

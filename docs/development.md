@@ -4,6 +4,7 @@
 pnpm test:unit
 pnpm test:e2e
 pnpm typecheck
+pnpm lint
 pnpm build
 ```
 
@@ -12,6 +13,8 @@ Firefox and WebKit; install them with `pnpm exec playwright install` if needed. 
 tests run against the Vite dev server. In CI, a `production` project also runs a smoke
 test against the built app through `vite preview`; locally, run `pnpm build` and then
 `ZOOMFLOW_PRODUCTION_E2E=1 pnpm exec playwright test --project=production`.
+`pnpm lint` runs Biome's linter (formatting is not enforced; see `biome.jsonc`). Node
+26 is required; `.node-version` pins the version CI uses.
 The app build is written to `apps/web/dist`. D2 is loaded lazily, but its bundled
 compiler is still a large download (roughly 8.5 MB gzip).
 

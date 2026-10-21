@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { expect, test } from '@playwright/test';
+import { source } from './helpers';
 
 const fixture = (name: string) => readFileSync(`fixtures/lint/${name}.d2`, 'utf8');
 
@@ -26,9 +27,8 @@ test('bundled stdlib and live lint diagnostics recover, with optional backlink w
   await expect(page.locator('#lint-summary')).toHaveText('No lint issues');
 
   // Exercise the debounce/edit path rather than only file loading.
-  const source = page.getByRole('textbox', { name: 'D2 source', exact: true });
-  await source.click();
-  await source.press('ControlOrMeta+a');
+  await source(page).click();
+  await source(page).press('ControlOrMeta+a');
   await page.keyboard.insertText(fixture('labelled'));
   await expect(page.locator('#lint-summary')).toHaveText('No lint issues');
   await expect(page.locator('.cm-lintRange-error')).toHaveCount(0);

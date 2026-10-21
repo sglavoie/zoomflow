@@ -14,18 +14,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      # Reads the pnpm version from packageManager in package.json.
+      - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: '26'
-      - name: Install pnpm and workspace
-        run: |
-          npm install --global pnpm@12.6.0
-          pnpm install --frozen-lockfile
-      - name: Install D2 v0.9.0
-        run: |
-          curl --fail --silent --show-error --location https://d2lang.com/install.sh -o "$RUNNER_TEMP/install-d2.sh"
-          sh "$RUNNER_TEMP/install-d2.sh" --version v0.9.0 --method standalone --prefix "$RUNNER_TEMP/d2"
-          echo "$RUNNER_TEMP/d2/bin" >> "$GITHUB_PATH"
+          node-version-file: .node-version
+          cache: pnpm
+      - name: Install workspace
+        run: pnpm install --frozen-lockfile
+      - uses: ./.github/actions/setup-d2
       - name: Build CLI
         run: pnpm --filter cli build
       - name: Lint diagram boundaries

@@ -67,10 +67,9 @@ test('live edits keep the current view, while opening another diagram fits it', 
   await expect(page.locator('.zf-stage > svg')).toBeVisible();
   await page.getByRole('button', { name: 'Zoom in' }).click();
   await expect(page.locator('.zf-zoom-controls span')).toHaveText('150%');
-  const source = page.getByRole('textbox', { name: 'D2 source' });
-  await source.press('ControlOrMeta+End');
-  await source.press('Enter');
-  await source.pressSequentially('Note: Keeps the view');
+  await source(page).press('ControlOrMeta+End');
+  await source(page).press('Enter');
+  await source(page).pressSequentially('Note: Keeps the view');
   await expect(page.locator('.zf-stage')).toContainText('Keeps the view');
   await expect(page.locator('.zf-zoom-controls span')).toHaveText('150%');
   await page.locator('#file').setInputFiles({ name: 'fresh.d2', mimeType: 'text/plain', buffer: Buffer.from('fresh: Fits again') });

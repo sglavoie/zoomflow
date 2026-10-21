@@ -34,7 +34,7 @@ for (const theme of ['light', 'dark'] as const) {
       expect(controls.y + controls.height).toBeLessThanOrEqual(size.height);
       expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(size.width);
       expect(await page.evaluate(() => document.documentElement.scrollHeight)).toBe(size.height);
-      if (browserName === 'chromium') await expect(page).toHaveScreenshot(`offline-${theme}-${size.name}.png`, { maxDiffPixelRatio: 0.005 });
+      if (browserName === 'chromium') await expect(page).toHaveScreenshot(`offline-${theme}-${size.name}.png`);
     }
     await page.getByRole('link', { name: 'Return to checkout', exact: true }).focus();
     await page.keyboard.press('Enter');

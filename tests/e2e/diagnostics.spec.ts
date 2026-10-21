@@ -36,7 +36,7 @@ test('unlocated compiler failures stay in the list without a fabricated line-one
   await page.addInitScript(() => {
     const NativeWorker = window.Worker;
     window.Worker = class extends NativeWorker {
-      postMessage(message: unknown, options?: StructuredSerializeOptions | Transferable[]) {
+      override postMessage(message: unknown, options?: StructuredSerializeOptions | Transferable[]) {
         const request = message as { type?: string; id?: number };
         if (request.type === 'compile') {
           this.dispatchEvent(new MessageEvent('message', { data: { id: request.id, type: 'error', error: 'Layout could not finish' } }));

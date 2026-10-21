@@ -4,16 +4,21 @@
   "private": true,
   "type": "module",
   "packageManager": "pnpm@12.6.0",
+  "engines": {
+    "node": ">=26"
+  },
   "scripts": {
     "test": "pnpm test:unit && pnpm test:e2e",
     "test:unit": "vitest run",
     "test:e2e": "playwright test",
     "typecheck": "tsc --noEmit",
+    "lint": "biome lint .",
     "dev": "pnpm --filter @zoomflow/web dev",
     "build": "pnpm --filter @zoomflow/web build",
     "zoomflow": "node packages/cli/bin/zoomflow.mjs"
   },
   "devDependencies": {
+    "@biomejs/biome": "2.5.15",
     "@playwright/test": "1.64.1",
     "@types/node": "26.6.5",
     "@zoomflow/cli": "workspace:*",

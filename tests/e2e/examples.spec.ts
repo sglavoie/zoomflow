@@ -22,7 +22,7 @@ test('examples switch source and preview, start at root and export under their o
   await ready(page, 'root.layers.checkout');
   await choose(page, 'Database schema', 'schema.d2');
   await expect(page.locator('.zf-stage')).toContainText('Customers');
-  await expect(page.getByRole('textbox', { name: 'D2 source' })).toContainText('shape: sql_table');
+  await expect(source(page)).toContainText('shape: sql_table');
   await expect(page.getByRole('navigation', { name: 'Breadcrumb' }).getByRole('button')).toHaveText(['Root']);
   await expect(page.locator('#lint-summary')).toHaveText('No lint issues');
   const pending = page.waitForEvent('download');
@@ -43,16 +43,15 @@ test('examples switch source and preview, start at root and export under their o
 test('keeps edited examples and uploaded files, including a file with an example name', async ({ page }) => {
   await page.goto('/');
   await ready(page);
-  const source = page.getByRole('textbox', { name: 'D2 source' });
-  await source.fill('draft: My edited order');
+  await source(page).fill('draft: My edited order');
   await expect(page.locator('.zf-stage')).toContainText('My edited order');
   await choose(page, 'Flowchart basics', 'flowchart.d2');
   await choose(page, 'Order flow', 'order.d2');
-  await expect(source).toHaveText('draft: My edited order');
+  await expect(source(page)).toHaveText('draft: My edited order');
   await expect(page.locator('.zf-stage')).toContainText('My edited order');
   await page.locator('#file').setInputFiles({ name: 'order.d2', mimeType: 'text/plain', buffer: Buffer.from('local: Uploaded file') });
   await expect(page.locator('.zf-stage')).toContainText('Uploaded file');
-  await source.fill('local: Edited upload');
+  await source(page).fill('local: Edited upload');
   await choose(page, 'Service architecture', 'architecture.d2');
   await choose(page, /order\.d2.*Your file/, 'order.d2');
   await expect(page.locator('.zf-stage')).toContainText('Edited upload');

@@ -1,16 +1,12 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test } from '@playwright/test';
+import { source, previewReady } from './helpers';
 
-async function ready(page: Page) {
-  await expect(page.locator('#preview-status')).toHaveText('Preview ready');
-  await expect(page.locator('#viewer')).toHaveAttribute('aria-busy', 'false');
-}
-const source = (page: Page) => page.getByRole('textbox', { name: 'D2 source', exact: true });
 test.use({ hasTouch: true, viewport: { width: 390, height: 844 }, colorScheme: 'light', reducedMotion: 'reduce', locale: 'en-US', timezoneId: 'UTC' });
 
 test('the touch canvas exposes readable cues and a zoom hint before any gesture', async ({ page, browserName }) => {
-  await page.goto('/'); await ready(page);
+  await page.goto('/'); await previewReady(page);
   await expect(page.locator('.zf-pan-hint')).toHaveText('Tap Checkout to explore · Pinch to zoom');
-  if (browserName === 'chromium') await expect(page).toHaveScreenshot('touch-canvas.png', { maxDiffPixelRatio: 0.005 });
+  if (browserName === 'chromium') await expect(page).toHaveScreenshot('touch-canvas.png');
   await page.setViewportSize({ width: 844, height: 390 });
   for (const badge of await page.locator('.appendix-icon circle').all()) {
     expect((await badge.boundingBox())!.width).toBeGreaterThanOrEqual(23.9);
@@ -18,11 +14,11 @@ test('the touch canvas exposes readable cues and a zoom hint before any gesture'
 });
 
 test('touch hit areas share available space without covering neighboring shapes', async ({ page }) => {
-  await page.goto('/'); await ready(page);
+  await page.goto('/'); await previewReady(page);
   await page.locator('#mobile-source').click();
   const nodes = Array.from({ length: 12 }, (_, i) => `n${i}`);
   await source(page).fill(`direction: right\n${nodes.map((id) => `${id}: {link: layers.child}`).join('\n')}\n${nodes.join(' -> ')}\nlayers: {child: {a: Detail}}`);
-  await expect(page.locator('[data-shape-id="n11"]')).toBeAttached(); await ready(page);
+  await expect(page.locator('[data-shape-id="n11"]')).toBeAttached(); await previewReady(page);
   await page.locator('#mobile-preview').click();
   await page.evaluate(() => new Promise(requestAnimationFrame));
   for (const size of [{ width: 390, height: 844 }, { width: 844, height: 390 }]) {
@@ -42,7 +38,7 @@ test('touch hit areas share available space without covering neighboring shapes'
 });
 
 test('reveal from the hidden mobile preview frames the selected shape after the pane opens', async ({ page }) => {
-  await page.goto('/'); await ready(page);
+  await page.goto('/'); await previewReady(page);
   await page.getByRole('button', { name: 'Zoom in', exact: true }).click();
   await page.getByRole('button', { name: 'Zoom in', exact: true }).click();
   await page.locator('#mobile-source').click();

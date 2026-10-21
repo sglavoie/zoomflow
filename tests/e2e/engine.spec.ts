@@ -9,7 +9,7 @@ test('a stalled preview can restart without losing the good diagram or latest ed
     (window as any).workersCreated = 0;
     window.Worker = class extends NativeWorker {
       constructor(url: string | URL, options?: WorkerOptions) { super(url, options); (window as any).workersCreated++; }
-      postMessage(message: unknown, options?: StructuredSerializeOptions | Transferable[]) {
+      override postMessage(message: unknown, options?: StructuredSerializeOptions | Transferable[]) {
         const request = message as { type?: string };
         if (request.type === 'compile' && (window as any).holdCompile) {
           (window as any).compileHeld = true;
@@ -81,7 +81,7 @@ for (const failure of ['module', 'worker'] as const) {
         const NativeWorker = window.Worker;
         let fail = true;
         window.Worker = class extends NativeWorker {
-          postMessage(message: unknown, options?: StructuredSerializeOptions | Transferable[]) {
+          override postMessage(message: unknown, options?: StructuredSerializeOptions | Transferable[]) {
             if (fail && (message as { type?: string }).type === 'init') {
               fail = false;
               this.dispatchEvent(new MessageEvent('message', { data: { type: 'error', error: 'Simulated initialization failure' } }));
