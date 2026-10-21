@@ -1,7 +1,13 @@
 # Zoomflow
 
+[![Application checks](https://github.com/sglavoie/zoomflow/actions/workflows/application.yml/badge.svg)](https://github.com/sglavoie/zoomflow/actions/workflows/application.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
 Build flows with a form or edit D2 source, explore drill-down diagrams, and export a navigable HTML file that
 works offline. Diagrams compile locally in your browser.
+
+**Status:** early development. Zoomflow runs from source and is not published to npm;
+expect breaking changes.
 
 ![Zoomflow with a drill-down diagram beside its D2 source](docs/images/workspace.png)
 
@@ -63,3 +69,15 @@ pnpm build
 Install test browsers with `pnpm exec playwright install`. CLI export tests also
 require native D2 v0.9.0; see the [CLI setup](docs/cli.md). Production output is in
 `apps/web/dist`.
+
+## Contributing and security
+
+Issues and pull requests are welcome; run the checks above before opening one.
+Report vulnerabilities privately as described in [SECURITY.md](SECURITY.md).
+
+## License
+
+Zoomflow is released under the [MIT License](LICENSE). It bundles a patched build of
+[D2](https://github.com/d2lang/d2) under the Mozilla Public License 2.0
+([details](vendor/d2/README.md)) and Source Sans Pro under the SIL Open Font
+License 1.1 ([details](fonts/README.md)).
