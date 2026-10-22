@@ -246,8 +246,14 @@ test('format preserves selection, cursor and scroll inside a large edited docume
     view.focus();
     return view.state.doc.sliceString(start, start + 6);
   });
-  await expect.poll(() => page.locator('.cm-scroller').evaluate(el => el.scrollTop)).toBeGreaterThan(500);
-  const scroll = await page.locator('.cm-scroller').evaluate(el => el.scrollTop);
+  // Centering first overshoots on estimated line heights, then settles after CodeMirror
+  // measures them. Record the scroll position only once two readings agree.
+  let scroll = -1;
+  await expect.poll(async () => {
+    const previous = scroll;
+    scroll = await page.locator('.cm-scroller').evaluate(el => el.scrollTop);
+    return scroll > 500 && scroll === previous;
+  }).toBe(true);
   await source(page).press('Shift+Alt+f');
   await expect(page.locator('#format-status')).toHaveText('Source formatted.');
   await expect.poll(() => page.evaluate(() => getSelection()?.toString())).toBe(before);
