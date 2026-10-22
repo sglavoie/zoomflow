@@ -50,6 +50,12 @@ runs:
       with:
         path: ${{ runner.os == 'macOS' && '~/Library/Caches/ms-playwright' || '~/.cache/ms-playwright' }}
         key: playwright-${{ runner.os }}-${{ runner.arch }}-${{ steps.playwright.outputs.version }}-${{ steps.playwright.outputs.key }}
+    # A stalled Ubuntu mirror once held the system library install until the job timed
+    # out; apt's defaults wait minutes per package. Fail over and retry quickly instead.
+    - name: Bound apt network waits
+      if: inputs.browsers != '' && runner.os == 'Linux'
+      shell: bash
+      run: printf 'Acquire::Retries "5";\nAcquire::http::Timeout "20";\nAcquire::https::Timeout "20";\n' | sudo tee /etc/apt/apt.conf.d/99-ci-network
     # Linux needs system libraries even when the browsers are cached; cached browsers are
     # not downloaded again. macOS needs no system dependencies, so a cache hit skips it.
     - name: Install Playwright browsers
