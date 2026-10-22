@@ -5,7 +5,7 @@ import { comparesVisuals } from './helpers';
 
 test.use({ reducedMotion: 'reduce', locale: 'en-US', timezoneId: 'UTC' });
 for (const theme of ['light', 'dark'] as const) {
-  test(`${theme} offline viewer fits phones, landscape and enlarged text`, async ({ page, context, browserName }, info) => {
+  test(`${theme} offline viewer fits phones, landscape and enlarged text`, { tag: '@visual' }, async ({ page, context, browserName }, info) => {
     await page.emulateMedia({ colorScheme: theme });
     await page.goto('/');
     await expect(page.locator('#preview-status')).toHaveText('Preview ready');

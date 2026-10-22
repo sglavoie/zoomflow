@@ -5,7 +5,8 @@ WebKit. `production.spec.ts` runs only in its own project (see below), and scree
 comparisons run in Chromium on macOS only: `visual.spec.ts` and `controls-visual.spec.ts`
 skip elsewhere, while `export.spec.ts`, `export-visual.spec.ts` and `touch.spec.ts` run
 their behavioral checks in every engine but compare baselines only in Chromium on macOS
-(see [Visual baselines](#visual-baselines)). Install browsers with
+(see [Visual baselines](#visual-baselines)). Every test that compares a baseline carries
+the `@visual` tag, which decides where CI runs it. Install browsers with
 `pnpm exec playwright install` and run `pnpm test:e2e` from the workspace root.
 
 The dev server listens on port 4173 and the production preview on 4174. To run separate
@@ -118,10 +119,12 @@ timezone, reduced motion and the AI availability response. `playwright.config.ts
 allows 0.5% differing pixels for every `toHaveScreenshot` call, and the PNG download
 uses the same tolerance.
 
-The application workflow runs Chromium, the production projects and `engine.spec.ts` in
-WebKit on `macos-15`, matching the baseline family; browser versions come from the pinned
-Playwright dependency. Firefox and WebKit behavior tests run in a parallel `ubuntu-24.04`
-job, where `comparesVisuals` skips every comparison. To review a layout change on macOS 15:
+The application workflow runs the `@visual` Chromium tests, the production projects and
+`engine.spec.ts` in WebKit on `macos-15`, matching the baseline family; browser versions
+come from the pinned Playwright dependency. Every other test runs in Chromium, Firefox and
+WebKit on sharded `ubuntu-24.04` jobs, where `comparesVisuals` skips every comparison, so
+a new test that compares a baseline needs the tag (`{ tag: '@visual' }`) or it never
+compares in CI. To review a layout change on macOS 15:
 
 ```sh
 pnpm exec playwright test tests/e2e/visual.spec.ts --project=chromium --update-snapshots
@@ -134,7 +137,7 @@ differently, so some baselines fail locally on newer systems even without change
 
 Without a macOS 15 machine, run the "Application checks" workflow manually (Actions, Run
 workflow) with `update_snapshots` checked. It regenerates the Chromium baselines of the
-visual specs and `export.spec.ts`, skips the regular browser tests and uploads only the
+`@visual` tests, skips the regular browser tests and uploads only the
 new or changed PNGs as the `visual-baselines` artifact, laid out by repository path.
 Extract it at the repository root, inspect every image and commit the ones you accept.
 

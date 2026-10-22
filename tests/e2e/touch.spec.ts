@@ -3,7 +3,7 @@ import { comparesVisuals, source, previewReady, selectSource } from './helpers';
 
 test.use({ hasTouch: true, viewport: { width: 390, height: 844 }, colorScheme: 'light', reducedMotion: 'reduce', locale: 'en-US', timezoneId: 'UTC' });
 
-test('the touch canvas exposes readable cues and a zoom hint before any gesture', async ({ page, browserName }) => {
+test('the touch canvas exposes readable cues and a zoom hint before any gesture', { tag: '@visual' }, async ({ page, browserName }) => {
   await page.goto('/'); await previewReady(page);
   await expect(page.locator('.zf-pan-hint')).toHaveText('Tap Checkout to explore · Pinch to zoom');
   if (comparesVisuals(browserName)) await expect(page).toHaveScreenshot('touch-canvas.png');

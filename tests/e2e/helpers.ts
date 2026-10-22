@@ -5,7 +5,8 @@ import { fileURLToPath } from 'node:url';
  * Whether to compare against the checked-in screenshot baselines. They are Chromium
  * captures from macOS, so other engines and platforms skip only the pixel comparison
  * (behavioral assertions still run). Set ZOOMFLOW_SKIP_VISUAL=1 to skip them on macOS
- * versions that render text differently.
+ * versions that render text differently. CI runs only `@visual`-tagged tests on macOS,
+ * so tag every test that calls this.
  */
 export function comparesVisuals(browserName: string) {
   return browserName === 'chromium' && process.platform === 'darwin' && process.env.ZOOMFLOW_SKIP_VISUAL !== '1';

@@ -17,7 +17,7 @@ async function download(page: Page, format: string, info: TestInfo) {
 
 test.use({ colorScheme: 'light', reducedMotion: 'reduce' });
 
-test('downloads the current SVG and PNG and matches the root PNG snapshot', async ({ page, browserName }, info) => {
+test('downloads the current SVG and PNG and matches the root PNG snapshot', { tag: '@visual' }, async ({ page, browserName }, info) => {
   const fonts = new Set<string>();
   page.on('response', (response) => {
     const face = response.url().match(/SourceSansPro-(Regular|Bold|Italic|Semibold)\.ttf/);

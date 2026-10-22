@@ -58,17 +58,12 @@ jobs:
   browser:
     # Checked-in PNG and workspace baselines are macOS captures. Keep the runner
     # pinned and review baseline changes when upgrading Playwright or the OS.
-    # This job runs Chromium with the visual baselines and the production bundle in
-    # Chromium and WebKit; Firefox and WebKit behavior tests run on Linux below.
-    # Each shard keeps the configured two workers, so per-machine load is unchanged.
+    # macOS runners run each test about twice as slowly as Linux, so this job runs only
+    # the @visual tests that compare baselines, plus the production bundle in Chromium and
+    # WebKit; every other test runs on Linux below.
     if: ${{ !inputs.update_snapshots }}
-    name: browser (${{ matrix.shard }}/2)
     runs-on: macos-15
     timeout-minutes: 30
-    strategy:
-      fail-fast: false
-      matrix:
-        shard: [1, 2]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/setup-workspace
@@ -76,11 +71,16 @@ jobs:
           browsers: chromium webkit
       - name: Production build
         run: pnpm build
-      - name: Chromium, visual regression and production tests
+      - name: Visual regression tests
+        run: pnpm exec playwright test --project=chromium --grep @visual --reporter=github,html,./tests/e2e/flaky-reporter.ts
+      - name: Production tests in Chromium and WebKit
+        if: ${{ !cancelled() }}
         # CI=true adds the production smoke projects, which serve the build above.
-        run: pnpm exec playwright test --project=chromium --project=production --project=production-webkit --shard=${{ matrix.shard }}/2 --reporter=github,html,./tests/e2e/flaky-reporter.ts
+        env:
+          PLAYWRIGHT_HTML_OUTPUT_DIR: playwright-report/production
+        run: pnpm exec playwright test --project=production --project=production-webkit --reporter=github,html,./tests/e2e/flaky-reporter.ts --output=test-results/production
       - name: WebKit engine tests on macOS
-        if: ${{ !cancelled() && matrix.shard == 1 }}
+        if: ${{ !cancelled() }}
         # The vendored D2 build patches a WebKit WASM stack overflow; check it on Safari's platform too.
         env:
           PLAYWRIGHT_HTML_OUTPUT_DIR: playwright-report/webkit-engine
@@ -89,7 +89,7 @@ jobs:
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: ${{ !cancelled() }}
         with:
-          name: browser-report-macos-${{ matrix.shard }}
+          name: browser-report-macos
           path: |
             playwright-report/
             test-results/
@@ -97,8 +97,9 @@ jobs:
           retention-days: 14
 
   engines:
-    # Firefox and WebKit behavior tests, one job per browser and shard. comparesVisuals
-    # in tests/e2e/helpers.ts skips every screenshot comparison off macOS Chromium.
+    # Behavior tests in every engine, one job per browser and shard. comparesVisuals in
+    # tests/e2e/helpers.ts skips every screenshot comparison off macOS Chromium, and the
+    # @visual tests that exist for those comparisons run in the macOS job above.
     if: ${{ !inputs.update_snapshots }}
     name: engines (${{ matrix.browser }} ${{ matrix.shard }}/2)
     runs-on: ubuntu-24.04
@@ -106,7 +107,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        browser: [firefox, webkit]
+        browser: [chromium, firefox, webkit]
         shard: [1, 2]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -117,7 +118,7 @@ jobs:
       - name: Production build
         run: pnpm build
       - name: ${{ matrix.browser }} behavior tests
-        run: pnpm exec playwright test --project=${{ matrix.browser }} --shard=${{ matrix.shard }}/2 --reporter=github,html,./tests/e2e/flaky-reporter.ts
+        run: pnpm exec playwright test --project=${{ matrix.browser }} --grep-invert @visual --shard=${{ matrix.shard }}/2 --reporter=github,html,./tests/e2e/flaky-reporter.ts
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: ${{ !cancelled() }}
         with:
@@ -142,9 +143,7 @@ jobs:
         run: pnpm build
       - name: Update visual baselines
         run: |
-          pnpm exec playwright test --project=chromium --update-snapshots \
-            tests/e2e/visual.spec.ts tests/e2e/controls-visual.spec.ts \
-            tests/e2e/export-visual.spec.ts tests/e2e/touch.spec.ts tests/e2e/export.spec.ts
+          pnpm exec playwright test --project=chromium --grep @visual --update-snapshots
       - name: Collect changed baselines
         if: ${{ !cancelled() }}
         run: |
