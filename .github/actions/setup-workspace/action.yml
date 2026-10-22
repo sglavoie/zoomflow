@@ -1,0 +1,61 @@
+name: Set up workspace
+description: Install Node, the pinned pnpm and the workspace, plus optional Playwright browsers.
+
+inputs:
+  browsers:
+    description: Space-separated Playwright browsers to install, such as "chromium webkit". Empty installs none.
+    default: ''
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+      with:
+        node-version-file: .node-version
+    # pnpm/action-setup's npm self-installer has stalled for 7 minutes on a hung registry
+    # request, then downloaded pnpm a second time to switch versions. Install the exact
+    # packageManager version directly, and let a hung fetch time out and retry quickly.
+    - name: Install pnpm
+      shell: bash
+      run: |
+        set -euo pipefail
+        version=$(node -p "require('./package.json').packageManager.replace(/^pnpm@/, '')")
+        npm install --global --no-audit --no-fund --fetch-timeout=30000 --fetch-retries=4 "pnpm@$version"
+        pnpm --version
+    - name: Locate pnpm store
+      id: pnpm
+      shell: bash
+      run: echo "store=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
+    - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: ${{ steps.pnpm.outputs.store }}
+        key: pnpm-store-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pnpm-lock.yaml') }}
+        restore-keys: pnpm-store-${{ runner.os }}-${{ runner.arch }}-
+    - name: Install workspace
+      shell: bash
+      run: pnpm install --frozen-lockfile
+    - name: Read Playwright version
+      if: inputs.browsers != ''
+      id: playwright
+      shell: bash
+      env:
+        BROWSERS: ${{ inputs.browsers }}
+      run: |
+        echo "version=$(node -p "require('@playwright/test/package.json').version")" >> "$GITHUB_OUTPUT"
+        echo "key=${BROWSERS// /-}" >> "$GITHUB_OUTPUT"
+    - name: Cache Playwright browsers
+      if: inputs.browsers != ''
+      id: playwright-cache
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: ${{ runner.os == 'macOS' && '~/Library/Caches/ms-playwright' || '~/.cache/ms-playwright' }}
+        key: playwright-${{ runner.os }}-${{ runner.arch }}-${{ steps.playwright.outputs.version }}-${{ steps.playwright.outputs.key }}
+    # Linux needs system libraries even when the browsers are cached; cached browsers are
+    # not downloaded again. macOS needs no system dependencies, so a cache hit skips it.
+    - name: Install Playwright browsers
+      if: inputs.browsers != '' && (runner.os == 'Linux' || steps.playwright-cache.outputs.cache-hit != 'true')
+      shell: bash
+      env:
+        BROWSERS: ${{ inputs.browsers }}
+      # BROWSERS is split into separate arguments on purpose.
+      run: pnpm exec playwright install ${{ runner.os == 'Linux' && '--with-deps' || '' }} $BROWSERS
