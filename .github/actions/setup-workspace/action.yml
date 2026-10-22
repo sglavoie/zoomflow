@@ -43,6 +43,7 @@ runs:
       run: |
         echo "version=$(node -p "require('@playwright/test/package.json').version")" >> "$GITHUB_OUTPUT"
         echo "key=${BROWSERS// /-}" >> "$GITHUB_OUTPUT"
+        echo "image=${ImageOS:-unknown}-${ImageVersion:-unknown}" >> "$GITHUB_OUTPUT"
     - name: Cache Playwright browsers
       if: inputs.browsers != ''
       id: playwright-cache
@@ -51,21 +52,30 @@ runs:
         path: ${{ runner.os == 'macOS' && '~/Library/Caches/ms-playwright' || '~/.cache/ms-playwright' }}
         key: playwright-${{ runner.os }}-${{ runner.arch }}-${{ steps.playwright.outputs.version }}-${{ steps.playwright.outputs.key }}
     # Linux needs about 120 MB of system libraries, and the runners' Ubuntu mirror has
-    # stalled on them for up to 30 minutes. Cache the packages so apt installs them
-    # locally; apt still refreshes its index, with bounded waits.
+    # stalled on both those packages and apt's index refresh for up to 30 minutes. Cache
+    # the packages per runner image and install them without touching the network; a cache
+    # miss, or a cached set the image no longer accepts, falls back to the mirror.
     - name: Cache browser system packages
       if: inputs.browsers != '' && runner.os == 'Linux'
       id: apt-cache
       uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: ~/apt-archives
-        key: apt-${{ runner.os }}-${{ runner.arch }}-${{ steps.playwright.outputs.version }}-${{ steps.playwright.outputs.key }}
-    - name: Prepare apt
-      if: inputs.browsers != '' && runner.os == 'Linux'
+        key: apt-${{ steps.playwright.outputs.image }}-${{ runner.arch }}-${{ steps.playwright.outputs.version }}-${{ steps.playwright.outputs.key }}
+    - name: Install cached system packages
+      if: inputs.browsers != '' && runner.os == 'Linux' && steps.apt-cache.outputs.cache-hit == 'true'
+      id: apt-local
       shell: bash
       run: |
-        printf 'Acquire::Retries "5";\nAcquire::http::Timeout "20";\nAcquire::https::Timeout "20";\n' | sudo tee /etc/apt/apt.conf.d/99-ci-network
-        if compgen -G "$HOME/apt-archives/*.deb" > /dev/null; then sudo cp "$HOME"/apt-archives/*.deb /var/cache/apt/archives/; fi
+        if sudo apt-get install -y --no-download --no-install-recommends "$HOME"/apt-archives/*.deb; then
+          echo "installed=true" >> "$GITHUB_OUTPUT"
+        else
+          echo "::warning::Cached browser system packages did not install; falling back to the Ubuntu mirror."
+        fi
+    - name: Bound apt network waits
+      if: inputs.browsers != '' && runner.os == 'Linux' && steps.apt-local.outputs.installed != 'true'
+      shell: bash
+      run: printf 'Acquire::Retries "5";\nAcquire::http::Timeout "20";\nAcquire::https::Timeout "20";\n' | sudo tee /etc/apt/apt.conf.d/99-ci-network
     # Cached browsers are not downloaded again. macOS needs no system dependencies, so a
     # cache hit skips installation entirely.
     - name: Install Playwright browsers
@@ -74,7 +84,7 @@ runs:
       env:
         BROWSERS: ${{ inputs.browsers }}
       # BROWSERS is split into separate arguments on purpose.
-      run: pnpm exec playwright install ${{ runner.os == 'Linux' && '--with-deps' || '' }} $BROWSERS
+      run: pnpm exec playwright install ${{ runner.os == 'Linux' && steps.apt-local.outputs.installed != 'true' && '--with-deps' || '' }} $BROWSERS
     - name: Keep system packages for the cache
       if: inputs.browsers != '' && runner.os == 'Linux' && steps.apt-cache.outputs.cache-hit != 'true'
       shell: bash
