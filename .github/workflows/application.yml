@@ -1,9 +1,14 @@
 name: Application checks
 
+# Pull requests run the full suite; a merge to main does not repeat it. The Pages
+# deploy keeps its own gate (static checks, unit and CLI tests, production smoke tests).
+# Nothing in the app or its tests reads Markdown or docs/, so those changes skip it.
 on:
   pull_request:
-  push:
-    branches: [main]
+    paths-ignore:
+      - '**/*.md'
+      - 'docs/**'
+      - LICENSE
   workflow_dispatch:
     inputs:
       update_snapshots:
@@ -27,33 +32,16 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      # Reads the pnpm version from packageManager in package.json (pnpm 12 needs v6.1+).
-      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+      # CLI integration tests need Chromium; the cached install takes seconds.
+      - uses: ./.github/actions/setup-workspace
         with:
-          node-version-file: .node-version
-          cache: pnpm
-      - name: Install workspace
-        run: pnpm install --frozen-lockfile
-      # Fail fast on static checks before downloading browsers and D2.
+          browsers: chromium
       - name: Typecheck
         run: pnpm typecheck
       - name: Lint
         run: pnpm lint
       - name: Verify vendored checksums
         run: (cd fonts && shasum -a 256 -c SHA256SUMS) && (cd vendor/d2 && shasum -a 256 -c SHA256SUMS)
-      - name: Read Playwright version
-        id: playwright
-        run: echo "version=$(node -p "require('@playwright/test/package.json').version")" >> "$GITHUB_OUTPUT"
-      - name: Cache Playwright browsers
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ runner.arch }}-${{ steps.playwright.outputs.version }}-chromium
-      # Linux needs system libraries even when the browser itself is cached; a cached
-      # browser is not downloaded again.
-      - name: Install Chromium for CLI tests
-        run: pnpm exec playwright install --with-deps chromium
       - uses: ./.github/actions/setup-d2
       - name: Unit and CLI integration tests with coverage
         run: pnpm test:coverage
@@ -72,68 +60,36 @@ jobs:
     # pinned and review baseline changes when upgrading Playwright or the OS.
     # This job runs Chromium with the visual baselines and the production bundle in
     # Chromium and WebKit; Firefox and WebKit behavior tests run on Linux below.
+    # Each shard keeps the configured two workers, so per-machine load is unchanged.
+    if: ${{ !inputs.update_snapshots }}
+    name: browser (${{ matrix.shard }}/2)
     runs-on: macos-15
     timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      # Reads the pnpm version from packageManager in package.json (pnpm 12 needs v6.1+).
-      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+      - uses: ./.github/actions/setup-workspace
         with:
-          node-version-file: .node-version
-          cache: pnpm
-      - name: Install workspace
-        run: pnpm install --frozen-lockfile
-      - name: Read Playwright version
-        id: playwright
-        run: echo "version=$(node -p "require('@playwright/test/package.json').version")" >> "$GITHUB_OUTPUT"
-      - name: Cache Playwright browsers
-        id: playwright-cache
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: ~/Library/Caches/ms-playwright
-          key: playwright-${{ runner.os }}-${{ runner.arch }}-${{ steps.playwright.outputs.version }}-chromium-webkit
-      # macOS needs no system dependencies, so a cache hit skips installation entirely.
-      - name: Install browsers
-        if: steps.playwright-cache.outputs.cache-hit != 'true'
-        run: pnpm exec playwright install chromium webkit
+          browsers: chromium webkit
       - name: Production build
         run: pnpm build
-      - name: Update visual baselines
-        if: ${{ inputs.update_snapshots }}
-        run: |
-          pnpm exec playwright test --project=chromium --update-snapshots \
-            tests/e2e/visual.spec.ts tests/e2e/controls-visual.spec.ts \
-            tests/e2e/export-visual.spec.ts tests/e2e/touch.spec.ts tests/e2e/export.spec.ts
-      - name: Collect changed baselines
-        if: ${{ inputs.update_snapshots && !cancelled() }}
-        run: |
-          mkdir -p snapshot-updates
-          git ls-files --modified --others --exclude-standard -- 'tests/e2e/*-snapshots/*' > "$RUNNER_TEMP/changed.txt"
-          cat "$RUNNER_TEMP/changed.txt"
-          if [ -s "$RUNNER_TEMP/changed.txt" ]; then tar -cf - -T "$RUNNER_TEMP/changed.txt" | tar -xf - -C snapshot-updates; fi
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        if: ${{ inputs.update_snapshots && !cancelled() }}
-        with:
-          name: visual-baselines
-          path: snapshot-updates/
-          if-no-files-found: warn
-          retention-days: 14
       - name: Chromium, visual regression and production tests
-        if: ${{ !inputs.update_snapshots }}
         # CI=true adds the production smoke projects, which serve the build above.
-        run: pnpm exec playwright test --project=chromium --project=production --project=production-webkit --reporter=github,html,./tests/e2e/flaky-reporter.ts
+        run: pnpm exec playwright test --project=chromium --project=production --project=production-webkit --shard=${{ matrix.shard }}/2 --reporter=github,html,./tests/e2e/flaky-reporter.ts
       - name: WebKit engine tests on macOS
-        if: ${{ !cancelled() && !inputs.update_snapshots }}
+        if: ${{ !cancelled() && matrix.shard == 1 }}
         # The vendored D2 build patches a WebKit WASM stack overflow; check it on Safari's platform too.
         env:
           PLAYWRIGHT_HTML_OUTPUT_DIR: playwright-report/webkit-engine
         run: pnpm exec playwright test tests/e2e/engine.spec.ts --project=webkit --reporter=github,html,./tests/e2e/flaky-reporter.ts --output=test-results/webkit-engine
       # Upload after failures and flaky passes alike (flakes are reported as warnings).
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        if: ${{ !cancelled() && !inputs.update_snapshots }}
+        if: ${{ !cancelled() }}
         with:
-          name: browser-report-macos
+          name: browser-report-macos-${{ matrix.shard }}
           path: |
             playwright-report/
             test-results/
@@ -141,44 +97,65 @@ jobs:
           retention-days: 14
 
   engines:
-    # Firefox and WebKit behavior tests. comparesVisuals in tests/e2e/helpers.ts skips
-    # every screenshot comparison off macOS Chromium.
+    # Firefox and WebKit behavior tests, one job per browser and shard. comparesVisuals
+    # in tests/e2e/helpers.ts skips every screenshot comparison off macOS Chromium.
     if: ${{ !inputs.update_snapshots }}
+    name: engines (${{ matrix.browser }} ${{ matrix.shard }}/2)
     runs-on: ubuntu-24.04
     timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        browser: [firefox, webkit]
+        shard: [1, 2]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      # Reads the pnpm version from packageManager in package.json (pnpm 12 needs v6.1+).
-      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+      - uses: ./.github/actions/setup-workspace
         with:
-          node-version-file: .node-version
-          cache: pnpm
-      - name: Install workspace
-        run: pnpm install --frozen-lockfile
-      - name: Read Playwright version
-        id: playwright
-        run: echo "version=$(node -p "require('@playwright/test/package.json').version")" >> "$GITHUB_OUTPUT"
-      - name: Cache Playwright browsers
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ runner.arch }}-${{ steps.playwright.outputs.version }}-firefox-webkit
-      # Linux needs system libraries even when the browsers are cached; cached
-      # browsers are not downloaded again.
-      - name: Install browsers
-        run: pnpm exec playwright install --with-deps firefox webkit
+          browsers: ${{ matrix.browser }}
       # CI=true also starts the production preview server, which needs the build.
       - name: Production build
         run: pnpm build
-      - name: Firefox and WebKit behavior tests
-        run: pnpm exec playwright test --project=firefox --project=webkit --reporter=github,html,./tests/e2e/flaky-reporter.ts
+      - name: ${{ matrix.browser }} behavior tests
+        run: pnpm exec playwright test --project=${{ matrix.browser }} --shard=${{ matrix.shard }}/2 --reporter=github,html,./tests/e2e/flaky-reporter.ts
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: ${{ !cancelled() }}
         with:
-          name: browser-report-linux
+          name: browser-report-linux-${{ matrix.browser }}-${{ matrix.shard }}
           path: |
             playwright-report/
             test-results/
           if-no-files-found: ignore
+          retention-days: 14
+
+  update-snapshots:
+    # Same macOS runner as the browser job, which owns the checked-in baselines.
+    if: ${{ inputs.update_snapshots }}
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/setup-workspace
+        with:
+          browsers: chromium webkit
+      - name: Production build
+        run: pnpm build
+      - name: Update visual baselines
+        run: |
+          pnpm exec playwright test --project=chromium --update-snapshots \
+            tests/e2e/visual.spec.ts tests/e2e/controls-visual.spec.ts \
+            tests/e2e/export-visual.spec.ts tests/e2e/touch.spec.ts tests/e2e/export.spec.ts
+      - name: Collect changed baselines
+        if: ${{ !cancelled() }}
+        run: |
+          mkdir -p snapshot-updates
+          git ls-files --modified --others --exclude-standard -- 'tests/e2e/*-snapshots/*' > "$RUNNER_TEMP/changed.txt"
+          cat "$RUNNER_TEMP/changed.txt"
+          if [ -s "$RUNNER_TEMP/changed.txt" ]; then tar -cf - -T "$RUNNER_TEMP/changed.txt" | tar -xf - -C snapshot-updates; fi
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: ${{ !cancelled() }}
+        with:
+          name: visual-baselines
+          path: snapshot-updates/
+          if-no-files-found: warn
           retention-days: 14
