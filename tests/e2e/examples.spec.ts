@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import { selectMenuOption, downloadExport } from './menu';
-import { source, previewReady, stubAiStatus, openFolder } from './helpers';
+import { d2Module, source, previewReady, stubAiStatus, openFolder } from './helpers';
 
 async function ready(page: Page, id = 'root') {
   await expect(page.locator('.zf-stage')).toHaveAttribute('data-board', id);
@@ -109,7 +109,7 @@ test('picker supports keyboard, Escape without navigating, outside dismissal, an
 test('rapid example changes during compiler startup only publish the last selection', async ({ page }) => {
   let release!: () => void;
   const gate = new Promise<void>((resolve) => { release = resolve; });
-  await page.route(/@d2lang_d2\.js/, async (route) => { await gate; await route.continue(); });
+  await page.route(d2Module, async (route) => { await gate; await route.continue(); });
   try {
     await page.goto('/', { waitUntil: 'domcontentloaded' });
     for (const name of ['Flowchart basics', 'Database schema', 'Sequence diagram']) {

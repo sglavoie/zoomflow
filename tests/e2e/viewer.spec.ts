@@ -3,6 +3,7 @@ import { expect, test, type BrowserContext, type Page, type TestInfo } from '@pl
 import { pathToFileURL } from 'node:url';
 import { readFileSync } from 'node:fs';
 import { board, drill } from './helpers';
+import { devURL } from './servers';
 
 for (const offline of [false, true]) {
   test(`port-free layers infer parent context ${offline ? 'in offline HTML' : 'in the viewer'}`, async ({ page, context }, info) => {
@@ -334,7 +335,8 @@ for (const offline of [false, true]) {
 }
 
 test('destroying a viewer releases its viewport listeners and controls', async ({ page }) => {
-  await page.goto('/');
+  // Imports a source module, which only the dev server serves.
+  await page.goto(`${devURL}/`);
   await board(page, 'root');
   const result = await page.evaluate(async (url) => {
     const { Viewer, setupViewport } = await import(url);
@@ -403,7 +405,8 @@ test('going up returns keyboard focus to the link that leads back down', async (
 });
 
 test('sanitizing removes HTML-namespaced and odd-case executable elements before they run', async ({ page }) => {
-  await page.goto('/');
+  // Imports a source module, which only the dev server serves.
+  await page.goto(`${devURL}/`);
   await board(page, 'root');
   const url = `/@fs${process.cwd()}/packages/viewer/src/sanitize.ts`;
   const mount = (flag: string, sanitize: boolean) => page.evaluate(async ({ url, flag, sanitize }) => {

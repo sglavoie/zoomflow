@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { source, previewReady } from './helpers';
+import { d2Module, regularFont, source, previewReady } from './helpers';
 
 /** Diagram engine startup, slow previews and restarts. */
 
@@ -45,7 +45,7 @@ test('a stalled preview can restart without losing the good diagram or latest ed
 test('startup failure offers retry without source diagnostics or lost edits', async ({ page }) => {
   let fail = true;
   let aborted = 0;
-  await page.route(/SourceSansPro-Regular\.ttf$/, (route) => {
+  await page.route(regularFont, (route) => {
     if (!fail) return route.continue();
     aborted++;
     return route.abort();
@@ -71,7 +71,7 @@ test('startup failure offers retry without source diagnostics or lost edits', as
 test('slow initial download explains the wait while source remains editable', async ({ page }) => {
   let release!: () => void;
   const gate = new Promise<void>((resolve) => { release = resolve; });
-  await page.route(/@d2lang_d2\.js/, async (route) => { await gate; await route.continue(); });
+  await page.route(d2Module, async (route) => { await gate; await route.continue(); });
   try {
     await page.goto('/', { waitUntil: 'domcontentloaded' });
     await expect(page.locator('#engine-message')).toContainText('first download');
@@ -84,7 +84,7 @@ test('slow initial download explains the wait while source remains editable', as
 for (const failure of ['module', 'worker'] as const) {
   test(`retries a failed ${failure} initialization`, async ({ page }) => {
     if (failure === 'module') {
-      await page.route(/@d2lang_d2\.js/, (route) => route.abort(), { times: 1 });
+      await page.route(d2Module, (route) => route.abort(), { times: 1 });
     } else {
       await page.addInitScript(() => {
         const NativeWorker = window.Worker;

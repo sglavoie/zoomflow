@@ -16,4 +16,9 @@ function lazyDependencySourceMaps(): Plugin {
 }
 
 // A relative base lets the static build run from any path, such as a GitHub Pages project site.
-export default defineConfig({ base: './', plugins: [aiPlugin(), lazyDependencySourceMaps()] });
+// Browser tests intercept the lazily loaded D2 module, so give its chunk a stable name.
+export default defineConfig({
+  base: './',
+  plugins: [aiPlugin(), lazyDependencySourceMaps()],
+  build: { rolldownOptions: { output: { manualChunks: (id) => (id.includes('/@d2lang/d2/') ? 'd2' : undefined) } } },
+});

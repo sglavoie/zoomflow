@@ -2,7 +2,7 @@ import { expect, test, type Page, type TestInfo } from '@playwright/test';
 import { pathToFileURL } from 'node:url';
 import { readFile } from 'node:fs/promises';
 import { selectMenuOption, downloadExport } from './menu';
-import { source, previewReady, stubAiStatus, board, drill, comparesVisuals } from './helpers';
+import { source, previewReady, stubAiStatus, board, drill, comparesVisuals, regularFont } from './helpers';
 
 async function download(page: Page, format: string, info: TestInfo) {
   await selectMenuOption(page, '#export-format', format);
@@ -20,7 +20,7 @@ test.use({ colorScheme: 'light', reducedMotion: 'reduce' });
 test('downloads the current SVG and PNG and matches the root PNG snapshot', { tag: '@visual' }, async ({ page, browserName }, info) => {
   const fonts = new Set<string>();
   page.on('response', (response) => {
-    const face = response.url().match(/SourceSansPro-(Regular|Bold|Italic|Semibold)\.ttf/);
+    const face = response.url().match(/SourceSansPro-(Regular|Bold|Italic|Semibold)(-[\w-]+)?\.ttf/);
     if (face && response.ok()) fonts.add(face[1]);
   });
   await page.goto('/');
@@ -43,7 +43,7 @@ test('downloads the current SVG and PNG and matches the root PNG snapshot', { ta
 });
 
 test('uses the shipped font bytes for compilation instead of silently falling back', async ({ page }) => {
-  await page.route('**/SourceSansPro-Regular.ttf', (route) => route.fulfill({
+  await page.route(regularFont, (route) => route.fulfill({
     contentType: 'font/ttf', body: 'invalid font bytes',
   }));
   await page.goto('/');

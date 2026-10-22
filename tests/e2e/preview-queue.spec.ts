@@ -1,5 +1,9 @@
 import { expect, test } from '@playwright/test';
 import { source } from './helpers';
+import { devURL } from './servers';
+
+// Rewrites /src/compiler.ts, which only the dev server serves as its own module.
+test.use({ baseURL: devURL });
 
 test('a busy compiler skips superseded previews and compiles the latest edit next', async ({ page }) => {
   // Hold a real compilation at its boundary, without relying on machine speed.

@@ -98,10 +98,15 @@ CodeMirror access through `withEditorView`, selection) and `menu.ts` (export men
 
 ## Production build
 
-`production.spec.ts` runs only in the `production` project, against `pnpm build` output
-served by `vite preview`. It checks what only the bundle can break: the lazy D2 worker,
-WASM, fonts and the offline export runtime. CI enables it; locally, build first and set
-`ZOOMFLOW_PRODUCTION_E2E=1`:
+Production mode serves `pnpm build` output through `vite preview`. CI always uses it;
+locally, build first and set `ZOOMFLOW_PRODUCTION_E2E=1`. The behavioral projects then
+load the bundle instead of the dev server's modules, which starts each page about a third
+faster. Tests that import or rewrite source modules (`/@fs/…`, `/src/compiler.ts`) pin
+`devURL` from `servers.ts`, which both modes keep running. Intercept the D2 module through
+`d2Module` from `helpers.ts`, which matches it in both modes.
+
+`production.spec.ts` runs only in the `production` project. It checks what only the
+bundle can break: the lazy D2 worker, WASM, fonts and the offline export runtime:
 
 ```sh
 pnpm build

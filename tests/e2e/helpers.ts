@@ -68,21 +68,25 @@ export async function chooseProjectFile(page: Page, path: string) {
   await page.locator(`.example-option[title="browser-project/${path}"]`).click();
 }
 
-// Vite's prebundled CodeMirror module: the same instance the app uses, so
-// `EditorView.findFromDOM` finds the live editor. The only place tests name this path.
-const codemirrorView = '/node_modules/.vite/deps/@codemirror_view.js';
-
 /**
  * Run `fn` in the page with the first pane's CodeMirror view and the `EditorView` class.
  * `fn` is serialized like any `evaluate` callback: it may use only its arguments.
+ * The view comes from the tile CodeMirror links to its content element, which is what
+ * `EditorView.findFromDOM` reads, so this works against the dev server and the bundle.
  */
 export async function withEditorView<R, A = undefined>(page: Page, fn: (view: any, EditorView: any, arg: A) => R, arg?: A): Promise<Awaited<R>> {
-  return page.locator('#editor').evaluate(async (el, { path, body, arg }) => {
-    const { EditorView } = await import(/* @vite-ignore */ path);
-    const view = EditorView.findFromDOM(el.querySelector('.cm-editor')!)!;
-    return new Function(`return (${body})`)()(view, EditorView, arg);
-  }, { path: codemirrorView, body: fn.toString(), arg: arg as A });
+  return page.locator('#editor').evaluate((el, { body, arg }) => {
+    const view = (el.querySelector('.cm-content') as any)?.cmTile?.root?.view;
+    if (!view) throw new Error('No CodeMirror view on .cm-content; check how @codemirror/view implements findFromDOM.');
+    return new Function(`return (${body})`)()(view, view.constructor, arg);
+  }, { body: fn.toString(), arg: arg as A });
 }
+
+/** The lazily loaded D2 module: Vite's prebundled dependency, or the named build chunk. */
+export const d2Module = /\/@d2lang_d2\.js|\/assets\/d2-[\w-]+\.js/;
+
+/** The regular diagram font, by its source name or its hashed build asset. */
+export const regularFont = /\/SourceSansPro-Regular(-[\w-]+)?\.ttf$/;
 
 /** Read CodeMirror's document, including lines outside its rendered viewport. */
 export const editorText = (page: Page) => withEditorView(page, view => view.state.doc.toString() as string);

@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import { selectMenuOption } from './menu';
-import { source, previewReady, stubAiStatus, editorText, withEditorView } from './helpers';
+import { d2Module, source, previewReady, stubAiStatus, editorText, withEditorView } from './helpers';
 
 async function ready(page: Page, id = 'root') {
   await expect(page.locator('.zf-stage')).toHaveAttribute('data-board', id);
@@ -185,7 +185,7 @@ test('format errors leave source and last good preview intact', async ({ page })
 test('formatting during compiler startup cannot overwrite later edits', async ({ page }) => {
   let release!: () => void;
   const gate = new Promise<void>((resolve) => { release = resolve; });
-  await page.route(/@d2lang_d2\.js/, async (route) => {
+  await page.route(d2Module, async (route) => {
     await gate;
     await route.continue();
   });
