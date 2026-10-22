@@ -67,7 +67,9 @@ runs:
       id: apt-local
       shell: bash
       run: |
-        if sudo apt-get install -y --no-download --no-install-recommends "$HOME"/apt-archives/*.deb; then
+        # dpkg installs exactly the cached set; apt's resolver would consult the runner's
+        # stale index and try to download other versions.
+        if sudo dpkg -i "$HOME"/apt-archives/*.deb; then
           echo "installed=true" >> "$GITHUB_OUTPUT"
         else
           echo "::warning::Cached browser system packages did not install; falling back to the Ubuntu mirror."
