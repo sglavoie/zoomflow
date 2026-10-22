@@ -72,7 +72,8 @@ pnpm build
 Install test browsers with `pnpm exec playwright install`. CLI export tests also
 require native D2 v0.9.0; see the [CLI setup](docs/cli.md). Production output is in
 `apps/web/dist`;
-every push to `main` that passes the application checks deploys it to GitHub Pages.
+every push to `main` deploys it to GitHub Pages once typecheck, lint, unit tests and the
+production smoke tests pass.
 
 ## Contributing and security
 
