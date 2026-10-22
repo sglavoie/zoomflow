@@ -50,14 +50,24 @@ runs:
       with:
         path: ${{ runner.os == 'macOS' && '~/Library/Caches/ms-playwright' || '~/.cache/ms-playwright' }}
         key: playwright-${{ runner.os }}-${{ runner.arch }}-${{ steps.playwright.outputs.version }}-${{ steps.playwright.outputs.key }}
-    # A stalled Ubuntu mirror once held the system library install until the job timed
-    # out; apt's defaults wait minutes per package. Fail over and retry quickly instead.
-    - name: Bound apt network waits
+    # Linux needs about 120 MB of system libraries, and the runners' Ubuntu mirror has
+    # stalled on them for up to 30 minutes. Cache the packages so apt installs them
+    # locally; apt still refreshes its index, with bounded waits.
+    - name: Cache browser system packages
+      if: inputs.browsers != '' && runner.os == 'Linux'
+      id: apt-cache
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: ~/apt-archives
+        key: apt-${{ runner.os }}-${{ runner.arch }}-${{ steps.playwright.outputs.version }}-${{ steps.playwright.outputs.key }}
+    - name: Prepare apt
       if: inputs.browsers != '' && runner.os == 'Linux'
       shell: bash
-      run: printf 'Acquire::Retries "5";\nAcquire::http::Timeout "20";\nAcquire::https::Timeout "20";\n' | sudo tee /etc/apt/apt.conf.d/99-ci-network
-    # Linux needs system libraries even when the browsers are cached; cached browsers are
-    # not downloaded again. macOS needs no system dependencies, so a cache hit skips it.
+      run: |
+        printf 'Acquire::Retries "5";\nAcquire::http::Timeout "20";\nAcquire::https::Timeout "20";\n' | sudo tee /etc/apt/apt.conf.d/99-ci-network
+        if compgen -G "$HOME/apt-archives/*.deb" > /dev/null; then sudo cp "$HOME"/apt-archives/*.deb /var/cache/apt/archives/; fi
+    # Cached browsers are not downloaded again. macOS needs no system dependencies, so a
+    # cache hit skips installation entirely.
     - name: Install Playwright browsers
       if: inputs.browsers != '' && (runner.os == 'Linux' || steps.playwright-cache.outputs.cache-hit != 'true')
       shell: bash
@@ -65,3 +75,10 @@ runs:
         BROWSERS: ${{ inputs.browsers }}
       # BROWSERS is split into separate arguments on purpose.
       run: pnpm exec playwright install ${{ runner.os == 'Linux' && '--with-deps' || '' }} $BROWSERS
+    - name: Keep system packages for the cache
+      if: inputs.browsers != '' && runner.os == 'Linux' && steps.apt-cache.outputs.cache-hit != 'true'
+      shell: bash
+      run: |
+        mkdir -p ~/apt-archives
+        if compgen -G "/var/cache/apt/archives/*.deb" > /dev/null; then cp /var/cache/apt/archives/*.deb ~/apt-archives/; fi
+        du -sh ~/apt-archives
