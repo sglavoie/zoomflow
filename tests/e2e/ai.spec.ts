@@ -62,6 +62,30 @@ test('Claude config directory is visible and sent with shared environment', asyn
   await expect(page.locator('#ai-status')).toHaveText('No change needed.');
 });
 
+test('Full access sends its working directory only once switched on', async ({ page }) => {
+  const requests: Record<string, unknown>[] = [];
+  await page.route('**/api/ai', async (route) => {
+    requests.push(route.request().postDataJSON());
+    await route.fulfill({ status: 200, contentType: 'application/json',
+      body: JSON.stringify({ reply: 'No change needed.', source: null }) });
+  });
+  await page.goto('/'); await previewReady(page);
+  await page.locator('#ai-assistant > summary').click();
+  await page.locator('.ai-settings summary').click();
+  await expect(page.locator('#ai-working-directory')).toBeHidden();
+  const prompt = page.getByRole('textbox', { name: 'Ask AI about this diagram' });
+  await prompt.fill('Explain this board');
+  await page.getByRole('button', { name: 'Send' }).click();
+  await expect(page.locator('#ai-status')).toHaveText('No change needed.');
+  await page.getByLabel('Full access (bypass permissions)').check();
+  await page.locator('#ai-working-directory').fill('~/projects/example');
+  await prompt.fill('Summarize the latest features');
+  await page.getByRole('button', { name: 'Send' }).click();
+  await expect.poll(() => requests.length).toBe(2);
+  expect(requests[0]!.fullAccess).toBe(false);
+  expect(requests[1]).toMatchObject({ fullAccess: true, workingDirectory: '~/projects/example' });
+});
+
 test('AI errors and stale responses leave the source alone', async ({ page }) => {
   let release!: () => void;
   const gate = new Promise<void>((resolve) => { release = resolve; });

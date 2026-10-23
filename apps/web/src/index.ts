@@ -189,15 +189,19 @@ function ensureSecondPane() {
   paneRoots.b.append(...secondPane);
   // Start with the first pane's AI settings, then keep both panes' settings in step.
   // The panes share one availability check for the same settings.
-  const settings = ['ai-provider', 'ai-environment', 'ai-claude-config-dir'];
+  const settings = ['ai-provider', 'ai-environment', 'ai-claude-config-dir', 'ai-full-access', 'ai-working-directory'];
   const [a, b] = [paneScope('a', paneRoots.a), paneScope('b', paneRoots.b)];
   for (const name of settings) {
     const [first, second] = [a.part<HTMLInputElement>(name), b.part<HTMLInputElement>(name)];
-    second.value = first.value;
+    const state = (input: HTMLInputElement) => input.type === 'checkbox' ? input.checked : input.value;
+    const copy = (from: HTMLInputElement, to: HTMLInputElement) => {
+      if (to.type === 'checkbox') to.checked = from.checked; else to.value = from.value;
+    };
+    copy(first, second);
     for (const [from, to] of [[first, second], [second, first]]) {
       from.addEventListener('change', () => {
-        if (to.value === from.value) return;
-        to.value = from.value;
+        if (state(to) === state(from)) return;
+        copy(from, to);
         to.dispatchEvent(new Event('change'));
       });
     }

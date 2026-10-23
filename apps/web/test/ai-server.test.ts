@@ -1,5 +1,5 @@
 import { afterEach, expect, it, vi } from 'vitest';
-import { chmod, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { chmod, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises';
 import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createServer, request as httpRequest, type IncomingMessage, type ServerResponse } from 'node:http';
@@ -86,6 +86,36 @@ it('starts each CLI without the user\'s own settings', async () => {
   expect(claude[claude.indexOf('--setting-sources') + 1]).toBe('');
   expect(claude).not.toContain('--bare');
   expect(await args('codex')).toContain('--ignore-user-config');
+});
+
+it('bypasses permissions in the chosen working directory only when full access is on', async () => {
+  fakeBin = await mkdtemp(join(tmpdir(), 'zoomflow-ai-test-'));
+  for (const name of ['claude', 'codex']) {
+    const reply = `JSON.stringify({ args: process.argv.slice(2), cwd: process.cwd(), prompt })`;
+    const output = name === 'claude' ? `{ is_error: false, structured_output: { reply: ${reply}, source: null } }` : `{ reply: ${reply}, source: null }`;
+    await writeFile(join(fakeBin, name), `#!/usr/bin/env node\nlet prompt = '';\nprocess.stdin.on('data', (chunk) => prompt += chunk);\nprocess.stdin.on('end', () => process.stdout.write(JSON.stringify(${output})));\n`);
+    await chmod(join(fakeBin, name), 0o755);
+  }
+  process.env.PATH = `${fakeBin}:${originalPath}`;
+  const run = async (provider: 'claude' | 'codex', fullAccess: boolean) => JSON.parse((await runAi({ ...request, provider,
+    fullAccess, workingDirectory: fakeBin })).reply) as { args: string[]; cwd: string; prompt: string };
+  const claude = await run('claude', true);
+  expect(claude.args).toContain('--dangerously-skip-permissions');
+  expect(claude.args).not.toContain('--tools');
+  expect(await realpath(claude.cwd)).toBe(await realpath(fakeBin));
+  expect(claude.prompt).toContain('full access');
+  const codex = await run('codex', true);
+  expect(codex.args).toContain('--dangerously-bypass-approvals-and-sandbox');
+  expect(codex.args).not.toContain('--sandbox');
+  expect(await realpath(codex.cwd)).toBe(await realpath(fakeBin));
+  // Without full access the working directory setting is ignored.
+  const limited = await run('claude', false);
+  expect(limited.args).not.toContain('--dangerously-skip-permissions');
+  expect(limited.args[limited.args.indexOf('--tools') + 1]).toBe('');
+  expect(limited.cwd).toMatch(/zoomflow-ai-(?!test-)/);
+  expect((await run('codex', false)).args).toContain('read-only');
+  await expect(runAi({ ...request, provider: 'claude', fullAccess: true, workingDirectory: join(fakeBin, 'missing') }))
+    .rejects.toThrow('does not exist or is not a directory');
 });
 
 it('runs Claude Code and reads structured output', async () => {

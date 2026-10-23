@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process';
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, rm, stat, writeFile } from 'node:fs/promises';
 import { homedir, tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { promisify } from 'node:util';
@@ -9,7 +9,7 @@ import type { Plugin } from 'vite';
 
 type Provider = 'claude' | 'codex';
 type AiRequest = { provider: Provider; prompt: string; source: string; name: string; board: string;
-  environment?: string; claudeConfigDir?: string };
+  environment?: string; claudeConfigDir?: string; fullAccess?: boolean; workingDirectory?: string };
 export type AiReply = { reply: string; source: string | null };
 
 const schema = {
@@ -23,6 +23,8 @@ const MAX_REQUEST = 1_000_000;
 const MAX_STATUS_REQUEST = 64_000;
 const MAX_OUTPUT = 500_000;
 const TIMEOUT_MS = 180_000;
+/** Full access lets the CLI read files and run commands, which takes longer than answering from the source alone. */
+const FULL_ACCESS_TIMEOUT_MS = 600_000;
 const exec = promisify(execFile);
 
 const optionalText = (value: unknown, limit: number) => value === undefined || typeof value === 'string' && value.length <= limit;
@@ -41,7 +43,8 @@ function isRequest(value: unknown): value is AiRequest {
   return typeof item.prompt === 'string' && item.prompt.trim().length > 0 && item.prompt.length <= 8_000
     && typeof item.source === 'string' && item.source.length <= 180_000
     && typeof item.name === 'string' && item.name.length <= 300
-    && typeof item.board === 'string' && item.board.length <= 300;
+    && typeof item.board === 'string' && item.board.length <= 300
+    && (item.fullAccess === undefined || typeof item.fullAccess === 'boolean') && optionalText(item.workingDirectory, 4_000);
 }
 
 /** Variables that load code or change which programs run would let a page run arbitrary commands. */
@@ -71,19 +74,31 @@ function parseEnvironment(text: string): Record<string, string> {
   return Object.fromEntries(entries);
 }
 
+/** Expand `~` to the home directory and resolve relative paths from `base`. */
+function expandPath(setting: string, label: string, base = process.cwd()) {
+  const path = setting.trim();
+  if (!path) throw new Error(`${label} cannot be empty.`);
+  if (path.startsWith('~') && path !== '~' && !path.startsWith('~/')) {
+    throw new Error(`${label} supports ~ or ~/ for the home directory.`);
+  }
+  return path === '~' ? homedir() : path.startsWith('~/') ? resolve(homedir(), path.slice(2)) : resolve(base, path);
+}
+
 function processEnvironment(request: StatusRequest): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = { ...process.env, ...parseEnvironment(request.environment ?? '') };
-  if (request.provider === 'claude') {
-    const setting = request.claudeConfigDir ?? '~/.claude';
-    const path = setting.trim();
-    if (!path) throw new Error('CLAUDE_CONFIG_DIR cannot be empty.');
-    if (path.startsWith('~') && path !== '~' && !path.startsWith('~/')) {
-      throw new Error('CLAUDE_CONFIG_DIR supports ~ or ~/ for the home directory.');
-    }
-    env.CLAUDE_CONFIG_DIR = path === '~' ? homedir()
-      : path.startsWith('~/') ? resolve(homedir(), path.slice(2)) : resolve(process.cwd(), path);
-  }
+  if (request.provider === 'claude') env.CLAUDE_CONFIG_DIR = expandPath(request.claudeConfigDir ?? '~/.claude', 'CLAUDE_CONFIG_DIR');
   return env;
+}
+
+/** pnpm and npm record where `pnpm dev` was typed, usually the repository root rather than apps/web. */
+const launchDirectory = () => process.env.INIT_CWD || process.cwd();
+
+/** The directory a full-access request works in: the setting, or where the local server was started. */
+export async function workingDirectory(setting: string | undefined) {
+  const path = setting?.trim() ? expandPath(setting, 'Working directory', launchDirectory()) : launchDirectory();
+  const info = await stat(path).catch(() => undefined);
+  if (!info?.isDirectory()) throw new Error(`Working directory ${path} does not exist or is not a directory.`);
+  return path;
 }
 
 export async function providerStatus(request: StatusRequest): Promise<{ available: boolean; reason?: string }> {
@@ -109,8 +124,11 @@ export async function providerStatus(request: StatusRequest): Promise<{ availabl
   return { available: false, reason: 'Codex is installed. Sign in with codex login.' };
 }
 
-function instructions(request: AiRequest): string {
-  return `You are helping edit a D2 diagram in Zoomflow. Answer the user's request using only the supplied diagram source. Do not access files, run commands, or use tools. Return one JSON object with exactly two fields: "reply" (a concise explanation or error) and "source" (the full replacement D2 source, or null if no change is needed or you cannot safely make it). Preserve unrelated source and working drill-down links. Do not include markdown fences. If the user asks a question without requesting a change, set source to null.\n\nDocument: ${request.name}\nCurrent board: ${request.board}\n\nCurrent D2 source:\n<d2-source>\n${request.source}\n</d2-source>\n\nUser request:\n<request>\n${request.prompt}\n</request>`;
+function instructions(request: AiRequest, directory?: string): string {
+  const access = directory
+    ? `You have full access to this computer: you may read files, run commands, and use tools to gather what the request needs, starting in the working directory ${directory}. Do not write the diagram to a file yourself; return any diagram change in the JSON reply.`
+    : 'Answer the user\'s request using only the supplied diagram source. Do not access files, run commands, or use tools.';
+  return `You are helping edit a D2 diagram in Zoomflow. ${access} Return one JSON object with exactly two fields: "reply" (a concise explanation or error) and "source" (the full replacement D2 source, or null if no change is needed or you cannot safely make it). Preserve unrelated source and working drill-down links. Do not include markdown fences. If the user asks a question without requesting a change, set source to null.\n\nDocument: ${request.name}\nCurrent board: ${request.board}\n\nCurrent D2 source:\n<d2-source>\n${request.source}\n</d2-source>\n\nUser request:\n<request>\n${request.prompt}\n</request>`;
 }
 
 function parseReply(output: string, provider: Provider): AiReply {
@@ -140,18 +158,22 @@ function parseReply(output: string, provider: Provider): AiReply {
 export async function runAi(request: AiRequest, signal?: AbortSignal): Promise<AiReply> {
   signal?.throwIfAborted();
   const env = processEnvironment(request);
+  const cwd = request.fullAccess ? await workingDirectory(request.workingDirectory) : undefined;
+  signal?.throwIfAborted();
   const directory = await mkdtemp(join(tmpdir(), 'zoomflow-ai-'));
   try {
     const schemaPath = join(directory, 'reply.schema.json');
     if (request.provider === 'codex') await writeFile(schemaPath, JSON.stringify(schema));
     // Leave out the user's own CLI settings (hooks, plugins, instructions); sign-in still applies.
+    // Full access replaces the tool-less or read-only mode with one that skips every permission check.
     const args = request.provider === 'claude'
-      ? ['-p', '--tools', '', '--setting-sources', '', '--strict-mcp-config', '--no-session-persistence', '--output-format', 'json', '--json-schema', JSON.stringify(schema)]
-      : ['exec', '--sandbox', 'read-only', '--ephemeral', '--ignore-user-config', '--skip-git-repo-check', '--output-schema', schemaPath, '-'];
+      ? ['-p', ...(cwd ? ['--dangerously-skip-permissions'] : ['--tools', '']), '--setting-sources', '', '--strict-mcp-config', '--no-session-persistence', '--output-format', 'json', '--json-schema', JSON.stringify(schema)]
+      : ['exec', ...(cwd ? ['--dangerously-bypass-approvals-and-sandbox'] : ['--sandbox', 'read-only']), '--ephemeral', '--ignore-user-config', '--skip-git-repo-check', '--output-schema', schemaPath, '-'];
+    const timeout = cwd ? FULL_ACCESS_TIMEOUT_MS : TIMEOUT_MS;
     const command = request.provider === 'claude' ? 'claude' : 'codex';
     signal?.throwIfAborted();
     const output = await new Promise<string>((resolve, reject) => {
-      const child = spawn(command, args, { cwd: directory, env, stdio: ['pipe', 'pipe', 'pipe'], shell: false,
+      const child = spawn(command, args, { cwd: cwd ?? directory, env, stdio: ['pipe', 'pipe', 'pipe'], shell: false,
         detached: process.platform !== 'win32' });
       let stdout = '';
       let stderr = '';
@@ -166,7 +188,7 @@ export async function runAi(request: AiRequest, signal?: AbortSignal): Promise<A
       };
       signal?.addEventListener('abort', abort, { once: true });
       if (signal?.aborted) abort();
-      const timer = setTimeout(() => { timedOut = true; abort(); }, TIMEOUT_MS);
+      const timer = setTimeout(() => { timedOut = true; abort(); }, timeout);
       child.stdout.setEncoding('utf8');
       child.stderr.setEncoding('utf8');
       child.stdout.on('data', (chunk: string) => {
@@ -183,13 +205,13 @@ export async function runAi(request: AiRequest, signal?: AbortSignal): Promise<A
         clearTimeout(timer);
         signal?.removeEventListener('abort', abort);
         if (signal?.aborted) reject(new Error('AI request canceled.'));
-        else if (timedOut) reject(new Error(`${command} timed out after 3 minutes.`));
+        else if (timedOut) reject(new Error(`${command} timed out after ${timeout / 60_000} minutes.`));
         else if (overflow) reject(new Error(`${command} returned too much output.`));
         else if (code !== 0) reject(new Error(`${command} failed: ${stderr.trim() || stdout.trim() || `exit code ${code}`}`));
         else resolve(stdout);
       });
       child.stdin.on('error', () => { /* Process errors are reported by close/error. */ });
-      child.stdin.end(instructions(request));
+      child.stdin.end(instructions(request, cwd));
     });
     return parseReply(output, request.provider);
   } finally { await rm(directory, { recursive: true, force: true }); }
@@ -257,7 +279,7 @@ export async function handle(request: IncomingMessage, response: ServerResponse)
     try { payload = JSON.parse(body); }
     catch { send(response, 400, { error: 'Invalid JSON request.' }); return; }
     if (!isRequest(payload)) { send(response, 400, { error: 'Invalid AI request.' }); return; }
-    try { processEnvironment(payload); }
+    try { processEnvironment(payload); if (payload.fullAccess) await workingDirectory(payload.workingDirectory); }
     catch (error) { send(response, 400, { error: message(error) }); return; }
     const controller = new AbortController();
     const disconnect = () => controller.abort();

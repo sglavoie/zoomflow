@@ -1234,8 +1234,21 @@ footer {
   font-weight: normal;
   color: var(--subtle);
 }
-[data-part="ai-claude-config"][hidden] {
+[data-part="ai-claude-config"][hidden],
+[data-part="ai-working-config"][hidden] {
   display: none;
+}
+.ai-full-access {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+[data-part="ai-form"] .ai-full-access input {
+  width: auto;
+}
+.ai-full-access-note {
+  margin: 0;
+  color: var(--subtle);
 }
 [data-part="ai-form"] input,
 [data-part="ai-form"] textarea {

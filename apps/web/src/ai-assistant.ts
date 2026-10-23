@@ -54,6 +54,9 @@ export function setupAiAssistant({ root, part }: PaneScope, { read, validate, ap
   const claudeConfig = part<HTMLElement>('ai-claude-config');
   const claudeConfigDir = part<HTMLInputElement>('ai-claude-config-dir');
   const environment = part<HTMLTextAreaElement>('ai-environment');
+  const fullAccess = part<HTMLInputElement>('ai-full-access');
+  const workingConfig = part<HTMLElement>('ai-working-config');
+  const workingDirectory = part<HTMLInputElement>('ai-working-directory');
   const prompt = part<HTMLTextAreaElement>('ai-prompt');
   const button = part<HTMLButtonElement>('ai-send');
   const status = part<HTMLElement>('ai-status');
@@ -161,6 +164,12 @@ export function setupAiAssistant({ root, part }: PaneScope, { read, validate, ap
     claudeConfig.hidden = !isClaude;
     claudeConfigDir.disabled = !isClaude;
   }
+  function showAccessSettings() {
+    workingConfig.hidden = !fullAccess.checked;
+    workingDirectory.disabled = !fullAccess.checked;
+  }
+  fullAccess.addEventListener('change', showAccessSettings);
+  showAccessSettings();
   provider.addEventListener('change', () => { showProviderSettings(); recheck(); });
   environment.addEventListener('change', recheck);
   claudeConfigDir.addEventListener('change', recheck);
@@ -190,7 +199,8 @@ export function setupAiAssistant({ root, part }: PaneScope, { read, validate, ap
     try {
       const response = await fetch('/api/ai', { method: 'POST', signal: controller.signal, headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ provider: provider.value, prompt: question, source: snapshot.source, name: snapshot.name,
-          board: snapshot.board, environment: environment.value, claudeConfigDir: claudeConfigDir.value }) });
+          board: snapshot.board, environment: environment.value, claudeConfigDir: claudeConfigDir.value,
+          fullAccess: fullAccess.checked, workingDirectory: workingDirectory.value }) });
       const data = await readAiResponse(response);
       controller.signal.throwIfAborted();
       if (typeof data.reply !== 'string' || (data.source !== null && typeof data.source !== 'string')) {

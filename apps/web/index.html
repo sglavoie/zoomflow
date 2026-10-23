@@ -209,6 +209,11 @@
               <label class="ai-field" for="ai-environment">Environment <span>One NAME=value per line; values are literal</span>
                 <textarea id="ai-environment" data-part="ai-environment" rows="2" spellcheck="false" autocomplete="off" autocapitalize="off" placeholder="EXAMPLE_KEY=value"></textarea>
               </label>
+              <label class="ai-full-access" for="ai-full-access"><input id="ai-full-access" type="checkbox" aria-describedby="ai-full-access-note" /> Full access (bypass permissions)</label>
+              <p id="ai-full-access-note" class="ai-full-access-note">Lets the AI read and change files and run commands without asking. A diagram you didn't write could steer it.</p>
+              <label id="ai-working-config" data-part="ai-working-config" class="ai-field" for="ai-working-directory" hidden>Working directory <span>Blank uses the folder where the local server started</span>
+                <input id="ai-working-directory" type="text" spellcheck="false" autocomplete="off" placeholder="~/projects/example" disabled />
+              </label>
             </details>
           </form>
         </details>

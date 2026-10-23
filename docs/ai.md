@@ -51,6 +51,21 @@ Zoomflow starts Claude Code with `--setting-sources ''` and Codex with
 instructions and Codex `config.toml` don't affect AI requests; your existing
 sign-in still applies.
 
+## Full access
+
+By default the AI answers only from the diagram source, so it can't answer
+requests that need your files, such as "diagram the latest five features in this
+repository". Check **Full access (bypass permissions)** under **AI settings** to let
+it read and change files and run commands without asking: Zoomflow starts Claude
+Code with `--dangerously-skip-permissions` and Codex with
+`--dangerously-bypass-approvals-and-sandbox`. The CLI starts in the **Working
+directory** field, or, when that is blank, in the folder where you ran `pnpm dev`.
+`~` expands to your home directory, and relative paths resolve from that folder.
+A missing directory is reported before the CLI starts. Requests with full access
+may run for up to 10 minutes instead of 3. Diagram changes still arrive as one
+undoable editor edit. The setting is kept only in the current page and starts
+off on every load.
+
 ## Security
 
 The AI endpoint answers only connections from this computer (a loopback address)
@@ -59,7 +74,9 @@ itself. Treat the diagram as untrusted input: a `.d2` file you opened can contai
 text written to steer the AI, such as instructions in comments or labels. Review
 proposed changes before keeping them. Claude Code runs without tools, but Codex runs
 in its read-only sandbox, which can still read files on this computer, so a
-manipulated request could quote local file contents in its reply.
+manipulated request could quote local file contents in its reply. With **Full
+access** on, a manipulated request could change or delete files, run any command
+or send data elsewhere. Use it only with diagrams you trust.
 
 ## Error feedback
 
