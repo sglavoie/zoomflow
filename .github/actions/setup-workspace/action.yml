@@ -55,13 +55,16 @@ runs:
     # stalled on both those packages and apt's index refresh for up to 30 minutes. Cache
     # the packages per runner image and install them without touching the network; a cache
     # miss, or a cached set the image no longer accepts, falls back to the mirror.
-    - name: Cache browser system packages
+    # One entry holds the packages for every browser, so each job's key matches it
+    # exactly. A per-browser key prefix-matched another set's entry, which counts as a
+    # miss, and was saved only when a job got through the mirror and passed.
+    - name: Restore browser system packages
       if: inputs.browsers != '' && runner.os == 'Linux'
       id: apt-cache
-      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: ~/apt-archives
-        key: apt-${{ steps.playwright.outputs.image }}-${{ runner.arch }}-${{ steps.playwright.outputs.version }}-${{ steps.playwright.outputs.key }}
+        key: apt-all-${{ steps.playwright.outputs.image }}-${{ runner.arch }}-${{ steps.playwright.outputs.version }}
     - name: Install cached system packages
       if: inputs.browsers != '' && runner.os == 'Linux' && steps.apt-cache.outputs.cache-hit == 'true'
       id: apt-local
@@ -74,10 +77,29 @@ runs:
         else
           echo "::warning::Cached browser system packages did not install; falling back to the Ubuntu mirror."
         fi
-    - name: Bound apt network waits
+    - name: Install system packages from the mirror
       if: inputs.browsers != '' && runner.os == 'Linux' && steps.apt-local.outputs.installed != 'true'
       shell: bash
-      run: printf 'Acquire::Retries "5";\nAcquire::http::Timeout "20";\nAcquire::https::Timeout "20";\n' | sudo tee /etc/apt/apt.conf.d/99-ci-network
+      run: |
+        printf 'Acquire::Retries "5";\nAcquire::http::Timeout "20";\nAcquire::https::Timeout "20";\n' | sudo tee /etc/apt/apt.conf.d/99-ci-network
+        # Every browser's dependencies, so the saved set serves all jobs.
+        pnpm exec playwright install-deps chromium firefox webkit
+    # Save right away: a later failure or cancellation would skip a post-job save.
+    - name: Keep system packages for the cache
+      if: inputs.browsers != '' && runner.os == 'Linux' && steps.apt-cache.outputs.cache-hit != 'true'
+      shell: bash
+      run: |
+        mkdir -p ~/apt-archives
+        if compgen -G "/var/cache/apt/archives/*.deb" > /dev/null; then cp /var/cache/apt/archives/*.deb ~/apt-archives/; fi
+        du -sh ~/apt-archives
+    - name: Save browser system packages
+      if: inputs.browsers != '' && runner.os == 'Linux' && steps.apt-cache.outputs.cache-hit != 'true'
+      # Parallel jobs that miss together race to save; only the first succeeds.
+      continue-on-error: true
+      uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: ~/apt-archives
+        key: ${{ steps.apt-cache.outputs.cache-primary-key }}
     # Cached browsers are not downloaded again. macOS needs no system dependencies, so a
     # cache hit skips installation entirely.
     - name: Install Playwright browsers
@@ -86,11 +108,4 @@ runs:
       env:
         BROWSERS: ${{ inputs.browsers }}
       # BROWSERS is split into separate arguments on purpose.
-      run: pnpm exec playwright install ${{ runner.os == 'Linux' && steps.apt-local.outputs.installed != 'true' && '--with-deps' || '' }} $BROWSERS
-    - name: Keep system packages for the cache
-      if: inputs.browsers != '' && runner.os == 'Linux' && steps.apt-cache.outputs.cache-hit != 'true'
-      shell: bash
-      run: |
-        mkdir -p ~/apt-archives
-        if compgen -G "/var/cache/apt/archives/*.deb" > /dev/null; then cp /var/cache/apt/archives/*.deb ~/apt-archives/; fi
-        du -sh ~/apt-archives
+      run: pnpm exec playwright install $BROWSERS
