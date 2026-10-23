@@ -82,8 +82,20 @@ runs:
       shell: bash
       run: |
         printf 'Acquire::Retries "5";\nAcquire::http::Timeout "20";\nAcquire::https::Timeout "20";\n' | sudo tee /etc/apt/apt.conf.d/99-ci-network
-        # Every browser's dependencies, so the saved set serves all jobs.
-        pnpm exec playwright install-deps chromium firefox webkit
+        # apt's own timeouts have not stopped the stalls, so each attempt gets 4 minutes and
+        # a stalled mirror fails the job in about 9 instead of holding it for 30. timeout
+        # runs as root so it can kill the root apt processes too. Every browser's
+        # dependencies are installed, so the saved set serves all jobs.
+        for attempt in 1 2; do
+          if sudo timeout --kill-after=20 240 "$(command -v node)" node_modules/@playwright/test/cli.js install-deps chromium firefox webkit; then
+            exit 0
+          fi
+          echo "::warning::Installing browser system packages from the mirror failed or stalled (attempt $attempt of 2)."
+          # Finish any half-configured packages left by the killed attempt.
+          sudo dpkg --configure -a || true
+        done
+        echo "::error::The Ubuntu mirror did not deliver the browser system packages; re-run the job."
+        exit 1
     # Save right away: a later failure or cancellation would skip a post-job save.
     - name: Keep system packages for the cache
       if: inputs.browsers != '' && runner.os == 'Linux' && steps.apt-cache.outputs.cache-hit != 'true'
