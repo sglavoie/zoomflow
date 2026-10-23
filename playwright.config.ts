@@ -19,6 +19,9 @@ export default defineConfig({
   // CI retries a failed test once. A test that passes on retry does not fail the run;
   // tests/e2e/flaky-reporter.ts reports it as a warning instead.
   retries: process.env.CI ? 1 : 0,
+  // Tests share no state, so they spread across workers and shards one by one rather
+  // than file by file; otherwise the largest spec file sets the length of a CI shard.
+  fullyParallel: true,
   workers: 2,
   use: { baseURL: appURL, trace: 'retain-on-failure' },
   webServer: [
