@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { childToward, resolveRouteHash, restoreTrail, routeFallbackNotice, simplifyTrail, watchHistory } from '../src/navigation';
 
 const hashes = new Set(['#/', '#/checkout', '#/checkout/charge']);
@@ -63,16 +63,38 @@ describe('restoreTrail', () => {
 describe('watchHistory', () => {
   it('restores once per traversal and once for a bare hash change', () => {
     const target = new EventTarget();
+    const location = { hash: '#/' };
+    vi.stubGlobal('location', location);
     let calls = 0;
     watchHistory(target, () => { calls++; });
-    target.dispatchEvent(new Event('popstate'));
-    target.dispatchEvent(new Event('hashchange'));
+    const go = (event: string, hash: string) => { location.hash = hash; target.dispatchEvent(new Event(event)); };
+    go('popstate', '#/a');
+    go('hashchange', '#/a');
     expect(calls).toBe(1);
-    target.dispatchEvent(new Event('hashchange'));
+    go('hashchange', '#/b');
     expect(calls).toBe(2);
-    target.dispatchEvent(new Event('popstate'));
-    target.dispatchEvent(new Event('popstate'));
+    // Traversals between entries with the same hash fire no hashchange.
+    go('popstate', '#/b');
+    go('popstate', '#/b');
     expect(calls).toBe(4);
+    // An address-bar edit after them still restores.
+    go('hashchange', '#/c');
+    expect(calls).toBe(5);
+    vi.unstubAllGlobals();
+  });
+
+  it('skips the hashchange of a traversal whose restore already replaced the hash', () => {
+    const target = new EventTarget();
+    const location = { hash: '#/' };
+    vi.stubGlobal('location', location);
+    let calls = 0;
+    // Restoring an unknown board replaces its hash with the root's before hashchange fires.
+    watchHistory(target, () => { calls++; location.hash = '#/'; });
+    location.hash = '#/nope';
+    target.dispatchEvent(new Event('popstate'));
+    target.dispatchEvent(Object.assign(new Event('hashchange'), { newURL: 'https://example.test/#/nope' }));
+    expect(calls).toBe(1);
+    vi.unstubAllGlobals();
   });
 
   it('stops listening when its signal aborts', () => {

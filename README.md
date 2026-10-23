@@ -1,6 +1,6 @@
 # Zoomflow
 
-[![Application checks](https://github.com/sglavoie/zoomflow/actions/workflows/application.yml/badge.svg)](https://github.com/sglavoie/zoomflow/actions/workflows/application.yml)
+[![Deploy to GitHub Pages](https://github.com/sglavoie/zoomflow/actions/workflows/pages.yml/badge.svg?branch=main)](https://github.com/sglavoie/zoomflow/actions/workflows/pages.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 Build flows with a form or edit D2 source, explore drill-down diagrams, and export a navigable HTML file that

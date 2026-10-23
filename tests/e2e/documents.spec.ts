@@ -477,6 +477,45 @@ test('saving asks before overwriting a file that changed on disk since it was op
   expect(await page.evaluate(() => (window as any).disk.text)).toBe('disk: Mine');
 });
 
+test('saving a file that was moved or deleted on disk asks where to save it', async ({ page }) => {
+  await page.addInitScript(() => {
+    const state = { deleted: false, opened: '', saved: '', pickerCalls: 0, cancelPicker: true };
+    (window as any).state = state;
+    (window as any).showOpenFilePicker = async () => [{ kind: 'file', name: 'gone.d2',
+      getFile: async () => {
+        if (state.deleted) throw new DOMException('A requested file or directory could not be found.', 'NotFoundError');
+        return new File(['gone: Original'], 'gone.d2', { type: 'text/plain', lastModified: 1 });
+      },
+      createWritable: async () => {
+        if (state.deleted) throw new DOMException('A requested file or directory could not be found.', 'NotFoundError');
+        return { write: async (text: string) => { state.opened = text; }, close: async () => {}, abort: async () => {} };
+      } }];
+    (window as any).showSaveFilePicker = async () => {
+      state.pickerCalls++;
+      if (state.cancelPicker) throw new DOMException('Canceled', 'AbortError');
+      return { name: 'moved.d2', getFile: async () => new File([state.saved], 'moved.d2', { lastModified: 2 }),
+        createWritable: async () => ({ write: async (text: string) => { state.saved = text; }, close: async () => {}, abort: async () => {} }) };
+    };
+  });
+  await page.goto('/'); await previewReady(page);
+  await page.locator('#file').click();
+  await expect(page.locator('#filename')).toHaveText('gone.d2'); await previewReady(page);
+  await page.evaluate(() => { (window as any).state.deleted = true; });
+  await source(page).fill('gone: Mine');
+  await page.locator('#save-file').click();
+  await expect(page.locator('#activity-status')).toHaveText('The file was moved or deleted; choose where to save.');
+  await expect(page.locator('#draft-status')).toHaveText('File has unsaved changes');
+  await page.evaluate(() => { (window as any).state.cancelPicker = false; });
+  await page.locator('#save-file').click();
+  await expect(page.locator('#draft-status')).toHaveText('Saved to file');
+  await expect(page.locator('#activity-status')).not.toContainText('moved or deleted');
+  // Later saves go to the newly chosen file without asking again.
+  await source(page).fill('gone: Again');
+  await page.locator('#save-file').click();
+  await expect(page.locator('#draft-status')).toHaveText('Saved to file');
+  expect(await page.evaluate(() => (window as any).state)).toMatchObject({ opened: '', saved: 'gone: Again', pickerCalls: 2 });
+});
+
 test('leaving the page asks first when edits exist only in memory because browser backup failed', async ({ page }) => {
   await page.addInitScript(() => { Storage.prototype.setItem = () => { throw new Error('Storage blocked'); }; });
   await page.goto('/'); await previewReady(page);

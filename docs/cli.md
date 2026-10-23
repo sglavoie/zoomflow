@@ -17,7 +17,8 @@ The workspace installs the `zoomflow` executable (`pnpm exec zoomflow`);
 options and `--version` (`-v`) for the version. Rebuild after source changes. The
 CLI requires Node.js 26 or later.
 Without `--all`, SVG/PNG exports contain only the root board. With `--all`, they
-produce a ZIP using the same board paths as browser exports. ZIP entry names keep
+produce a ZIP using the same board paths as browser exports; in an SVG ZIP, board
+links point to the linked board's file, so the SVGs stay navigable. ZIP entry names keep
 board names, including Unicode; only characters and names that archives or common
 file systems reject (`/ \ < > : " | ? *`, control characters, trailing dots or
 spaces, `.`/`..`, and Windows device names such as `CON` or `LPT1`) are replaced
@@ -84,16 +85,16 @@ baselines described in the [browser test guide](../tests/e2e/README.md).
 
 ## Application checks
 
-The [application workflow](../.github/workflows/application.yml) runs two jobs. On
-`ubuntu-24.04`, it typechecks, lints, and runs the unit and CLI integration tests with
-the pinned native D2 and Playwright's Chromium (installed with its system libraries).
-On a pinned `macos-15` runner, matching the screenshot baselines, it runs the production
-build and the browser suite in Chromium, Firefox and WebKit. Chromium workspace screenshots cover desktop and phone layouts
-in both themes, compilation errors, expanded tools, the reference panel, and AI change
-highlights. Further Chromium baselines cover export, picker, confirmation and breadcrumb
-controls, the touch canvas, the downloaded root PNG, and the offline HTML viewer at phone,
-short, landscape and enlarged-text sizes.
-Failures upload screenshots, diffs, and traces. See [browser test guidance](../tests/e2e/README.md)
-for deliberate baseline updates.
+The [application workflow](../.github/workflows/application.yml) runs on pull requests
+that change more than documentation. An `ubuntu-24.04` job typechecks, lints, verifies
+vendored checksums, and runs the unit and CLI integration tests with the pinned native D2.
+One job builds the production bundle, which the browser jobs download instead of
+rebuilding. A pinned `macos-15` job, matching the screenshot baselines, runs the
+`@visual` Chromium tests, the production smoke tests in Chromium and WebKit, and the
+WebKit engine tests; every other browser test runs in Chromium, Firefox and WebKit on
+four Linux shards per engine. Each browser job uploads its HTML report, with traces,
+screenshots and diffs for failing tests; flaky passes are reported as warnings. Pushes to `main` run the [Pages deploy](../.github/workflows/pages.yml)
+gate instead. See the [browser test guide](../tests/e2e/README.md) for what each job
+covers and how to update baselines deliberately.
 
 [Back to the quick start](../README.md)

@@ -91,7 +91,27 @@ describe.concurrent('zoomflow CLI', () => {
         expect(png.readUInt32BE(20)).toBeGreaterThan(0);
       }
     }
-    if (format === 'svg') expect(strFromU8(files['checkout/charge.svg'])).toContain('Capture');
+    if (format === 'svg') {
+      expect(strFromU8(files['checkout/charge.svg'])).toContain('Capture');
+      // Board links point at the boards' files, relative to the linking board.
+      const hrefs = (path: string) => new Set([...strFromU8(files[path]).matchAll(/ href="([^"]*)"/g)].map((match) => match[1]));
+      expect(hrefs('root.svg')).toEqual(new Set(['checkout.svg', 'https://d2lang.com/tour/intro/']));
+      expect(hrefs('checkout.svg')).toEqual(new Set(['checkout/charge.svg', 'root.svg']));
+      expect(hrefs('checkout/charge.svg')).toEqual(new Set(['../checkout.svg']));
+    }
+  }, 180_000);
+
+  it('links ZIP SVGs across scenarios and escaped board names', async () => {
+    const input = join(temp, 'zip-links.d2');
+    const output = join(temp, 'zip-links.zip');
+    await writeFile(input, 'a.link: layers."x y&z"\nlayers."x y&z": {up.link: _; b -> c: {link: _.scenarios.s}}\nscenarios.s: {d}');
+    success(await run(['export', input, '--all', '-o', output]));
+    const files = unzipSync(await readFile(output));
+    const hrefs = (path: string) => new Set([...strFromU8(files[path]).matchAll(/ href="([^"]*)"/g)].map((match) => match[1]));
+    expect(Object.keys(files)).toEqual(['root.svg', 'x y&z.svg', '@scenarios/s.svg']);
+    expect(hrefs('root.svg')).toEqual(new Set(['x%20y&amp;z.svg']));
+    expect(hrefs('x y&z.svg')).toEqual(new Set(['root.svg', '@scenarios/s.svg']));
+    expect(hrefs('@scenarios/s.svg')).toEqual(new Set(['../x%20y&amp;z.svg']));
   }, 180_000);
 
   it('exports only root by default and resolves imported sources for native export', async () => {
@@ -198,6 +218,16 @@ describe.concurrent('zoomflow CLI', () => {
       .rejects.toThrow('Local image path is not valid URL encoding: ./bad%E0%A4%A.svg');
   });
 
+  it('names a missing local icon when the root is reached through a symlink', async () => {
+    const real = join(temp, 'real-project');
+    const linked = join(temp, 'linked-project');
+    await mkdir(real, { recursive: true });
+    await symlink(real, linked);
+    const diagram = { name: '', shapes: [{ link: '', icon: './missing.png' }], connections: [], root: { link: '' } } as unknown as Diagram;
+    await expect(stageIcons(diagram, join(linked, 'a.d2'), linked, join(temp, 'linked-stage')))
+      .rejects.toThrow(/^cannot read .*missing\.png: no such file$/);
+  });
+
   it('keeps local images inside --root, through symlinked folders too, and requires regular files', async () => {
     const project = join(temp, 'icons');
     const root = join(project, 'q');
@@ -250,7 +280,29 @@ describe.concurrent('zoomflow CLI', () => {
     const result = await run(['lint', input, '--json']);
     expect(result.code).toBe(2);
     expect(JSON.parse(result.stdout)).toEqual({ error: `${input}:1:4: maps must be terminated with }`, diagnostics: [] });
+    const usage = await Promise.all([['lint', 'a.d2', '--json', '--all'], ['lint', '--json'], ['lint', 'a.d2', 'b.d2', '--json']].map((args) => run(args)));
+    expect(usage.map((item) => [item.code, JSON.parse(item.stdout)])).toEqual([
+      [2, { error: 'Export options cannot be used with lint.', diagnostics: [] }],
+      [2, { error: 'lint takes exactly one .d2 file.', diagnostics: [] }],
+      [2, { error: 'lint takes exactly one .d2 file.', diagnostics: [] }],
+    ]);
   });
+
+  it('names directories and symlinks given as input, and unwritable output folders', async () => {
+    const folder = join(temp, 'folder.d2');
+    const linked = join(temp, 'linked.d2');
+    const locked = join(temp, 'read-only');
+    await Promise.all([mkdir(folder, { recursive: true }), mkdir(locked, { recursive: true }), symlink(resolve(repo, 'fixtures/order.d2'), linked)]);
+    await chmod(locked, 0o555);
+    try {
+      const [directory, link, unwritable] = await Promise.all([run(['lint', folder]), run(['lint', linked]),
+        run(['export', 'fixtures/order.d2', '-o', join(locked, 'order.svg')])]);
+      expect(directory.stderr).toBe('zoomflow: Input must be a regular file.\n');
+      expect(link.stderr).toBe('zoomflow: Input must be a regular file; symlinks are not followed.\n');
+      expect(unwritable.code).toBe(2);
+      expect(unwritable.stderr).toBe(`zoomflow: cannot write ${join(locked, 'order.svg')}: permission denied\n`);
+    } finally { await chmod(locked, 0o755); }
+  }, 180_000);
 
   it('rejects an output directory before rendering', async () => {
     const output = join(temp, 'output.svg');

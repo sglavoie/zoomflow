@@ -51,12 +51,18 @@ export function restoreTrail(saved: unknown, board: string, exists: (id: string)
     saved.every((id) => typeof id === 'string' && exists(id)) ? saved as string[] : ancestors();
 }
 
-/** Call `restore` once per history step: traversals fire popstate then hashchange,
- * while editing the hash in the address bar fires hashchange alone. */
+/** Call `restore` once per history step: traversals fire popstate then, only when the hash
+ * changes, hashchange; editing the hash in the address bar fires hashchange alone. */
 export function watchHistory(target: EventTarget, restore: () => void, options?: AddEventListenerOptions) {
-  let popped = false;
-  target.addEventListener('popstate', () => { popped = true; restore(); }, options);
-  target.addEventListener('hashchange', () => { if (!popped) restore(); popped = false; }, options);
+  // The hash a popstate just restored; its own hashchange, if any, comes next.
+  let restored: string | undefined;
+  target.addEventListener('popstate', () => { restored = location.hash; restore(); }, options);
+  target.addEventListener('hashchange', (event) => {
+    // Compare the hash this step went to: restoring may already have replaced an unknown one.
+    const { newURL } = event as HashChangeEvent;
+    if ((newURL ? new URL(newURL).hash : location.hash) !== restored) restore();
+    restored = undefined;
+  }, options);
 }
 
 /** When `ancestor` is a proper ancestor of `descendant`, the child of `ancestor` on the way back down. */

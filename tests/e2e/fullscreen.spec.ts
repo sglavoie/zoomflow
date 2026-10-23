@@ -1,4 +1,5 @@
 import { selectMenuOption } from './menu';
+import { previewReady, source } from './helpers';
 import { expect, test } from '@playwright/test';
 
 for (const viewport of [{ width: 1280, height: 900 }, { width: 390, height: 844 }]) {
@@ -114,4 +115,31 @@ test('nested board content stays centered with its own background', async ({ pag
   await selectMenuOption(page, '#theme', 'light');
   await page.getByRole('button', { name: 'Fullscreen', exact: true }).click();
   await assertBoard();
+});
+
+test('Escape cancels an open confirmation before it exits fullscreen', async ({ page }) => {
+  await page.addInitScript(() => {
+    const disk = { text: 'disk: Original', modified: 1 };
+    (window as any).disk = disk;
+    (window as any).showOpenFilePicker = async () => [{ kind: 'file', name: 'shared.d2',
+      getFile: async () => new File([disk.text], 'shared.d2', { type: 'text/plain', lastModified: disk.modified }),
+      createWritable: async () => ({ write: async (text: string) => { disk.text = text; disk.modified++; }, close: async () => {}, abort: async () => {} }) }];
+  });
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto('/'); await previewReady(page);
+  await page.locator('#file').click();
+  await expect(page.locator('#filename')).toHaveText('shared.d2'); await previewReady(page);
+  await source(page).fill('disk: Mine');
+  await page.evaluate(() => { (window as any).disk.modified = 99; });
+  await page.getByRole('button', { name: 'Fullscreen', exact: true }).click();
+  await expect(page.locator('#pane-a')).toHaveAttribute('data-fullscreen', '');
+  await page.keyboard.press('ControlOrMeta+s');
+  const dialog = page.getByRole('dialog', { name: 'File changed on disk — overwrite?' });
+  await expect(dialog).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(dialog).toBeHidden();
+  await expect(page.locator('#pane-a')).toHaveAttribute('data-fullscreen', '');
+  expect(await page.evaluate(() => (window as any).disk.text)).toBe('disk: Original');
+  await page.keyboard.press('Escape');
+  await expect(page.locator('#pane-a')).not.toHaveAttribute('data-fullscreen');
 });

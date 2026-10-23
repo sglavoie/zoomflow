@@ -174,7 +174,7 @@ export class Viewer {
     const doc = new DOMParser().parseFromString(svg, 'image/svg+xml');
     // File content can contain labels and links; never insert executable markup. Sanitize while
     // the parsed SVG is still inert: importing an element into this document can start loading it.
-    if (doc.querySelector('parsererror') || !sanitizeSvg(doc.documentElement)) throw new Error('Invalid SVG from renderer');
+    if (doc.querySelector('parsererror') || !sanitizeSvg(doc.documentElement)) throw new Error(`Invalid SVG for ${board.name}`);
     const element = document.importNode(doc.documentElement, true) as unknown as SVGElement;
     element.setAttribute('preserveAspectRatio', 'xMidYMid meet');
     restoreMissingLinks(element, this.diagnostics.filter((item) => item.board === board.id));
@@ -275,7 +275,7 @@ export class Viewer {
       renderParentContext(this.context, parentContext(board, this.boards));
       this.setMessage(notice);
     } catch (error) {
-      if (revision === this.revision) { this.cancelTransition(); this.setMessage(String(error), true); }
+      if (revision === this.revision) { this.cancelTransition(); this.setMessage(error instanceof Error ? error.message : String(error), true); }
     } finally {
       if (revision === this.revision) this.setBusy(false);
     }

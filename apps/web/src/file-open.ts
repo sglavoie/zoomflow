@@ -17,6 +17,17 @@ export type FileOpenHost = {
   setActive: (pane: PaneId) => void;
 };
 
+/** Whether a draft's stored file handle is the file being opened; undefined for drafts without a handle.
+ * A file opened without a handle (a drop or the input fallback) may be another file of the same name. */
+export async function sameEntries(fileHandles: Map<string, FileSystemFileHandle>, opened: (key: string) => FileSystemFileHandle | undefined) {
+  const known = new Map<string, boolean>();
+  for (const [key, existing] of fileHandles) {
+    const handle = opened(key);
+    known.set(key, handle ? await existing.isSameEntry(handle).catch(() => false) : false);
+  }
+  return (key: string) => known.get(key);
+}
+
 /** Open .d2, Open folder and dropped files, which open in the active pane. */
 export function setupFileOpen({ picker, activePane, fileHandles, paneRoots, setActive }: FileOpenHost) {
   const pickerWindow = window as PickerWindow;
@@ -26,22 +37,13 @@ export function setupFileOpen({ picker, activePane, fileHandles, paneRoots, setA
     fileStatus.hidden = !message;
     if (message) activePane().setActivity(message, 'error');
   }
-  /** Whether a draft's stored file handle is the file being opened; undefined when unknown. */
-  async function sameEntries(opened: (key: string) => FileSystemFileHandle | undefined) {
-    const known = new Map<string, boolean>();
-    for (const [key, existing] of fileHandles) {
-      const handle = opened(key);
-      if (handle) known.set(key, await existing.isSameEntry(handle).catch(() => false));
-    }
-    return (key: string) => known.get(key);
-  }
   /** Resolves whether the file opened. */
   async function openFile(file: File, handle?: FileSystemFileHandle) {
     try {
       if (!/\.d2$/i.test(file.name)) throw new Error('Choose a .d2 file.');
       const source = await file.text();
       setFileError('');
-      const key = picker().rememberFile(file.name, source, source, await sameEntries(() => handle));
+      const key = picker().rememberFile(file.name, source, source, await sameEntries(fileHandles, () => handle));
       if (handle) { fileHandles.set(key, handle); rememberDiskVersion(handle, file); }
       picker().refresh();
       await activePane().replaceDocument(source, file.name, key);
@@ -69,7 +71,7 @@ export function setupFileOpen({ picker, activePane, fileHandles, paneRoots, setA
     handles?: Record<string, FileSystemFileHandle> }) {
     setFileError('');
     const selection = picker().rememberFolder(folder.name, folder.files,
-      await sameEntries((key) => key.startsWith('project:') ? folder.handles?.[key.split(':').slice(2).join(':')] : undefined));
+      await sameEntries(fileHandles, (key) => key.startsWith('project:') ? folder.handles?.[key.split(':').slice(2).join(':')] : undefined));
     for (const [path, handle] of Object.entries(folder.handles ?? {})) fileHandles.set(selection.keys[path], handle);
     picker().refresh();
     await activePane().replaceDocument(selection.source, selection.name, selection.key);

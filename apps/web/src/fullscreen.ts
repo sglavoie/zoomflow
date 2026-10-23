@@ -26,7 +26,8 @@ export function setupFullscreen(stage: HTMLElement, pane: HTMLElement) {
 
   button.addEventListener('click', () => setFullscreen(!fullscreen));
   function onKey(event: KeyboardEvent) {
-    if (!fullscreen) return;
+    // An open dialog, such as a confirmation, handles its own keys first.
+    if (!fullscreen || document.querySelector('dialog[open]')) return;
     if (event.key === 'Escape') {
       event.preventDefault();
       event.stopImmediatePropagation();

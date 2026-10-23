@@ -25,7 +25,7 @@
   --grip: #8192a4;
   --accent-soft: #477de522;
   --accent-surface: #eef5ff;
-  --subtle: #7a899d;
+  --subtle: #5f7084;
   --active-line: #8192a418;
   --selection: #477de544;
   --backdrop: #11172288;
@@ -38,6 +38,9 @@
   --divider: #8192a433;
   --accent-hover: #194b98;
   --drop-overlay: #477de5dd;
+  --on-drop-overlay: #fff;
+  --mark-surface: #ffe49a;
+  --mark-ink: #203044;
   --stage: var(--surface);
   --code-surface: #8192a414;
   --warning: #aa7519;
@@ -53,7 +56,7 @@
   --token-punctuation: #617083;
   --token-ai-changed: #e89d2324;
   --token-ai-changed-edge: #b47713;
-  --token-source-selected: #e89d23;
+  --token-source-selected: #b47713;
   /* Stacking order, lowest first: the fullscreen diagram covers the header and its diagram menu. */
   --z-raised: 1;
   --z-sticky: 12;
@@ -116,6 +119,9 @@
   --token-punctuation: #abb9ce;
   --token-ai-changed: #e89d2330;
   --token-ai-changed-edge: #f3bc56;
+  --token-source-selected: #e89d23;
+  --mark-surface: #695019;
+  --mark-ink: #fff3cb;
 }
 * {
   box-sizing: border-box;
@@ -523,7 +529,7 @@ body.file-drop-active::after {
   border: 3px dashed var(--focus);
   border-radius: 16px;
   background: var(--drop-overlay);
-  color: white;
+  color: var(--on-drop-overlay);
   font-size: var(--font-size-xl);
   font-weight: 700;
   pointer-events: none;
@@ -581,7 +587,7 @@ button:disabled {
   width: 100%;
   cursor: pointer;
 }
-.file-button:focus-within,
+.file-button:has(input:focus-visible),
 button:focus-visible,
 select:focus-visible {
   outline: 2px solid var(--focus);
@@ -1043,13 +1049,9 @@ footer {
   min-width: 66px;
 }
 .reference-topic mark {
-  background: #ffe49a;
-  color: #203044;
+  background: var(--mark-surface);
+  color: var(--mark-ink);
   border-radius: 2px;
-}
-[data-theme="dark"] .reference-topic mark {
-  background: #695019;
-  color: #fff3cb;
 }
 .reference-topic pre {
   padding: 10px var(--space-3);
@@ -1384,6 +1386,11 @@ footer {
 [data-part="editor"] > .cm-editor {
   flex: 1;
   min-height: 0;
+}
+/* CodeMirror's default dotted focus outline is faint in dark mode; draw it inside the clipped pane. */
+[data-part="editor"] > .cm-editor.cm-focused {
+  outline: 2px solid var(--focus);
+  outline-offset: -2px;
 }
 .zf-token-comment {
   color: var(--token-comment);

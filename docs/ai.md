@@ -46,6 +46,10 @@ Variables that change which programs or code the CLI loads are refused with an
 error naming the line: `PATH`, `NODE_OPTIONS`, `NODE_PATH`, `ELECTRON_RUN_AS_NODE`,
 `BASH_ENV`, `ENV`, `HOME`, `LD_*`, `DYLD_*` and similar shell, interpreter and Git
 loader settings. Set those in the shell that starts the local server instead.
+Zoomflow starts Claude Code with `--setting-sources ''` and Codex with
+`--ignore-user-config`, so your own CLI settings, hooks, plugins, CLAUDE.md
+instructions and Codex `config.toml` don't affect AI requests; your existing
+sign-in still applies.
 
 ## Security
 

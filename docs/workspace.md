@@ -169,8 +169,8 @@ available in Diagnostics.
 Formatting success messages return to the file status after four seconds; formatting
 failures remain visible until another attempt or source change.
 Healthy preview and lint checks stay quiet, leaving one stable file-status message.
-Use **Diagnostics** to open the detailed list; the toolbar and editor stay in place
-through compilation failures and recovery.
+Use **Diagnostics**, or press **⌘⇧M / Ctrl+Shift+M** in the editor, to open the
+detailed list; the toolbar and editor stay in place through compilation failures and recovery.
 Transient progress appears only after 700 ms so quick edits do not flash indicators;
 source mapping and exports are invalidated immediately. Compiler errors replace the normal status with one summary emphasizing the
 first issue's line and column, with **Go to error** focusing its source location,
@@ -189,7 +189,8 @@ phones, this also opens
 Preview. Linked shapes still navigate; Alt+click selects
 their source without navigating. Source links pause while edits are uncompiled,
 so an old diagram cannot select an outdated text range. Editor keyboard shortcuts,
-including undo, search, Escape and Backspace, stay in the editor.
+including undo, search, Escape and Backspace, stay in the editor. Tab indents the
+source; to leave the editor with the keyboard, press Esc, then Tab within two seconds.
 
 ## Syntax reference and workspace layout
 
@@ -251,7 +252,8 @@ switches between them. The Layout control is hidden on screens 600px wide or nar
 
 Successful compilations also run Zoomflow lint. **Diagnostics** opens the
 editor's diagnostic list. Missing board links are errors; unlinked layers are
-warnings. **Check boundary ports** opts into explicit `zf-in`/`zf-out` validation;
+warnings, as are links the viewer ignores (relative file paths such as `./x`, or
+`_` above the root board). **Check boundary ports** opts into explicit `zf-in`/`zf-out` validation;
 boundary mismatches in layers that declare ports are errors only when this is
 enabled. Port-free layers remain valid. **Check parent backlinks** enables an
 additional, off-by-default warning for layers with no link back to their parent. Lint errors do not prevent preview or export.

@@ -6,6 +6,11 @@ name: Deploy to GitHub Pages
 on:
   push:
     branches: [main]
+    # Mirrors application.yml: nothing in the app or its tests reads Markdown or docs/.
+    paths-ignore:
+      - '**/*.md'
+      - 'docs/**'
+      - LICENSE
   workflow_dispatch:
 
 permissions:

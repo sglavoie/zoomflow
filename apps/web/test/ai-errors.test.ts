@@ -7,6 +7,10 @@ test.each([
   [Response.json(null), 'incomplete response'],
   [Response.json({ error: 'Provider timed out after 120000ms' }, { status: 504 }), 'took too long'],
   [Response.json({ error: 'spawn failed: internal detail' }, { status: 500 }), 'Check its installation'],
+  [Response.json({ error: 'Invalid AI request.' }, { status: 400 }), 'prompt under 8,000 characters'],
+  [Response.json({ error: 'Request is too large.' }, { status: 413 }), 'too large. Keep the prompt'],
+  [Response.json({ error: 'AI is available only from the local Zoomflow server.' }, { status: 403 }), 'opened through localhost'],
+  [Response.json({ error: 'Environment line 1 must be NAME=value.' }, { status: 400 }), 'Environment line 1'],
 ])('transport failures have actionable messages and separate details', async (response, message) => {
   try { await readAiResponse(response); throw new Error('Expected failure'); }
   catch (error) {

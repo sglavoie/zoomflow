@@ -5,6 +5,8 @@ import { describeError } from './text';
 type PickerWindow = Window & { showSaveFilePicker?: (options?: object) => Promise<FileSystemFileHandle> };
 const pickerWindow = window as PickerWindow;
 
+const moved = 'The file was moved or deleted; choose where to save.';
+
 /** Whether this browser can ask where to save a new file. */
 export const canChooseSaveFile = () => Boolean(pickerWindow.showSaveFilePicker);
 
@@ -42,6 +44,17 @@ export function setupSaveFile(button: HTMLButtonElement, target: SaveFileTarget)
           return;
         }
       }
+      let writable: FileSystemWritableFileStream | undefined;
+      if (handle) {
+        try { writable = await handle.createWritable(); }
+        catch (error) {
+          // The file was moved or deleted on disk: forget it and ask where to save instead.
+          if (!(error instanceof DOMException && error.name === 'NotFoundError')) throw error;
+          target.fileHandles.delete(key);
+          handle = undefined;
+          if (target.key() === key) target.setActivity(moved);
+        }
+      }
       if (!handle && pickerWindow.showSaveFilePicker) {
         handle = await pickerWindow.showSaveFilePicker({ suggestedName: name,
           types: [{ description: 'D2 source', accept: { 'text/plain': ['.d2'] } }] });
@@ -51,7 +64,7 @@ export function setupSaveFile(button: HTMLButtonElement, target: SaveFileTarget)
         return;
       }
       saving = setTimeout(() => { if (target.key() === key) target.setActivity('Saving file…'); }, 700);
-      const writable = await handle.createWritable();
+      writable ??= await handle.createWritable();
       try { await writable.write(source); await writable.close(); }
       catch (error) { await writable.abort(); throw error; }
       await refreshDiskVersion(handle);
@@ -59,6 +72,7 @@ export function setupSaveFile(button: HTMLButtonElement, target: SaveFileTarget)
       if (!saved) return; // The draft may have been removed while the file dialog was open.
       target.fileHandles.set(saved.key, handle);
       if (target.key() === key) target.adopt(saved);
+      if (target.key() === key && target.activity() === moved) target.setActivity('');
     } catch (error) {
       if (target.key() === key && !(error instanceof DOMException && error.name === 'AbortError')) target.setActivity(`Could not save file: ${describeError(error)}`, 'error');
     } finally {

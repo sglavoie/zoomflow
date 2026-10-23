@@ -90,21 +90,23 @@ export async function providerStatus(request: StatusRequest): Promise<{ availabl
   const env = processEnvironment(request);
   const command = request.provider === 'claude' ? 'claude' : 'codex';
   const args = request.provider === 'claude' ? ['auth', 'status'] : ['login', 'status'];
-  try {
-    const { stdout } = await exec(command, args, { env, timeout: 5_000, maxBuffer: 64_000 });
-    if (request.provider === 'claude') {
-      const status = JSON.parse(stdout) as { loggedIn?: boolean };
-      if (status.loggedIn === true || env.ANTHROPIC_API_KEY) return { available: true };
-      return { available: false, reason: 'Claude Code is installed. Sign in with claude auth login.' };
-    }
-    if (/^Logged in\b/im.test(stdout) || env.OPENAI_API_KEY) return { available: true };
-    return { available: false, reason: 'Codex is installed. Sign in with codex login.' };
-  } catch (error) {
-    const failure = error as NodeJS.ErrnoException;
+  let stdout: string;
+  try { ({ stdout } = await exec(command, args, { env, timeout: 5_000, maxBuffer: 64_000 })); }
+  catch (error) {
+    // Signed-out CLIs exit 1 but still print their status; a timeout kills the process instead.
+    const failure = error as NodeJS.ErrnoException & { killed?: boolean; stdout?: string };
     if (failure.code === 'ENOENT') return { available: false, reason: `Install ${command} and add it to the local server PATH.` };
-    if (failure.code === 'ETIMEDOUT') return { available: false, reason: `${command} did not respond. Check again.` };
-    return { available: false, reason: `Sign in to ${command}, then check again.` };
+    if (failure.killed || failure.code === 'ETIMEDOUT') return { available: false, reason: `${command} did not respond. Check again.` };
+    stdout = failure.stdout ?? '';
   }
+  if (request.provider === 'claude') {
+    let status: { loggedIn?: boolean } = {};
+    try { status = JSON.parse(stdout) as { loggedIn?: boolean }; } catch { /* Unknown output counts as signed out. */ }
+    if (status.loggedIn === true || env.ANTHROPIC_API_KEY) return { available: true };
+    return { available: false, reason: 'Claude Code is installed. Sign in with claude auth login.' };
+  }
+  if (/^Logged in\b/im.test(stdout) || env.OPENAI_API_KEY) return { available: true };
+  return { available: false, reason: 'Codex is installed. Sign in with codex login.' };
 }
 
 function instructions(request: AiRequest): string {
@@ -142,9 +144,10 @@ export async function runAi(request: AiRequest, signal?: AbortSignal): Promise<A
   try {
     const schemaPath = join(directory, 'reply.schema.json');
     if (request.provider === 'codex') await writeFile(schemaPath, JSON.stringify(schema));
+    // Leave out the user's own CLI settings (hooks, plugins, instructions); sign-in still applies.
     const args = request.provider === 'claude'
-      ? ['-p', '--tools', '', '--strict-mcp-config', '--no-session-persistence', '--output-format', 'json', '--json-schema', JSON.stringify(schema)]
-      : ['exec', '--sandbox', 'read-only', '--ephemeral', '--skip-git-repo-check', '--output-schema', schemaPath, '-'];
+      ? ['-p', '--tools', '', '--setting-sources', '', '--strict-mcp-config', '--no-session-persistence', '--output-format', 'json', '--json-schema', JSON.stringify(schema)]
+      : ['exec', '--sandbox', 'read-only', '--ephemeral', '--ignore-user-config', '--skip-git-repo-check', '--output-schema', schemaPath, '-'];
     const command = request.provider === 'claude' ? 'claude' : 'codex';
     signal?.throwIfAborted();
     const output = await new Promise<string>((resolve, reject) => {

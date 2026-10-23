@@ -48,14 +48,44 @@ async function fakeStatus(name: string, output: object | string, exit = 0) {
 }
 
 it('checks installed provider sign-in before allowing a request', async () => {
-  await fakeStatus('codex', 'Not logged in');
-  await expect(providerStatus({ provider: 'codex', environment: 'OPENAI_API_KEY=' })).resolves.toMatchObject({ available: false });
+  // Both CLIs exit 1 when signed out but still print their status.
+  await fakeStatus('codex', 'Not logged in', 1);
+  await expect(providerStatus({ provider: 'codex', environment: 'OPENAI_API_KEY=' }))
+    .resolves.toEqual({ available: false, reason: 'Codex is installed. Sign in with codex login.' });
+  await expect(providerStatus({ provider: 'codex', environment: 'OPENAI_API_KEY=key' })).resolves.toEqual({ available: true });
   await fakeStatus('codex', 'Logged in using ChatGPT');
   await expect(providerStatus({ provider: 'codex' })).resolves.toEqual({ available: true });
-  await fakeStatus('claude', { loggedIn: false });
-  await expect(providerStatus({ provider: 'claude', environment: 'ANTHROPIC_API_KEY=' })).resolves.toMatchObject({ available: false });
+  await fakeStatus('claude', { loggedIn: false }, 1);
+  await expect(providerStatus({ provider: 'claude', environment: 'ANTHROPIC_API_KEY=' }))
+    .resolves.toEqual({ available: false, reason: 'Claude Code is installed. Sign in with claude auth login.' });
+  await expect(providerStatus({ provider: 'claude', environment: 'ANTHROPIC_API_KEY=key' })).resolves.toEqual({ available: true });
   await fakeStatus('claude', { loggedIn: true });
   await expect(providerStatus({ provider: 'claude' })).resolves.toEqual({ available: true });
+});
+
+it('reports a status check that does not respond', async () => {
+  fakeBin = await mkdtemp(join(tmpdir(), 'zoomflow-ai-test-'));
+  const command = join(fakeBin, 'codex');
+  await writeFile(command, '#!/usr/bin/env node\nsetInterval(() => {}, 1000);\n');
+  await chmod(command, 0o755);
+  process.env.PATH = `${fakeBin}:${originalPath}`;
+  await expect(providerStatus({ provider: 'codex' })).resolves.toEqual({ available: false, reason: 'codex did not respond. Check again.' });
+});
+
+it('starts each CLI without the user\'s own settings', async () => {
+  fakeBin = await mkdtemp(join(tmpdir(), 'zoomflow-ai-test-'));
+  for (const name of ['claude', 'codex']) {
+    const reply = `JSON.stringify(process.argv.slice(2))`;
+    const output = name === 'claude' ? `{ is_error: false, structured_output: { reply: ${reply}, source: null } }` : `{ reply: ${reply}, source: null }`;
+    await writeFile(join(fakeBin, name), `#!/usr/bin/env node\nprocess.stdin.resume();\nprocess.stdin.on('end', () => process.stdout.write(JSON.stringify(${output})));\n`);
+    await chmod(join(fakeBin, name), 0o755);
+  }
+  process.env.PATH = `${fakeBin}:${originalPath}`;
+  const args = async (provider: 'claude' | 'codex') => JSON.parse((await runAi({ ...request, provider })).reply) as string[];
+  const claude = await args('claude');
+  expect(claude[claude.indexOf('--setting-sources') + 1]).toBe('');
+  expect(claude).not.toContain('--bare');
+  expect(await args('codex')).toContain('--ignore-user-config');
 });
 
 it('runs Claude Code and reads structured output', async () => {

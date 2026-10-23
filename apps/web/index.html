@@ -4,6 +4,10 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Zoomflow</title>
+    <meta name="description" content="Build flows with a form or edit D2 source, explore drill-down diagrams, and export a navigable HTML file that works offline." />
+    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#f4f6f9" />
+    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#111722" />
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23235db8'/%3E%3Crect x='7' y='7' width='18' height='18' rx='3' fill='none' stroke='%23fff' stroke-width='2.5'/%3E%3Crect x='13' y='13' width='6' height='6' rx='1' fill='%23fff'/%3E%3C/svg%3E" />
     <script>
       // Apply the saved theme before first paint; updateTheme() in src/index.ts takes over once the app loads.
       (() => {
@@ -85,6 +89,8 @@
           <div><dt>Undo</dt><dd><kbd>⌘ / Ctrl</kbd> + <kbd>Z</kbd></dd></div>
           <div><dt>Redo</dt><dd><kbd>⌘ / Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>Z</kbd></dd></div>
           <div><dt>Find in source</dt><dd><kbd>⌘ / Ctrl</kbd> + <kbd>F</kbd></dd></div>
+          <div><dt>Show diagnostics</dt><dd><kbd>⌘ / Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>M</kbd></dd></div>
+          <div><dt>Leave the editor</dt><dd><kbd>Esc</kbd>, then <kbd>Tab</kbd></dd></div>
         </dl>
       </section>
       <section aria-labelledby="shortcuts-ai">
@@ -179,7 +185,7 @@
           <div class="diagnostic-actions">
             <button id="reveal-source" data-part="reveal-source" class="button-quiet" type="button" title="Reveal selected source in diagram (⌘⇧Enter or Ctrl+Shift+Enter)" aria-keyshortcuts="Meta+Shift+Enter Control+Shift+Enter" disabled>Reveal in diagram</button>
             <button id="go-to-error" data-part="go-to-error" class="button-primary" type="button" hidden>Go to error</button>
-            <button id="show-diagnostics" data-part="show-diagnostics" class="button-quiet" type="button" aria-label="Review 0 diagnostics" disabled>Diagnostics</button>
+            <button id="show-diagnostics" data-part="show-diagnostics" class="button-quiet" type="button" aria-label="Review 0 diagnostics" title="Show diagnostics (⌘⇧M or Ctrl+Shift+M)" aria-keyshortcuts="Meta+Shift+M Control+Shift+M" disabled>Diagnostics</button>
           </div>
         </div>
         <div class="source-tools">
@@ -187,7 +193,7 @@
           <summary>Ask AI about this diagram</summary>
           <form id="ai-form" data-part="ai-form" aria-label="AI diagram assistant">
             <div class="ai-composer">
-              <textarea id="ai-prompt" aria-label="Ask AI about this diagram" placeholder="Describe a change or ask about this diagram…" rows="2" required disabled></textarea>
+              <textarea id="ai-prompt" aria-label="Ask AI about this diagram" placeholder="Describe a change or ask about this diagram…" rows="2" maxlength="8000" required disabled></textarea>
               <div class="ai-actions"><span id="ai-elapsed" data-part="ai-elapsed" aria-live="off"></span><button id="ai-cancel" type="button" hidden>Cancel</button><button id="ai-send" data-part="ai-send" type="submit" aria-keyshortcuts="Meta+Enter Control+Enter" title="Send (⌘Enter or Ctrl+Enter)" disabled>Send</button></div>
             </div>
             <p id="ai-availability" data-part="ai-availability" role="status">Checking local AI availability…</p>

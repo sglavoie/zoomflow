@@ -219,3 +219,59 @@ it('reports each dangling connection link separately at its own source line', as
     { board: 'root.layers.k', connection: '(g -> h)[0]', target: 'root.layers.k.layers.zz' },
   ]);
 });
+
+it('recovers dropped links on quoted, nested and differently cased shape keys', async () => {
+  const result = lint(await compile(`"x y": {link: layers.nope}
+Api
+api.link: layers.nope2
+"plain": {link: layers.nope3}
+outer: {"in ner": {link: layers.nope4}}
+"a.b": {link: layers.nope5}
+outer: {_.Plain.link: layers.nope6}`));
+  expect(result.diagnostics.map(({ rule, shape, target, range }) => ({ rule, shape, target, line: range?.split(',')[1].split(':')[0] }))).toEqual([
+    { rule: 'dangling-link', shape: 'x y', target: 'root.layers.nope', line: '0' },
+    { rule: 'dangling-link', shape: 'Api', target: 'root.layers.nope2', line: '2' },
+    { rule: 'dangling-link', shape: 'plain', target: 'root.layers.nope6', line: '6' },
+    { rule: 'dangling-link', shape: 'outer.in ner', target: 'root.layers.nope4', line: '4' },
+    { rule: 'dangling-link', shape: '"a.b"', target: 'root.layers.nope5', line: '5' },
+  ]);
+});
+
+it('locates connection links set through edge references by edge identity', async () => {
+  const result = lint(await compile(`a -> b
+c -> d: {link: layers.missing}
+(a -> b)[0].link: layers.missing
+o: {x <- y; x <- y: {link: layers.gone}}
+(O.x <- o.Y)[0]: {link: layers.gone}
+p -> q
+p -> q
+(p -> q)[*].link: layers.all`));
+  expect(result.diagnostics.map(({ connection, range }) => [connection, range?.split(',')[1].split(':').slice(0, 2).join(':')])).toEqual([
+    ['(a -> b)[0]', '2:18'], ['(c -> d)[0]', '1:15'], ['o.(x <- y)[0]', '4:24'], ['o.(x <- y)[1]', '3:27'],
+    // A glob reference has no single edge identity, so its location is omitted rather than guessed.
+    ['(p -> q)[0]', undefined], ['(p -> q)[1]', undefined],
+  ]);
+});
+
+it('names missing boards with quoted segments as authored', async () => {
+  const result = lint(await compile('a.link: layers."x.y"\nb.link: layers.k.layers."m n".layers."x.layers.y"\nlayers.k: {z}'));
+  expect(result.diagnostics.filter((item) => item.rule === 'dangling-link').map((item) => item.message)).toEqual([
+    'Link targets missing board "Root > x.y".', 'Link targets missing board "Root > k > m n > x.layers.y".',
+  ]);
+});
+
+it('warns about links the viewer ignores, such as a parent of root or a relative path', async () => {
+  const result = lint(await compile(`a.link: _
+b.link: ./x
+c -> d: {link: ./y}
+open.link: layers.L
+layers.L: {up.link: _; over.link: _._; there.link: _.layers.L; e.link: mailto:a@b.c; m.link: layers.M; layers.M: {f.link: _._._}}`));
+  expect(result.diagnostics.map(({ rule, severity, board, shape, connection, message }) => ({ rule, severity, board, item: shape ?? connection, message }))).toEqual([
+    { rule: 'ignored-link', severity: 'warning', board: 'root', item: 'b', message: 'Link "./x" is not a board or web address, so the viewer ignores it.' },
+    { rule: 'ignored-link', severity: 'warning', board: 'root', item: '(c -> d)[0]', message: 'Link "./y" is not a board or web address, so the viewer ignores it.' },
+    { rule: 'ignored-link', severity: 'warning', board: 'root', item: 'a', message: 'Link "_" goes above the root board, so the viewer ignores it.' },
+    { rule: 'ignored-link', severity: 'warning', board: 'root.layers.L', item: 'over', message: 'Link "root._" goes above the root board, so the viewer ignores it.' },
+    { rule: 'ignored-link', severity: 'warning', board: 'root.layers.L.layers.M', item: 'f', message: 'Link "root._" goes above the root board, so the viewer ignores it.' },
+  ]);
+  expect(result.diagnostics.every((item) => item.range?.startsWith('index,'))).toBe(true);
+});
