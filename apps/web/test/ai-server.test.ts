@@ -38,11 +38,11 @@ process.stdin.on('end', () => {
 
 const request = { prompt: 'Rename the box', source: 'old: Old', name: 'example.d2', board: 'root.layers.checkout' };
 
-async function fakeStatus(name: string, output: object | string, exit = 0) {
+async function fakeStatus(name: string, output: object | string, exit = 0, stream: 'stdout' | 'stderr' = 'stdout') {
   fakeBin ??= await mkdtemp(join(tmpdir(), 'zoomflow-ai-test-'));
   const path = join(fakeBin, name);
   const stdout = typeof output === 'string' ? output : JSON.stringify(output);
-  await writeFile(path, `#!/usr/bin/env node\nprocess.stdout.write(${JSON.stringify(stdout)}); process.exit(${exit});\n`);
+  await writeFile(path, `#!/usr/bin/env node\nprocess.${stream}.write(${JSON.stringify(stdout)}); process.exit(${exit});\n`);
   await chmod(path, 0o755);
   process.env.PATH = `${fakeBin}:${originalPath}`;
 }
@@ -54,6 +54,9 @@ it('checks installed provider sign-in before allowing a request', async () => {
     .resolves.toEqual({ available: false, reason: 'Codex is installed. Sign in with codex login.' });
   await expect(providerStatus({ provider: 'codex', environment: 'OPENAI_API_KEY=key' })).resolves.toEqual({ available: true });
   await fakeStatus('codex', 'Logged in using ChatGPT');
+  await expect(providerStatus({ provider: 'codex' })).resolves.toEqual({ available: true });
+  // Codex prints its login status to stderr.
+  await fakeStatus('codex', 'Logged in using ChatGPT', 0, 'stderr');
   await expect(providerStatus({ provider: 'codex' })).resolves.toEqual({ available: true });
   await fakeStatus('claude', { loggedIn: false }, 1);
   await expect(providerStatus({ provider: 'claude', environment: 'ANTHROPIC_API_KEY=' }))

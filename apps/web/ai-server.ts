@@ -106,13 +106,15 @@ export async function providerStatus(request: StatusRequest): Promise<{ availabl
   const command = request.provider === 'claude' ? 'claude' : 'codex';
   const args = request.provider === 'claude' ? ['auth', 'status'] : ['login', 'status'];
   let stdout: string;
-  try { ({ stdout } = await exec(command, args, { env, timeout: 5_000, maxBuffer: 64_000 })); }
+  let stderr: string;
+  try { ({ stdout, stderr } = await exec(command, args, { env, timeout: 5_000, maxBuffer: 64_000 })); }
   catch (error) {
     // Signed-out CLIs exit 1 but still print their status; a timeout kills the process instead.
-    const failure = error as NodeJS.ErrnoException & { killed?: boolean; stdout?: string };
+    const failure = error as NodeJS.ErrnoException & { killed?: boolean; stdout?: string; stderr?: string };
     if (failure.code === 'ENOENT') return { available: false, reason: `Install ${command} and add it to the local server PATH.` };
     if (failure.killed || failure.code === 'ETIMEDOUT') return { available: false, reason: `${command} did not respond. Check again.` };
     stdout = failure.stdout ?? '';
+    stderr = failure.stderr ?? '';
   }
   if (request.provider === 'claude') {
     let status: { loggedIn?: boolean } = {};
@@ -120,7 +122,8 @@ export async function providerStatus(request: StatusRequest): Promise<{ availabl
     if (status.loggedIn === true || env.ANTHROPIC_API_KEY) return { available: true };
     return { available: false, reason: 'Claude Code is installed. Sign in with claude auth login.' };
   }
-  if (/^Logged in\b/im.test(stdout) || env.OPENAI_API_KEY) return { available: true };
+  // Codex prints its login status to stderr.
+  if (/^Logged in\b/im.test(`${stdout}\n${stderr}`) || env.OPENAI_API_KEY) return { available: true };
   return { available: false, reason: 'Codex is installed. Sign in with codex login.' };
 }
 
