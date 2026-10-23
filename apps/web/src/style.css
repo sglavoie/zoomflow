@@ -1486,7 +1486,8 @@ footer {
 .zf-stage [data-shape-id] {
   cursor: pointer;
 }
-.zf-stage [data-shape-id]:hover {
+/* A linked shape's anchor draws its own hover outline. */
+.zf-stage [data-shape-id]:not(a [data-shape-id]):hover {
   outline: 2px solid var(--focus);
   outline-offset: 3px;
 }

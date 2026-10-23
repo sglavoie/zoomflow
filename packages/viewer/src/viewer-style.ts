@@ -28,7 +28,9 @@ export const viewerStyle = `
 .zf-stage:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
 .zf-stage > svg { display: block; width: 100%; height: 100%; max-width: 100%; max-height: 100%; }
 .zf-stage a { cursor: pointer; }
-.zf-stage a:focus { outline: 2px solid var(--focus); }
+.zf-stage a:focus-visible { outline: 2px solid var(--focus); }
+/* Chromium outlines focused SVG links by default, even when focus came from the mouse. */
+.zf-stage a:where(:focus:not(:focus-visible)) { outline: none; }
 .zf-stage a[data-missing] { outline: 2px dashed #d64e52; }
 .zf-link-hint { position: absolute; top: 12px; left: 12px; max-width: calc(100% - 24px); padding: 6px 10px; border-radius: var(--radius); background: #203044; color: #fff; font-size: 12px; pointer-events: none; overflow-wrap: anywhere; }
 .zf-pan-hint { grid-row: 3; grid-column: 1 / -1; font-size: 12px; color: var(--muted); }

@@ -416,6 +416,23 @@ test('canvas guidance follows navigation, mouse, keyboard and zoom context', asy
   await expect(hint).toHaveText('Click Charge to explore');
 });
 
+test('hovering a linked shape draws a single outline', async ({ page }) => {
+  await page.goto('/'); await previewReady(page);
+  const browse = page.locator('.zf-stage [data-shape-id="Browse"]');
+  await browse.hover();
+  await expect(browse).toHaveCSS('outline-style', 'solid');
+  const link = page.locator('.zf-stage a[href="root.layers.checkout"]');
+  await link.locator('[data-shape-id="Checkout"]').hover();
+  await expect(link).toHaveCSS('outline-style', 'solid');
+  await expect(link.locator('[data-shape-id="Checkout"]')).toHaveCSS('outline-style', 'none');
+  // Returning by mouse focuses the link back down for keyboard users, without outlining it.
+  await link.click();
+  await page.getByRole('link', { name: 'Return to Root', exact: true }).click();
+  await page.mouse.move(0, 0);
+  await expect(link).toBeFocused();
+  await expect(link).toHaveCSS('outline-style', 'none');
+});
+
 for (const offline of [false, true]) test(`link badges keep their screen size through zoom and resize ${offline ? 'offline' : 'live'}`, async ({ page, context }, info) => {
   await stubAiStatus(page);
   await page.goto('/'); await previewReady(page);
