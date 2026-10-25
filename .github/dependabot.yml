@@ -1,13 +1,20 @@
 version: 2
 updates:
   # Workflow actions are pinned to commit SHAs; Dependabot bumps the SHA and version comment.
+  # Minor and patch updates are grouped; major updates open their own pull requests.
   - package-ecosystem: github-actions
     directory: /
     schedule:
       interval: weekly
     groups:
-      github-actions:
+      minor-and-patch:
+        applies-to: version-updates
         patterns: ["*"]
+        update-types: [minor, patch]
+      security-minor-and-patch:
+        applies-to: security-updates
+        patterns: ["*"]
+        update-types: [minor, patch]
   - package-ecosystem: npm
     directory: /
     schedule:
@@ -15,12 +22,23 @@ updates:
     groups:
       # Playwright upgrades change browser builds, so review them with the visual baselines.
       playwright:
+        applies-to: version-updates
         patterns: ["@playwright/*", "playwright"]
+        update-types: [minor, patch]
       codemirror:
+        applies-to: version-updates
         patterns: ["@codemirror/*", "@lezer/*", "codemirror"]
-      tooling:
+        update-types: [minor, patch]
+      minor-and-patch:
+        applies-to: version-updates
         patterns: ["*"]
         exclude-patterns: ["@playwright/*", "playwright", "@codemirror/*", "@lezer/*", "codemirror", "@d2lang/d2"]
+        update-types: [minor, patch]
+      security-minor-and-patch:
+        applies-to: security-updates
+        patterns: ["*"]
+        exclude-patterns: ["@d2lang/d2"]
+        update-types: [minor, patch]
     ignore:
       # A vendored, patched tarball; update it through vendor/d2/build.py.
       - dependency-name: "@d2lang/d2"
