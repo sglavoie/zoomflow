@@ -1,8 +1,8 @@
 import { basicSetup } from 'codemirror';
 import { codeFolding } from '@codemirror/language';
-import { EditorState, Prec, type Extension } from '@codemirror/state';
+import { EditorState, Prec, type Extension, type StateEffect } from '@codemirror/state';
 import { EditorView, keymap } from '@codemirror/view';
-import { insertTab, isolateHistory, undo } from '@codemirror/commands';
+import { insertTab, isolateHistory, redo, undo } from '@codemirror/commands';
 import { lintGutter, setDiagnostics } from '@codemirror/lint';
 import type { SourceRange } from '@zoomflow/core';
 import { diagnosticLocation, type SourceDiagnostic } from './diagnostics';
@@ -11,6 +11,7 @@ import { formatChanges } from './format-changes';
 import { hangingIndentation } from './editor-indentation';
 import { aiChanges } from './ai-changes';
 import { aiHighlights, highlightAiLines } from './editor-ai-highlights';
+import { boardFocus, focusBoard } from './editor-board-focus';
 import { plural } from './text';
 
 export type SourceEditorOptions = {
@@ -37,7 +38,7 @@ export class SourceEditor {
   private readonly documents = new Map<string, { state: EditorState; scroll: ReturnType<EditorView['scrollSnapshot']> }>();
   constructor(parent: HTMLElement, { source = '', panelId, changed, selected, format, reveal, label = 'D2 source' }: SourceEditorOptions) {
     this.extensions = [
-        basicSetup, d2Language, lintGutter(), EditorView.lineWrapping, hangingIndentation, aiHighlights,
+        basicSetup, d2Language, lintGutter(), EditorView.lineWrapping, hangingIndentation, aiHighlights, boardFocus,
         codeFolding({ placeholderDOM: (view, unfold) => {
           // Safari does not consistently dispatch clicks on non-editable spans.
           const button = document.createElement('button');
@@ -135,6 +136,13 @@ export class SourceEditor {
     this.currentKey = key;
   }
   undo() { return undo(this.view); }
+  redo() { return redo(this.view); }
+  /** Dim the source outside a board's block, and scroll to it when the board was just opened. */
+  showBoard(block: SourceRange | undefined, scroll: boolean) {
+    const effects: StateEffect<unknown>[] = [focusBoard.of(block ?? null)];
+    if (block && scroll) effects.push(EditorView.scrollIntoView(Math.max(0, block.from - 1), { y: 'start', yMargin: 24 }));
+    this.view.dispatch({ effects });
+  }
   clearAiHighlights() {
     if (this.view.state.field(aiHighlights).size) this.view.dispatch({ effects: highlightAiLines.of([]) });
   }

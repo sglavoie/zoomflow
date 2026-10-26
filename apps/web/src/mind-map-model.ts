@@ -51,17 +51,18 @@ export function uniqueBoardName(label: string, taken: Set<string>): string {
   return name;
 }
 
-/** The topics on a map's main board, with the identifiers `mindMapSource` gives them, their labels from the
- * central topic down, and the detail board each detail topic opens. */
-export function boardTopics(map: MindMap): { id: string; path: string[]; board?: string }[] {
-  const topics: { id: string; path: string[]; board?: string }[] = [];
+export type BoardTopic = { id: string; path: string[]; topic: MindTopic; parent?: MindTopic; board?: string };
+/** The topics on the board centred on `center` (the main board by default), with the identifiers `mindMapSource`
+ * gives them, their labels from the centre down, and the detail board each detail topic opens. */
+export function boardTopics(map: MindMap, center = map.root): BoardTopic[] {
+  const topics: BoardTopic[] = [];
   const names = new Set<string>();
-  const visit = (topic: MindTopic, id: string, path: string[]) => {
+  const visit = (topic: MindTopic, id: string, path: string[], parent?: MindTopic) => {
     const detail = path.length > 1 && path.length - 1 === map.split && topic.children.length > 0;
-    topics.push({ id, path, ...detail ? { board: uniqueBoardName(topic.label, names) } : {} });
-    if (!detail) topic.children.forEach((child, i) => visit(child, `${id}_${i + 1}`, [...path, child.label]));
+    topics.push({ id, path, topic, ...parent ? { parent } : {}, ...detail ? { board: uniqueBoardName(topic.label, names) } : {} });
+    if (!detail) topic.children.forEach((child, i) => visit(child, `${id}_${i + 1}`, [...path, child.label], topic));
   };
-  visit(map.root, 'n', [map.root.label]);
+  visit(center, 'n', [center.label]);
   return topics;
 }
 

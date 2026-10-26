@@ -48,6 +48,10 @@ CodeMirror access through `withEditorView`, selection) and `menu.ts` (export men
   context menu and keyboard, editing each board with its own builder, and the explanation
   when an edit would strand an attached board. `apps/web/test/board-model.test.ts` covers
   locating board blocks, attached sections and reattaching boards to moved topics.
+- `canvas-edit.spec.ts`: renaming, adding and removing steps and topics on the diagram with
+  the keyboard, undo and redo on the diagram, selecting the shape that led down after going
+  up, the boards outline, the source following the board on view, and link previews.
+  `apps/web/test/canvas-model.test.ts` covers the edits on flows, mind maps and detail boards.
 - `ai.spec.ts`: AI edits and undo, availability checks and timeouts, cancellation,
   transport failures, highlights of changed lines, deletions on short phone screens, the
   phone composer, sending with ⌘/Ctrl+Enter, and AI settings mirrored across split panes

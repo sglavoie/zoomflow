@@ -86,6 +86,45 @@ hand-written ones. Imported boards, scenarios and steps are left alone, as are a
 detail boards: add boards from topics on the map's main board, or keep every topic on one
 board.
 
+## Edit on the diagram
+
+Steps of a flow and topics of a mind map change right on the diagram, without opening
+a builder. Click one to select it; focus stays on the diagram, and the bar over it offers
+the same actions as these keys:
+
+- **F2** or double-click renames it. Enter applies the name and Escape cancels.
+- **Tab** adds the next step after a flow step, or a subtopic under a topic, and starts
+  naming it. Tab while naming applies the name and adds another, so a map grows as fast
+  as you type.
+- **Enter** on a mind map topic adds a sibling topic after it; on the central topic it
+  adds a main branch.
+- **Delete**, or ⌘/Ctrl+Backspace, removes the step and its connections, or the topic
+  and its subtopics. A flow keeps at least one step.
+- **⌘Z / Ctrl+Z** undoes on the diagram as in the source editor, and ⌘⇧Z, Ctrl+Shift+Z
+  or Ctrl+Y redoes.
+
+Edits keep the builder's form, so **Edit flow** and **Edit mind map** still open, and
+boards attached to steps and topics stay on them. Topics on a mind map's detail boards
+are edited on those boards; renaming a detail board's central topic renames the board
+too. Other shapes keep their usual behaviour: clicking one selects its source in the
+editor.
+
+## Find your way between boards
+
+**Boards** above the preview lists every board of the document as a tree, marked with
+the builder that writes it: **Flow**, **Mind map**, or **Part of mind map** for a map's
+detail boards. Choose a board to open it, with breadcrumbs that follow the tree, or
+**Edit** to open its builder. The list appears when a document has more than one board.
+
+Hovering or focusing a link to another board shows a picture of that board with its
+name and what it holds, such as **Flow · 4 steps**, so you can look before drilling in.
+Going back up selects the shape that led down, with its actions in the bar, so a
+board's builder or its neighbours are one step away.
+
+The source editor follows the board on view: opening a board scrolls to its block, and
+lines outside it are dimmed. Editing anywhere clears the dimming until the preview
+updates. The root board's block is the whole document, so nothing is dimmed there.
+
 ## Style diagrams consistently
 
 Give shapes a class for what they are, and define how each class looks in one place.
@@ -383,6 +422,8 @@ on a board without focusable shapes, plain arrows pan too. Focused
 shapes are brought into view. Unlinked shapes with source locations are
 keyboard-focusable: press Enter or Space
 to select their source. Alt+Enter selects a linked shape’s source without navigating.
+Steps and topics of builder boards add F2, Tab, Enter and Delete, as described in
+[Edit on the diagram](#edit-on-the-diagram); Shift+Tab still leaves the diagram.
 Recompiling the same board retains focus on a surviving shape. Wheel zoom normalizes
 pixel, line and page deltas; pinch zoom works from Fit. Touch devices show the pinch
 hint even at Fit. Link badges stay 24 screen pixels across zoom levels, and touch hit areas

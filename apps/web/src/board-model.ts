@@ -140,6 +140,14 @@ export function boardSites(source: string, blocks: Map<string, SourceRange>, boa
   }
   return {
     owner,
+    /** The builder board that writes `board`, its own text, and the detail board names from it down to `board`. */
+    canvas(board: string) {
+      const id = owner(board);
+      if (!id) return;
+      const trail: string[] = [];
+      for (let child = board; child !== id; child = boards.get(child)!.parent!) trail.unshift(boards.get(child)!.name);
+      return { owner: id, own: site(id)!.parts.own, trail };
+    },
     /** The builder and own text of a board that `owner` returned. */
     builder(id: string) {
       const current = site(id);

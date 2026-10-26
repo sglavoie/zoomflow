@@ -35,11 +35,14 @@ use **Retry preview** to try again without losing your source.
    turns an indented outline into a mind map whose deep branches open as their own
    boards; **Edit mind map** reopens the outline. Select or right-click any shape to
    give it a flow or mind map board of its own, so flows and mind maps can open from
-   each other. Or change the D2 source on the right and watch the preview update. Use the
+   each other. On those boards, rename, add and remove steps and topics right on the
+   diagram with F2, Tab, Enter and Delete. Or change the D2 source on the right and watch
+   the preview update. Use the
    filename menu for built-in examples, **Open .d2** for a file, or **Open folder** for
    a project with relative imports. **D2 reference** contains searchable examples.
 2. **Explore:** click **Checkout** in the default diagram, then **Charge** to drill
-   deeper. Use breadcrumbs to return, or zoom and drag to inspect the diagram.
+   deeper. Use breadcrumbs or **Boards** to move around, hover a link to preview its
+   board, or zoom and drag to inspect the diagram.
    Click an ordinary shape to select its source. On narrow screens, switch between
    **Preview** and **Source**.
 3. **Keep and share:** use **Save .d2** (⌘S / Ctrl+S) for source. In **Export**, choose

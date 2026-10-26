@@ -18,7 +18,8 @@ test('adds a mind map board to a selected flow step, and edits each board with i
   await approvalFlow(page);
   await shape(page, 'step_3').click();
   const selected = page.getByRole('group', { name: 'Selected: Complete request' });
-  await selected.getByRole('button', { name: 'Add mind map board', exact: true }).click();
+  await selected.getByRole('button', { name: 'Add board…', exact: true }).click();
+  await page.getByRole('menu', { name: 'Actions for Complete request' }).getByRole('menuitem', { name: 'Add mind map board…' }).click();
   const dialog = page.getByRole('dialog', { name: 'Add a mind map board' });
   await expect(dialog.getByLabel('Board name')).toHaveValue('Complete request');
   await expect(dialog.getByRole('textbox', { name: 'Topics' })).toHaveValue('Complete request\n  First idea\n  Second idea');
@@ -58,9 +59,10 @@ test('offers the same actions from a context menu and the keyboard', async ({ pa
   await approvalFlow(page);
   await shape(page, 'step_4').click({ button: 'right' });
   const menu = page.getByRole('menu', { name: 'Actions for Request changes' });
-  await expect(menu.getByRole('menuitem', { name: 'Add flow board…' })).toBeFocused();
-  await page.keyboard.press('ArrowDown');
-  await expect(menu.getByRole('menuitem', { name: 'Add mind map board…' })).toBeFocused();
+  await expect(menu.getByRole('menuitem')).toHaveText(['Rename', 'Add next step', 'Delete', 'Add flow board…', 'Add mind map board…', 'Select in source']);
+  await expect(menu.getByRole('menuitem', { name: 'Rename' })).toBeFocused();
+  await page.keyboard.press('ArrowUp');
+  await expect(menu.getByRole('menuitem', { name: 'Select in source' })).toBeFocused();
   await page.keyboard.press('Escape');
   await expect(menu).toBeHidden();
 

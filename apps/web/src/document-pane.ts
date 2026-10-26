@@ -1,4 +1,4 @@
-import { boardBlocks, indexBoards, indexShapeSources, parseSourceRange, lint, type CompileResponse, type ShapeSource, type Diagram, type LintDiagnostic, type LintResult } from '@zoomflow/core';
+import { boardBlocks, indexBoards, indexShapeSources, parseSourceRange, lint, type CompileResponse, type ShapeSource, type SourceRange, type Diagram, type LintDiagnostic, type LintResult } from '@zoomflow/core';
 import { Viewer, setupViewport, type RenderBoard, type ViewerRoute } from '@zoomflow/viewer';
 import { SourceEditor } from './editor';
 import { compilerDiagnostics, lintDiagnostics, type SourceDiagnostic } from './diagnostics';
@@ -11,6 +11,7 @@ import { setupMobileView } from './mobile-view';
 import { projectFileSystem } from './project-files';
 import { setupCanvasGuidance } from './canvas-guidance';
 import { setupBoardTools } from './board-tools';
+import { setupLinkPreview } from './link-preview';
 import { boardSites } from './board-model';
 import type { setupFlowBuilder } from './flow-builder';
 import type { setupMindMapBuilder } from './mind-map-builder';
@@ -90,6 +91,8 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
   let documentName = '';
   let currentDocumentKey: string | undefined;
   let sourceMap: ShapeSource[] = [];
+  /** Where each board's block is in the compiled source. */
+  let blocks = new Map<string, SourceRange>();
   let mappedSource: string | undefined;
   let debounce: ReturnType<typeof setTimeout> | undefined;
   const lintSummary = part('lint-summary');
@@ -193,14 +196,24 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
       editor.replaceSource(source);
       showView('preview');
     },
-    selectSource: (shape) => {
+    selectSource: (shape, focusEditor) => {
       const entry = sourceMap.find((item) => item.board === viewer.currentBoard?.id && item.shape === shape);
       if (!entry || mappedSource !== editor.source) return;
-      showView('source');
-      editor.select(entry, true);
+      if (focusEditor) showView('source');
+      editor.select(entry, focusEditor);
       void highlightSelection(false);
     },
+    status: (message, kind) => setActivity(message, kind),
+    undo: () => editor.undo(),
+    redo: () => editor.redo(),
   });
+  const linkPreview = setupLinkPreview(scope, viewer);
+  /** Dim the source outside the board on view; `opened` scrolls to it unless someone is typing there. */
+  function showBoardSource(opened: boolean) {
+    if (mappedSource !== editor.source) return;
+    const board = viewer.currentBoard?.id ?? 'root';
+    editor.showBoard(board === 'root' ? undefined : blocks.get(board), opened && !editor.view.hasFocus);
+  }
 
   setupSaveFile(saveFileButton, {
     fileHandles: shared.fileHandles, picker,
@@ -359,7 +372,8 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
       if (currentDocumentKey) shared.documentRoutes.set(currentDocumentKey, viewer.route);
       shared.exportChanged();
     });
-    boardTools.refresh();
+    boardTools.boardChanged();
+    showBoardSource(true);
     void highlightSelection(false);
   });
   function selectShape(event: MouseEvent | KeyboardEvent) {
@@ -375,8 +389,11 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
       event.stopImmediatePropagation();
     }
     if (linked && event.altKey) { event.preventDefault(); event.stopImmediatePropagation(); }
-    if (!linked || event.altKey) showView('source');
-    editor.select(entry, !linked || event.altKey);
+    // Steps and topics of a builder board are edited on the diagram, so selecting one keeps focus there.
+    const onCanvas = !linked && !event.altKey && boardTools.editsOnCanvas(entry.shape);
+    if (onCanvas) shape.focus({ preventScroll: true });
+    else if (!linked || event.altKey) showView('source');
+    editor.select(entry, !onCanvas && (!linked || event.altKey));
     void highlightSelection(false);
   }
   viewer.stage.addEventListener('click', selectShape, { capture: true });
@@ -432,7 +449,11 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
         updateLint();
         compileError.hide(true);
         const boards = indexBoards(compiled.diagram);
-        const added = boardTools.compiled(source, boardSites(source, boardBlocks(compiled.graph, source, compiled.inputPath), boards), boards);
+        blocks = boardBlocks(compiled.graph, source, compiled.inputPath);
+        const sites = boardSites(source, blocks, boards);
+        boardTools.compiled(source, sites, boards);
+        linkPreview.compiled(boards, sites, render);
+        showBoardSource(false);
         void highlightSelection(false);
         const renderSource = async (glyphs: string) => {
           const { d2: engine, fonts } = await shared.compiler.get();
@@ -443,8 +464,8 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
         documentExport = { diagram: compiled.diagram, render, name, diagnostics, renderSource };
         shared.exportChanged();
         setPreviewState('ready');
-        // Show a board a builder just added, from the board it opens from.
-        if (added) void viewer.navigate(added);
+        // Show a board or shape an edit just made.
+        void boardTools.settled();
       }
     } catch (error) {
       if (request === generation) {
