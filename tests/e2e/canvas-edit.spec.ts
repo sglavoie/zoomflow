@@ -24,6 +24,10 @@ test('renames, adds and removes flow steps on the diagram, and undoes there', as
   await shape(page, 'step_5').click();
   await expect(stage(page).locator('.zf-canvas-selected')).toHaveCount(1);
   await expect(shape(page, 'step_5')).toHaveClass(/zf-canvas-selected/);
+  // A click on the background clears the selection.
+  await stage(page).click({ position: { x: 5, y: 5 } });
+  await expect(stage(page).locator('.zf-selection-ring, .zf-canvas-selected')).toHaveCount(0);
+  await expect(page.getByRole('group', { name: /^Selected:/ })).toBeHidden();
   await shape(page, 'step_1').click();
   await page.keyboard.press('F2');
   const rename = page.getByRole('textbox', { name: 'Rename New idea' });

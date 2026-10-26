@@ -383,6 +383,12 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
     if (mappedSource !== editor.source) return;
     const shape = event.target instanceof Element ? event.target.closest<SVGElement>('[data-shape-id]')
       ?? event.target.closest('a')?.querySelector<SVGElement>('[data-shape-id]') : null;
+    // A click on the background clears the selection on the diagram; the source cursor stays where it is.
+    if (!shape && event instanceof MouseEvent) {
+      viewer.highlightShapes([]);
+      boardTools.select([]);
+      return;
+    }
     const entry = shape && sourceMap.find((item) => item.board === viewer.currentBoard?.id && item.shape === shape.dataset.shapeId);
     if (!entry) return;
     const anchor = shape.closest('a');

@@ -66,7 +66,7 @@ Click a shape to select it: a blue ring marks it, and a bar beside it offers **A
 board** and **Add mind map board**. Right-click a shape, or focus it and press Shift+F10 or the
 context menu key, for the same actions in a menu with **Select in source**. Right-clicking
 or focusing a shape selects it, so the blue ring always marks the shape that keys and menus
-act on. The builder starts
+act on. Click the background of the diagram to clear the selection. The builder starts
 from the shape's label as the board name, and the new board opens once it is added.
 
 **Edit flow** or **Edit mind map** above the preview edits the board on view, so drill
