@@ -53,6 +53,9 @@ export function setupFlowBuilder(create: (source: string, name: string) => void,
   /** The form when the builder opened; closing asks before discarding later changes. */
   let snapshot = '';
   const formState = () => `${editing ? '' : name.value}\n${flowSource(flow)}`;
+  /** The steps and connections as last loaded; an example replaces them without asking until they change. */
+  let loaded = '';
+  const stepsState = () => JSON.stringify([flow.steps, flow.connections]);
   let returnFocus: HTMLElement = launch;
   /** Where focus goes when `returnFocus` is gone or hidden by the time the builder closes. */
   let fallbackFocus: HTMLElement | undefined;
@@ -170,27 +173,45 @@ export function setupFlowBuilder(create: (source: string, name: string) => void,
       edit: 'Updates this flow. Undo with ⌘Z / Ctrl+Z on the diagram or in the source.' }[next.mode];
     render();
     snapshot = formState();
+    loaded = stepsState();
     returnFocus.focus({ preventScroll: true });
     dialog.showModal();
     (editing ? steps.querySelector('input')! : name).focus();
   }
   launch.addEventListener('click', () => open(draft()));
-  guardBuilderDialog(dialog, () => {
+  // Enter in a step or label moves on instead of submitting a flow that is still being written.
+  // The dialog guard stops keys before they reach the form, so it runs this as its shortcut.
+  function enterMovesOn(event: KeyboardEvent) {
+    const input = event.target;
+    if (event.key !== 'Enter' || event.metaKey || event.ctrlKey || event.isComposing || !(input instanceof HTMLInputElement)
+      || !(steps.contains(input) || connections.contains(input))) return false;
+    if (!steps.contains(input)) return true;
+    const inputs = [...steps.querySelectorAll('input')];
+    const next = inputs[inputs.indexOf(input) + 1];
+    if (next) next.focus();
+    else if (input.value.trim()) addStep.click();
+    return true;
+  }
+  const guard = guardBuilderDialog(dialog, () => {
     if (formState() === snapshot) return true;
     const focused = document.activeElement;
     return confirmDiscard(editing ? 'Discard flow changes?' : 'Discard this flow?',
       editing ? 'Closing the builder discards the steps and connections you changed. Your diagram is unchanged.'
         : `Closing the builder discards the flow you started. ${target.mode === 'board' ? 'No board is added.' : 'No draft is created.'}`,
       'Discard changes', () => (focused instanceof HTMLElement && dialog.contains(focused) ? focused : submit).focus({ preventScroll: true }));
-  });
+  }, enterMovesOn);
   dialog.addEventListener('close', () => ([returnFocus, fallbackFocus].find(element => element?.isConnected && !element.closest('[hidden]')) ?? launch)
     .focus({ preventScroll: true }));
   name.addEventListener('input', () => name.setCustomValidity(name.value.trim() ? '' : `Give your ${target.mode === 'board' ? 'board' : 'flow'} a name.`));
   direction.addEventListener('change', () => { flow.direction = direction.value as Flow['direction']; });
   for (const box of look.boxes) box.addEventListener('change', () => { flow.look = look.get(); });
-  dialog.querySelectorAll<HTMLButtonElement>('[data-template]').forEach(button => button.addEventListener('click', () => {
+  dialog.querySelectorAll<HTMLButtonElement>('[data-template]').forEach(button => button.addEventListener('click', async () => {
+    if (stepsState() !== loaded && !await guard.ask(() => confirmDiscard('Replace your steps?',
+      'The example replaces the steps and connections you entered. Your flow name and look are kept.', 'Replace steps',
+      () => button.focus({ preventScroll: true })))) return;
     flow = { ...flowTemplate(button.dataset.template!), look: flow.look };
     render();
+    loaded = stepsState();
   }));
   addStep.addEventListener('click', () => {
     const last = flow.steps.at(-1)!;

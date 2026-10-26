@@ -86,3 +86,13 @@ test('adaptive split gives the editor room and preserves a deliberate resize unt
   await page.setViewportSize({ width: 1440, height: 900 });
   await expect(divider).toHaveAttribute('aria-valuenow', '62');
 });
+
+test('a click on the source divider without dragging keeps the split adaptive', async ({ page }) => {
+  await page.setViewportSize({ width: 1024, height: 768 });
+  await page.goto('/'); await previewReady(page);
+  const divider = page.locator('#source-divider');
+  await expect(divider).toHaveAttribute('aria-valuenow', '50');
+  await divider.click();
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await expect(divider).toHaveAttribute('aria-valuenow', '62');
+});

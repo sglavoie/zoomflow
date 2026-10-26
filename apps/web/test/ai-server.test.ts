@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { createServer, request as httpRequest, type IncomingMessage, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { Readable } from 'node:stream';
-import { handle, isLoopbackAddress, providerStatus, readBody, runAi } from '../ai-server';
+import { handle, isLoopbackAddress, providerStatus, readBody, runAi, stopRunning } from '../ai-server';
 
 const originalPath = process.env.PATH;
 const original = { CLAUDE_CONFIG_DIR: process.env.CLAUDE_CONFIG_DIR, INIT_CWD: process.env.INIT_CWD };
@@ -172,6 +172,17 @@ it('reports CLI failure and malformed output', async () => {
   await expect(runAi({ ...request, provider: 'codex' })).rejects.toThrow('codex failed: Authentication failed');
   await fakeCommand('codex', 'not JSON');
   await expect(runAi({ ...request, provider: 'codex' })).rejects.toThrow();
+  // Claude Code exits 1 for an error result but still prints its envelope; show only its message.
+  await fakeCommand('claude', { type: 'result', is_error: true, result: 'Credit balance is too low' }, 1);
+  await expect(runAi({ ...request, provider: 'claude' })).rejects.toThrow(/^claude failed: Credit balance is too low$/);
+});
+
+it('names a provider CLI that cannot start', async () => {
+  fakeBin = await mkdtemp(join(tmpdir(), 'zoomflow-ai-test-'));
+  // Not executable, and alone on PATH so the lookup cannot fall through to an installed claude.
+  await writeFile(join(fakeBin, 'claude'), '#!/usr/bin/env node\n');
+  process.env.PATH = fakeBin;
+  await expect(providerStatus({ provider: 'claude' })).resolves.toEqual({ available: false, reason: 'claude could not start: EACCES.' });
 });
 
 it('cancels a running CLI process when its request is aborted', async () => {
@@ -191,6 +202,24 @@ it('cancels a running CLI process when its request is aborted', async () => {
     await rejected;
     await vi.waitFor(() => expect(() => process.kill(pid, 0)).toThrow(), { timeout: 5_000 });
   } finally { controller.abort(); }
+});
+
+it('stops running CLI processes when the server stops', async () => {
+  fakeBin = await mkdtemp(join(tmpdir(), 'zoomflow-ai-test-'));
+  const pidPath = join(fakeBin, 'pid');
+  const command = join(fakeBin, 'codex');
+  await writeFile(command, `#!/usr/bin/env node\nrequire('node:fs').writeFileSync(${JSON.stringify(pidPath)}, String(process.pid));\nsetInterval(() => {}, 1000);\n`);
+  await chmod(command, 0o755);
+  process.env.PATH = `${fakeBin}:${originalPath}`;
+  const result = runAi({ ...request, provider: 'codex' });
+  const rejected = expect(result).rejects.toThrow('codex failed');
+  try {
+    let pid = 0;
+    await vi.waitFor(async () => { pid = Number(await readFile(pidPath, 'utf8')); expect(pid).toBeGreaterThan(0); }, { timeout: 10_000 });
+    stopRunning();
+    await rejected;
+    await vi.waitFor(() => expect(() => process.kill(pid, 0)).toThrow(), { timeout: 5_000 });
+  } finally { stopRunning(); }
 });
 
 /** A response stand-in that records what `send` writes. */
@@ -235,6 +264,7 @@ it('answers non-JSON requests with 415 and other methods with 405', async () => 
   });
   try {
     await expect(call('POST', '/api/ai/status', 'text/plain')).resolves.toEqual({ status: 415, error: 'Send JSON to check a provider.' });
+    await expect(call('POST', '/api/ai/status', 'application/json')).resolves.toEqual({ status: 400, error: 'Invalid JSON request.' });
     await expect(call('PUT', '/api/ai/status', 'application/json')).resolves.toEqual({ status: 405, error: 'Use POST to check a provider.' });
     await expect(call('POST', '/api/ai', 'text/plain')).resolves.toEqual({ status: 415, error: 'Send the AI request as JSON.' });
     await expect(call('GET', '/api/ai')).resolves.toEqual({ status: 405, error: 'Send a JSON POST request.' });

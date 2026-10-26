@@ -16,7 +16,7 @@ export type SplitAxis = {
 export function setupSplit(divider: HTMLElement, axis: () => SplitAxis | undefined) {
   type State = { requested: number; customized: boolean; share: number };
   const states = new Map<string, State>();
-  let drag: { pointer: number; offset: number } | undefined;
+  let drag: { pointer: number; offset: number; moved?: boolean } | undefined;
   function state(current: SplitAxis) {
     let saved = states.get(current.storageKey);
     if (saved) return saved;
@@ -99,13 +99,15 @@ export function setupSplit(divider: HTMLElement, axis: () => SplitAxis | undefin
     const bounds = current.container.getBoundingClientRect();
     const available = size(current, bounds) - size(current, divider.getBoundingClientRect());
     const position = current.rows ? event.clientY - bounds.top : event.clientX - bounds.left;
-    if (available > 0) setShare((position - drag.offset) / available * 100);
+    if (available > 0) { drag.moved = true; setShare((position - drag.offset) / available * 100); }
   });
   function finishDrag() {
-    const pointer = drag?.pointer;
+    if (!drag) return;
+    const { pointer, moved } = drag;
     drag = undefined;
-    if (pointer !== undefined && divider.hasPointerCapture(pointer)) divider.releasePointerCapture(pointer);
-    saveShare();
+    if (divider.hasPointerCapture(pointer)) divider.releasePointerCapture(pointer);
+    // A click without movement is not a resize, so the split keeps adapting to the window.
+    if (moved) saveShare();
   }
   divider.addEventListener('pointerup', finishDrag);
   divider.addEventListener('pointercancel', finishDrag);
@@ -118,6 +120,6 @@ export function setupSplit(divider: HTMLElement, axis: () => SplitAxis | undefin
     try { localStorage.removeItem(current.storageKey); } catch { /* Reset works without storage. */ }
   });
   /** Finish a drag in progress, for example before the divider hides. */
-  const endDrag = () => { if (drag) finishDrag(); };
+  const endDrag = () => finishDrag();
   return { refresh, endDrag };
 }

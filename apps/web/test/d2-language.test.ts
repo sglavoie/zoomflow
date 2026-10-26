@@ -11,6 +11,7 @@ const examples = [
   `a: Start {link: layers.detail}\nlayers: {\n  detail: {\n    note: |md\n      **Braces {here} are text**\n    |\n    done: End\n  }\n}`,
   `a: Root\nscenarios: {\n  alternate: {\n    b: Alternate\n  }\n}\nsteps: {\n  first: {\n    c: First step\n  }\n}`,
   `note: ||md\n  A pipe | in text, and {braces}\n||\na: After`,
+  `a -> b: Yes | No\nlayers: {\n  detail: {\n    c: x | y\n  }\n}`,
 ];
 
 it.each(examples)('folds real D2 structures without interpreting label text: %s', async (source) => {
@@ -55,4 +56,20 @@ it('ends indented and inline multiline strings so following D2 regains highlight
   expect(tokens).toContainEqual({ text: 'b', style: 'property' });
   expect(state.block).toBeNull();
   expect(state.depth).toBe(0);
+});
+
+it('reads a pipe inside an unquoted label as text, not the start of a multiline string', () => {
+  const state = d2Parser.startState!(2);
+  const tokens: { text: string; style: string | null }[] = [];
+  for (const line of ['a -> b: Yes | No', 'c: x | y', 'd: Next']) {
+    const stream = new StringStream(line, 4, 2);
+    while (!stream.eol()) {
+      stream.start = stream.pos;
+      const style = d2Parser.token(stream, state);
+      tokens.push({ text: stream.current(), style });
+    }
+  }
+  expect(tokens).toContainEqual({ text: 'd', style: 'property' });
+  expect(tokens.some(token => token.style === 'string')).toBe(false);
+  expect(state.block).toBeNull();
 });

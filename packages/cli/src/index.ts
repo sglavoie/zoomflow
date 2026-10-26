@@ -97,8 +97,10 @@ async function compileSources(d2: D2, root: string, realRoot: string, inputPath:
     } catch (error) {
       const code = (error as { code?: string }).code ?? '';
       // D2 resolves imports relative to their importing file, so the stdlib sits beside every source.
-      if (basename(key) === 'zoomflow.d2' && ['ENOENT', 'ELOOP', 'EISDIR'].includes(code)) files[key] = library;
+      // Only a missing file falls back; a local zoomflow.d2 that cannot be used is reported, not silently replaced.
+      if (basename(key) === 'zoomflow.d2' && code === 'ENOENT') files[key] = library;
       else if (code === 'ELOOP') problems.set(key, 'symlinks are not followed');
+      else if (code === 'EISDIR') problems.set(key, 'not a regular file');
       else if (code === 'EACCES' || code === 'EPERM') problems.set(key, 'cannot read: permission denied');
       else if (code !== 'ENOENT') problems.set(key, `cannot read: ${(error as Error).message || code}`);
     }
@@ -151,7 +153,7 @@ export async function stageIcons(diagram: Diagram, input: string, root: string, 
 async function regularFile(path: string, shown: string): Promise<boolean> {
   try { return (await lstat(path)).isFile(); } catch (error) {
     const code = (error as { code?: string }).code;
-    if (code === 'ENOENT') throw new Error(`Cannot read ${shown}: no such file`);
+    if (code === 'ENOENT' || code === 'ENOTDIR') throw new Error(`Cannot read ${shown}: no such file`);
     if (code === 'EACCES' || code === 'EPERM') throw new Error(`Cannot read ${shown}: permission denied`);
     throw error;
   }
@@ -233,7 +235,11 @@ export async function main(args = process.argv.slice(2)): Promise<number> {
       throw new Error((await lstat(input)).isSymbolicLink() ? 'Input must be a regular file; symlinks are not followed.' : 'Input must be a regular file.');
     }
     const root = resolve(values.root ?? dirname(input));
-    const realRoot = await realpath(root).catch(() => { throw new Error(`Root directory not found: ${root}`); });
+    const realRoot = await realpath(root).catch((error: { code?: string }) => {
+      if (error.code === 'EACCES' || error.code === 'EPERM') throw new Error(`Cannot read root directory ${root}: permission denied`);
+      if (error.code === 'ENOENT' || error.code === 'ENOTDIR') throw new Error(`Root directory not found: ${root}`);
+      throw error;
+    });
     if (!(await stat(realRoot)).isDirectory()) throw new Error(`Root is not a directory: ${root}`);
     // The real path decides; an input named through the other side of a symlinked root is moved onto the root's side.
     const realInput = await realpath(input);
@@ -248,6 +254,7 @@ export async function main(args = process.argv.slice(2)): Promise<number> {
     const extension = all && format !== 'html' ? '.zip' : `.${format}`;
     const output = resolve(values.output ?? input.slice(0, -3) + (extension === '.zip' ? `-${format}.zip` : extension));
     if (command === 'export' && (output === input || extname(output).toLowerCase() === '.d2')) throw new Error('Output must not overwrite D2 source files.');
+    if (command === 'export' && !all && extname(output).toLowerCase() === '.zip') throw new Error(`A .zip output needs --all: ${values.output}`);
     if (command === 'export' && extname(output).toLowerCase() !== extension) {
       throw new Error(`Output must end in ${extension} for ${extension === '.zip' ? `--all --format ${format}` : `--format ${format}`}: ${values.output}`);
     }
@@ -264,7 +271,11 @@ export async function main(args = process.argv.slice(2)): Promise<number> {
             const item = diagnostic.shape ?? diagnostic.connection;
             console.log(`${location(diagnostic.range, shown) ?? shown(inputPath)}: ${diagnostic.severity} ${diagnostic.rule} [${boardLabel(diagnostic.board, boards)}${item ? ` / ${item}` : ''}] ${diagnostic.message}`);
           }
-          console.log(`${result.diagnostics.filter((d) => d.severity === 'error').length} errors, ${result.diagnostics.filter((d) => d.severity === 'warning').length} warnings; ${result.boundaryPairsEvaluated} boundary pairs evaluated.`);
+          const count = (n: number, noun: string) => `${n} ${noun}${n === 1 ? '' : 's'}`;
+          const errors = result.diagnostics.filter((d) => d.severity === 'error').length;
+          const warnings = result.diagnostics.filter((d) => d.severity === 'warning').length;
+          const pairs = values['boundary-ports'] ? `; ${count(result.boundaryPairsEvaluated, 'boundary pair')} evaluated` : '';
+          console.log(`${count(errors, 'error')}, ${count(warnings, 'warning')}${pairs}.`);
         }
         return result.diagnostics.some((item) => item.severity === 'error') ? 1 : 0;
       }
@@ -291,8 +302,11 @@ export async function main(args = process.argv.slice(2)): Promise<number> {
             }
             return result.stdout;
           } catch (error) {
-            const failure = error as Error & { code?: string; stderr?: Buffer };
+            const failure = error as Error & { code?: string; killed?: boolean; signal?: string | null; stderr?: Buffer };
             if (failure.code === 'ENOENT') throw new Error('D2 executable not found. Install D2 v0.9.0 and add d2 to PATH.');
+            if (failure.code === 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER') throw new Error('D2 export failed: the rendered output was too large.');
+            if (failure.killed) throw new Error('D2 export timed out after 3 minutes.');
+            if (failure.signal) throw new Error(`D2 export stopped by ${failure.signal}.`);
             throw new Error(`D2 export failed: ${messages(failure.stderr?.toString() ?? '').join('\n') || failure.message}`);
           }
         };

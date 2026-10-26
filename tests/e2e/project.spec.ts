@@ -237,3 +237,22 @@ test('the shape menu offers Select in source only for shapes this file defines',
     await page.keyboard.press('Escape');
   }
 });
+
+test('a linked shape from an imported file opens no empty shape menu', async ({ page }) => {
+  const project = test.info().outputPath('linked-import');
+  await mkdir(project, { recursive: true });
+  await writeFile(`${project}/main.d2`, '...@shared\n');
+  await writeFile(`${project}/shared.d2`, 'Imported.link: https://example.com\n');
+  const errors: Error[] = [];
+  page.on('pageerror', error => errors.push(error));
+  await page.goto('/');
+  await openFolder(page, project);
+  await previewReady(page);
+  const imported = page.locator('.zf-stage [data-shape-id="Imported"]');
+  await imported.click({ button: 'right' });
+  await expect(page.getByRole('menu')).toHaveCount(0);
+  await imported.focus();
+  await page.keyboard.press('Shift+F10');
+  await expect(page.getByRole('menu')).toHaveCount(0);
+  expect(errors).toEqual([]);
+});

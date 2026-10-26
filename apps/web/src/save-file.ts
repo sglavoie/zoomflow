@@ -1,6 +1,6 @@
 import type { setupExamplePicker } from './example-picker';
 import { changedOnDisk, refreshDiskVersion } from './disk-version';
-import { writePermission, type FileHandles } from './file-handles';
+import { hasWritePermission, writePermission, type FileHandles } from './file-handles';
 import { describeError } from './text';
 
 type PickerWindow = Window & { showSaveFilePicker?: (options?: object) => Promise<FileSystemFileHandle> };
@@ -28,8 +28,9 @@ export type SaveFileTarget = {
 export function setupSaveFile(button: HTMLButtonElement, target: SaveFileTarget) {
   /** Notices that a file needs a new destination, cleared once a save succeeds. */
   const notices = new Set([moved]);
-  /** Drafts whose file Zoomflow was refused writing to; Save asks where to save them instead of asking again. */
-  const refused = new Set<string>();
+  /** The file each draft was refused writing to; Save asks where to save instead of asking again, until the
+   * visitor grants it elsewhere or opens the draft from another file. */
+  const refused = new Map<string, FileSystemFileHandle>();
   button.addEventListener('click', async () => {
     if (!target.key()) return;
     button.disabled = true;
@@ -42,10 +43,16 @@ export function setupSaveFile(button: HTMLButtonElement, target: SaveFileTarget)
       await target.fileHandles.ready();
       let handle = target.fileHandles.get(key);
       // A handle restored after a reload needs permission again; without it, ask where to save.
-      if (handle && (refused.has(key) || !await writePermission(handle))) {
-        refused.add(key);
-        notify(`Zoomflow may not write ${handle.name}; choose where to save.`);
-        handle = undefined;
+      if (handle) {
+        const permission = refused.get(key) === handle
+          ? (await hasWritePermission(handle) ? 'granted' : 'denied')
+          : await writePermission(handle);
+        if (permission !== 'granted') {
+          if (permission === 'denied') refused.set(key, handle);
+          notify(permission === 'denied' ? `Zoomflow may not write ${handle.name}; choose where to save.`
+            : `Zoomflow needs permission to write ${handle.name}; choose where to save.`);
+          handle = undefined;
+        }
       }
       if (handle && await changedOnDisk(handle)) {
         const focused = document.activeElement;
@@ -86,7 +93,8 @@ export function setupSaveFile(button: HTMLButtonElement, target: SaveFileTarget)
       saving = setTimeout(() => { if (target.key() === key) target.setActivity('Saving file…'); }, 700);
       writable ??= await handle.createWritable();
       try { await writable.write(source); await writable.close(); }
-      catch (error) { await writable.abort(); throw error; }
+      // Aborting an already failed stream can reject too; report the write error instead.
+      catch (error) { await writable.abort().catch(() => {}); throw error; }
       await refreshDiskVersion(handle);
       const saved = target.picker().markDiskSaved(key, source, handle.name);
       if (!saved) return; // The draft may have been removed while the file dialog was open.
@@ -95,7 +103,10 @@ export function setupSaveFile(button: HTMLButtonElement, target: SaveFileTarget)
       if (target.key() === key) target.adopt(saved);
       if (target.key() === key && notices.has(target.activity() ?? '')) target.setActivity('');
     } catch (error) {
-      if (target.key() === key && !(error instanceof DOMException && error.name === 'AbortError')) target.setActivity(`Could not save file: ${describeError(error)}`, 'error');
+      if (error instanceof DOMException && error.name === 'AbortError') return;
+      // Name the file when another document is open by now, so the failure is not mistaken for this one's.
+      target.setActivity(target.key() === key ? `Could not save file: ${describeError(error)}`
+        : `Could not save ${name}: ${describeError(error)}`, 'error');
     } finally {
       clearTimeout(saving);
       if (target.key() === key && target.activity() === 'Saving file…') target.setActivity('');

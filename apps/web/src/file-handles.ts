@@ -88,12 +88,21 @@ export class FileHandles extends Map<string, FileSystemFileHandle> {
   }
 }
 
-/** Ask to write a handle restored after a reload; the browser prompts only during a user action such as Save. */
-export async function writePermission(handle: FileSystemFileHandle) {
+/** Ask to write a handle restored after a reload; the browser prompts only during a user action such as Save.
+ * Resolves `denied` only when the visitor refused: a dismissed prompt or a lost user action resolves `prompt`. */
+export async function writePermission(handle: FileSystemFileHandle): Promise<PermissionState> {
   const permissions = handle as PermissionHandle;
-  if (!permissions.queryPermission || !permissions.requestPermission) return true;
+  if (!permissions.queryPermission || !permissions.requestPermission) return 'granted';
   try {
-    return await permissions.queryPermission({ mode: 'readwrite' }) === 'granted'
-      || await permissions.requestPermission({ mode: 'readwrite' }) === 'granted';
-  } catch { return false; }
+    const state = await permissions.queryPermission({ mode: 'readwrite' });
+    return state === 'granted' ? state : await permissions.requestPermission({ mode: 'readwrite' });
+  } catch { return 'prompt'; }
+}
+
+/** Whether Zoomflow may write a handle now, without prompting; a visitor can grant it in site settings after refusing. */
+export async function hasWritePermission(handle: FileSystemFileHandle) {
+  const permissions = handle as PermissionHandle;
+  if (!permissions.queryPermission) return true;
+  try { return await permissions.queryPermission({ mode: 'readwrite' }) === 'granted'; }
+  catch { return false; }
 }

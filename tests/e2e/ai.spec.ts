@@ -446,3 +446,26 @@ test('switching documents cancels a running AI request with its own explanation'
   await expect(source(page)).toHaveText('other: Unrelated');
   await expect(page.locator('.zf-stage')).not.toContainText('Wrong');
 });
+
+test('keyboard focus follows a request from the prompt to Cancel and back, and returns after Undo', async ({ page }) => {
+  await stubAiStatus(page);
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => { release = resolve; });
+  await page.route('**/api/ai', async (route) => {
+    await gate;
+    await route.fulfill({ json: { reply: 'Added a note.', source: 'note: Added by AI' } });
+  });
+  await page.goto('/'); await previewReady(page);
+  await page.locator('#ai-assistant > summary').click();
+  const prompt = page.locator('#ai-prompt');
+  await prompt.fill('Add a note');
+  await prompt.press('ControlOrMeta+Enter');
+  await expect(page.locator('#ai-cancel')).toBeFocused();
+  release();
+  await expect(page.locator('#ai-status')).toContainText('Diagram updated.');
+  await expect(prompt).toBeFocused();
+  await page.locator('#ai-undo').focus();
+  await page.keyboard.press('Enter');
+  await expect(page.locator('#ai-undo')).toBeHidden();
+  await expect(prompt).toBeFocused();
+});

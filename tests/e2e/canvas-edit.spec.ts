@@ -285,3 +285,20 @@ test('a step that opens a board selects and renames on click, and opens from its
   await page.getByRole('link', { name: 'Open Onboarding board', exact: true }).press('Enter');
   await board(page, 'root.layers.Plan the launch.layers.Onboarding');
 });
+
+test('undo with the background focused keeps focus off the first shape', async ({ page }) => {
+  await mixed(page);
+  await shape(page, 'step_5').click();
+  await page.keyboard.press('F2');
+  await page.getByRole('textbox', { name: /^Rename / }).fill('Renamed');
+  await page.keyboard.press('Enter');
+  await ready(page);
+  await stage(page).click({ position: { x: 5, y: 5 } });
+  await page.keyboard.press('ControlOrMeta+z');
+  await ready(page);
+  await expect(stage(page)).not.toContainText('Renamed');
+  await expect(shape(page, 'step_1')).not.toBeFocused();
+  // Delete with nothing selected removes nothing.
+  await page.keyboard.press('Delete');
+  await expect(stage(page)).toContainText('New idea');
+});

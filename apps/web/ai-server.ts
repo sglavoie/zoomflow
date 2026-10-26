@@ -1,11 +1,11 @@
-import { spawn } from 'node:child_process';
+import { spawn, type ChildProcess } from 'node:child_process';
 import { mkdtemp, rm, stat, writeFile } from 'node:fs/promises';
 import { homedir, tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { promisify } from 'node:util';
 import { execFile } from 'node:child_process';
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import type { Plugin } from 'vite';
+import type { Plugin, PreviewServer, ViteDevServer } from 'vite';
 
 type Provider = 'claude' | 'codex';
 type AiRequest = { provider: Provider; prompt: string; source: string; name: string; board: string;
@@ -26,6 +26,34 @@ const TIMEOUT_MS = 180_000;
 /** Full access lets the CLI read files and run commands, which takes longer than answering from the source alone. */
 const FULL_ACCESS_TIMEOUT_MS = 600_000;
 const exec = promisify(execFile);
+
+/** Requests still running; detached CLIs do not receive the terminal's Ctrl+C, so the server stops them itself. */
+const running = new Set<ChildProcess>();
+function kill(child: ChildProcess) {
+  // The CLI may have spawned subprocesses; stop this request's whole group.
+  try {
+    if (process.platform !== 'win32' && child.pid) process.kill(-child.pid, 'SIGKILL');
+    else child.kill('SIGKILL');
+  } catch { /* The process may already have exited. */ }
+}
+/** Stop every running CLI; exported for tests. */
+export function stopRunning() {
+  for (const child of running) kill(child);
+  running.clear();
+}
+let exitHooked = false;
+function stopOnExit() {
+  if (exitHooked) return;
+  exitHooked = true;
+  process.once('exit', stopRunning);
+  for (const signal of ['SIGINT', 'SIGTERM'] as const) {
+    process.once(signal, () => {
+      stopRunning();
+      // Without other listeners, adding ours replaced the default exit; restore it.
+      if (process.listenerCount(signal) === 0) process.kill(process.pid, signal);
+    });
+  }
+}
 
 const optionalText = (value: unknown, limit: number) => value === undefined || typeof value === 'string' && value.length <= limit;
 
@@ -117,6 +145,8 @@ export async function providerStatus(request: StatusRequest): Promise<{ availabl
     const failure = error as NodeJS.ErrnoException & { killed?: boolean; stdout?: string; stderr?: string };
     if (failure.code === 'ENOENT') return { available: false, reason: `Install ${command} and add it to the local server PATH.` };
     if (failure.killed || failure.code === 'ETIMEDOUT') return { available: false, reason: `${command} did not respond. Check again.` };
+    // Exit statuses are numbers; a string code means the command never ran, for example EACCES.
+    if (typeof failure.code === 'string') return { available: false, reason: `${command} could not start: ${failure.code}.` };
     stdout = failure.stdout ?? '';
     stderr = failure.stderr ?? '';
   }
@@ -136,6 +166,14 @@ function instructions(request: AiRequest, directory?: string): string {
     ? `You have full access to this computer: you may read files, run commands, and use tools to gather what the request needs, starting in the working directory ${directory}. Do not write the diagram to a file yourself; return any diagram change in the JSON reply.`
     : 'Answer the user\'s request using only the supplied diagram source. Do not access files, run commands, or use tools.';
   return `You are helping edit a D2 diagram in Zoomflow. ${access} Return one JSON object with exactly two fields: "reply" (a concise explanation or error) and "source" (the full replacement D2 source, or null if no change is needed or you cannot safely make it). Preserve unrelated source and working drill-down links. Do not include markdown fences. If the user asks a question without requesting a change, set source to null.\n\nDocument: ${request.name}\nCurrent board: ${request.board}\n\nCurrent D2 source:\n<d2-source>\n${request.source}\n</d2-source>\n\nUser request:\n<request>\n${request.prompt}\n</request>`;
+}
+
+/** Claude Code exits non-zero for an error result but still prints its JSON envelope; keep only its message. */
+function claudeError(output: string) {
+  try {
+    const envelope = JSON.parse(output.trim()) as { is_error?: boolean; result?: unknown };
+    return envelope.is_error && typeof envelope.result === 'string' && envelope.result.trim() ? envelope.result.trim() : undefined;
+  } catch { return undefined; }
 }
 
 function parseReply(output: string, provider: Provider): AiReply {
@@ -186,13 +224,8 @@ export async function runAi(request: AiRequest, signal?: AbortSignal): Promise<A
       let stderr = '';
       let overflow = false;
       let timedOut = false;
-      const abort = () => {
-        // The CLI may have spawned subprocesses; cancel only this request's group.
-        try {
-          if (process.platform !== 'win32' && child.pid) process.kill(-child.pid, 'SIGKILL');
-          else child.kill('SIGKILL');
-        } catch { /* The process may already have exited. */ }
-      };
+      running.add(child);
+      const abort = () => kill(child);
       signal?.addEventListener('abort', abort, { once: true });
       if (signal?.aborted) abort();
       const timer = setTimeout(() => { timedOut = true; abort(); }, timeout);
@@ -205,16 +238,21 @@ export async function runAi(request: AiRequest, signal?: AbortSignal): Promise<A
       child.stderr.on('data', (chunk: string) => { stderr = (stderr + chunk).slice(-8_000); });
       child.on('error', (error: NodeJS.ErrnoException) => {
         clearTimeout(timer);
+        running.delete(child);
         signal?.removeEventListener('abort', abort);
         reject(error.code === 'ENOENT' ? new Error(`${command} is not installed or is not on the server PATH.`) : error);
       });
       child.on('close', (code) => {
         clearTimeout(timer);
+        running.delete(child);
         signal?.removeEventListener('abort', abort);
         if (signal?.aborted) reject(new Error('AI request canceled.'));
         else if (timedOut) reject(new Error(`${command} timed out after ${timeout / 60_000} minutes.`));
         else if (overflow) reject(new Error(`${command} returned too much output.`));
-        else if (code !== 0) reject(new Error(`${command} failed: ${stderr.trim() || stdout.trim() || `exit code ${code}`}`));
+        else if (code !== 0) {
+          const detail = (request.provider === 'claude' ? claudeError(stdout) : undefined) || stderr.trim() || stdout.trim().slice(0, 2_000);
+          reject(new Error(`${command} failed: ${detail || `exit code ${code}`}`));
+        }
         else resolve(stdout);
       });
       child.stdin.on('error', () => { /* Process errors are reported by close/error. */ });
@@ -270,7 +308,9 @@ export async function handle(request: IncomingMessage, response: ServerResponse)
       try {
         const body = await readBody(request, response, MAX_STATUS_REQUEST, 'Status request is too large.');
         if (body === undefined) return;
-        const payload: unknown = JSON.parse(body);
+        let payload: unknown;
+        try { payload = JSON.parse(body); }
+        catch { send(response, 400, { error: 'Invalid JSON request.' }); return; }
         if (!isStatusRequest(payload)) { send(response, 400, { error: 'Invalid provider status request.' }); return; }
         send(response, 200, await providerStatus(payload));
       } catch (error) { send(response, 400, { error: message(error) }); }
@@ -305,6 +345,10 @@ export function aiPlugin(): Plugin {
     if (!['/api/ai', '/api/ai/status'].includes(request.url?.split('?')[0] ?? '')) return next();
     void handle(request, response);
   };
-  return { name: 'zoomflow-local-ai', configureServer(server) { server.middlewares.use(middleware); },
-    configurePreviewServer(server) { server.middlewares.use(middleware); } };
+  const attach = (server: ViteDevServer | PreviewServer) => {
+    server.middlewares.use(middleware);
+    server.httpServer?.once('close', stopRunning);
+    stopOnExit();
+  };
+  return { name: 'zoomflow-local-ai', configureServer: attach, configurePreviewServer: attach };
 }

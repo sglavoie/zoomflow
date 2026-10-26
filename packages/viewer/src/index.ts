@@ -239,8 +239,9 @@ export class Viewer {
     const revision = ++this.revision;
     const active = document.activeElement;
     const focusStage = this.stage.contains(active);
+    // A focused link wraps its shape; the stage or its <svg> holds every shape, so it names none.
     const focusedShape = active instanceof Element
-      ? (active.closest<SVGElement>('[data-shape-id]') ?? active.querySelector<SVGElement>('[data-shape-id]'))?.dataset.shapeId : undefined;
+      ? (active.closest<SVGElement>('[data-shape-id]') ?? (active.localName === 'a' ? active.querySelector<SVGElement>('[data-shape-id]') : null))?.dataset.shapeId : undefined;
     const focusCrumb = this.crumbs.contains(active);
     this.cancelTransition();
     this.setBusy(true);

@@ -395,6 +395,8 @@ export function setupBoardTools(scope: PaneScope, viewer: Viewer, options: Board
     if (note) parts.push(note);
     for (const part of [heading, note]) { part?.setAttribute('role', 'none'); part?.setAttribute('aria-hidden', 'true'); }
     if (!boardsOnly && options.inSource(shape)) parts.push(item('Select in source', () => options.selectSource(shape, true)));
+    // A shape with no actions, such as a link from an imported file, opens no menu.
+    if (!parts.some(part => part.getAttribute('role') === 'menuitem')) return false;
     menu.replaceChildren(...parts);
     menu.setAttribute('aria-label', `Actions for ${heading.textContent}`);
     if (note) menu.setAttribute('aria-describedby', note.id); else menu.removeAttribute('aria-describedby');
@@ -408,7 +410,8 @@ export function setupBoardTools(scope: PaneScope, viewer: Viewer, options: Board
     const { width, height } = menu.getBoundingClientRect();
     menu.style.left = `${Math.max(8, Math.min(x, innerWidth - width - 8))}px`;
     menu.style.top = `${Math.max(8, Math.min(y, innerHeight - height - 8))}px`;
-    menu.querySelector<HTMLElement>('[role="menuitem"]')!.focus({ preventScroll: true });
+    menu.querySelector<HTMLElement>('[role="menuitem"]')?.focus({ preventScroll: true });
+    return true;
   }
   function shapeAt(target: EventTarget | null) {
     const element = target instanceof Element ? target.closest<SVGElement>('[data-shape-id]')
@@ -418,10 +421,9 @@ export function setupBoardTools(scope: PaneScope, viewer: Viewer, options: Board
   viewer.stage.addEventListener('contextmenu', event => {
     const shape = shapeAt(event.target);
     if (!shape || !ready()) return;
-    event.preventDefault();
     // The menu acts on the shape it opened from, so that shape is the selected one.
     options.selectSource(shape.id, false);
-    openMenu(shape.id, shape.focus, event.clientX, event.clientY);
+    if (openMenu(shape.id, shape.focus, event.clientX, event.clientY)) event.preventDefault();
   });
   // Double-click edits: renames a step or topic, or opens any other shape's source.
   viewer.stage.addEventListener('dblclick', event => {
@@ -449,10 +451,9 @@ export function setupBoardTools(scope: PaneScope, viewer: Viewer, options: Board
     const shape = shapeAt(event.target);
     if (!shape || !ready()) return;
     if (event.key === 'ContextMenu' || event.shiftKey && event.key === 'F10') {
-      event.preventDefault();
       options.selectSource(shape.id, false);
       const box = shape.focus.getBoundingClientRect();
-      openMenu(shape.id, shape.focus, box.left + box.width / 2, box.top + box.height / 2);
+      if (openMenu(shape.id, shape.focus, box.left + box.width / 2, box.top + box.height / 2)) event.preventDefault();
       return;
     }
     const canvas = canvasTarget(shape.id);

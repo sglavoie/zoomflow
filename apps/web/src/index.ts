@@ -274,9 +274,15 @@ narrow.addEventListener('change', applyLayout);
 roomy.addEventListener('change', applyLayout);
 
 window.addEventListener('keydown', (event) => {
-  if (event.isComposing || event.altKey || event.shiftKey || !(event.metaKey || event.ctrlKey) || event.key.toLowerCase() !== 's') return;
+  // `code` keeps the shortcut on layouts whose S key types another letter.
+  if (event.isComposing || event.altKey || event.shiftKey || !(event.metaKey || event.ctrlKey)
+    || (event.key.toLowerCase() !== 's' && event.code !== 'KeyS')) return;
   event.preventDefault();
-  if (!event.repeat) activePane().save();
+  if (event.repeat) return;
+  // A name typed in the Export menu applies on change; apply it first so the save uses it.
+  const field = document.activeElement;
+  if (field instanceof HTMLInputElement && field.id === 'export-name') field.dispatchEvent(new Event('change'));
+  activePane().save();
 });
 
 // A page kept in the back/forward cache must still work when the visitor returns.

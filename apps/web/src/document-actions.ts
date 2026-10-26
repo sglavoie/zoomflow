@@ -40,7 +40,7 @@ export function setupDocumentActions(returnFocus: () => void) {
     // Stop diagram navigation and workspace shortcuts while confirming an action.
     event.stopImmediatePropagation();
     if (event.key === 'Escape') { event.preventDefault(); dialog.close('cancel'); }
-    else if (event.key === 'Backspace' || (event.metaKey || event.ctrlKey) && event.key === 's') event.preventDefault();
+    else if (event.key === 'Backspace' || (event.metaKey || event.ctrlKey) && (event.key.toLowerCase() === 's' || event.code === 'KeyS')) event.preventDefault();
   }, { capture: true });
   undo.onclick = () => { const action = pending; expire(); action?.(); };
   dismiss.onclick = expire;

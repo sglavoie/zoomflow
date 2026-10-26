@@ -476,6 +476,25 @@ describe.concurrent('zoomflow CLI', () => {
     } finally { await page.close(); }
   });
 
+  it('reports unusable imports, a local zoomflow.d2 included, and readable summaries and paths', async () => {
+    const root = join(temp, 'unusable-imports');
+    await mkdir(join(root, 'shared.d2'), { recursive: true });
+    await Promise.all([writeFile(join(root, 'styled.d2'), '...@zoomflow\na'), writeFile(join(root, 'folder.d2'), '...@shared\na'),
+      writeFile(join(root, 'warn.d2'), 'layers: { unused: {x} }'),
+      symlink(resolve(repo, 'stdlib/zoomflow.d2'), join(root, 'zoomflow.d2'))]);
+    const [styled, folder, summary, zip, notDir] = await Promise.all([run(['lint', join(root, 'styled.d2')]),
+      run(['lint', join(root, 'folder.d2')]), run(['lint', join(root, 'warn.d2')]),
+      run(['export', 'fixtures/order.d2', '-o', join(temp, 'single.zip')]), run(['lint', 'fixtures/order.d2/inner.d2'])]);
+    // A symlinked zoomflow.d2 is not silently swapped for the bundled one.
+    expect(styled.code).toBe(2);
+    expect(styled.stderr).toContain('failed to import "zoomflow.d2": file does not exist (symlinks are not followed)');
+    expect(folder.stderr).toContain('failed to import "shared.d2": file does not exist (not a regular file)');
+    success(summary);
+    expect(summary.stdout).toMatch(/\n0 errors, 1 warning\.\n$/);
+    expect(zip.stderr).toBe(`zoomflow: A .zip output needs --all: ${join(temp, 'single.zip')}\n`);
+    expect(notDir.stderr).toBe('zoomflow: Cannot read fixtures/order.d2/inner.d2: no such file\n');
+  });
+
   it('allows port-free diagrams by default and retains actionable dangling-link errors', async () => {
     const source = await readFile(resolve(repo, 'fixtures/lint/nested-navigation.d2'), 'utf8');
     const input = join(temp, 'nested.d2');

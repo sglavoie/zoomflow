@@ -154,6 +154,8 @@ test('naming a diagram names its exports, keeps examples intact and makes Save a
   await page.locator('#export-name').press('Enter');
   await expect(page.locator('#filename')).toHaveText('Checkout plan.d2');
   await expect(page.locator('#export-name')).toHaveValue('Checkout plan');
+  // Enter commits the name and keeps focus in the open menu.
+  await expect(page.locator('#export-name')).toBeFocused();
   await expect(page.locator('#draft-status')).toHaveText('File has unsaved changes');
   await selectMenuOption(page, '#export-format', 'svg');
   const pending = page.waitForEvent('download');
@@ -181,6 +183,29 @@ test('naming a diagram names its exports, keeps examples intact and makes Save a
   await source(page).press('ControlOrMeta+s');
   await expect(page.locator('#draft-status')).toHaveText('Saved to file');
   expect(await page.evaluate(() => (window as typeof window & { suggested?: string }).suggested)).toBe('renamed work.d2');
+});
+
+test('the save shortcut applies a name still being typed before saving', async ({ page }) => {
+  await page.addInitScript(() => {
+    const target = window as typeof window & { suggested?: string; showOpenFilePicker?: () => Promise<unknown[]>; showSaveFilePicker?: (options: { suggestedName: string }) => Promise<unknown> };
+    const handle = (name: string) => ({ name, getFile: async () => new File(['a -> b'], name, { lastModified: 1 }),
+      createWritable: async () => ({ write: async () => {}, close: async () => {}, abort: async () => {} }) });
+    target.showOpenFilePicker = async () => [handle('work.d2')];
+    target.showSaveFilePicker = async ({ suggestedName }) => { target.suggested = suggestedName; return handle(suggestedName); };
+  });
+  await page.goto('/'); await previewReady(page);
+  await page.locator('#file').click();
+  await expect(page.locator('#filename')).toHaveText('work.d2'); await previewReady(page);
+  await openDownloads(page);
+  await page.locator('#export-name').fill('typed name');
+  await page.locator('#export-name').press('ControlOrMeta+s');
+  await expect(page.locator('#draft-status')).toHaveText('Saved to file');
+  expect(await page.evaluate(() => (window as typeof window & { suggested?: string }).suggested)).toBe('typed name.d2');
+  await expect(page.locator('#filename')).toHaveText('typed name.d2');
+  // Leaving the field afterwards keeps the file the save chose.
+  await page.locator('#export-name').blur();
+  await expect(page.locator('#activity-status')).not.toContainText('Save asks where to save it');
+  await expect(page.locator('#draft-status')).toHaveText('Saved to file');
 });
 
 test('a slow save preserves later edits and does not rename a document opened in the meantime', async ({ page }) => {

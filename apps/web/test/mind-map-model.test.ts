@@ -64,9 +64,21 @@ it('keeps labels literal and board names linkable', async () => {
   expect(compiled.diagram.shapes.map(shape => 'label' in shape && shape.label)).toEqual([label, label, 'Label', 'TOP', '_', '#']);
   expect(compiled.diagram.shapes.slice(1).every(shape => shape.link)).toBe(true);
   expect(compiled.diagram.layers?.map(layer => layer?.name)).toEqual([
-    "Review 'A': (B) -> C tag, (x) /path $5 $(hello) … 日本語", 'label', 'top', 'Topic', 'Topic 2']);
+    "Review 'A': (B) -> C tag, (x) /path 5 (hello) … 日本語", 'label', 'top', 'Topic', 'Topic 2']);
   expect(readMindMap(source)).toEqual(map);
   expect(detailBoardName('  ')).toBe('Topic');
+});
+
+it('links detail boards for topics named like board containers or holding dollar signs', async () => {
+  const names = ['Steps', 'layers', 'SCENARIOS', 'steps topic', '$x', 'US$ 5'];
+  const map: MindMap = { direction: 'right', split: 1, look: plain, root: { label: 'Root', children:
+    names.map(label => ({ label, children: [{ label: 'child', children: [] }] })) } };
+  const source = mindMapSource(map);
+  const compiled = await compile(source);
+  const boards = [...indexBoards(compiled.diagram).values()].slice(1).map(board => board.name);
+  expect(boards).toEqual(['Steps topic', 'layers topic', 'SCENARIOS topic', 'steps topic 2', 'x', 'US 5']);
+  expect(compiled.diagram.shapes.slice(1).map(shape => shape.link)).toEqual(boards.map(name => `root.layers.${name}`));
+  expect(readMindMap(source)).toEqual(map);
 });
 
 it('does not offer form editing when it would discard custom source', () => {

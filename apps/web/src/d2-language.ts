@@ -21,9 +21,11 @@ export const d2Parser: StreamParser<State> = {
       return 'string';
     }
     if (stream.eatSpace()) return null;
-    if (/:\s*$/.test(stream.string.slice(0, stream.pos)) && stream.match(/#[0-9a-fA-F]{3,8}\b/)) return 'number';
+    const value = /:\s*$/.test(stream.string.slice(0, stream.pos));
+    if (value && stream.match(/#[0-9a-fA-F]{3,8}\b/)) return 'number';
     if (stream.match('#')) { stream.skipToEnd(); return 'comment'; }
-    const block = stream.match(/(\|+)[a-zA-Z0-9_-]*/);
+    // Only a value can open a multiline string; a pipe later in an unquoted label is text.
+    const block = value && stream.match(/(\|+)[a-zA-Z0-9_-]*/);
     if (Array.isArray(block)) { state.block = block[1]; state.blockIndent = stream.indentation(); return 'string'; }
     if (stream.match(/\.\.\.@[^\s;{}]+/)) return 'keyword';
     if (stream.match(/\$\{[^}]*\}/)) return 'variable';

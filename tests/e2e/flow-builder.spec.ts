@@ -139,3 +139,38 @@ test('closing the builder confirms before discarding changes, and closes at once
   await expect(page.locator('#filename')).toHaveText('order.d2');
   await expect(page.getByRole('button', { name: 'New flow', exact: true })).toBeFocused();
 });
+
+test('Enter moves through the steps instead of submitting, and examples ask before replacing edited steps', async ({ page }) => {
+  await page.goto('/'); await ready(page);
+  await page.getByRole('button', { name: 'New flow', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: 'Create a flow' });
+  await dialog.getByLabel('Step 1 name').press('Enter');
+  await expect(dialog.getByLabel('Step 2 name')).toBeFocused();
+  await dialog.getByLabel('Step 3 name').press('Enter');
+  await expect(dialog.getByLabel('Step 4 name')).toBeFocused();
+  // An unnamed last step does not add another.
+  await page.keyboard.press('Enter');
+  await expect(dialog.getByLabel('Step 4 name')).toBeFocused();
+  await expect(dialog.getByLabel('Step 5 name')).toHaveCount(0);
+  await dialog.getByLabel('Step 4 name').fill('Notify the team');
+  await dialog.getByLabel('Connection 1 label').press('Enter');
+  await expect(dialog).toBeVisible();
+  await expect(page.locator('#filename')).toHaveText('order.d2');
+
+  const replace = page.getByRole('dialog', { name: 'Replace your steps?' });
+  const approval = dialog.getByRole('button', { name: 'Approval with Yes / No' });
+  await approval.click();
+  // Escape answers the confirmation and keeps the builder and its steps.
+  await page.keyboard.press('Escape');
+  await expect(replace).toBeHidden();
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByLabel('Step 4 name')).toHaveValue('Notify the team');
+  await expect(approval).toBeFocused();
+  await approval.click();
+  await replace.getByRole('button', { name: 'Replace steps', exact: true }).click();
+  await expect(dialog.getByLabel('Step 2 name')).toHaveValue('Approved?');
+  // An unedited example switches without asking.
+  await dialog.getByRole('button', { name: 'Simple flow' }).click();
+  await expect(replace).toBeHidden();
+  await expect(dialog.getByLabel('Step 4 name')).toHaveCount(0);
+});

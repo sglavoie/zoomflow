@@ -17,12 +17,14 @@ export type BuilderTarget = {
 export function guardBuilderDialog(dialog: HTMLDialogElement, discard: () => boolean | Promise<boolean>,
   shortcut: (event: KeyboardEvent) => boolean = () => false) {
   let confirming = false;
-  async function requestClose() {
-    if (confirming) return;
+  /** Ask `question` over the dialog, leaving its keys to that confirmation; false while another is open. */
+  async function ask(question: () => boolean | Promise<boolean>) {
+    if (confirming) return false;
     confirming = true;
-    const close = await discard();
-    confirming = false;
-    if (close) dialog.close();
+    try { return await question(); } finally { confirming = false; }
+  }
+  async function requestClose() {
+    if (await ask(discard)) dialog.close();
   }
   dialog.querySelectorAll<HTMLButtonElement>('[data-close]').forEach(button => button.addEventListener('click', () => void requestClose()));
   // Handle Escape directly: Chromium may skip the cancel event for repeated close
@@ -44,6 +46,7 @@ export function guardBuilderDialog(dialog: HTMLDialogElement, discard: () => boo
     else if ((event.metaKey || event.ctrlKey) && ['s', '/', '?'].includes(event.key.toLowerCase())) event.preventDefault();
     else if (event.key === 'Backspace' && !(event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement)) event.preventDefault();
   }, { capture: true });
+  return { ask };
 }
 
 const lookLabels: Record<keyof Look, string> = { filled: 'Filled shapes', compact: 'Compact text', shadow: 'Shadows' };

@@ -36,10 +36,13 @@ export const mindMapExample = `Product launch
 
 /** Board names appear in breadcrumbs and links, so keep them readable but within what D2 links accept. */
 export function detailBoardName(label: string): string {
-  const name = label.replace(/["\\#{}[\];]/g, character =>
+  // D2 reads `$` in a link as the start of a variable, so the link would miss its board.
+  const name = label.replace(/["\\#{}[\];$]/g, character =>
     ({ '"': "'", '\\': '/', '{': '(', '[': '(', '}': ')', ']': ')', ';': ',' })[character] ?? ' ')
     .replace(/\s+/g, ' ').trim();
   if (!name || name === '_') return 'Topic';
+  // Boards named after the board containers cannot be linked to in any case.
+  if (/^(?:layers|scenarios|steps)$/i.test(name)) return `${name} topic`;
   return keywords.has(name.toLowerCase()) ? name.toLowerCase() : name;
 }
 

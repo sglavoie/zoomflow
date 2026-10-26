@@ -70,7 +70,8 @@ compared by real path so a symlinked directory cannot reach outside it; symlinke
 files are not followed. An import that exists but cannot be used names the reason
 after D2's error, for example `(outside --root /work/app; pass --root to include
 it)` or `(cannot read: permission denied)`. The bundled `zoomflow.d2` is available beside
-each source file, with a local file of that name taking precedence. Export stages the
+each source file, with a local file of that name taking precedence; a local one that
+is a symlink or a folder is reported like any other import, not replaced. Export stages the
 same source snapshot in a temporary directory, then runs native D2 with ELK,
 asset bundling and one explicit board target per process, running up to one
 process per available CPU and skipping empty boards in HTML. D2's progress output

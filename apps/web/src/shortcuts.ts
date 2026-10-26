@@ -29,7 +29,7 @@ export function setupShortcuts() {
       event.preventDefault();
       close.focus({ preventScroll: true });
     }
-    if ((event.metaKey || event.ctrlKey) && ['s', '/', '?'].includes(event.key.toLowerCase())) {
+    if ((event.metaKey || event.ctrlKey) && (['s', '/', '?'].includes(event.key.toLowerCase()) || event.code === 'KeyS')) {
       event.preventDefault();
     }
   }, { capture: true });

@@ -149,6 +149,8 @@ export function setupAiAssistant({ root, part }: PaneScope, { read, validate, ap
     undoRevision = undefined;
     undoButton.hidden = true;
     changeFeedback.hidden = true;
+    // Undo hides itself, so keep keyboard focus in the assistant.
+    prompt.focus();
   });
   const panelToggled = () => {
     // WebKit can keep the native select hidden to visibility checks after a
@@ -188,7 +190,10 @@ export function setupAiAssistant({ root, part }: PaneScope, { read, validate, ap
     const unchanged = () => read().revision === snapshot.revision;
     const controller = active = new AbortController();
     responseDetails();
+    // The prompt is disabled and Send hidden while waiting, so Cancel takes their focus.
+    const sending = document.activeElement === prompt || document.activeElement === button;
     updateControls();
+    if (sending) cancel.focus();
     const started = Date.now();
     elapsed.textContent = '0s elapsed';
     const timer = setInterval(() => { elapsed.textContent = `${Math.floor((Date.now() - started) / 1000)}s elapsed`; }, 1000);
@@ -263,7 +268,11 @@ export function setupAiAssistant({ root, part }: PaneScope, { read, validate, ap
       clearInterval(timer);
       elapsed.textContent = '';
       active = undefined;
+      // Return focus that Cancel held, or lost while the prompt was disabled, without taking it from elsewhere.
+      const returning = [cancel, document.body, null].includes(document.activeElement as HTMLElement | null);
       updateControls();
+      // Without scrolling: the change summary and Undo just revealed must stay in view.
+      if (returning && !prompt.disabled) prompt.focus({ preventScroll: true });
     }
   });
   return {

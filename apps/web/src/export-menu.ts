@@ -44,13 +44,15 @@ export function setupExportMenu(activePane: () => DocumentPane | undefined, pick
     nameField.disabled = !pane?.key || project;
     nameHint.textContent = project ? 'Project files keep their file name.' : 'Names the downloaded files.';
   }
-  nameField.addEventListener('change', () => {
+  function commitName() {
     const pane = activePane();
     if (pane?.key) pane.rename(nameField.value);
     showName();
-  });
+  }
+  nameField.addEventListener('change', commitName);
   nameField.addEventListener('keydown', (event) => {
-    if (event.key === 'Enter') { event.preventDefault(); nameField.blur(); }
+    // Enter commits the name and keeps focus in the open menu.
+    if (event.key === 'Enter') { event.preventDefault(); commitName(); nameField.select(); }
     // Escape restores the name before the menu closes.
     else if (event.key === 'Escape') showName();
   });
