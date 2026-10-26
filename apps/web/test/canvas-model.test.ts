@@ -42,8 +42,9 @@ it('adds subtopics and siblings, renames and removes topics on a mind map board'
 
 it('edits topics on detail boards and follows a renamed detail board', () => {
   const own = mindMapSource(map('Trip\n  Places\n    Lisbon\n      Alfama\n    Porto', 2));
-  // The detail topic itself is edited from its own board.
-  expect(canvasShape(own, [], 'n_1_1')).toBeUndefined();
+  // A detail topic is edited from the main board too; renaming it renames its board.
+  expect(canvasShape(own, [], 'n_1_1')).toMatchObject({ label: 'Lisbon', sibling: true, remove: true });
+  expect(outline(editOnCanvas(own, [], 'n_1_1', { type: 'rename', label: 'Lisboa' })!.own)).toContain('    Lisboa\n      Alfama');
   expect(canvasShape(own, ['Lisbon'], 'n')).toMatchObject({ label: 'Lisbon', sibling: false, remove: false });
   const added = editOnCanvas(own, ['Lisbon'], 'n_1', { type: 'sibling' })!;
   expect(outline(added.own)).toBe('Trip\n  Places\n    Lisbon\n      Alfama\n      New topic\n    Porto');

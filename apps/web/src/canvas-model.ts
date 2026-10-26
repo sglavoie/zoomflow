@@ -27,8 +27,7 @@ export function canvasShape(own: string, trail: string[], shape: string): Canvas
   if (step) return { kind: 'flow', label: step.label, add: 'Add next step', sibling: false, remove: flow!.steps.length > 1 };
   const map = readMindMap(own);
   const topic = map && mapBoard(map, trail)?.find(item => item.id === shape);
-  // A detail topic's own board is where its subtopics are added.
-  if (!topic || topic.board) return;
+  if (!topic) return;
   // A detail board's centre is the topic on the board above, which adds its siblings and removes it.
   const outer = Boolean(topic.parent);
   return { kind: 'mind map', label: topic.topic.label, add: 'Add subtopic', sibling: outer, remove: outer };

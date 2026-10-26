@@ -23,6 +23,8 @@ export function decorateLinks(svg: Element, boards: Map<string, { name: string; 
   /** Name a missing board target; defaults to its raw ID. */
   describe: (target: string) => string = (target) => target) {
   const ns = 'http://www.w3.org/2000/svg';
+  // Badges draw in a 32-unit box with a 24-unit circle; this scales that circle to 32 screen pixels.
+  const badgeScale = 4 / 3;
   // Read live: the primary pointer can change, and an attached viewport re-measures when it does.
   const coarse = matchMedia('(pointer: coarse)');
   const cues: { link: SVGAElement; shape: SVGGraphicsElement; badge: SVGGElement; hit: SVGRectElement; x: number; y: number;
@@ -162,7 +164,8 @@ export function decorateLinks(svg: Element, boards: Map<string, { name: string; 
     });
     for (const { cue, scale, start, end } of updates) {
       // Size badges in screen pixels, independently of diagram fit and zoom.
-      cue.badge.setAttribute('transform', `translate(${cue.x - 16 * scale} ${cue.y - 16 * scale}) scale(${scale})`);
+      const size = scale * badgeScale;
+      cue.badge.setAttribute('transform', `translate(${cue.x - 16 * size} ${cue.y - 16 * size}) scale(${size})`);
       cue.hit.setAttribute('x', String(start.x));
       cue.hit.setAttribute('y', String(start.y));
       cue.hit.setAttribute('width', String(Math.max(0, end.x - start.x)));

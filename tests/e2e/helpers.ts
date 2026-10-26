@@ -116,3 +116,9 @@ export async function insideStage(page: Page, selector: string) {
   expect(shape.x + shape.width).toBeLessThanOrEqual(stage.x + stage.width + 1);
   expect(shape.y + shape.height).toBeLessThanOrEqual(stage.y + stage.height + 1);
 }
+
+/** Open a link's board from its arrow badge. Steps and topics of builder boards open only from it,
+ * since a click on the shape selects it to edit. */
+export async function openFromBadge(page: Page, name: string) {
+  await page.getByRole('link', { name, exact: true }).locator('.appendix-icon').click();
+}

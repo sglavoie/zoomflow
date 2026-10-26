@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { board, chooseExample, editorText } from './helpers';
+import { board, openFromBadge, chooseExample, editorText } from './helpers';
 
 const ready = (page: Page) => expect(page.locator('#preview-status')).toHaveText('Preview ready');
 const shape = (page: Page, id: string) => page.locator(`.zf-stage [data-shape-id="${id}"]`);
@@ -102,10 +102,10 @@ test('the Flows & mind maps example opens each board in its own builder', async 
   await chooseExample(page, /^Flows & mind maps/);
   await ready(page);
   await expect(page.getByRole('button', { name: 'Edit flow', exact: true })).toBeVisible();
-  await page.getByRole('link', { name: 'Open Plan the launch board', exact: true }).click();
+  await openFromBadge(page, 'Open Plan the launch board');
   await board(page, 'root.layers.Plan the launch');
   await expect(page.getByRole('button', { name: 'Edit mind map', exact: true })).toBeVisible();
-  await page.getByRole('link', { name: 'Open Onboarding board', exact: true }).click();
+  await openFromBadge(page, 'Open Onboarding board');
   await board(page, 'root.layers.Plan the launch.layers.Onboarding');
   await expect(page.locator('.zf-stage')).toContainText('Invite a teammate');
   await expect(page.getByRole('button', { name: 'Edit flow', exact: true })).toBeVisible();

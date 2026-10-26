@@ -171,12 +171,13 @@ header > strong {
   position: absolute;
   top: var(--space-2);
   left: var(--space-2);
+  max-width: calc(100% - 2 * var(--space-2));
+  width: max-content;
   z-index: var(--z-raised);
   display: flex;
   align-items: center;
   flex-wrap: wrap;
   gap: var(--space-2);
-  max-width: calc(100% - 2 * var(--space-2));
   padding: var(--space-1) var(--space-1) var(--space-1) var(--space-3);
   border: 1px solid var(--border-strong);
   border-radius: 10px;
@@ -186,8 +187,11 @@ header > strong {
 .board-selection[hidden] {
   display: none;
 }
+.board-selection strong {
+  color: var(--text);
+}
 .board-selection span {
-  max-width: 24ch;
+  max-width: 32ch;
   overflow: hidden;
   color: var(--muted);
   font-size: var(--font-size-sm);
@@ -1782,6 +1786,34 @@ footer {
 .zf-stage .zf-source-selected {
   outline: 3px solid var(--token-source-selected);
   outline-offset: 4px;
+}
+/* Steps and topics open their board from the arrow badge alone. */
+.zf-stage a[data-follow="badge"] .appendix-icon {
+  cursor: pointer;
+}
+.zf-stage a[data-follow="badge"] .appendix-icon:hover circle {
+  stroke: var(--focus);
+  stroke-opacity: 1;
+  stroke-width: 2;
+}
+/* The single selected shape: a ring and halo drawn around it in the diagram, in place of the source outline. */
+.zf-stage .zf-source-selected.zf-canvas-selected,
+.zf-stage .zf-canvas-selected:focus-visible,
+.zf-stage a:has(> .zf-canvas-selected):focus-visible {
+  outline: none;
+}
+.zf-stage .zf-selection {
+  pointer-events: none;
+}
+.zf-stage .zf-selection-halo {
+  fill: var(--focus);
+  fill-opacity: 0.16;
+}
+.zf-stage .zf-selection-ring {
+  fill: none;
+  stroke: var(--focus);
+  stroke-width: 3px;
+  vector-effect: non-scaling-stroke;
 }
 [data-part="mobile-error"] {
   display: none;

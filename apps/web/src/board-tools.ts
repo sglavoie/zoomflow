@@ -221,6 +221,8 @@ export function setupBoardTools(scope: PaneScope, viewer: Viewer, options: Board
     const button: Item = (label, run, { relinks, keys } = {}) => {
       const element = document.createElement('button');
       element.type = 'button';
+      // Keyboard users reach these through shortcuts and Shift+F10, so Tab still leaves the diagram.
+      element.tabIndex = -1;
       element.textContent = label.replace(/^((Add|Edit) (flow|mind map) board)…$/, '$1');
       if (keys) { element.setAttribute('aria-keyshortcuts', keys); element.title = `${label} (${keys === 'F2' ? 'F2 or double-click' : keys})`; }
       // A button that relinks the shape is gone when the builder closes, so focus returns to the diagram.
@@ -243,10 +245,68 @@ export function setupBoardTools(scope: PaneScope, viewer: Viewer, options: Board
       const label = `Selected: ${shapeLabel(boardId(), shape)}`;
       shapeGroup.setAttribute('aria-label', label);
       const caption = document.createElement('span');
-      caption.textContent = label;
+      caption.append('Selected: ', Object.assign(document.createElement('strong'), { textContent: shapeLabel(boardId(), shape) }));
       shapeGroup.replaceChildren(caption, ...buttons);
     }
+    drawSelection(shape);
+    markLinks();
   }
+  /** Links on steps and topics open from their arrow badge only, leaving the shape to select and rename. */
+  function markLinks() {
+    for (const link of viewer.stage.querySelectorAll<SVGAElement>('a[data-link-kind]')) {
+      const id = link.querySelector<SVGElement>('[data-shape-id]')?.dataset.shapeId;
+      if (id && link.querySelector('.appendix-icon') && canvasTarget(id)) link.dataset.follow = 'badge';
+      else delete link.dataset.follow;
+    }
+  }
+  /** Mark the selected shape with a ring and halo around its bounds, drawn in the diagram so they pan and zoom
+   * with it. The ring keeps its width at any zoom. */
+  function drawSelection(shape: string | undefined) {
+    for (const node of viewer.stage.querySelectorAll('.zf-selection')) node.remove();
+    for (const node of viewer.stage.querySelectorAll('.zf-canvas-selected')) node.classList.remove('zf-canvas-selected');
+    const element = shape && shapeElement(shape);
+    if (!(element instanceof SVGGraphicsElement)) return;
+    const box = element.getBBox();
+    const pad = 7;
+    // Pills, ovals and circles get a pill-shaped ring that follows them.
+    const corner = Number(element.querySelector('rect')?.getAttribute('rx') ?? 0);
+    const round = Boolean(element.querySelector('ellipse, circle')) || corner >= box.height / 2 - 1;
+    const [halo, ring] = ['halo', 'ring'].map(part => {
+      const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+      rect.setAttribute('class', `zf-selection zf-selection-${part}`);
+      for (const [name, value] of Object.entries({ x: box.x - pad, y: box.y - pad, width: box.width + 2 * pad,
+        height: box.height + 2 * pad, rx: round ? box.height / 2 + pad : 10 })) rect.setAttribute(name, String(value));
+      rect.setAttribute('aria-hidden', 'true');
+      return rect;
+    });
+    // The halo sits behind the shape and the ring in front of it, under a link's arrow badge.
+    const outer = element.closest('a') ?? element;
+    outer.before(halo);
+    const badge = outer.querySelector(':scope > .appendix-icon');
+    if (badge) badge.before(ring);
+    else outer.after(ring);
+    element.classList.add('zf-canvas-selected');
+    placeBar();
+  }
+  /** Keep the selection bar beside the selected shape: below it, or above when there is no room below,
+   * and within the diagram's area. */
+  function placeBar() {
+    const ring = viewer.stage.querySelector('.zf-selection-ring');
+    const area = shapeGroup.offsetParent;
+    if (shapeGroup.hidden || !ring || !area) return;
+    const box = ring.getBoundingClientRect();
+    const bounds = area.getBoundingClientRect();
+    const stage = viewer.stage.getBoundingClientRect();
+    const { offsetWidth: width, offsetHeight: height } = shapeGroup;
+    const gap = 8;
+    const below = box.bottom + gap + height <= stage.bottom || box.top - gap - height < stage.top;
+    const top = below ? Math.min(box.bottom + gap, stage.bottom - height - gap) : box.top - gap - height;
+    const left = Math.max(stage.left + gap, Math.min(box.left + box.width / 2 - width / 2, stage.right - width - gap));
+    shapeGroup.style.left = `${left - bounds.left}px`;
+    shapeGroup.style.top = `${Math.max(stage.top + gap, top) - bounds.top}px`;
+  }
+  // Panning and zooming move the shape; the bar follows.
+  viewer.stage.addEventListener('zf-viewportchange', placeBar, { capture: true });
   editBoard.addEventListener('click', () => edit(editBoard.dataset.board!, editBoard));
 
   function closeMenu(restore = true) {
@@ -300,13 +360,23 @@ export function setupBoardTools(scope: PaneScope, viewer: Viewer, options: Board
     const shape = shapeAt(event.target);
     if (!shape || !ready()) return;
     event.preventDefault();
+    // The menu acts on the shape it opened from, so that shape is the selected one.
+    options.selectSource(shape.id, false);
     openMenu(shape.id, shape.focus, event.clientX, event.clientY);
   });
+  // Double-click edits: renames a step or topic, or opens any other shape's source.
   viewer.stage.addEventListener('dblclick', event => {
     const shape = shapeAt(event.target);
-    if (!shape || !canvasTarget(shape.id)) return;
+    const canvas = shape && canvasTarget(shape.id);
+    if (!shape || !ready() || shape.focus.localName === 'a' && !canvas) return;
     event.preventDefault();
-    startRename(shape.id);
+    if (canvas) startRename(shape.id);
+    else options.selectSource(shape.id, true);
+  });
+  // Selection follows keyboard focus, so the ring marks the shape that keys act on.
+  viewer.stage.addEventListener('focusin', event => {
+    const shape = shapeAt(event.target);
+    if (shape && ready() && shape.id !== selected) options.selectSource(shape.id, false);
   });
   // Capture, so builder shortcuts on a focused shape run before the pane's Enter-to-select-source.
   viewer.stage.addEventListener('keydown', event => {
@@ -321,6 +391,7 @@ export function setupBoardTools(scope: PaneScope, viewer: Viewer, options: Board
     if (!shape || !ready()) return;
     if (event.key === 'ContextMenu' || event.shiftKey && event.key === 'F10') {
       event.preventDefault();
+      options.selectSource(shape.id, false);
       const box = shape.focus.getBoundingClientRect();
       openMenu(shape.id, shape.focus, box.left + box.width / 2, box.top + box.height / 2);
       return;
@@ -330,8 +401,10 @@ export function setupBoardTools(scope: PaneScope, viewer: Viewer, options: Board
     const plain = !event.metaKey && !event.ctrlKey && !event.shiftKey;
     const change: CanvasEdit | 'rename' | undefined = event.key === 'F2' && plain ? 'rename'
       : event.key === 'Tab' && plain ? { type: 'add' }
-        // In a mind map, Enter adds a sibling; the centre has none, so it adds a main branch.
-        : event.key === 'Enter' && plain && canvas.kind === 'mind map' ? { type: canvas.sibling ? 'sibling' : 'add' }
+        // In a mind map, Enter adds a sibling; the centre has none, so it adds a main branch. Enter on a topic
+        // that opens a board opens it, as on any link.
+        : event.key === 'Enter' && plain && canvas.kind === 'mind map' && shape.focus.localName !== 'a'
+          ? { type: canvas.sibling ? 'sibling' : 'add' }
           : (event.key === 'Delete' && plain || event.key === 'Backspace' && (event.metaKey || event.ctrlKey)) && canvas.remove ? { type: 'remove' }
             : undefined;
     if (!change) return;

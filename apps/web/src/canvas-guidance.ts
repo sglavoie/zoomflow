@@ -15,6 +15,10 @@ export function setupCanvasGuidance(stage: HTMLElement, setGuidance: (text: stri
       text = link ? `Enter: ${link.getAttribute('aria-label')}${source ? ' · Alt+Enter selects source' : ''}`
         : shape && source ? 'Enter selects source · Arrow keys move between shapes'
         : 'Arrow keys move between shapes · Tab leaves the diagram';
+    } else if (link && link.getAttribute('data-follow') === 'badge' && !target?.closest('.appendix-icon')) {
+      // Steps and topics open their board from the arrow badge; the shape itself is for editing.
+      const action = link.getAttribute('aria-label') ?? 'Open link';
+      text = `${activate} to select · Double-click to rename · The arrow badge will ${action[0].toLowerCase()}${action.slice(1)}`;
     } else if (link) {
       const action = link.getAttribute('aria-label') ?? 'Open link';
       text = `${activate} to ${action[0].toLowerCase()}${action.slice(1)}${source && input === 'mouse' ? ' · Alt+click selects source' : ''}`;
@@ -23,7 +27,7 @@ export function setupCanvasGuidance(stage: HTMLElement, setGuidance: (text: stri
     } else {
       const child = stage.querySelector('a[data-link-direction="child"]');
       const label = child?.querySelector('text')?.textContent?.trim();
-      text = label ? `${activate} ${label} to explore`
+      text = label ? child!.getAttribute('data-follow') === 'badge' ? `${activate} the arrow on ${label} to explore` : `${activate} ${label} to explore`
         : source ? `${activate} a shape to select its source`
         : 'Use the breadcrumbs to explore this diagram';
       if (input === 'touch') text += ' · Pinch to zoom';

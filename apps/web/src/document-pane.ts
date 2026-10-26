@@ -75,7 +75,10 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
   const scope = paneScope(id, root);
   const { part } = scope;
   const picker = () => shared.picker();
-  const viewer = new Viewer(part('viewer'), { history: id === 'a', active: shared.isActive });
+  const viewer = new Viewer(part('viewer'), { history: id === 'a', active: shared.isActive,
+    // Steps and topics open their board from the arrow badge, so a click on the shape selects it to edit.
+    follows: (link, event) => (link as SVGElement).dataset.follow !== 'badge' || event instanceof KeyboardEvent ||
+      Boolean(event.target instanceof Element && event.target.closest('.appendix-icon')) });
   const viewport = setupViewport(viewer.stage, setupFullscreen(viewer.stage, root));
   const compileError = setupCompileError(scope, viewer.stage, () => {
     if (activeDiagnostics[0]) void openDiagnostic(activeDiagnostics[0]);
@@ -382,7 +385,10 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
       ?? event.target.closest('a')?.querySelector<SVGElement>('[data-shape-id]') : null;
     const entry = shape && sourceMap.find((item) => item.board === viewer.currentBoard?.id && item.shape === shape.dataset.shapeId);
     if (!entry) return;
-    const linked = Boolean(shape.closest('a'));
+    const anchor = shape.closest('a');
+    // A click on a step or topic that opens a board selects it; only its arrow badge opens the board.
+    const linked = Boolean(anchor) && !(anchor!.dataset.follow === 'badge' && event instanceof MouseEvent &&
+      !(event.target instanceof Element && event.target.closest('.appendix-icon')));
     if (event instanceof KeyboardEvent) {
       if (event.key !== 'Enter' && event.key !== ' ' || linked && !event.altKey) return;
       event.preventDefault();

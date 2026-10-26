@@ -13,6 +13,8 @@ export type ViewerOptions = {
   history?: boolean;
   /** Whether page-level Escape/Backspace should navigate this viewer. */
   active?: () => boolean;
+  /** Whether a click or Enter on a link opens it; by default every one does. */
+  follows?: (link: Element, event: MouseEvent | KeyboardEvent) => boolean;
 };
 export { prepareExportSvg, rasterizeSvg, offlineViewerScript } from './export';
 export { setupViewport } from './viewport';
@@ -196,6 +198,8 @@ export class Viewer {
   }
 
   private follow(event: MouseEvent | KeyboardEvent) {
+    const link = event.target instanceof Element ? event.target.closest('a') : null;
+    if (link && this.settings.follows?.(link, event) === false) { event.preventDefault(); return; }
     const action = followLink(event, this.resolve);
     if (action?.kind === 'missing') this.setMessage(`Missing board: ${boardLabel(action.target, this.boards)}`, true);
     else if (action?.kind === 'board') void this.navigate(action.target);

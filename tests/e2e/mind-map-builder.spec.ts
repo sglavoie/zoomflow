@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { board, source } from './helpers';
+import { board, openFromBadge, source } from './helpers';
 
 const ready = (page: Page) => expect(page.locator('#preview-status')).toHaveText('Preview ready');
 // The header offers New mind map from 1350px; narrower screens use the filename menu.
@@ -18,7 +18,7 @@ test('creates a mind map from an outline, drills into a detail board and edits i
   await ready(page);
   await expect(page.locator('#filename')).toHaveText('Trip.d2');
   await expect(page.locator('.zf-stage')).toContainText('Budget "max" $2k');
-  await page.getByRole('link', { name: 'Open Lisbon board', exact: true }).click();
+  await openFromBadge(page, 'Open Lisbon board');
   await board(page, 'root.layers.Lisbon');
   await expect(page.locator('.zf-stage')).toContainText('Alfama');
   await expect(page.getByRole('navigation', { name: 'Breadcrumb' }).getByRole('button')).toHaveText(['Root', 'Lisbon']);

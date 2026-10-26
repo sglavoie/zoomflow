@@ -444,11 +444,11 @@ for (const offline of [false, true]) test(`link badges keep their screen size th
     await page.goto(pathToFileURL(path).href);
   }
   const badge = page.locator('a[data-link-direction="child"] .appendix-icon circle').first();
-  // The circle is 24px across; Playwright may include its 1px stroke.
+  // The circle is 32px across; Playwright may include its stroke.
   const size = async () => (await badge.boundingBox())!.width;
   const initial = await size();
-  expect(initial).toBeGreaterThanOrEqual(23.9);
-  expect(initial).toBeLessThanOrEqual(25.1);
+  expect(initial).toBeGreaterThanOrEqual(31.9);
+  expect(initial).toBeLessThanOrEqual(33.5);
   for (let i = 0; i < 5; i++) {
     await expect.poll(async () => Math.abs(await size() - initial)).toBeLessThan(0.2);
     await page.getByRole('button', { name: 'Zoom in', exact: true }).click();

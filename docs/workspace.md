@@ -62,10 +62,11 @@ Each board keeps its own layout, so a top-to-bottom flow can open a left-to-righ
 Choose **Flows & mind maps** in the filename menu for an example: a launch flow whose
 planning step opens a mind map, with a topic on that map opening an onboarding flow.
 
-Click a shape to select it: a bar over the diagram offers **Add flow board** and
-**Add mind map board**. Right-click a shape, or focus it and press Shift+F10 or the
-context menu key, for the same actions in a menu with **Select in source**. Linked
-shapes open their board when clicked, so use the menu for them. The builder starts
+Click a shape to select it: a blue ring marks it, and a bar beside it offers **Add flow
+board** and **Add mind map board**. Right-click a shape, or focus it and press Shift+F10 or the
+context menu key, for the same actions in a menu with **Select in source**. Right-clicking
+or focusing a shape selects it, so the blue ring always marks the shape that keys and menus
+act on. The builder starts
 from the shape's label as the board name, and the new board opens once it is added.
 
 **Edit flow** or **Edit mind map** above the preview edits the board on view, so drill
@@ -89,24 +90,30 @@ board.
 ## Edit on the diagram
 
 Steps of a flow and topics of a mind map change right on the diagram, without opening
-a builder. Click one to select it; focus stays on the diagram, and the bar over it offers
-the same actions as these keys:
+a builder. Click one to select it: a blue ring and halo mark it, focus stays on the
+diagram, and a bar just below it (above it near the bottom edge) names it and offers the
+same actions as these keys. The bar follows the shape as you pan and zoom. Its buttons
+are for the pointer; from the keyboard, use these keys or Shift+F10.
 
 - **F2** or double-click renames it. Enter applies the name and Escape cancels.
 - **Tab** adds the next step after a flow step, or a subtopic under a topic, and starts
   naming it. Tab while naming applies the name and adds another, so a map grows as fast
   as you type.
 - **Enter** on a mind map topic adds a sibling topic after it; on the central topic it
-  adds a main branch.
+  adds a main branch. On a topic that opens a board, Enter opens the board instead.
 - **Delete**, or ⌘/Ctrl+Backspace, removes the step and its connections, or the topic
   and its subtopics. A flow keeps at least one step.
 - **⌘Z / Ctrl+Z** undoes on the diagram as in the source editor, and ⌘⇧Z, Ctrl+Shift+Z
   or Ctrl+Y redoes.
 
+A step or topic that opens a board opens it from its arrow badge, or with Enter when it
+has focus. A click anywhere else on it selects it, so you can double-click to rename it
+like any other step or topic. Hand-written diagrams keep whole-shape links.
+
 Edits keep the builder's form, so **Edit flow** and **Edit mind map** still open, and
-boards attached to steps and topics stay on them. Topics on a mind map's detail boards
-are edited on those boards; renaming a detail board's central topic renames the board
-too. Other shapes keep their usual behaviour: clicking one selects its source in the
+boards attached to steps and topics stay on them. A topic that opens a detail board
+can be edited on the main board or as the centre of its own board; renaming it renames
+the board too. Other shapes keep their usual behaviour: clicking one selects its source in the
 editor.
 
 ## Find your way between boards
