@@ -45,6 +45,8 @@
         <div id="header-more">
           <button id="header-more-toggle" type="button" aria-expanded="false" aria-controls="header-more-content">Export</button>
           <div id="header-more-content" class="header-more-content" hidden>
+            <label class="export-name">Name<input id="export-name" type="text" maxlength="100" spellcheck="false" autocomplete="off" aria-describedby="export-name-hint" /></label>
+            <p id="export-name-hint">Names the downloaded files.</p>
             <fieldset id="export-format">
               <legend>What would you like to share?</legend>
               <label class="export-choice"><input type="radio" name="export-format" value="html" /><span><strong>Interactive diagram <small>HTML</small></strong><span>Every board, with drill-down navigation. Opens offline in a browser.</span></span></label>

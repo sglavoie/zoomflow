@@ -228,22 +228,23 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
     editor.showBoard(board === 'root' ? undefined : blocks.get(board), opened && !editor.view.hasFocus);
   }
 
+  /** Take on a saved or renamed draft's key and name, which a saved or renamed example changes. */
+  function adopt(saved: { key: string; name: string }) {
+    if (saved.key !== currentDocumentKey) {
+      editor.copyDocument(saved.key);
+      viewport.copyDocument(saved.key);
+      const route = shared.documentRoutes.get(currentDocumentKey!);
+      if (route) shared.documentRoutes.set(saved.key, route);
+    }
+    currentDocumentKey = saved.key;
+    documentName = saved.name;
+    // Identity changes do not invalidate compiled geometry or editor history.
+    picker().refresh();
+  }
   setupSaveFile(saveFileButton, {
     fileHandles: shared.fileHandles, picker,
     key: () => currentDocumentKey, name: () => documentName, source: () => editor.source,
-    adopt: (saved) => {
-      if (saved.key !== currentDocumentKey) {
-        editor.copyDocument(saved.key);
-        viewport.copyDocument(saved.key);
-        const route = shared.documentRoutes.get(currentDocumentKey!);
-        if (route) shared.documentRoutes.set(saved.key, route);
-      }
-      currentDocumentKey = saved.key;
-      documentName = saved.name;
-      // Save identity changes do not invalidate compiled geometry or editor history.
-      picker().refresh();
-      setActivity('');
-    },
+    adopt: (saved) => { adopt(saved); setActivity(''); },
     setActivity, activity: () => activityStatus.textContent,
   });
 
@@ -548,6 +549,16 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
     get current() { return mappedSource === editor.source; },
     replaceDocument,
     save: () => saveFileButton.click(),
+    /** Name the document for its exports and downloads; returns the name it was given. */
+    rename(name: string) {
+      const renamed = picker().rename(id, name);
+      if (!renamed) return documentName;
+      // The file on disk keeps its name, so the next save asks where to save under the new one.
+      const linked = shared.fileHandles.delete(renamed.key);
+      adopt(renamed);
+      setActivity(`Renamed to ${renamed.name}.${linked ? ' Save asks where to save it.' : ''}`);
+      return documentName;
+    },
     /** Show a document restored on startup, keeping its board from the page URL. */
     open(document: { key: string; name: string; source: string }) {
       ai?.documentSwitched();

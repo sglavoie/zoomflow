@@ -719,6 +719,31 @@ header > strong {
   gap: 6px;
   font-size: var(--font-size-md);
 }
+#export-name {
+  min-height: 36px;
+  padding: 7px 10px;
+  font: inherit;
+  font-weight: 400;
+  border: 1px solid var(--control-border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: inherit;
+}
+#export-name:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+#export-name:disabled {
+  color: var(--muted);
+}
+.header-more-content .export-name {
+  font-weight: 600;
+}
+#export-name-hint {
+  margin: calc(-1 * var(--space-2)) 0 0;
+  color: var(--muted);
+  font-size: var(--font-size-sm);
+}
 #export-format {
   min-width: 0;
   border: 0;

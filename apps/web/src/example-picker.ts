@@ -1,7 +1,8 @@
 import { examples } from './examples';
 import type { Draft } from './draft-store';
 import { setupDocumentActions } from './document-actions';
-import { createDraftLibrary, isOwnDraft } from './draft-library';
+import { createDraftLibrary, exampleSource, isOwnDraft } from './draft-library';
+import { flowFilename } from './flow-model';
 import { draftRow, projectGroup, type ProjectGroup } from './picker-rows';
 import { setText } from './text';
 
@@ -224,6 +225,19 @@ export function setupExamplePicker({ readSource, open, onState, forget, checkpoi
     filterRows();
   }
 
+  /** A named draft carrying an example's edits; the example is unedited again. */
+  function ownCopy(example: Draft, name: string) {
+    const draft: Draft = { ...example, key: `file:${crypto.randomUUID()}`, number: library.nextNumber(),
+      template: examples.find((item) => item.name === example.key)!.title, name, title: name, updatedAt: Date.now() };
+    // The edits move to the copy with their undo history.
+    example.source = example.baseline;
+    example.updatedAt = undefined;
+    refreshRows.get(example.key)?.();
+    drafts.set(draft.key, draft);
+    addOption(draft);
+    return draft;
+  }
+
   function addOption(item: Draft) {
     const { row, button, refresh } = draftRow(item, {
       choose: () => {
@@ -367,24 +381,33 @@ export function setupExamplePicker({ readSource, open, onState, forget, checkpoi
       const pane = panes.find((id) => current[id] === key);
       if (pane) { draft.source = readSource(pane); downloadRequested[pane] = false; }
       // Saving a built-in example creates a named file without taking over the template.
-      const template = examples.find((example) => example.name === key);
-      if (template) {
-        const example = draft;
-        draft = { ...draft, key: `file:${crypto.randomUUID()}`, number: library.nextNumber(), template: template.title,
-          name, title: name, updatedAt: Date.now() };
-        // The edits moved to the saved copy with their undo history; the example is unedited again.
-        example.source = example.baseline;
-        example.updatedAt = undefined;
-        refreshRows.get(example.key)?.();
-        drafts.set(draft.key, draft);
-        addOption(draft);
-      } else {
+      if (exampleSource(key) !== undefined) draft = ownCopy(draft, name);
+      else {
         draft.name = name;
         if (!draft.projectId) draft.title = name;
       }
       draft.baseline = source;
       refreshRows.get(draft.key)?.();
       if (pane) activate(draft.key, pane);
+      persist();
+      return { key: draft.key, name: draft.name };
+    },
+    /** Name the pane's draft, which names its exports and downloads; project files keep their path.
+     * Renaming a built-in example moves its edits to a new draft with that name, as saving one does. */
+    rename(pane: PaneId, name: string) {
+      let draft = draftOf(pane);
+      if (!draft || draft.projectId) return;
+      name = flowFilename(name, draft.name);
+      if (name === draft.name) return;
+      draft.source = readSource(pane);
+      if (exampleSource(draft.key) !== undefined) {
+        // The copy is not on disk yet, so all of its source counts as unsaved.
+        draft = ownCopy(draft, name);
+        draft.baseline = '';
+        downloadRequested[pane] = false;
+      } else Object.assign(draft, { name, title: name });
+      refreshRows.get(draft.key)?.();
+      activate(draft.key, pane);
       persist();
       return { key: draft.key, name: draft.name };
     },

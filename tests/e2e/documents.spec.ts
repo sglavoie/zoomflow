@@ -137,6 +137,52 @@ test('saving an example creates a named copy with its history, export names and 
   await expect(source(page)).toHaveText('saved: After');
 });
 
+test('naming a diagram names its exports, keeps examples intact and makes Save ask for a new file', async ({ page }) => {
+  await page.addInitScript(() => {
+    const target = window as typeof window & { suggested?: string; showOpenFilePicker?: () => Promise<unknown[]>; showSaveFilePicker?: (options: { suggestedName: string }) => Promise<unknown> };
+    const handle = (name: string) => ({ name, getFile: async () => new File(['a -> b'], name, { lastModified: 1 }),
+      createWritable: async () => ({ write: async () => {}, close: async () => {}, abort: async () => {} }) });
+    target.showOpenFilePicker = async () => [handle('work.d2')];
+    target.showSaveFilePicker = async ({ suggestedName }) => { target.suggested = suggestedName; return handle(suggestedName); };
+  });
+  await page.goto('/'); await previewReady(page);
+  await source(page).fill('named: Before');
+  await expect(page.locator('.zf-stage')).toContainText('Before'); await previewReady(page);
+  await openDownloads(page);
+  await expect(page.locator('#export-name')).toHaveValue('order');
+  await page.locator('#export-name').fill('Checkout plan');
+  await page.locator('#export-name').press('Enter');
+  await expect(page.locator('#filename')).toHaveText('Checkout plan.d2');
+  await expect(page.locator('#export-name')).toHaveValue('Checkout plan');
+  await expect(page.locator('#draft-status')).toHaveText('File has unsaved changes');
+  await selectMenuOption(page, '#export-format', 'svg');
+  const pending = page.waitForEvent('download');
+  await downloadExport(page);
+  expect((await pending).suggestedFilename()).toBe('Checkout plan-root.svg');
+  // The edits moved to the named draft with their history; the example is unedited.
+  await source(page).press('ControlOrMeta+z');
+  await expect(source(page)).not.toContainText('named: Before');
+  await source(page).press('ControlOrMeta+Shift+z');
+  await page.locator('#example-picker summary').click();
+  await expect(page.locator('#draft-options')).toContainText('Saved copy of Order flow');
+  await expect(page.locator('#example-options').getByRole('button', { name: /^Order flow/ }).locator('.example-modified')).toBeHidden();
+  await page.keyboard.press('Escape');
+  await page.reload(); await previewReady(page);
+  await expect(page.locator('#filename')).toHaveText('Checkout plan.d2');
+  await expect(source(page)).toHaveText('named: Before');
+
+  // A file opened from disk keeps its name there, so Save asks where to save under the new one.
+  await page.locator('#file').click();
+  await expect(page.locator('#filename')).toHaveText('work.d2'); await previewReady(page);
+  await openDownloads(page);
+  await page.locator('#export-name').fill('renamed work');
+  await page.locator('#export-name').press('Enter');
+  await expect(page.locator('#filename')).toHaveText('renamed work.d2');
+  await source(page).press('ControlOrMeta+s');
+  await expect(page.locator('#draft-status')).toHaveText('Saved to file');
+  expect(await page.evaluate(() => (window as typeof window & { suggested?: string }).suggested)).toBe('renamed work.d2');
+});
+
 test('a slow save preserves later edits and does not rename a document opened in the meantime', async ({ page }) => {
   await page.addInitScript(() => {
     (window as any).showSaveFilePicker = async () => ({ name: 'saved-copy.d2', createWritable: async () => ({

@@ -25,13 +25,34 @@ export function setupExportMenu(activePane: () => DocumentPane | undefined, pick
     moreContent.hidden = !open;
     moreToggle.setAttribute('aria-expanded', String(open));
   }
-  moreToggle.addEventListener('click', () => setMoreOpen(Boolean(moreContent.hidden)));
+  moreToggle.addEventListener('click', () => { showName(); setMoreOpen(Boolean(moreContent.hidden)); });
   document.addEventListener('click', (event) => { if (event.target instanceof Node && !more.contains(event.target)) setMoreOpen(false); });
   more.addEventListener('focusout', (event) => { if (event.relatedTarget instanceof Node && !more.contains(event.relatedTarget)) setMoreOpen(false); });
   more.addEventListener('keydown', (event) => {
     if (event.key === 'Escape' && !moreContent.hidden) {
       event.preventDefault(); event.stopPropagation(); setMoreOpen(false); moreToggle.focus();
     }
+  });
+
+  // The name field shows the name without its extension; changing it renames the draft.
+  const nameField = document.querySelector<HTMLInputElement>('#export-name')!;
+  const nameHint = document.querySelector<HTMLElement>('#export-name-hint')!;
+  function showName() {
+    const pane = activePane();
+    const project = Boolean(pane?.key && picker().projectName(pane.id));
+    nameField.value = pane?.name.replace(/\.d2$/i, '') ?? '';
+    nameField.disabled = !pane?.key || project;
+    nameHint.textContent = project ? 'Project files keep their file name.' : 'Names the downloaded files.';
+  }
+  nameField.addEventListener('change', () => {
+    const pane = activePane();
+    if (pane?.key) pane.rename(nameField.value);
+    showName();
+  });
+  nameField.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter') { event.preventDefault(); nameField.blur(); }
+    // Escape restores the name before the menu closes.
+    else if (event.key === 'Escape') showName();
   });
 
   const exportStatus = document.querySelector<HTMLElement>('#export-status')!;
@@ -81,6 +102,7 @@ export function setupExportMenu(activePane: () => DocumentPane | undefined, pick
   const canExport = () => !exporting && Boolean(activePane()?.documentExport && activePane()!.current);
   function updateExportLabel() {
     const pane = activePane();
+    if (document.activeElement !== nameField) showName();
     const documentExport = pane?.documentExport;
     exportButton.disabled = !canExport();
     const count = documentExport ? indexBoards(documentExport.diagram).size : 0;
