@@ -1,5 +1,5 @@
 import { D2 } from '@d2lang/d2';
-import { boardLabel, exportBoardsHtml, exportBoardsZip, exportGlyphSource, indexBoards, lint, renderExportBoards, shapeClass, type Diagram } from '@zoomflow/core';
+import { boardLabel, classifyHref, exportBoardsHtml, exportBoardsZip, exportGlyphSource, indexBoards, lint, renderExportBoards, shapeClass, type Diagram } from '@zoomflow/core';
 import { offlineViewerScript, offlineViewerStyle } from '@zoomflow/viewer';
 import { execFile } from 'node:child_process';
 import { copyFile, lstat, mkdir, mkdtemp, readFile, realpath, rename, rm, stat, writeFile } from 'node:fs/promises';
@@ -23,15 +23,27 @@ function compilerLinks(svg: string, diagram: Diagram): string {
   return svg.replace(/(<a\b[^>]*>)(\s*<g\b[^>]*\bclass="([^"]*)")/g, (match, anchor: string, group: string, classes: string) => {
     const link = classes.split(/\s+/).map((name) => links.get(name)).find(Boolean);
     if (!link) return match;
-    const escaped = link.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+    // Escape whitespace too: XML attribute normalization would turn it into spaces.
+    const escaped = link.replace(/[&"<\t\n\r]/g, (char) => ({ '&': '&amp;', '"': '&quot;', '<': '&lt;' })[char] ?? `&#${char.charCodeAt(0)};`);
     return anchor.replace(/((?:xlink:)?href=")[^"]*"/g, (_attribute, prefix: string) => `${prefix}${escaped}"`) + group;
   });
 }
+const entities: Record<string, string> = { amp: '&', quot: '"', lt: '<', gt: '>', apos: "'" };
+const unescapeXml = (text: string) => text.replace(/&(?:#(\d+)|#x([\da-f]+)|(amp|quot|lt|gt|apos));/gi,
+  (_entity, dec?: string, hex?: string, name?: string) => name ? entities[name.toLowerCase()] : String.fromCodePoint(dec ? Number(dec) : parseInt(hex!, 16)));
+/** Keep web and mail links, and board links where the export can follow them, as browser exports do.
+ * Other anchors stay but lose their href, so `javascript:` and `data:` links never reach the output.
+ */
+function safeLinks(svg: string, boards: boolean): string {
+  return svg.replace(/<a\b(?:[^>"]|"[^"]*")*>/g, (anchor) => anchor.replace(/\s(?:xlink:)?href="([^"]*)"/g, (attribute, href: string) => {
+    const { kind } = classifyHref(unescapeXml(href));
+    return kind === 'external' || (boards && kind === 'board') ? attribute : '';
+  }));
+}
 /** Point board links at the relative paths of their files in the ZIP, keeping other links. */
 function zipLinks(svg: string, from: string, paths: Map<string, string>): string {
-  const entities: Record<string, string> = { amp: '&', quot: '"', '#34': '"', lt: '<', gt: '>', apos: "'", '#39': "'" };
   return svg.replace(/((?:xlink:)?href=")([^"]*)"/g, (match, prefix: string, href: string) => {
-    const path = paths.get(href.replace(/&(amp|quot|#34|lt|gt|apos|#39);/g, (_entity, name: string) => entities[name]));
+    const path = paths.get(unescapeXml(href));
     if (path === undefined) return match;
     const link = encodeURI(posix.relative(posix.dirname(from), path)).replace(/[#?]/g, encodeURIComponent);
     return `${prefix}${link.replace(/&/g, '&amp;')}"`;
@@ -46,7 +58,7 @@ const help = `${usage}
 SVG/PNG export the root board by default; --all creates a ZIP of every board.
 HTML always includes every board in one navigable, self-contained file.
 Default output: file.svg, file.png, file.html, or file-svg.zip / file-png.zip;
- -o, --output must use the same extension.
+ -o, --output must use the same extension, which sets the format when --format is absent.
 --root bounds local imports and images (default: the input file's directory);
  pass it to import from parent folders. Only the input and the files it imports
  are read. Local zoomflow.d2 files override the bundled stdlib.
@@ -185,7 +197,9 @@ export async function main(args = process.argv.slice(2)): Promise<number> {
   // Show paths as the user would type them: relative to cwd for root-relative D2 paths.
   let shown = (path: string) => path;
   // Known before parsing, so a lint --json usage error still prints JSON.
-  let json = args.find((arg) => !arg.startsWith('-')) === 'lint' && args.includes('--json');
+  // Skip option values: in `--root . lint`, the command is lint, not the root.
+  const valued = new Set(['--root', '--format', '--output', '-o']);
+  let json = args.find((arg, i) => !arg.startsWith('-') && !valued.has(args[i - 1])) === 'lint' && args.includes('--json');
   try {
     const { values, positionals } = (() => {
       try {
@@ -209,17 +223,22 @@ export async function main(args = process.argv.slice(2)): Promise<number> {
     if (positionals.length !== 2) throw new UsageError(`${command} takes exactly one .d2 file.`);
     if (command === 'lint' && (values.all || values.format || values.output)) throw new UsageError('Export options cannot be used with lint.');
     if (command === 'export' && (values.json || values['missing-backlink'] || values['boundary-ports'])) throw new UsageError('Lint options cannot be used with export.');
-    const format = values.format ?? 'svg';
-    if (!['svg', 'png', 'html'].includes(format)) throw new UsageError(`Unsupported format: ${format}`);
-    const input = resolve(filename);
-    if (extname(input) !== '.d2') throw new UsageError('Input must be a .d2 file.');
+    // Without --format, an -o extension other than .zip chooses it.
+    const implied = /^\.(svg|png|html)$/i.exec(extname(values.output ?? ''))?.[1];
+    const format = (values.format ?? implied ?? 'svg').toLowerCase();
+    if (!['svg', 'png', 'html'].includes(format)) throw new UsageError(`Unsupported format: ${values.format}`);
+    let input = resolve(filename);
+    if (extname(input).toLowerCase() !== '.d2') throw new UsageError('Input must be a .d2 file.');
     if (!(await regularFile(input, filename))) {
       throw new Error((await lstat(input)).isSymbolicLink() ? 'Input must be a regular file; symlinks are not followed.' : 'Input must be a regular file.');
     }
     const root = resolve(values.root ?? dirname(input));
     const realRoot = await realpath(root).catch(() => { throw new Error(`Root directory not found: ${root}`); });
     if (!(await stat(realRoot)).isDirectory()) throw new Error(`Root is not a directory: ${root}`);
-    if (!within(root, input) || !within(realRoot, await realpath(input))) throw new Error('Input must be inside --root.');
+    // The real path decides; an input named through the other side of a symlinked root is moved onto the root's side.
+    const realInput = await realpath(input);
+    if (!within(realRoot, realInput)) throw new Error('Input must be inside --root.');
+    if (!within(root, input)) input = join(root, relative(realRoot, realInput));
     shown = (path) => {
       const rel = relative(process.cwd(), join(root, path));
       return within(process.cwd(), join(root, path)) && rel ? rel : join(root, path);
@@ -228,7 +247,7 @@ export async function main(args = process.argv.slice(2)): Promise<number> {
     const all = values.all || format === 'html';
     const extension = all && format !== 'html' ? '.zip' : `.${format}`;
     const output = resolve(values.output ?? input.slice(0, -3) + (extension === '.zip' ? `-${format}.zip` : extension));
-    if (command === 'export' && (output === input || extname(output) === '.d2')) throw new Error('Output must not overwrite D2 source files.');
+    if (command === 'export' && (output === input || extname(output).toLowerCase() === '.d2')) throw new Error('Output must not overwrite D2 source files.');
     if (command === 'export' && extname(output).toLowerCase() !== extension) {
       throw new Error(`Output must end in ${extension} for ${extension === '.zip' ? `--all --format ${format}` : `--format ${format}`}: ${values.output}`);
     }
@@ -278,14 +297,15 @@ export async function main(args = process.argv.slice(2)): Promise<number> {
           }
         };
         const diagnostics = lint(compiled).diagnostics;
-        if (!all) await save(output, await render('', format));
+        // A lone board's links to other boards lead nowhere.
+        if (!all) await save(output, format === 'svg' ? safeLinks((await render('', format)).toString('utf8'), false) : await render('', format));
         else {
           const binaries = new Map<string, Buffer>();
           const byTarget = new Map([...boards.values()].map((board) => [board.target, board.diagram]));
           const exported = await renderExportBoards(compiled.diagram, async (target) => {
             const data = await render(target, format === 'html' ? 'svg' : format);
             binaries.set(target, data);
-            return format === 'png' ? '' : compilerLinks(data.toString('utf8'), byTarget.get(target)!);
+            return format === 'png' ? '' : safeLinks(compilerLinks(data.toString('utf8'), byTarget.get(target)!), true);
           }, format === 'html' ? diagnostics : [], { concurrency: availableParallelism(), skipEmpty: format === 'html' });
           if (format === 'html') {
             // One extra render gives every board the same font subsets; without it each board keeps its own.
@@ -295,7 +315,7 @@ export async function main(args = process.argv.slice(2)): Promise<number> {
               .then(() => exec('d2', ['--layout=elk', '--bundle=true', '--watch=false', ...fontArgs, '--stdout-format=svg', glyphFile, '-'],
                 { encoding: 'utf8', maxBuffer: 128 * 1024 * 1024, timeout: 180_000 }))
               .then((result) => result.stdout, () => undefined) : undefined;
-            await save(output, exportBoardsHtml(exported, { title: basename(input, '.d2'), script: offlineViewerScript(), style: offlineViewerStyle, glyphs }));
+            await save(output, exportBoardsHtml(exported, { title: basename(input).slice(0, -3), script: offlineViewerScript(), style: offlineViewerStyle, glyphs }));
           } else {
             const paths = new Map(exported.map((board) => [board.id, board.path]));
             const files = exported.map((board) => ({ ...board, path: board.path.replace(/\.svg$/, `.${format}`),

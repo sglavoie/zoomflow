@@ -306,6 +306,7 @@ export function setupExamplePicker({ readSource, open, onState, forget, checkpoi
 
   return {
     initial: { source: draftOf('a')!.source, name: draftOf('a')!.name, key: current.a! },
+    hasDraft: (key: string) => drafts.has(key),
     /** Show the second pane: it reopens the draft it showed before a reload, or starts empty. */
     setSplit(value: boolean) {
       if (value === split) return;

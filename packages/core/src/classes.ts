@@ -83,15 +83,18 @@ export function definedClasses(files: Record<string, string>, path: string, seen
       const end = text.indexOf('}', i);
       append(text.slice(i, end < 0 ? text.length : end + 1));
       i = end < 0 ? text.length : end;
-    } else if (char === '"' || char === "'") {
+    } else if ((char === '"' || char === "'") && (i === 0 || /[\s:;.,{[<>@]/.test(text[i - 1]))) {
+      // Only a token can open a string: the quote in `Don't` or `55" TV` is label text.
+      // An unterminated string ends before its line break, so the statement still ends there.
       let end = i + 1;
-      while (end < text.length && text[end] !== char && text[end] !== '\n') end += char === '"' && text[end] === '\\' ? 2 : 1;
-      append(text.slice(i, end + 1));
-      i = end;
+      while (end < text.length && text[end] !== char && text[end] !== '\n') end += char === '"' && text[end] === '\\' && text[end + 1] !== '\n' ? 2 : 1;
+      const closed = text[end] === char;
+      append(text.slice(i, closed ? end + 1 : end));
+      i = closed ? end : end - 1;
     } else if (char === '|' && current.colon) {
-      // Block strings close with the same run of pipes that opened them.
+      // Block strings close with the same run of pipes that opened them, on the same line too.
       const pipes = /^\|+/.exec(text.slice(i))![0];
-      const end = text.indexOf(pipes, text.indexOf('\n', i));
+      const end = text.indexOf(pipes, i + pipes.length);
       if (end < 0) return;
       i = end + pipes.length - 1;
     } else if (char === '[') {

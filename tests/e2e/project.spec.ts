@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { fileURLToPath } from 'node:url';
+import { mkdir, writeFile } from 'node:fs/promises';
 import { source, previewReady, stubAiStatus, projectFolder, openFolder } from './helpers';
 
 const folder = fileURLToPath(new URL('../../fixtures/browser-project', import.meta.url));
@@ -218,4 +219,21 @@ test('projects group files above examples and removal only affects the chosen pr
   await page.locator('#example-picker summary').click();
   await expect(page.locator('.project-group')).toHaveCount(0);
   await expect(page.locator('#draft-options')).toContainText('keep.d2');
+});
+
+test('the shape menu offers Select in source only for shapes this file defines', async ({ page }) => {
+  const project = test.info().outputPath('menu-project');
+  await mkdir(project, { recursive: true });
+  await writeFile(`${project}/main.d2`, '...@shared\nLocal: Here\n');
+  await writeFile(`${project}/shared.d2`, 'Imported: From another file\n');
+  await page.goto('/');
+  await openFolder(page, project);
+  await previewReady(page);
+  for (const [id, offered] of [['Imported', false], ['Local', true]] as const) {
+    await page.locator(`.zf-stage [data-shape-id="${id}"]`).click({ button: 'right' });
+    const menu = page.getByRole('menu');
+    await expect(menu).toBeVisible();
+    await expect(menu.getByRole('menuitem', { name: 'Select in source' })).toHaveCount(offered ? 1 : 0);
+    await page.keyboard.press('Escape');
+  }
 });

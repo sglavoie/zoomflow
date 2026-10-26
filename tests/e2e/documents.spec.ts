@@ -552,6 +552,94 @@ test('Save writes back to an opened file after reload and still asks about outsi
   expect(await page.evaluate(() => (window as any).pickerCalls)).toBe(0);
 });
 
+test('after a reload, Open and Save wait for stored file handles, and handles of lost drafts are removed', async ({ page, browserName }) => {
+  test.skip(browserName !== 'chromium', 'Writable origin-private file handles');
+  await page.addInitScript(() => {
+    const w = window as any;
+    w.pickerCalls = 0;
+    w.showSaveFilePicker = async () => { w.pickerCalls++; throw new DOMException('Canceled', 'AbortError'); };
+    w.showOpenFilePicker = async () => [await (await navigator.storage.getDirectory()).getFileHandle('kept.d2', { create: true })];
+    w.storedKeys = () => new Promise<IDBValidKey[]>((resolve) => {
+      const request = indexedDB.open('zoomflow.files');
+      request.onsuccess = () => {
+        const keys = request.result.transaction('handles', 'readonly').objectStore('handles').getAllKeys();
+        keys.onsuccess = () => { resolve(keys.result); request.result.close(); };
+      };
+    });
+    // Stored handles load slowly after the reload, as they may with a busy disk.
+    if (sessionStorage.getItem('slow')) {
+      const getAll = IDBObjectStore.prototype.getAll;
+      IDBObjectStore.prototype.getAll = function (...args) {
+        const request = getAll.apply(this, args);
+        let handler: ((event: Event) => void) | null = null;
+        Object.defineProperty(request, 'onsuccess', { get: () => handler, set: (value) => { handler = value; } });
+        request.addEventListener('success', (event) => setTimeout(() => handler?.call(request, event), 1500));
+        return request;
+      };
+    }
+  });
+  await page.goto('/'); await previewReady(page);
+  await page.locator('#file').click();
+  await expect(page.locator('#filename')).toHaveText('kept.d2'); await previewReady(page);
+  // A handle whose draft is gone, as after clearing site data.
+  await page.evaluate(async () => {
+    const handle = await (await navigator.storage.getDirectory()).getFileHandle('ghost.d2', { create: true });
+    await new Promise<void>((resolve) => {
+      const request = indexedDB.open('zoomflow.files');
+      request.onsuccess = () => {
+        const transaction = request.result.transaction('handles', 'readwrite');
+        transaction.objectStore('handles').put({ handle }, 'file:ghost');
+        transaction.oncomplete = () => { request.result.close(); resolve(); };
+      };
+    });
+    sessionStorage.setItem('slow', '1');
+  });
+  await page.reload();
+  // Saving at once writes back rather than asking where to save.
+  await source(page).fill('kept: Saved at once');
+  await page.locator('#save-file').click();
+  await expect(page.locator('#draft-status')).toHaveText('Saved to file');
+  expect(await page.evaluate(() => (window as any).pickerCalls)).toBe(0);
+  await expect.poll(() => page.evaluate(() => (window as any).storedKeys())).not.toContain('file:ghost');
+  // Another program changes the file; opening it at once returns to its draft rather than adding another.
+  await page.evaluate(async () => {
+    const writable = await (await (await navigator.storage.getDirectory()).getFileHandle('kept.d2')).createWritable();
+    await writable.write('kept: Edited elsewhere'); await writable.close();
+  });
+  await page.reload();
+  await page.locator('#file').click();
+  await expect(page.locator('#filename')).toHaveText('kept.d2'); await previewReady(page);
+  expect(await draftRows(page, 'kept.d2')).toBe(1);
+});
+
+test('refusing to let Zoomflow write a file asks where to save, once', async ({ page, browserName }) => {
+  test.skip(browserName !== 'chromium', 'Writable origin-private file handles');
+  await page.addInitScript(() => {
+    const w = window as any;
+    w.permissionPrompts = 0;
+    w.saveDialogs = 0;
+    w.showOpenFilePicker = async () => [await (await navigator.storage.getDirectory()).getFileHandle('locked.d2', { create: true })];
+    const prototype = FileSystemHandle.prototype as any;
+    prototype.queryPermission = async () => 'prompt';
+    prototype.requestPermission = async () => { w.permissionPrompts++; return 'denied'; };
+    // Answering the permission prompt used up the click that would open the save dialog.
+    w.showSaveFilePicker = async () => {
+      w.saveDialogs++;
+      if (w.saveDialogs === 1) throw new DOMException('Must be handling a user gesture', 'SecurityError');
+      throw new DOMException('Canceled', 'AbortError');
+    };
+  });
+  await page.goto('/'); await previewReady(page);
+  await page.locator('#file').click();
+  await expect(page.locator('#filename')).toHaveText('locked.d2'); await previewReady(page);
+  await source(page).fill('locked: Mine');
+  await page.locator('#save-file').click();
+  await expect(page.locator('#activity-status')).toHaveText('Click Save again to choose where to save.');
+  await page.locator('#save-file').click();
+  await expect.poll(() => page.evaluate(() => (window as any).saveDialogs)).toBe(2);
+  expect(await page.evaluate(() => (window as any).permissionPrompts)).toBe(1);
+});
+
 test('leaving the page asks first when edits exist only in memory because browser backup failed', async ({ page }) => {
   await page.addInitScript(() => { Storage.prototype.setItem = () => { throw new Error('Storage blocked'); }; });
   await page.goto('/'); await previewReady(page);

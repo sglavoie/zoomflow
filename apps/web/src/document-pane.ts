@@ -13,6 +13,7 @@ import { setupCanvasGuidance } from './canvas-guidance';
 import { setupBoardTools } from './board-tools';
 import { setupLinkPreview } from './link-preview';
 import { boardSites } from './board-model';
+import type { FileHandles } from './file-handles';
 import type { setupFlowBuilder } from './flow-builder';
 import type { setupMindMapBuilder } from './mind-map-builder';
 import type { DraftState, setupExamplePicker } from './example-picker';
@@ -34,7 +35,7 @@ export type PaneContext = {
   flowBuilder: ReturnType<typeof setupFlowBuilder>;
   mindMapBuilder: ReturnType<typeof setupMindMapBuilder>;
   engine: EngineNotice;
-  fileHandles: Map<string, FileSystemFileHandle>;
+  fileHandles: FileHandles;
   documentRoutes: Map<string, ViewerRoute>;
   isActive: () => boolean;
   /** Whether this pane shows one view at a time (narrow screens and split tabs). */
@@ -206,6 +207,7 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
       immediate = false;
       showView('preview');
     },
+    inSource: (shape) => sourceMap.some((item) => item.board === viewer.currentBoard?.id && item.shape === shape),
     selectSource: (shape, focusEditor) => {
       const entry = sourceMap.find((item) => item.board === viewer.currentBoard?.id && item.shape === shape);
       if (!entry || mappedSource !== editor.source) return;

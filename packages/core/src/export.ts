@@ -113,8 +113,10 @@ const scopeOf = (svg: string) => /<svg\b[^>]*\bclass="(d2-\d+) d2-svg"/.exec(svg
 
 /** D2 subsets each board's fonts to that board's text. Rendering this source once yields
  * faces covering every shown board: bold shape labels, regular shapes, italic edge labels.
+ * Undefined for fewer than two shown boards, which keep their own fonts.
  */
 export function exportGlyphSource(boards: readonly ExportBoard[]): string | undefined {
+  if (boards.filter((board) => !board.empty).length < 2) return undefined;
   const chars = new Set<string>();
   for (const board of boards) {
     if (board.empty) continue;
@@ -183,8 +185,10 @@ export function exportBoardsHtml(boards: readonly ExportBoard[],
   // SVG labels can contain HTML closing tags. Never embed unescaped JSON in a script.
   const data = JSON.stringify(embedded).replace(/</g, '\\u003c').replace(/\u2028/g, '\\u2028').replace(/\u2029/g, '\\u2029');
   const style = shared.style;
+  // Offline and self-contained: only the inline runtime and styles, with embedded images and fonts.
+  const csp = "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; font-src data:; connect-src 'none'; base-uri 'none'; form-action 'none'";
   return `<!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<html lang="en"><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="${csp}"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>${title}</title><style>${options.style}</style>${style ? `<style id="zoomflow-svg-style">${style}</style>` : ''}</head><body>
 <header><h1>${title}</h1></header><main id="viewer"><nav class="zf-breadcrumbs" aria-label="Breadcrumb"></nav><div class="zf-context" role="group" aria-label="Parent connections" hidden></div><div class="zf-message"><span role="status"></span><span role="alert"></span></div><div class="zf-visually-hidden" aria-live="polite"></div><div class="zf-stage" role="region" aria-label="Diagram" tabindex="-1"></div></main>
 <footer>Select a linked shape to explore · Esc or Backspace goes up</footer>

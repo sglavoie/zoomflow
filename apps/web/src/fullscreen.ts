@@ -28,6 +28,8 @@ export function setupFullscreen(stage: HTMLElement, pane: HTMLElement) {
   function onKey(event: KeyboardEvent) {
     // An open dialog, such as a confirmation, handles its own keys first.
     if (!fullscreen || document.querySelector('dialog[open]')) return;
+    // So does a field or menu, such as renaming a shape on the diagram, where Escape cancels.
+    if (event.target instanceof Element && event.target.closest('input, textarea, select, [role="menu"]')) return;
     if (event.key === 'Escape') {
       event.preventDefault();
       event.stopImmediatePropagation();

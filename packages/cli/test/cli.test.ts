@@ -119,8 +119,69 @@ describe.concurrent('zoomflow CLI', () => {
     success(await run(['export', 'fixtures/lint/imported.d2', '-o', output]));
     const svg = await readFile(output, 'utf8');
     expect(svg).toContain('<svg');
-    expect(svg).toContain('root.layers.checkout');
+    expect(svg).toContain('Checkout');
+    // The board link would be dead in a standalone file.
+    expect(svg).not.toContain('root.layers.checkout');
     expect(svg).not.toContain('Entry');
+  });
+
+  it('keeps only web, mail and followable board links in SVG exports', async () => {
+    const input = join(temp, 'unsafe-links.d2');
+    await writeFile(input, 'a: x {link: "javascript:alert(1)"}\nb.link: "data:text/html,<b>x</b>"\nc.link: layers.k\n' +
+      'd.link: "https://e.com/?a=1&b=2"\ne.link: "mailto:x@y.z"\nf.link: \'vbscript:msgbox("x")\'\nlayers.k: {g.link: "javascript:alert(2)"; h.link: _}');
+    const [single, zip] = [join(temp, 'unsafe-links.svg'), join(temp, 'unsafe-links.zip')];
+    success(await run(['export', input, '-o', single]));
+    success(await run(['export', input, '--all', '-o', zip]));
+    const anchors = (svg: string) => [...svg.matchAll(/<a\b[^>]*>/g)].map((match) => match[0]);
+    expect(anchors(await readFile(single, 'utf8'))).toEqual(['<a>', '<a>', '<a>',
+      '<a href="https://e.com/?a=1&amp;b=2" xlink:href="https://e.com/?a=1&amp;b=2">', '<a href="mailto:x@y.z" xlink:href="mailto:x@y.z">', '<a>']);
+    const files = unzipSync(await readFile(zip));
+    expect(anchors(strFromU8(files['root.svg']))).toEqual(['<a>', '<a>', '<a href="k.svg" xlink:href="k.svg">',
+      '<a href="https://e.com/?a=1&amp;b=2" xlink:href="https://e.com/?a=1&amp;b=2">', '<a href="mailto:x@y.z" xlink:href="mailto:x@y.z">', '<a>']);
+    expect(anchors(strFromU8(files['k.svg']))).toEqual(['<a>', '<a href="root.svg" xlink:href="root.svg">']);
+  }, 180_000);
+
+  it('escapes whitespace in board links so XML attribute normalization keeps them navigable', async () => {
+    const input = join(temp, 'tab-board.d2');
+    const output = join(temp, 'tab-board.html');
+    await writeFile(input, 'a.link: layers."x\\ty"\nlayers."x\\ty": {b.link: _}');
+    success(await run(['export', input, '--format', 'html', '-o', output]));
+    expect(embedded(await readFile(output, 'utf8'))[0].svg).toContain('href="root.layers.x&#9;y"');
+    const page = await browser.newPage({ offline: true });
+    try {
+      await page.goto(pathToFileURL(output).href);
+      await page.locator('.zf-stage a').first().click();
+      expect(await page.locator('.zf-stage').getAttribute('data-board')).toBe('root.layers.x\ty');
+    } finally { await page.close(); }
+  });
+
+  it('accepts upper-case inputs and formats, and takes the format from the output extension', async () => {
+    const input = join(temp, 'UPPER.D2');
+    await writeFile(input, 'a -> b\nlayers.c: {d}');
+    const [png, html] = [join(temp, 'upper.png'), join(temp, 'upper.html')];
+    const results = await Promise.all([run(['export', input, '-o', png]), run(['export', input, '--format', 'HTML', '-o', html]),
+      run(['lint', input]), run(['export', input, '-o', join(temp, 'upper.D2')])]);
+    results.slice(0, 3).forEach(success);
+    expect([...(await readFile(png)).subarray(0, 4)]).toEqual([137, 80, 78, 71]);
+    expect(await readFile(html, 'utf8')).toContain('<title>UPPER</title>');
+    expect(results[3].stderr).toBe('zoomflow: Output must not overwrite D2 source files.\n');
+  });
+
+  it('accepts an input named by its real path inside a symlinked --root, and the reverse', async () => {
+    const real = join(temp, 'real-root');
+    const linked = join(temp, 'linked-root');
+    await mkdir(join(real, 'sub'), { recursive: true });
+    await symlink(real, linked);
+    await writeFile(join(real, 'sub', 'a.d2'), '...@../b\nx -> y');
+    await writeFile(join(real, 'b.d2'), 'z');
+    const [byReal, byLink] = await Promise.all([run(['lint', join(real, 'sub', 'a.d2'), '--root', linked, '--json']),
+      run(['lint', join(linked, 'sub', 'a.d2'), '--root', real, '--json'])]);
+    success(byReal);
+    success(byLink);
+    expect(JSON.parse(byReal.stdout).diagnostics).toEqual([]);
+    // The real path still decides: a symlinked folder cannot bring an outside input in.
+    const outside = await run(['lint', join(linked, 'sub', 'a.d2'), '--root', join(temp, 'reachable')]);
+    expect(outside.stderr).toBe('zoomflow: Input must be inside --root.\n');
   });
 
   it('exports cyclic boards into HTML that navigates offline from file://', async () => {
@@ -281,13 +342,16 @@ describe.concurrent('zoomflow CLI', () => {
     expect(result.code).toBe(2);
     expect(JSON.parse(result.stdout)).toEqual({ error: `${input}:1:4: maps must be terminated with }`, diagnostics: [] });
     const usage = await Promise.all([['lint', 'a.d2', '--json', '--all'], ['lint', '--json'], ['lint', 'a.d2', 'b.d2', '--json'],
-      ['lint', 'a.d2', '--json', '--bogus'], ['lint', 'a.d2', '--json', '--root']].map((args) => run(args)));
+      ['lint', 'a.d2', '--json', '--bogus'], ['lint', 'a.d2', '--json', '--root'], ['--root', '.', 'lint', 'a.d2', '--json', '--bogus'],
+      ['-o', 'x', '--format', 'svg', 'lint', 'a.d2', '--json']].map((args) => run(args)));
     expect(usage.map((item) => [item.code, JSON.parse(item.stdout)])).toEqual([
       [2, { error: 'Export options cannot be used with lint.', diagnostics: [] }],
       [2, { error: 'lint takes exactly one .d2 file.', diagnostics: [] }],
       [2, { error: 'lint takes exactly one .d2 file.', diagnostics: [] }],
       [2, { error: expect.stringContaining("Unknown option '--bogus'"), diagnostics: [] }],
       [2, { error: expect.stringContaining("Option '--root <value>' argument missing"), diagnostics: [] }],
+      [2, { error: expect.stringContaining("Unknown option '--bogus'"), diagnostics: [] }],
+      [2, { error: 'Export options cannot be used with lint.', diagnostics: [] }],
     ]);
     // Parse failures outside lint --json keep stdout empty.
     expect((await run(['lint', 'a.d2', '--bogus'])).stdout).toBe('');

@@ -91,3 +91,25 @@ test('works on a phone and keeps the builder inside the viewport', async ({ page
   await expect(page.locator('.zf-stage')).toContainText('Product launch');
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 });
+
+test('renaming a detail board’s centre topic replaces the board in history', async ({ page }) => {
+  await page.goto('/'); await ready(page);
+  await page.getByRole('button', { name: 'New mind map', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: 'Create a mind map' });
+  await dialog.getByLabel('Mind map name').fill('Trip');
+  await dialog.getByRole('textbox', { name: 'Topics' }).fill('Trip\n- Places\n  - Lisbon\n    - Alfama\n  - Porto');
+  await dialog.getByRole('button', { name: 'Create mind map', exact: true }).click();
+  await ready(page);
+  await openFromBadge(page, 'Open Lisbon board');
+  await board(page, 'root.layers.Lisbon');
+  const entries = await page.evaluate(() => history.length);
+  await page.locator('.zf-stage [data-shape-id]').filter({ hasText: /^Lisbon$/ }).dblclick();
+  const rename = page.getByRole('textbox', { name: 'Rename Lisbon' });
+  await rename.fill('Lisboa');
+  await rename.press('Enter');
+  await board(page, 'root.layers.Lisboa');
+  // Back leaves the renamed board for the one before it, not for the board the old name made.
+  expect(await page.evaluate(() => history.length)).toBe(entries);
+  await page.goBack();
+  await board(page, 'root');
+});

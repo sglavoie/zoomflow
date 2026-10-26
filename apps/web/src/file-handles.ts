@@ -28,6 +28,7 @@ const done = (transaction: IDBTransaction) => new Promise<void>((resolve, reject
  * in browsers without file-system access, stay for the page session only. */
 export class FileHandles extends Map<string, FileSystemFileHandle> {
   private database?: Promise<IDBDatabase | undefined>;
+  private restoring?: Promise<boolean>;
   /** Writes apply in order, so a removal cannot be overtaken by the save before it. */
   private writes: Promise<unknown> = Promise.resolve();
 
@@ -55,9 +56,16 @@ export class FileHandles extends Map<string, FileSystemFileHandle> {
     return existed;
   }
 
-  /** Bring back handles stored before a reload; removing a draft in any tab also removes its handle.
-   * Handles set since the page loaded take precedence. Resolves whether any handle was restored. */
-  async restore() {
+  /** Bring back handles stored before a reload, once; removing a draft in any tab also removes its handle.
+   * Handles set since the page loaded take precedence, and handles of drafts that `keep` rejects, such as
+   * drafts lost with cleared site data, are removed. Resolves whether any handle was restored. */
+  restore(keep: (key: string) => boolean = () => true) {
+    this.restoring ??= this.load(keep);
+    return this.restoring;
+  }
+  /** Settles once restored handles are in place, so opening or saving a file sees them. */
+  async ready() { await this.restoring; }
+  private async load(keep: (key: string) => boolean) {
     try {
       const db = await this.db();
       if (!db) return false;
@@ -68,7 +76,9 @@ export class FileHandles extends Map<string, FileSystemFileHandle> {
       let restored = false;
       keys.forEach((key, index) => {
         const value = values[index] as Partial<Stored> | undefined;
-        if (typeof key !== 'string' || this.has(key) || value?.handle?.kind !== 'file') return;
+        if (typeof key !== 'string' || this.has(key)) return;
+        if (!keep(key)) { this.write((store) => store.delete(key)); return; }
+        if (value?.handle?.kind !== 'file') return;
         super.set(key, value.handle);
         if (typeof value.modified === 'number' && diskVersion(value.handle) === undefined) rememberDiskVersion(value.handle, { lastModified: value.modified });
         restored = true;

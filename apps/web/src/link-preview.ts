@@ -82,10 +82,13 @@ export function setupLinkPreview(scope: PaneScope, viewer: Viewer) {
   });
   viewer.stage.addEventListener('focusout', hide);
   for (const type of ['wheel', 'pointerdown', 'zf-boardchange', 'zf-sourcechange']) viewer.stage.addEventListener(type, hide);
-  // Escape dismisses a shown card only, so the viewer does not also go up a board.
+  // Escape dismisses a shown card only, so the viewer does not also go up a board. Elsewhere, such as in the
+  // source, Escape also does its own work.
   pageListeners(viewer.stage, signal => addEventListener('keydown', event => {
     if (event.key !== 'Escape' || card.hidden) return;
     hide();
+    const focused = document.activeElement;
+    if (focused && focused !== document.body && !viewer.stage.contains(focused)) return;
     event.preventDefault();
     event.stopPropagation();
   }, { capture: true, signal }));

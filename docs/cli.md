@@ -16,21 +16,28 @@ The workspace installs the `zoomflow` executable (`pnpm exec zoomflow`);
 `pnpm zoomflow` is a root-workspace shortcut. Run `pnpm zoomflow --help` (`-h`) for
 options and `--version` (`-v`) for the version. Rebuild after source changes. The
 CLI requires Node.js 26 or later.
-Without `--all`, SVG/PNG exports contain only the root board. With `--all`, they
+Without `--all`, SVG/PNG exports contain only the root board, and its board links,
+which lead nowhere in a single file, are removed. With `--all`, they
 produce a ZIP using the same board paths as browser exports; in an SVG ZIP, board
-links point to the linked board's file, so the SVGs stay navigable. ZIP entry names keep
+links point to the linked board's file, so the SVGs stay navigable. As in browser
+exports, only `http:`, `https:` and `mailto:` links are kept besides board links;
+any other link, such as `javascript:` or `data:`, loses its target. ZIP entry names keep
 board names, including Unicode; only characters and names that archives or common
 file systems reject (`/ \ < > : " | ? *`, control characters, trailing dots or
 spaces, `.`/`..`, and Windows device names such as `CON` or `LPT1`) are replaced
 with `_` or prefixed, and names that differ only by case or Unicode normalization
 gain an `@` prefix. HTML always includes the whole board tree, titled after the
-input file without `.d2`, and a minified offline navigation runtime. One extra
-render of every board's characters gives all boards the same font subsets, so each
+input file without `.d2`, and a minified offline navigation runtime. Its
+Content-Security-Policy allows only the inline runtime and styles and embedded
+(`data:`) images and fonts, and no network requests. When two or more boards have
+shapes, one extra render of their characters gives them the same font subsets, so each
 face is embedded once; repeated D2 theme styles are also stored once, and empty
 boards carry no SVG. Faces that render lacks, such as code fonts, stay with their board. Default outputs sit beside the input: `file.svg`, `file.png`, `file.html`,
 `file-svg.zip`, or `file-png.zip`. `-o`/`--output` sets an explicit destination
 whose extension must match (`.zip` with `--all` for SVG/PNG), written only after
-successful rendering. Existing exports at that destination are replaced; a
+successful rendering. Without `--format`, an `.svg`, `.png` or `.html` output
+chooses the format, so `-o out.png` exports PNG; `--format` and the input's `.d2`
+extension are case-insensitive. Existing exports at that destination are replaced; a
 directory there is rejected before rendering (`Output is a directory`).
 Exports succeed with dangling board links but print a one-line summary such as
 `zoomflow: 1 dangling link (run zoomflow lint)` on stderr.
@@ -44,8 +51,9 @@ human-readable message still on stderr. `--boundary-ports` opts into explicit
 port validation, and `--missing-backlink` opts into warnings for layers without a link back to their parent.
 Lint always warns about classes that nothing defines (`undefined-class`) and about
 Markdown labels with images, which are not rendered (`unsupported-label`).
-Human diagnostics start with a clickable `path:line:column` (one-based, relative
-to the working directory, possibly an imported file) and name boards by their
+Human diagnostics start with a clickable `path:line:column` when a source location is
+known (one-based, relative to the working directory, possibly an imported file), or
+with the path alone otherwise, as for connections and orphan boards. They name boards by their
 trail, for example `Root > checkout`, followed by the shape or connection ID such
 as `(a -> b)[0]`; `--json` keeps the raw board IDs and D2 ranges. Compile errors
 print one `path:line:column: message` per line. Wrong arguments, including
@@ -56,7 +64,8 @@ Both commands snapshot the input and the `.d2` files it imports, transitively;
 no other file or folder is read, so unrelated unreadable files cannot fail a run.
 The project root defaults to the input file's directory regardless of the working
 directory. Set `--root path` to include imports from parent folders; the input
-must be inside it. Inputs, imports and local images must remain within that root,
+must be inside it, by real path, so a symlinked root such as macOS `/tmp` also
+accepts the input under `/private/tmp`. Inputs, imports and local images must remain within that root,
 compared by real path so a symlinked directory cannot reach outside it; symlinked
 files are not followed. An import that exists but cannot be used names the reason
 after D2's error, for example `(outside --root /work/app; pass --root to include

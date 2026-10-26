@@ -221,6 +221,10 @@ export function lint(compiled: LintInput, options: LintOptions = {}): LintResult
         break;
       }
     }
+    // D2 drops `\` and `"` from link targets, so a board named with them is unreachable.
+    const plain = (id: string) => id.replace(/["\\]/g, '');
+    const meant = hint ? undefined : [...boards.values()].find((item) => /["\\]/.test(item.name) && plain(item.id) === plain(target));
+    if (meant) hint = ` Did you mean "${label(meant.id)}"? Board names with backslashes or quotes cannot be link targets, so rename it.`;
     diagnostics.push({ rule: 'dangling-link', severity: 'error', board: board.id, shape, connection, range, target,
       message: `Link targets missing board "${label(target)}".${hint}` });
   }

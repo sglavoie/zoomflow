@@ -117,6 +117,7 @@ steps: {first: {Step}}`, { layout: 'elk' });
     const html = exportBoardsHtml(boards, { title: '<img src=x onerror=alert(1)>', script: 'void 0;', style: '' });
     expect(html).not.toContain('<img');
     expect(html.match(/<script/g)).toHaveLength(2);
+    expect(html).toContain(`<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; font-src data:; connect-src 'none'; base-uri 'none'; form-action 'none'">`);
     const json = html.match(/type="application\/json">(.*?)<\/script>/s)![1];
     expect(JSON.parse(json)).toEqual(boards);
   });
@@ -169,10 +170,13 @@ steps: {first: {Step}}`, { layout: 'elk' });
 
   it('builds glyph source that D2 compiles with every shown character, including quotes', async () => {
     const boards = [{ empty: false, svg: '<svg><style>.x{}</style><text>Ça &amp; "it\'s" ${x} \\ 漢</text></svg>' },
-      { empty: true, svg: '<svg><text>never</text></svg>' }] as ExportBoard[];
+      { empty: true, svg: '<svg><text>never</text></svg>' }, { empty: false, svg: '<svg><text>Ç</text></svg>' }] as ExportBoard[];
     const source = exportGlyphSource(boards)!;
     const labels = (await d2.compile(source, { layout: 'elk' })).diagram.shapes.map((shape) => ('label' in shape && shape.label) || '');
     expect(new Set(labels.join(''))).toEqual(new Set('Ça&"it\'s${x}\\漢'));
-    expect(exportGlyphSource([{ empty: false, svg: '<svg><text> </text></svg>' }] as ExportBoard[])).toBeUndefined();
+    expect(exportGlyphSource([boards[2], { empty: false, svg: '<svg><text> </text></svg>' }] as ExportBoard[])).toBe("b0: 'Ç'\nr0: 'Ç' {style.bold: false}\nb0 -> r0: 'Ç'\n");
+    expect(exportGlyphSource([{ empty: false, svg: '<svg><text> </text></svg>' }, { empty: false, svg: '<svg/>' }] as ExportBoard[])).toBeUndefined();
+    // Styles are shared only between two or more shown boards, so one would waste the render.
+    expect(exportGlyphSource(boards.slice(0, 2))).toBeUndefined();
   });
 });

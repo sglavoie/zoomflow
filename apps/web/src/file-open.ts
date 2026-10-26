@@ -2,6 +2,7 @@ import type { DocumentPane, PaneId } from './document-pane';
 import type { setupExamplePicker } from './example-picker';
 import { readDirectoryHandle, readFolderInput } from './project-files';
 import { rememberDiskVersion } from './disk-version';
+import type { FileHandles } from './file-handles';
 import { describeError } from './text';
 
 type PickerWindow = Window & {
@@ -12,7 +13,7 @@ type PickerWindow = Window & {
 export type FileOpenHost = {
   picker: () => ReturnType<typeof setupExamplePicker>;
   activePane: () => DocumentPane;
-  fileHandles: Map<string, FileSystemFileHandle>;
+  fileHandles: FileHandles;
   paneRoots: Record<PaneId, HTMLElement>;
   setActive: (pane: PaneId) => void;
 };
@@ -43,6 +44,8 @@ export function setupFileOpen({ picker, activePane, fileHandles, paneRoots, setA
       if (!/\.d2$/i.test(file.name)) throw new Error('Choose a .d2 file.');
       const source = await file.text();
       setFileError('');
+      // A file a draft came from before a reload opens that draft again.
+      await fileHandles.ready();
       const key = picker().rememberFile(file.name, source, source, await sameEntries(fileHandles, () => handle));
       if (handle) { rememberDiskVersion(handle, file); fileHandles.set(key, handle); }
       picker().refresh();
@@ -70,6 +73,7 @@ export function setupFileOpen({ picker, activePane, fileHandles, paneRoots, setA
   async function openFolder(folder: { name: string; files: { path: string; source: string }[];
     handles?: Record<string, FileSystemFileHandle> }) {
     setFileError('');
+    await fileHandles.ready();
     const selection = picker().rememberFolder(folder.name, folder.files,
       await sameEntries(fileHandles, (key) => key.startsWith('project:') ? folder.handles?.[key.split(':').slice(2).join(':')] : undefined));
     for (const [path, handle] of Object.entries(folder.handles ?? {})) fileHandles.set(selection.keys[path], handle);

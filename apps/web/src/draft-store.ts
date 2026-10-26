@@ -119,6 +119,7 @@ export class DraftStore {
     const next = new Map(drafts.map((draft) => [draft.key, draft]));
     const written = new Map<string, Version>();
     let failure: unknown;
+    let pruned = false;
     for (const key of new Set([...next.keys(), ...this.baselines.keys()])) {
       const draft = next.get(key) ?? null;
       const baseline = this.baselines.get(key);
@@ -133,8 +134,13 @@ export class DraftStore {
       try { this.storage.setItem(slot, value); }
       catch {
         // Storage is likely full: reclaim superseded revisions, including this save's, and try once more.
-        try { this.prune(); this.storage.setItem(slot, value); }
-        catch (error) { failure ??= error; continue; }
+        // Reclaiming scans all of storage, so a save does it once; later drafts that do not fit wait.
+        try {
+          if (pruned) throw new DOMException('Storage is full.', 'QuotaExceededError');
+          pruned = true;
+          this.prune();
+          this.storage.setItem(slot, value);
+        } catch (error) { failure ??= error; continue; }
       }
       this.clocks.set(key, clock);
       this.pendingMigration.delete(key);

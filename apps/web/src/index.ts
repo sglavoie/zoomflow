@@ -292,4 +292,4 @@ exportMenu.updateExportLabel();
 panes.a.open(examplePicker.initial);
 applyLayout();
 // Save writes back to the files drafts came from, after a reload too.
-void fileHandles.restore().then((restored) => { if (restored) examplePicker.refresh(); });
+void fileHandles.restore(examplePicker.hasDraft).then((restored) => { if (restored) examplePicker.refresh(); });

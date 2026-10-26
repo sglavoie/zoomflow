@@ -1,6 +1,6 @@
 import type { setupExamplePicker } from './example-picker';
 import { changedOnDisk, refreshDiskVersion } from './disk-version';
-import { writePermission } from './file-handles';
+import { writePermission, type FileHandles } from './file-handles';
 import { describeError } from './text';
 
 type PickerWindow = Window & { showSaveFilePicker?: (options?: object) => Promise<FileSystemFileHandle> };
@@ -12,7 +12,7 @@ const moved = 'The file was moved or deleted; choose where to save.';
 export const canChooseSaveFile = () => Boolean(pickerWindow.showSaveFilePicker);
 
 export type SaveFileTarget = {
-  fileHandles: Map<string, FileSystemFileHandle>;
+  fileHandles: FileHandles;
   picker: () => ReturnType<typeof setupExamplePicker>;
   /** The document the pane shows now, if any. */
   key: () => string | undefined;
@@ -28,6 +28,8 @@ export type SaveFileTarget = {
 export function setupSaveFile(button: HTMLButtonElement, target: SaveFileTarget) {
   /** Notices that a file needs a new destination, cleared once a save succeeds. */
   const notices = new Set([moved]);
+  /** Drafts whose file Zoomflow was refused writing to; Save asks where to save them instead of asking again. */
+  const refused = new Set<string>();
   button.addEventListener('click', async () => {
     if (!target.key()) return;
     button.disabled = true;
@@ -37,9 +39,11 @@ export function setupSaveFile(button: HTMLButtonElement, target: SaveFileTarget)
     let saving: ReturnType<typeof setTimeout> | undefined;
     const notify = (message: string) => { notices.add(message); if (target.key() === key) target.setActivity(message); };
     try {
+      await target.fileHandles.ready();
       let handle = target.fileHandles.get(key);
       // A handle restored after a reload needs permission again; without it, ask where to save.
-      if (handle && !await writePermission(handle)) {
+      if (handle && (refused.has(key) || !await writePermission(handle))) {
+        refused.add(key);
         notify(`Zoomflow may not write ${handle.name}; choose where to save.`);
         handle = undefined;
       }
@@ -65,8 +69,15 @@ export function setupSaveFile(button: HTMLButtonElement, target: SaveFileTarget)
         }
       }
       if (!handle && pickerWindow.showSaveFilePicker) {
-        handle = await pickerWindow.showSaveFilePicker({ suggestedName: name,
-          types: [{ description: 'D2 source', accept: { 'text/plain': ['.d2'] } }] });
+        try {
+          handle = await pickerWindow.showSaveFilePicker({ suggestedName: name,
+            types: [{ description: 'D2 source', accept: { 'text/plain': ['.d2'] } }] });
+        } catch (error) {
+          // Answering the permission prompt can use up the click that opens the save dialog.
+          if (!(error instanceof DOMException && error.name === 'SecurityError')) throw error;
+          notify('Click Save again to choose where to save.');
+          return;
+        }
       }
       if (!handle) {
         document.querySelector<HTMLButtonElement>('#save-source')!.click();
@@ -80,6 +91,7 @@ export function setupSaveFile(button: HTMLButtonElement, target: SaveFileTarget)
       const saved = target.picker().markDiskSaved(key, source, handle.name);
       if (!saved) return; // The draft may have been removed while the file dialog was open.
       target.fileHandles.set(saved.key, handle);
+      refused.delete(key);
       if (target.key() === key) target.adopt(saved);
       if (target.key() === key && notices.has(target.activity() ?? '')) target.setActivity('');
     } catch (error) {

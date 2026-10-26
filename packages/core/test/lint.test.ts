@@ -374,3 +374,22 @@ it('compiles every D2 example in the library guide', async () => {
   expect(styled.diagram.shapes[0]).toMatchObject({ type: 'diamond', stroke: '#0090ff', fontFamily: 'mono' });
   expect(styled.renderOptions).toMatchObject({ themeID: 0, darkThemeID: 200, themeOverrides: { b1: '#1d4ed8' } });
 });
+
+it('keeps scanning classes after apostrophes, inch marks and one-line block strings in labels', async () => {
+  const undefinedClasses = async (index: string) => lint(await d2.compile({ fs: { index }, options: { layout: 'elk' } }))
+    .diagnostics.filter((item) => item.rule === 'undefined-class').map((item) => item.message.split('"')[1]);
+  const classes = 'classes: {k: {style.fill: red}}\ny.class: k';
+  expect(await undefinedClasses(`x: Don't stop\n${classes}`)).toEqual([]);
+  expect(await undefinedClasses(`tv: 55" TV\n${classes}`)).toEqual([]);
+  expect(await undefinedClasses(`a: |md x|\n${classes}\nz.class: nope`)).toEqual(['nope']);
+  expect(await undefinedClasses(`${classes}\nb: |md last line|`)).toEqual([]);
+});
+
+it('names a board that a link cannot reach because its name has a backslash or quote', async () => {
+  const result = lint(await compile('a.link: layers."q\\"x"\nb.link: layers."b\\\\s"\nlayers."q\\"x": {c}\nlayers."b\\\\s": {d}'));
+  expect(result.diagnostics.filter((item) => item.rule === 'dangling-link').map((item) => item.message)).toEqual([
+    'Link targets missing board "Root > q.x". Did you mean "Root > q"x"? Board names with backslashes or quotes cannot be link targets, so rename it.',
+    'Link targets missing board "Root > bs". Did you mean "Root > b\\s"? Board names with backslashes or quotes cannot be link targets, so rename it.',
+  ]);
+  expect(lint(await compile('a.link: layers.qx\nlayers."q\\"y": {c}')).diagnostics[0].message).toBe('Link targets missing board "Root > qx".');
+});

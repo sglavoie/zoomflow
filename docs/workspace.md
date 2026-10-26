@@ -80,7 +80,9 @@ block per board. The builders rewrite only the text above that line, so a flow o
 map stays editable with boards attached. If an edit would remove the step or topic a
 board opens from, the builder explains which one instead of applying the change. Mind
 map topics find their board again by their labels, so reorder topics freely but keep
-a topic's name while it has a board.
+a topic's name while it has a board. If the source changes while a builder is open, such
+as from Ask AI, applying the form still works when its own board is unchanged; otherwise
+the builder asks you to reopen it so it starts from the latest version.
 
 Boards can be added to the root board and to any board declared once in the file, including
 hand-written ones. Imported boards, scenarios and steps are left alone, as are a mind map's
@@ -102,8 +104,9 @@ are for the pointer; from the keyboard, use these keys or Shift+F10.
   selected.
 - **Enter** on a mind map topic adds a sibling topic after it; on the central topic it
   adds a main branch. On a topic that opens a board, Enter opens the board instead.
-- **Delete**, or ⌘/Ctrl+Backspace, removes the step and its connections, or the topic
-  and its subtopics. A flow keeps at least one step.
+- **Delete** or **Backspace** (the Mac delete key) removes the step and its connections,
+  or the topic and its subtopics. A flow keeps at least one step. On a shape that cannot
+  be removed, Backspace still goes up a board.
 - **⌘Z / Ctrl+Z** undoes on the diagram as in the source editor, and ⌘⇧Z, Ctrl+Shift+Z
   or Ctrl+Y redoes.
 
@@ -168,7 +171,8 @@ The editor receives focus immediately; **⌘Z / Ctrl+Z** restores the cleared te
 Browsers with file-system access can write back to a file you opened or a destination
 you choose, also after a reload: Zoomflow keeps each draft's file handle in browser
 storage, and the browser may ask again for permission to edit the file when you
-save. If permission is refused, Save asks where to save instead. Other browsers download the source and label the button **Download .d2**.
+save. If permission is refused, Save asks where to save instead, without asking for that
+permission again until the page reloads. Other browsers download the source and label the button **Download .d2**.
 **Export → Download .d2 source** always starts a separate download.
 The status beside the save controls reports file state; its tooltip describes browser
 recovery. Successful background backups stay quiet, while unavailable recovery is

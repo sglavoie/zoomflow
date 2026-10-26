@@ -1,4 +1,4 @@
-import { describe, expect, test } from 'vitest';
+import { describe, expect, test, vi } from 'vitest';
 import { DraftStore, type Draft } from '../src/draft-store';
 class MemoryStorage implements Storage {
   data = new Map<string, string>();
@@ -214,6 +214,15 @@ describe('draft recovery across tabs', () => {
     storage.limit = [...storage.data.values()].reduce((total, text) => total + text.length, 0) * 1.6;
     store.save([big('one', 'one v2'), big('two', 'two v2')], 'one');
     expect(new DraftStore(storage, 'reload').load().drafts.map((d) => d.source.replace(/\.+$/, '')).sort()).toEqual(['one v2', 'two v2']);
+  });
+  test('a full quota reclaims revisions once per save, however many drafts do not fit', () => {
+    const storage = new LimitedStorage(2_000);
+    const store = new DraftStore(storage, 'a'); store.load();
+    const prune = vi.spyOn(store as unknown as { prune: () => void }, 'prune');
+    expect(() => store.save(['one', 'two', 'three'].map((key) => draft(key, 'x'.repeat(5_000))).concat(draft('small', 'kept')), 'small'))
+      .toThrow('Quota exceeded');
+    expect(prune).toHaveBeenCalledTimes(1);
+    expect(new DraftStore(storage, 'reload').load().drafts.map((d) => d.key)).toEqual(['small']);
   });
   test('a draft that cannot fit is skipped, the rest are saved, and it is retried next time', () => {
     const storage = new LimitedStorage(2_000);
