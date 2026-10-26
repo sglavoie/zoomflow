@@ -86,7 +86,7 @@ const builderArgs = [(source: string, name: string) => {
   const key = examplePicker.rememberFile(name, source, '');
   void activePane().replaceDocument(source, name, key);
   activePane().showView('preview');
-}, () => ({ source: activePane().source, name: activePane().name }),
+},
 (...request: Parameters<typeof examplePicker.confirm>) => examplePicker.confirm(...request)] as const;
 const flowBuilder = setupFlowBuilder(...builderArgs);
 const mindMapBuilder = setupMindMapBuilder(...builderArgs);

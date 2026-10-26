@@ -1,12 +1,9 @@
-import { guardBuilderDialog, lookControls, lookFields } from './builder-dialog';
-import type { PaneScope } from './pane-scope';
+import { guardBuilderDialog, lookControls, lookFields, type BuilderTarget } from './builder-dialog';
 import { plural, setText } from './text';
 import { flowFilename, flowSource, flowTemplate, readFlow, type Flow, type FlowStep } from './flow-model';
 
-type FlowTarget = { read: () => { source: string; name: string }; update: (source: string) => void };
-
-/** One builder dialog: New flow creates a draft, and each pane's Edit flow changes that pane's flow. */
-export function setupFlowBuilder(create: (source: string, name: string) => void, read: () => { source: string; name: string },
+/** One builder dialog: New flow creates a draft, and each pane opens it to add or edit a flow board. */
+export function setupFlowBuilder(create: (source: string, name: string) => void,
   confirmDiscard: (title: string, description: string, action: string, focus: () => void) => Promise<boolean>) {
   const launch = document.querySelector<HTMLButtonElement>('#new-flow')!;
   const dialog = document.createElement('dialog');
@@ -18,7 +15,7 @@ export function setupFlowBuilder(create: (source: string, name: string) => void,
       <div class="flow-heading"><h2 id="flow-builder-title">Create a flow</h2><button type="button" data-close aria-label="Close flow builder">Close</button></div>
       <p id="flow-builder-description">Name your steps, then choose what happens next. No diagram syntax needed.</p>
       <div class="flow-settings">
-        <label id="flow-name-field">Flow name<input id="flow-name" value="My flow" required maxlength="100" /></label>
+        <label id="flow-name-field"><span>Flow name</span><input id="flow-name" value="My flow" required maxlength="100" /></label>
         <label>Layout<select id="flow-direction"><option value="down">Top to bottom</option><option value="right">Left to right</option></select></label>
       </div>
       ${lookFields('flow')}
@@ -53,12 +50,12 @@ export function setupFlowBuilder(create: (source: string, name: string) => void,
   const submit = dialog.querySelector<HTMLButtonElement>('[type="submit"]')!;
   let flow: Flow = flowTemplate('simple');
   let editing = false;
-  let original = '';
   /** The form when the builder opened; closing asks before discarding later changes. */
   let snapshot = '';
   const formState = () => `${editing ? '' : name.value}\n${flowSource(flow)}`;
   let returnFocus: HTMLElement = launch;
-  let target: FlowTarget = { read, update: () => {} };
+  const draft = (): BuilderTarget => ({ mode: 'draft', name: 'My flow', apply: (source, title) => { create(source, flowFilename(title)); } });
+  let target = draft();
 
   function announce() {
     setText(feedback, `${plural(flow.steps.length, 'step')} · ${plural(flow.connections.length, 'connection')}`);
@@ -150,39 +147,41 @@ export function setupFlowBuilder(create: (source: string, name: string) => void,
     look.set(flow.look);
     renderSteps(); renderConnections();
   }
-  function open(isEditing: boolean, edit?: HTMLElement) {
-    const current = target.read();
-    const existing = isEditing ? readFlow(current.source) : undefined;
-    if (isEditing && !existing) return;
-    editing = isEditing;
-    original = current.source;
+  function open(next: BuilderTarget, edit?: HTMLElement) {
+    const existing = next.mode === 'edit' ? readFlow(next.source ?? '') : undefined;
+    if (next.mode === 'edit' && !existing) return;
+    target = next;
+    editing = next.mode === 'edit';
     flow = existing ?? flowTemplate('simple');
     returnFocus = edit ?? launch;
-    name.value = editing ? current.name.replace(/\.d2$/i, '') : 'My flow';
+    name.value = next.name;
     name.setCustomValidity('');
+    dialog.querySelector('#flow-name-field span')!.textContent = next.mode === 'board' ? 'Board name' : 'Flow name';
     dialog.querySelector<HTMLElement>('#flow-name-field')!.hidden = editing;
     dialog.querySelector<HTMLElement>('#flow-starters')!.hidden = editing;
-    dialog.querySelector('h2')!.textContent = editing ? 'Edit flow' : 'Create a flow';
-    submit.textContent = editing ? 'Apply changes' : 'Create flow';
-    dialog.querySelector('#flow-save-hint')!.textContent = editing
-      ? 'Updates this flow. You can undo in the source editor.' : 'Creates a new draft. Your current diagram is kept.';
+    dialog.querySelector('h2')!.textContent = { draft: 'Create a flow', board: 'Add a flow board', edit: 'Edit flow' }[next.mode];
+    submit.textContent = { draft: 'Create flow', board: 'Add board', edit: 'Apply changes' }[next.mode];
+    dialog.querySelector('#flow-save-hint')!.textContent = {
+      draft: 'Creates a new draft. Your current diagram is kept.',
+      board: 'Adds a board that opens from the shape. You can undo in the source editor.',
+      edit: 'Updates this flow. You can undo in the source editor.' }[next.mode];
     render();
     snapshot = formState();
     returnFocus.focus({ preventScroll: true });
     dialog.showModal();
     (editing ? steps.querySelector('input')! : name).focus();
   }
-  launch.addEventListener('click', () => { target = { read, update: () => {} }; open(false); });
+  launch.addEventListener('click', () => open(draft()));
   guardBuilderDialog(dialog, () => {
     if (formState() === snapshot) return true;
     const focused = document.activeElement;
     return confirmDiscard(editing ? 'Discard flow changes?' : 'Discard this flow?',
       editing ? 'Closing the builder discards the steps and connections you changed. Your diagram is unchanged.'
-        : 'Closing the builder discards the flow you started. No draft is created.',
+        : `Closing the builder discards the flow you started. ${target.mode === 'board' ? 'No board is added.' : 'No draft is created.'}`,
       'Discard changes', () => (focused instanceof HTMLElement && dialog.contains(focused) ? focused : submit).focus({ preventScroll: true }));
   });
   dialog.addEventListener('close', () => (returnFocus.isConnected && !returnFocus.closest('[hidden]') ? returnFocus : launch).focus({ preventScroll: true }));
-  name.addEventListener('input', () => name.setCustomValidity(name.value.trim() ? '' : 'Give your flow a name.'));
+  name.addEventListener('input', () => name.setCustomValidity(name.value.trim() ? '' : `Give your ${target.mode === 'board' ? 'board' : 'flow'} a name.`));
   direction.addEventListener('change', () => { flow.direction = direction.value as Flow['direction']; });
   for (const box of look.boxes) box.addEventListener('change', () => { flow.look = look.get(); });
   dialog.querySelectorAll<HTMLButtonElement>('[data-template]').forEach(button => button.addEventListener('click', () => {
@@ -205,27 +204,16 @@ export function setupFlowBuilder(create: (source: string, name: string) => void,
   });
   form.addEventListener('submit', event => {
     event.preventDefault();
-    if (editing && target.read().source !== original) {
-      error.textContent = 'This diagram changed while the builder was open. Close and reopen the builder to use the latest version.';
+    const problem = target.apply(flowSource(flow), name.value.trim());
+    if (problem) {
+      error.textContent = problem;
       error.hidden = false;
       return;
     }
-    const source = flowSource(flow);
     dialog.close();
-    if (editing) target.update(source);
-    else create(source, flowFilename(name.value));
   });
   return {
-    /** Offer Edit flow above a pane's diagram while its source is a builder flow. */
-    attach(scope: PaneScope, pane: FlowTarget) {
-      const toolbar = document.createElement('div');
-      toolbar.className = 'flow-builder-toolbar';
-      toolbar.hidden = true;
-      toolbar.innerHTML = `<button id="${scope.id('edit-flow')}" type="button">Edit flow</button><span>Change steps and connections without writing code.</span>`;
-      scope.part('viewer').prepend(toolbar);
-      const edit = toolbar.querySelector('button')!;
-      edit.addEventListener('click', () => { target = pane; open(true, edit); });
-      return { refresh() { toolbar.hidden = !readFlow(pane.read().source); } };
-    },
+    /** Add a flow board or edit one; `returnFocus` regains focus when the builder closes. */
+    open: (next: BuilderTarget, returnFocus: HTMLElement) => open(next, returnFocus),
   };
 }

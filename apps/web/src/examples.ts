@@ -1,4 +1,5 @@
 import order from '../../../fixtures/order.d2?raw';
+import mixed from './examples/mixed.d2?raw';
 import flowchart from './examples/flowchart.d2?raw';
 import architecture from './examples/architecture.d2?raw';
 import sequence from './examples/sequence.d2?raw';
@@ -17,6 +18,8 @@ export interface DiagramExample {
 export const examples: readonly DiagramExample[] = [
   { name: 'order.d2', title: 'Order flow', description: 'Nested drill-down, breadcrumbs and parent connections.',
     source: '# Click Checkout to open its detail board.\n' + order },
+  // Builder output reopens in the builders only without a comment above it, so the description explains the demo.
+  { name: 'mixed.d2', title: 'Flows & mind maps', description: 'A flow whose steps open a mind map and a flow. Select a shape to add boards; Edit flow and Edit mind map change the board on view.', source: mixed },
   { name: 'flowchart.d2', title: 'Flowchart basics', description: 'Shapes, decisions, edge labels and Markdown notes.', source: flowchart },
   { name: 'architecture.d2', title: 'Service architecture', description: 'Containers, variables, reusable classes and styled connections.', source: architecture },
   { name: 'sequence.d2', title: 'Sequence diagram', description: 'Participants, ordered messages, groups and replies.', source: sequence },

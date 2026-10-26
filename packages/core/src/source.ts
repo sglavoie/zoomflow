@@ -72,3 +72,46 @@ export function shapeRanges(diagram: Diagram, graph: unknown): Map<string, strin
   });
   return result;
 }
+
+// The serialized AST of the main file, with UTF-16 ranges like object references.
+interface AstMap { range?: string; nodes?: { map_key?: AstMapKey }[] }
+interface AstMapKey { key?: { path?: Record<string, { value?: { string?: string }[] }>[] }; value?: { map?: AstMap } }
+
+/** The text between the braces of each board's block in the main file; the whole file for the root board.
+ * Boards declared in more than one place, imported, or under scenarios and steps have no single block, so they are left out. */
+export function boardBlocks(graph: unknown, source: string, filename = 'index'): Map<string, SourceRange> {
+  const blocks = new Map<string, SourceRange>([['root', { from: 0, to: source.length }]]);
+  const declarations = new Map<string, number>();
+  const segment = (part: Record<string, { value?: { string?: string }[] }>) => {
+    const values = Object.values(part)[0]?.value;
+    return values?.every((value) => typeof value.string === 'string') ? values.map((value) => value.string).join('') : undefined;
+  };
+  function declare(path: (string | undefined)[], value: AstMapKey['value'], board: string) {
+    if (path[0] !== 'layers' || path.length < 2) {
+      if (path.length === 1 && path[0] === 'layers' && value?.map) {
+        for (const node of value.map.nodes ?? []) {
+          const child = node.map_key?.key?.path?.map(segment);
+          if (child) declare(['layers', ...child], node.map_key!.value, board);
+        }
+      }
+      return;
+    }
+    if (path[1] === undefined) return;
+    const id = `${board}.layers.${boardKey(path[1])}`;
+    declarations.set(id, (declarations.get(id) ?? 0) + 1);
+    if (path.length > 2) { declare(path.slice(2), value, id); return; }
+    const range = value?.map?.range && parseSourceRange(value.map.range, source, filename);
+    if (range && source[range.from] === '{' && source[range.to - 1] === '}') blocks.set(id, { from: range.from + 1, to: range.to - 1 });
+    if (value?.map) visit(value.map, id);
+  }
+  function visit(map: AstMap, board: string) {
+    for (const node of map.nodes ?? []) {
+      const path = node.map_key?.key?.path?.map(segment);
+      if (path) declare(path, node.map_key!.value, board);
+    }
+  }
+  const ast = (graph as { ast?: AstMap }).ast;
+  if (ast) visit(ast, 'root');
+  for (const [id, count] of declarations) if (count > 1) blocks.delete(id);
+  return blocks;
+}

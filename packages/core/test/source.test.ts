@@ -1,7 +1,7 @@
 import { D2 } from '@d2lang/d2';
 import { readFileSync } from 'node:fs';
 import { afterAll, expect, it } from 'vitest';
-import { indexBoards, indexShapeSources, parseSourceRange } from '../src';
+import { boardBlocks, indexBoards, indexShapeSources, parseSourceRange } from '../src';
 
 const d2 = new D2();
 afterAll(() => d2.dispose());
@@ -45,4 +45,18 @@ it('rejects malformed ranges without throwing', () => {
   expect(parseSourceRange('', 'a')).toBeUndefined();
   expect(parseSourceRange('index', 'a')).toBeUndefined();
   expect(parseSourceRange('index,0:0:0-0:1:1', 'a')).toEqual({ from: 0, to: 1 });
+});
+
+it('finds the block of each board declared once in the main file', async () => {
+  const source = 'a\nlayers: {\n  x: {\n    b\n    layers."Two words": {c}\n  }\n  twice: {d}\n}\nlayers.twice.e\nlayers.y: {f}\nlayers.imp: null\nscenarios: {s: {g}}\n';
+  const compiled = await d2.compile(source, { layout: 'elk' });
+  const blocks = boardBlocks(compiled.graph, source);
+  const text = (id: string) => { const range = blocks.get(id); return range && source.slice(range.from, range.to); };
+  expect(text('root')).toBe(source);
+  expect(text('root.layers.x')).toBe('\n    b\n    layers."Two words": {c}\n  ');
+  expect(text('root.layers.x.layers.Two words')).toBe('c');
+  expect(text('root.layers.y')).toBe('f');
+  expect(blocks.has('root.layers.twice')).toBe(false);
+  expect(blocks.has('root.layers.imp')).toBe(false);
+  expect(blocks.has('root.scenarios.s')).toBe(false);
 });

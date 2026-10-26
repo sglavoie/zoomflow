@@ -27,9 +27,10 @@ lines get `zf-yes` and `zf-no`. To restyle every flow in a
 project, change those classes in a [project style sheet](#style-diagrams-consistently).
 Flows saved before the builder used classes still reopen; applying changes rewrites
 them with classes. It can reopen its own generated source, including
-label edits that preserve its structure. Adding custom D2 styling, boards, or
-other syntax makes **Edit flow** unavailable so the form cannot discard those
-additions. Continue editing those diagrams in the source editor.
+label edits that preserve its structure. Boards added from its steps, as described in
+[Mix flows and mind maps](#mix-flows-and-mind-maps), keep it editable. Adding other
+custom D2 styling, boards, or syntax makes **Edit flow** unavailable so the form cannot
+discard those additions. Continue editing those diagrams in the source editor.
 
 ## Create a mind map from an outline
 
@@ -52,6 +53,38 @@ in the flow builder. The generated D2 imports the [standard library](../stdlib/R
 once, on the root board; detail boards inherit its mind map classes. Label edits that keep
 the structure still reopen in the outline; other custom D2 makes **Edit mind map**
 unavailable so the outline cannot discard it.
+
+## Mix flows and mind maps
+
+Any shape can open a board of its own, built with either builder, so a flow step can
+open a mind map of ideas and a mind map topic can open the flow that carries it out.
+Each board keeps its own layout, so a top-to-bottom flow can open a left-to-right map.
+Choose **Flows & mind maps** in the filename menu for an example: a launch flow whose
+planning step opens a mind map, with a topic on that map opening an onboarding flow.
+
+Click a shape to select it: a bar over the diagram offers **Add flow board** and
+**Add mind map board**. Right-click a shape, or focus it and press Shift+F10 or the
+context menu key, for the same actions in a menu with **Select in source**. Linked
+shapes open their board when clicked, so use the menu for them. The builder starts
+from the shape's label as the board name, and the new board opens once it is added.
+
+**Edit flow** or **Edit mind map** above the preview edits the board on view, so drill
+into a board to change it. A shape whose board a builder made offers **Edit flow
+board** or **Edit mind map board** from its parent board. Every change is undoable in
+the source editor.
+
+Boards that open from a board's shapes are written at the end of that board's block,
+after `# Boards that open from shapes on this board.`, as a `link` line and a `layers`
+block per board. The builders rewrite only the text above that line, so a flow or mind
+map stays editable with boards attached. If an edit would remove the step or topic a
+board opens from, the builder explains which one instead of applying the change. Mind
+map topics find their board again by their labels, so reorder topics freely but keep
+a topic's name while it has a board.
+
+Boards can be added to the root board and to any board declared once in the file, including
+hand-written ones. Imported boards, scenarios and steps are left alone, as are a mind map's
+detail boards: add boards from topics on the map's main board, or keep every topic on one
+board.
 
 ## Style diagrams consistently
 

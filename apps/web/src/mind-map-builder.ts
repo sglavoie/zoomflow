@@ -1,13 +1,10 @@
-import { guardBuilderDialog, lookControls, lookFields } from './builder-dialog';
+import { guardBuilderDialog, lookControls, lookFields, type BuilderTarget } from './builder-dialog';
 import { flowFilename, plainLook } from './flow-model';
 import { countTopics, mindMapExample, mindMapSource, outlineText, parseOutline, readMindMap, type MindMap } from './mind-map-model';
-import type { PaneScope } from './pane-scope';
 import { plural, setText } from './text';
 
-type MindMapTarget = { read: () => { source: string; name: string }; update: (source: string) => void };
-
-/** One outline dialog: New mind map creates a draft, and each pane's Edit mind map changes that pane's map. */
-export function setupMindMapBuilder(create: (source: string, name: string) => void, read: () => { source: string; name: string },
+/** One outline dialog: New mind map creates a draft, and each pane opens it to add or edit a mind map board. */
+export function setupMindMapBuilder(create: (source: string, name: string) => void,
   confirmDiscard: (title: string, description: string, action: string, focus: () => void) => Promise<boolean>) {
   const launch = document.querySelector<HTMLButtonElement>('#new-mind-map')!;
   const dialog = document.createElement('dialog');
@@ -19,7 +16,7 @@ export function setupMindMapBuilder(create: (source: string, name: string) => vo
       <div class="flow-heading"><h2 id="mind-map-builder-title">Create a mind map</h2><button type="button" data-close aria-label="Close mind map builder">Close</button></div>
       <p id="mind-map-builder-description">Write one topic per line. No diagram syntax needed.</p>
       <div class="flow-settings">
-        <label id="mind-map-name-field">Mind map name<input id="mind-map-name" value="My mind map" required maxlength="100" /></label>
+        <label id="mind-map-name-field"><span>Mind map name</span><input id="mind-map-name" value="My mind map" required maxlength="100" /></label>
         <label>Layout<select id="mind-map-direction"><option value="right">Left to right</option><option value="down">Top to bottom</option></select></label>
       </div>
       <section aria-labelledby="mind-map-outline-heading">
@@ -52,12 +49,13 @@ export function setupMindMapBuilder(create: (source: string, name: string) => vo
   const error = dialog.querySelector<HTMLElement>('#mind-map-error')!;
   const submit = dialog.querySelector<HTMLButtonElement>('[type="submit"]')!;
   let editing = false;
-  let original = '';
   /** The form when the builder opened; closing asks before discarding later changes. */
   let snapshot = '';
   const formState = () => `${editing ? '' : name.value}\n${direction.value}\n${split.value}\n${JSON.stringify(look.get())}\n${outline.value}`;
   let returnFocus: HTMLElement = launch;
-  let target: MindMapTarget = { read, update: () => {} };
+  const draft = (): BuilderTarget => ({ mode: 'draft', name: 'My mind map',
+    apply: (source, title) => { create(source, flowFilename(title, 'My mind map')); } });
+  let target = draft();
 
   function current(): MindMap | undefined {
     const root = parseOutline(outline.value);
@@ -92,25 +90,29 @@ export function setupMindMapBuilder(create: (source: string, name: string) => vo
     } else outline.setSelectionRange(start, start + text.length);
     announce();
   }
-  function open(isEditing: boolean, edit?: HTMLElement) {
-    const opened = target.read();
-    const existing = isEditing ? readMindMap(opened.source) : undefined;
-    if (isEditing && !existing) return;
-    editing = isEditing;
-    original = opened.source;
-    const map: MindMap = existing ?? { direction: 'right', split: 2, look: plainLook(), root: parseOutline(mindMapExample)! };
+  function open(next: BuilderTarget, edit?: HTMLElement) {
+    const existing = next.mode === 'edit' ? readMindMap(next.source ?? '') : undefined;
+    if (next.mode === 'edit' && !existing) return;
+    target = next;
+    editing = next.mode === 'edit';
+    // A board starts from its shape's label as the central topic.
+    const example = next.mode === 'board' ? `${next.name.replace(/\s+/g, ' ').trim() || 'Topic'}\n  First idea\n  Second idea` : mindMapExample;
+    const map: MindMap = existing ?? { direction: 'right', split: 2, look: plainLook(), root: parseOutline(example)! };
     returnFocus = edit ?? launch;
-    name.value = editing ? opened.name.replace(/\.d2$/i, '') : 'My mind map';
+    name.value = next.name;
     name.setCustomValidity('');
+    dialog.querySelector('#mind-map-name-field span')!.textContent = next.mode === 'board' ? 'Board name' : 'Mind map name';
     direction.value = map.direction;
     split.value = String(map.split);
     look.set(map.look);
     outline.value = outlineText(map.root);
     dialog.querySelector<HTMLElement>('#mind-map-name-field')!.hidden = editing;
-    dialog.querySelector('h2')!.textContent = editing ? 'Edit mind map' : 'Create a mind map';
-    submit.textContent = editing ? 'Apply changes' : 'Create mind map';
-    dialog.querySelector('#mind-map-save-hint')!.textContent = editing
-      ? 'Updates this mind map. You can undo in the source editor.' : 'Creates a new draft. Your current diagram is kept.';
+    dialog.querySelector('h2')!.textContent = { draft: 'Create a mind map', board: 'Add a mind map board', edit: 'Edit mind map' }[next.mode];
+    submit.textContent = { draft: 'Create mind map', board: 'Add board', edit: 'Apply changes' }[next.mode];
+    dialog.querySelector('#mind-map-save-hint')!.textContent = {
+      draft: 'Creates a new draft. Your current diagram is kept.',
+      board: 'Adds a board that opens from the shape. You can undo in the source editor.',
+      edit: 'Updates this mind map. You can undo in the source editor.' }[next.mode];
     announce();
     snapshot = formState();
     returnFocus.focus({ preventScroll: true });
@@ -119,21 +121,20 @@ export function setupMindMapBuilder(create: (source: string, name: string) => vo
     outline.setSelectionRange(0, 0);
     outline.scrollTop = 0;
   }
-  launch.addEventListener('click', () => { target = { read, update: () => {} }; open(false); });
+  launch.addEventListener('click', () => open(draft()));
   // The filename menu offers the same, for phones where the header has no room for it.
   const menuLaunch = document.querySelector<HTMLButtonElement>('#new-mind-map-picker')!;
   menuLaunch.addEventListener('click', () => {
     const picker = menuLaunch.closest('details')!;
     picker.open = false;
-    target = { read, update: () => {} };
-    open(false, picker.querySelector('summary')!);
+    open(draft(), picker.querySelector('summary')!);
   });
   guardBuilderDialog(dialog, () => {
     if (formState() === snapshot) return true;
     const focused = document.activeElement;
     return confirmDiscard(editing ? 'Discard mind map changes?' : 'Discard this mind map?',
       editing ? 'Closing the builder discards the topics you changed. Your diagram is unchanged.'
-        : 'Closing the builder discards the mind map you started. No draft is created.',
+        : `Closing the builder discards the mind map you started. ${target.mode === 'board' ? 'No board is added.' : 'No draft is created.'}`,
       'Discard changes', () => (focused instanceof HTMLElement && dialog.contains(focused) ? focused : submit).focus({ preventScroll: true }));
   }, event => {
     if (event.target !== outline || !(event.metaKey || event.ctrlKey) || event.altKey || !['[', ']'].includes(event.key)) return false;
@@ -141,34 +142,23 @@ export function setupMindMapBuilder(create: (source: string, name: string) => vo
     return true;
   });
   dialog.addEventListener('close', () => (returnFocus.isConnected && !returnFocus.closest('[hidden]') ? returnFocus : launch).focus({ preventScroll: true }));
-  name.addEventListener('input', () => name.setCustomValidity(name.value.trim() ? '' : 'Give your mind map a name.'));
+  name.addEventListener('input', () => name.setCustomValidity(name.value.trim() ? '' : `Give your ${target.mode === 'board' ? 'board' : 'mind map'} a name.`));
   outline.addEventListener('input', announce);
   split.addEventListener('change', announce);
   dialog.querySelector('#mind-map-indent')!.addEventListener('click', () => shift(1));
   dialog.querySelector('#mind-map-outdent')!.addEventListener('click', () => shift(-1));
   form.addEventListener('submit', event => {
     event.preventDefault();
-    if (editing && target.read().source !== original) {
-      error.textContent = 'This diagram changed while the builder was open. Close and reopen the builder to use the latest version.';
+    const problem = target.apply(mindMapSource(current()!), name.value.trim());
+    if (problem) {
+      error.textContent = problem;
       error.hidden = false;
       return;
     }
-    const source = mindMapSource(current()!);
     dialog.close();
-    if (editing) target.update(source);
-    else create(source, flowFilename(name.value, 'My mind map'));
   });
   return {
-    /** Offer Edit mind map above a pane's diagram while its source is a builder mind map. */
-    attach(scope: PaneScope, pane: MindMapTarget) {
-      const toolbar = document.createElement('div');
-      toolbar.className = 'flow-builder-toolbar';
-      toolbar.hidden = true;
-      toolbar.innerHTML = `<button id="${scope.id('edit-mind-map')}" type="button">Edit mind map</button><span>Change topics as an outline, without writing code.</span>`;
-      scope.part('viewer').prepend(toolbar);
-      const edit = toolbar.querySelector('button')!;
-      edit.addEventListener('click', () => { target = pane; open(true, edit); });
-      return { refresh() { toolbar.hidden = !readMindMap(pane.read().source); } };
-    },
+    /** Add a mind map board or edit one; `returnFocus` regains focus when the builder closes. */
+    open: (next: BuilderTarget, returnFocus: HTMLElement) => open(next, returnFocus),
   };
 }

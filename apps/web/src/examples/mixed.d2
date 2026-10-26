@@ -1,0 +1,81 @@
+# Created with the Zoomflow flow builder.
+...@zoomflow
+direction: down
+
+step_1: "New idea" {class: zf-terminal}
+step_2: "Plan the launch" {class: zf-step}
+step_3: "Ready to build?" {class: zf-decision}
+step_4: "Build and test" {class: zf-step}
+step_5: "Launched" {class: zf-terminal}
+
+step_1 -> step_2: ""
+step_2 -> step_3: ""
+step_3 -> step_4: "Yes" {class: zf-yes}
+step_3 -> step_2: "No" {class: zf-no}
+step_4 -> step_5: ""
+
+# Boards that open from shapes on this board.
+step_2.link: layers."Plan the launch"
+layers."Plan the launch": {
+  # Created with the Zoomflow mind map builder.
+  # All topics stay on one board.
+  ...@zoomflow
+  direction: right
+
+  n: "Plan the launch" {class: zf-topic}
+  n_1: "Audience" {class: [zf-branch; zf-accent-1]}
+  n_1_1: "Early adopters" {class: [zf-leaf; zf-accent-1]}
+  n_1_2: "Small teams" {class: [zf-leaf; zf-accent-1]}
+  n_2: "Marketing" {class: [zf-branch; zf-accent-2]}
+  n_2_1: "Newsletter" {class: [zf-leaf; zf-accent-2]}
+  n_2_2: "Short videos" {class: [zf-leaf; zf-accent-2]}
+  n_3: "Product" {class: [zf-branch; zf-accent-3]}
+  n_3_1: "Pricing" {class: [zf-leaf; zf-accent-3]}
+  n_3_2: "Onboarding" {class: [zf-leaf; zf-accent-3]}
+  n_4: "Risks" {class: [zf-branch; zf-accent-4]}
+
+  n -- n_1: {class: zf-accent-1}
+  n_1 -- n_1_1: {class: zf-accent-1}
+  n_1 -- n_1_2: {class: zf-accent-1}
+  n -- n_2: {class: zf-accent-2}
+  n_2 -- n_2_1: {class: zf-accent-2}
+  n_2 -- n_2_2: {class: zf-accent-2}
+  n -- n_3: {class: zf-accent-3}
+  n_3 -- n_3_1: {class: zf-accent-3}
+  n_3 -- n_3_2: {class: zf-accent-3}
+  n -- n_4: {class: zf-accent-4}
+
+  # Boards that open from shapes on this board.
+  n_3_2.link: layers."Onboarding"
+  layers."Onboarding": {
+    # Created with the Zoomflow flow builder.
+    ...@zoomflow
+    direction: right
+
+    step_1: "Sign up" {class: zf-terminal}
+    step_2: "Guided tour" {class: zf-step}
+    step_3: "First project" {class: zf-step}
+    step_4: "Invite a teammate" {class: zf-terminal}
+
+    step_1 -> step_2: ""
+    step_2 -> step_3: ""
+    step_3 -> step_4: ""
+  }
+}
+
+step_4.link: layers."Build and test"
+layers."Build and test": {
+  # Created with the Zoomflow flow builder.
+  ...@zoomflow
+  direction: down
+
+  step_1: "Freeze features" {class: zf-step}
+  step_2: "Tests pass?" {class: zf-decision}
+  step_3: "Release" {class: zf-step}
+  step_4: "Fix issues" {class: zf-step}
+
+  step_1 -> step_2: ""
+  step_2 -> step_3: "Yes" {class: zf-yes}
+  step_2 -> step_4: "No" {class: zf-no}
+  step_4 -> step_2: "Try again"
+}

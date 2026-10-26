@@ -43,6 +43,28 @@ export function detailBoardName(label: string): string {
   return keywords.has(name.toLowerCase()) ? name.toLowerCase() : name;
 }
 
+/** A board name for `label` that differs from `taken` in any case, as D2 board names must; it joins `taken`. */
+export function uniqueBoardName(label: string, taken: Set<string>): string {
+  let name = detailBoardName(label);
+  for (let n = 2; taken.has(name.toLowerCase()); n++) name = `${detailBoardName(label)} ${n}`;
+  taken.add(name.toLowerCase());
+  return name;
+}
+
+/** The topics on a map's main board, with the identifiers `mindMapSource` gives them, their labels from the
+ * central topic down, and the detail board each detail topic opens. */
+export function boardTopics(map: MindMap): { id: string; path: string[]; board?: string }[] {
+  const topics: { id: string; path: string[]; board?: string }[] = [];
+  const names = new Set<string>();
+  const visit = (topic: MindTopic, id: string, path: string[]) => {
+    const detail = path.length > 1 && path.length - 1 === map.split && topic.children.length > 0;
+    topics.push({ id, path, ...detail ? { board: uniqueBoardName(topic.label, names) } : {} });
+    if (!detail) topic.children.forEach((child, i) => visit(child, `${id}_${i + 1}`, [...path, child.label]));
+  };
+  visit(map.root, 'n', [map.root.label]);
+  return topics;
+}
+
 /** An indented outline: the first line is the central topic and each deeper line belongs to the line above it.
  * Bullets (-, *, +) and Markdown heading marks are optional. */
 export function parseOutline(text: string): MindTopic | undefined {
@@ -98,9 +120,7 @@ function boardSource(center: MindTopic, map: MindMap, legacy: boolean, accent?: 
     const detail = depth > 0 && depth === map.split && topic.children.length > 0;
     let link = '';
     if (detail) {
-      let name = detailBoardName(topic.label);
-      for (let n = 2; names.has(name.toLowerCase()); n++) name = `${detailBoardName(topic.label)} ${n}`;
-      names.add(name.toLowerCase());
+      const name = uniqueBoardName(topic.label, names);
       link = `; link: layers.${quote(name)}`;
       details.push(`${quote(name)}: {`, ...boardSource(topic, map, legacy, tone).map(line => line && `  ${line}`), '}');
     }

@@ -44,6 +44,10 @@ CodeMirror access through `withEditorView`, selection) and `menu.ts` (export men
 - `mind-map-builder.spec.ts`: mind maps from an outline, drilling into a detail board,
   reopening the outline, indenting from the keyboard and buttons, and phone layout.
   `apps/web/test/mind-map-model.test.ts` compiles generated maps and checks lossless reopening.
+- `board-builders.spec.ts`: adding flow and mind map boards to shapes from the selection bar,
+  context menu and keyboard, editing each board with its own builder, and the explanation
+  when an edit would strand an attached board. `apps/web/test/board-model.test.ts` covers
+  locating board blocks, attached sections and reattaching boards to moved topics.
 - `ai.spec.ts`: AI edits and undo, availability checks and timeouts, cancellation,
   transport failures, highlights of changed lines, deletions on short phone screens, the
   phone composer, sending with ⌘/Ctrl+Enter, and AI settings mirrored across split panes

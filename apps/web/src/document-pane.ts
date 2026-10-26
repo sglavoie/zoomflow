@@ -1,4 +1,4 @@
-import { indexShapeSources, parseSourceRange, lint, type CompileResponse, type ShapeSource, type Diagram, type LintDiagnostic, type LintResult } from '@zoomflow/core';
+import { boardBlocks, indexBoards, indexShapeSources, parseSourceRange, lint, type CompileResponse, type ShapeSource, type Diagram, type LintDiagnostic, type LintResult } from '@zoomflow/core';
 import { Viewer, setupViewport, type RenderBoard, type ViewerRoute } from '@zoomflow/viewer';
 import { SourceEditor } from './editor';
 import { compilerDiagnostics, lintDiagnostics, type SourceDiagnostic } from './diagnostics';
@@ -10,6 +10,8 @@ import { setupAiAssistant } from './ai-assistant';
 import { setupMobileView } from './mobile-view';
 import { projectFileSystem } from './project-files';
 import { setupCanvasGuidance } from './canvas-guidance';
+import { setupBoardTools } from './board-tools';
+import { boardSites } from './board-model';
 import type { setupFlowBuilder } from './flow-builder';
 import type { setupMindMapBuilder } from './mind-map-builder';
 import type { DraftState, setupExamplePicker } from './example-picker';
@@ -148,8 +150,7 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
   /** Lint with default options, computed once per compile for the viewer and exports. */
   let defaultLint: LintResult | undefined;
   function invalidateSource() {
-    flowEdit.refresh();
-    mindMapEdit.refresh();
+    boardTools.invalidate();
     // Invalidate immediately, including requests still awaiting WASM/render startup.
     ++generation;
     previewQueue.invalidate();
@@ -185,15 +186,21 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
     reveal: () => void revealSelection(),
     label: id === 'a' ? 'D2 source' : 'D2 source, second diagram',
   });
-  const builderTarget = {
-    read: () => ({ source: editor.source, name: documentName }),
-    update: (source: string) => {
+  const boardTools = setupBoardTools(scope, viewer, {
+    builders: { flow: shared.flowBuilder, 'mind map': shared.mindMapBuilder },
+    source: () => editor.source,
+    update: (source) => {
       editor.replaceSource(source);
       showView('preview');
     },
-  };
-  const flowEdit = shared.flowBuilder.attach(scope, builderTarget);
-  const mindMapEdit = shared.mindMapBuilder.attach(scope, builderTarget);
+    selectSource: (shape) => {
+      const entry = sourceMap.find((item) => item.board === viewer.currentBoard?.id && item.shape === shape);
+      if (!entry || mappedSource !== editor.source) return;
+      showView('source');
+      editor.select(entry, true);
+      void highlightSelection(false);
+    },
+  });
 
   setupSaveFile(saveFileButton, {
     fileHandles: shared.fileHandles, picker,
@@ -332,7 +339,9 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
     const target = matches.find((entry) => entry.board === current) ?? matches[0];
     revealButton.disabled = !target;
     if (navigate && target && target.board !== current) await viewer.navigate(target.board);
-    viewer.highlightShapes(matches.filter((entry) => entry.board === viewer.currentBoard?.id).map((entry) => entry.shape));
+    const shapes = matches.filter((entry) => entry.board === viewer.currentBoard?.id).map((entry) => entry.shape);
+    viewer.highlightShapes(shapes);
+    boardTools.select([...new Set(shapes)]);
   }
   async function revealSelection() {
     if (revealButton.disabled) return;
@@ -350,6 +359,7 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
       if (currentDocumentKey) shared.documentRoutes.set(currentDocumentKey, viewer.route);
       shared.exportChanged();
     });
+    boardTools.refresh();
     void highlightSelection(false);
   });
   function selectShape(event: MouseEvent | KeyboardEvent) {
@@ -421,6 +431,8 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
         defaultLint = linted;
         updateLint();
         compileError.hide(true);
+        const boards = indexBoards(compiled.diagram);
+        const added = boardTools.compiled(source, boardSites(source, boardBlocks(compiled.graph, source, compiled.inputPath), boards), boards);
         void highlightSelection(false);
         const renderSource = async (glyphs: string) => {
           const { d2: engine, fonts } = await shared.compiler.get();
@@ -431,6 +443,8 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
         documentExport = { diagram: compiled.diagram, render, name, diagnostics, renderSource };
         shared.exportChanged();
         setPreviewState('ready');
+        // Show a board a builder just added, from the board it opens from.
+        if (added) void viewer.navigate(added);
       }
     } catch (error) {
       if (request === generation) {
@@ -495,8 +509,7 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
       delete root.dataset.empty;
       viewport.setDocument(document.key);
       editor.open(document.key, document.source);
-      flowEdit.refresh();
-      mindMapEdit.refresh();
+      boardTools.refresh();
       picker().refresh();
       clearTimeout(debounce);
       void load(editor.source, documentName);

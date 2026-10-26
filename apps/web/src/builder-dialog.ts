@@ -1,5 +1,16 @@
 import { lookNames, type Look } from './flow-model';
 
+/** Where a builder's result goes: a new draft, a new board that opens from a shape, or the board it edits.
+ * `apply` returns why the result could not be applied, which the builder shows without closing. */
+export type BuilderTarget = {
+  mode: 'draft' | 'board' | 'edit';
+  /** The draft or board name to start from; boards start from their shape's label. */
+  name: string;
+  /** The builder source to reopen when editing. */
+  source?: string;
+  apply: (source: string, name: string) => string | undefined;
+};
+
 /** Modal behaviour shared by the form builders. `discard` resolves whether closing may proceed,
  * asking first when that would discard changes made since the builder opened. `shortcut` handles
  * the dialog's own keys, returning whether it did, since workspace key handlers never see them. */
