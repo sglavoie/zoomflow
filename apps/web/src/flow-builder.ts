@@ -1,3 +1,4 @@
+import { guardBuilderDialog } from './builder-dialog';
 import type { PaneScope } from './pane-scope';
 import { plural, setText } from './text';
 import { flowFilename, flowSource, flowTemplate, readFlow, type Flow, type FlowStep } from './flow-model';
@@ -53,7 +54,6 @@ export function setupFlowBuilder(create: (source: string, name: string) => void,
   let original = '';
   /** The form when the builder opened; closing asks before discarding later changes. */
   let snapshot = '';
-  let confirming = false;
   const formState = () => `${editing ? '' : name.value}\n${flowSource(flow)}`;
   let returnFocus: HTMLElement = launch;
   let target: FlowTarget = { read, update: () => {} };
@@ -170,31 +170,14 @@ export function setupFlowBuilder(create: (source: string, name: string) => void,
     (editing ? steps.querySelector('input')! : name).focus();
   }
   launch.addEventListener('click', () => { target = { read, update: () => {} }; open(false); });
-  /** Close, first confirming when that would discard changes made since the builder opened. */
-  async function requestClose() {
-    if (confirming) return;
-    if (formState() !== snapshot) {
-      const focused = document.activeElement;
-      confirming = true;
-      const discard = await confirmDiscard(editing ? 'Discard flow changes?' : 'Discard this flow?',
-        editing ? 'Closing the builder discards the steps and connections you changed. Your diagram is unchanged.'
-          : 'Closing the builder discards the flow you started. No draft is created.',
-        'Discard changes', () => (focused instanceof HTMLElement && dialog.contains(focused) ? focused : submit).focus({ preventScroll: true }));
-      confirming = false;
-      if (!discard) return;
-    }
-    dialog.close();
-  }
-  dialog.querySelectorAll<HTMLButtonElement>('[data-close]').forEach(button => button.addEventListener('click', () => void requestClose()));
-  // Handle Escape directly: Chromium may skip the cancel event for repeated close
-  // requests without user activation. The open confirmation stops Escape before this.
-  dialog.addEventListener('keydown', event => {
-    if (event.key !== 'Escape' || event.defaultPrevented) return;
-    event.preventDefault();
-    void requestClose();
+  guardBuilderDialog(dialog, () => {
+    if (formState() === snapshot) return true;
+    const focused = document.activeElement;
+    return confirmDiscard(editing ? 'Discard flow changes?' : 'Discard this flow?',
+      editing ? 'Closing the builder discards the steps and connections you changed. Your diagram is unchanged.'
+        : 'Closing the builder discards the flow you started. No draft is created.',
+      'Discard changes', () => (focused instanceof HTMLElement && dialog.contains(focused) ? focused : submit).focus({ preventScroll: true }));
   });
-  // Other close requests, such as a platform back gesture, also confirm first.
-  dialog.addEventListener('cancel', event => { event.preventDefault(); void requestClose(); });
   dialog.addEventListener('close', () => (returnFocus.isConnected && !returnFocus.closest('[hidden]') ? returnFocus : launch).focus({ preventScroll: true }));
   name.addEventListener('input', () => name.setCustomValidity(name.value.trim() ? '' : 'Give your flow a name.'));
   direction.addEventListener('change', () => { flow.direction = direction.value as Flow['direction']; });
@@ -228,15 +211,6 @@ export function setupFlowBuilder(create: (source: string, name: string) => void,
     if (editing) target.update(source);
     else create(source, flowFilename(name.value));
   });
-  // Keep workspace navigation and save shortcuts out of this modal while allowing typing.
-  window.addEventListener('keydown', event => {
-    // The discard confirmation above this dialog handles its own keys.
-    if (!dialog.open || confirming) return;
-    event.stopImmediatePropagation();
-    if (event.key === 'Escape') { event.preventDefault(); void requestClose(); }
-    else if ((event.metaKey || event.ctrlKey) && ['s', '/', '?'].includes(event.key.toLowerCase())) event.preventDefault();
-    else if (event.key === 'Backspace' && !(event.target instanceof HTMLInputElement)) event.preventDefault();
-  }, { capture: true });
   return {
     /** Offer Edit flow above a pane's diagram while its source is a builder flow. */
     attach(scope: PaneScope, pane: FlowTarget) {

@@ -11,6 +11,7 @@ import { setupMobileView } from './mobile-view';
 import { projectFileSystem } from './project-files';
 import { setupCanvasGuidance } from './canvas-guidance';
 import type { setupFlowBuilder } from './flow-builder';
+import type { setupMindMapBuilder } from './mind-map-builder';
 import type { DraftState, setupExamplePicker } from './example-picker';
 import { paneScope, type PaneId } from './pane-scope';
 import { paneNotice, type EngineNotice } from './engine-notice';
@@ -28,6 +29,7 @@ export type PaneContext = {
   compiler: ReturnType<typeof createCompiler>;
   picker: () => ReturnType<typeof setupExamplePicker>;
   flowBuilder: ReturnType<typeof setupFlowBuilder>;
+  mindMapBuilder: ReturnType<typeof setupMindMapBuilder>;
   engine: EngineNotice;
   fileHandles: Map<string, FileSystemFileHandle>;
   documentRoutes: Map<string, ViewerRoute>;
@@ -147,6 +149,7 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
   let defaultLint: LintResult | undefined;
   function invalidateSource() {
     flowEdit.refresh();
+    mindMapEdit.refresh();
     // Invalidate immediately, including requests still awaiting WASM/render startup.
     ++generation;
     previewQueue.invalidate();
@@ -182,13 +185,15 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
     reveal: () => void revealSelection(),
     label: id === 'a' ? 'D2 source' : 'D2 source, second diagram',
   });
-  const flowEdit = shared.flowBuilder.attach(scope, {
+  const builderTarget = {
     read: () => ({ source: editor.source, name: documentName }),
-    update: source => {
+    update: (source: string) => {
       editor.replaceSource(source);
       showView('preview');
     },
-  });
+  };
+  const flowEdit = shared.flowBuilder.attach(scope, builderTarget);
+  const mindMapEdit = shared.mindMapBuilder.attach(scope, builderTarget);
 
   setupSaveFile(saveFileButton, {
     fileHandles: shared.fileHandles, picker,
@@ -491,6 +496,7 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
       viewport.setDocument(document.key);
       editor.open(document.key, document.source);
       flowEdit.refresh();
+      mindMapEdit.refresh();
       picker().refresh();
       clearTimeout(debounce);
       void load(editor.source, documentName);

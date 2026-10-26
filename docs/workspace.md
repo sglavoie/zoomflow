@@ -23,6 +23,27 @@ label edits that preserve its structure. Adding custom D2 styling, boards, or
 other syntax makes **Edit flow** unavailable so the form cannot discard those
 additions. Continue editing those diagrams in the source editor.
 
+## Create a mind map from an outline
+
+Choose **New mind map** in the header, or **New mind map from an outline** in the
+filename menu on narrower screens, and write one topic per line. The first line is
+the central topic; indent a line to make it a subtopic of the line above it. Use spaces,
+the **Indent** and **Outdent** buttons, or ⌘] / Ctrl+] and ⌘[ / Ctrl+[ for the selected
+lines. Bullets (`-`, `*`, `+`) and Markdown heading marks are optional, so a pasted
+Markdown list works as it is. Unindented lines after the first become main branches.
+
+Each main branch gets its own colour, which its topics and lines keep on every board.
+**Detail boards** keeps a large map readable: topics at the chosen level that have
+subtopics link to a board of their own, with the topic at its centre. Click one to zoom
+in; breadcrumbs, Esc and Backspace return to the parent. Deeper levels split again at
+the same depth, and each board is named after its topic. Choose **Keep every topic on
+one board** for a single board.
+
+**Create mind map**, **Edit mind map**, undo and discard confirmation work as in the
+flow builder. The generated D2 uses the [standard library](../stdlib/README.md)'s mind
+map classes. Label edits that keep the structure still reopen in the outline; other
+custom D2 makes **Edit mind map** unavailable so the outline cannot discard it.
+
 ## Workspace and drafts
 
 The workspace opens local `.d2` files or a folder of related D2 files and starts

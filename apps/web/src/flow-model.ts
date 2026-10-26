@@ -55,7 +55,7 @@ export function readFlow(source: string): Flow | undefined {
   return flowSource(flow).trim() === normalized ? flow : undefined;
 }
 
-export function flowFilename(title: string) {
+export function flowFilename(title: string, fallback = 'My flow') {
   const name = title.trim().replace(/\.d2$/i, '').replace(/[<>:"/\\|?*\u0000-\u001f]/g, '-').replace(/[. ]+$/, '').slice(0, 100);
-  return `${name || 'My flow'}.d2`;
+  return `${name || fallback}.d2`;
 }

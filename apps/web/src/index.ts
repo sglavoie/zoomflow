@@ -7,6 +7,7 @@ import { setupSplit, type SplitAxis } from './source-split';
 import { setupViewportHeight } from './mobile-view';
 import { setupShortcuts } from './shortcuts';
 import { setupFlowBuilder } from './flow-builder';
+import { setupMindMapBuilder } from './mind-map-builder';
 import { createDocumentPane, type DocumentPane, type PaneContext, type PaneId } from './document-pane';
 import { cloneSecondPane, nameParts, paneScope } from './pane-scope';
 import { findEngineNotice } from './engine-notice';
@@ -80,15 +81,19 @@ const documentRoutes = new Map<string, ViewerRoute>();
 const fileHandles = new Map<string, FileSystemFileHandle>();
 const files = setupFileOpen({ picker: () => examplePicker, activePane, fileHandles, paneRoots, setActive });
 
-const flowBuilder = setupFlowBuilder((source, name) => {
+/** Builders create a separate draft from the active pane's point of view. */
+const builderArgs = [(source: string, name: string) => {
   const key = examplePicker.rememberFile(name, source, '');
   void activePane().replaceDocument(source, name, key);
   activePane().showView('preview');
-}, () => ({ source: activePane().source, name: activePane().name }), (...request) => examplePicker.confirm(...request));
+}, () => ({ source: activePane().source, name: activePane().name }),
+(...request: Parameters<typeof examplePicker.confirm>) => examplePicker.confirm(...request)] as const;
+const flowBuilder = setupFlowBuilder(...builderArgs);
+const mindMapBuilder = setupMindMapBuilder(...builderArgs);
 
 function context(id: PaneId): PaneContext {
   return {
-    compiler, picker: () => examplePicker, flowBuilder, engine, fileHandles, documentRoutes,
+    compiler, picker: () => examplePicker, flowBuilder, mindMapBuilder, engine, fileHandles, documentRoutes,
     isActive: () => active === id,
     tabbed: () => narrow.matches || workspace.dataset.layout === 'tabs',
     exportChanged: () => { if (active === id && panes[id]) exportMenu.updateExportLabel(); },

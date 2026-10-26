@@ -31,7 +31,9 @@ use **Retry preview** to try again without losing your source.
 
 1. **Create:** choose **New flow** to name steps and connect them without writing
    diagram syntax. Start with a simple flow or an approval with Yes/No branches.
-   Use **Edit flow** above the preview to keep editing in the form. Or change the
+   Use **Edit flow** above the preview to keep editing in the form. **New mind map**
+   turns an indented outline into a mind map whose deep branches open as their own
+   boards; **Edit mind map** reopens the outline. Or change the
    D2 source on the right and watch the preview update. Use the
    filename menu for built-in examples, **Open .d2** for a file, or **Open folder** for
    a project with relative imports. **D2 reference** contains searchable examples.

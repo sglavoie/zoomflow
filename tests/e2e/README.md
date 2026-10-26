@@ -41,6 +41,9 @@ CodeMirror access through `withEditorView`, selection) and `menu.ts` (export men
   reference snippet, and `apps/web/test/examples.test.ts` covers the bundled examples.
 - `flow-builder.spec.ts`: building flows from the form and editing them again, and focus
   that moves to the neighbouring connection after a removal.
+- `mind-map-builder.spec.ts`: mind maps from an outline, drilling into a detail board,
+  reopening the outline, indenting from the keyboard and buttons, and phone layout.
+  `apps/web/test/mind-map-model.test.ts` compiles generated maps and checks lossless reopening.
 - `ai.spec.ts`: AI edits and undo, availability checks and timeouts, cancellation,
   transport failures, highlights of changed lines, deletions on short phone screens, the
   phone composer, sending with ⌘/Ctrl+Enter, and AI settings mirrored across split panes

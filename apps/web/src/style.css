@@ -167,7 +167,7 @@ header > strong {
   color: var(--muted);
   font-size: var(--font-size-sm);
 }
-#flow-builder {
+:is(#flow-builder, #mind-map-builder) {
   width: min(760px, calc(100vw - 24px));
   max-height: calc(100dvh - 24px);
   padding: var(--space-5);
@@ -178,7 +178,7 @@ header > strong {
   background: var(--surface);
   box-shadow: var(--shadow-dialog);
 }
-#flow-builder::backdrop {
+:is(#flow-builder, #mind-map-builder)::backdrop {
   background: var(--backdrop);
 }
 .flow-heading {
@@ -192,6 +192,7 @@ header > strong {
   font-size: var(--font-size-xl);
 }
 #flow-builder-description,
+#mind-map-builder-description,
 .flow-help {
   color: var(--muted);
   line-height: 1.5;
@@ -200,18 +201,19 @@ header > strong {
   font-size: var(--font-size-md);
   margin: 6px 0 var(--space-3);
 }
-#flow-builder h3 {
+:is(#flow-builder, #mind-map-builder) h3 {
   margin: var(--space-5) 0 0;
   font-size: var(--font-size-lg);
 }
-#flow-builder label {
+:is(#flow-builder, #mind-map-builder) label {
   display: grid;
   gap: 5px;
   min-width: 0;
   font-size: var(--font-size-sm);
 }
-#flow-builder input,
-#flow-builder select {
+:is(#flow-builder, #mind-map-builder) input,
+:is(#flow-builder, #mind-map-builder) select,
+#mind-map-outline {
   min-width: 0;
   width: 100%;
   min-height: 40px;
@@ -223,9 +225,32 @@ header > strong {
   background: var(--surface);
   color: inherit;
 }
-#flow-builder input:focus-visible {
+:is(#flow-builder, #mind-map-builder) input:focus-visible,
+#mind-map-outline:focus-visible {
   outline: 2px solid var(--focus);
   outline-offset: 2px;
+}
+#mind-map-outline {
+  display: block;
+  resize: vertical;
+  min-height: 220px;
+  font-family: monospace;
+  font-size: var(--font-size-md);
+  line-height: 1.5;
+  tab-size: 2;
+}
+.mind-map-indent {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+}
+#mind-map-builder .mind-map-split {
+  margin-top: var(--space-4);
+}
+#new-mind-map {
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 .flow-settings {
   display: grid;
@@ -259,11 +284,13 @@ header > strong {
 .flow-connection {
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 120px auto;
 }
-#flow-feedback {
+#flow-feedback,
+#mind-map-feedback {
   color: var(--muted);
   font-size: var(--font-size-md);
 }
-#flow-error {
+#flow-error,
+#mind-map-error {
   color: var(--danger);
 }
 .flow-footer {
@@ -278,13 +305,14 @@ header > strong {
   border-top: 1px solid var(--border);
   background: var(--surface);
 }
-#flow-save-hint {
+#flow-save-hint,
+#mind-map-save-hint {
   flex: 1 1 240px;
   color: var(--muted);
   font-size: var(--font-size-sm);
 }
 @media (max-width: 600px) {
-  #flow-builder {
+  :is(#flow-builder, #mind-map-builder) {
     padding: var(--space-4);
   }
   .flow-footer {
@@ -314,6 +342,12 @@ header > strong {
 }
 @media (max-width: 1100px) {
   #open-folder {
+    display: none;
+  }
+}
+/* Narrower headers reach New mind map from the filename menu, like Open folder. */
+@media (max-width: 1349px) {
+  #new-mind-map {
     display: none;
   }
 }
@@ -775,10 +809,14 @@ select:focus-visible {
 .project-group .example-row {
   margin-left: var(--space-2);
 }
-#open-folder-picker {
+#open-folder-picker,
+#new-mind-map-picker {
   margin: var(--space-2);
   width: calc(100% - 16px);
   text-align: left;
+}
+#new-mind-map-picker {
+  margin-top: 0;
 }
 .example-menu-hint,
 .example-menu-footer {

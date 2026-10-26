@@ -19,6 +19,10 @@ The library is opt-in; existing documents are not rewritten.
 - `zf-initial`: small filled circle.
 - `zf-final`: filled circle with a double border.
 - `zf-state`: rounded rectangle.
+- `zf-topic` / `zf-branch` / `zf-leaf`: mind map pills for the central topic, its
+  main branches and deeper topics.
+- `zf-accent-1` to `zf-accent-6`: a branch colour for the outlines of topics and the
+  lines between them.
 
 Boundary ports are optional. Ordinary drill-down diagrams need only a board link;
 the viewer infers parent connection hints without adding ports to your source.
@@ -58,3 +62,23 @@ establish a parent/child boundary contract.
 
 The state pieces use a fixed slate fill, while the other classes inherit D2's
 neutral palettes. Standard D2 style overrides remain available.
+
+Mind map classes combine a role with an accent. Use undirected `--` lines so the
+map has no arrowheads. Layers start fresh in D2, so a detail board needs its own
+import:
+
+```d2
+...@zoomflow
+direction: right
+plan: Plan {class: zf-topic}
+people: People {class: [zf-branch; zf-accent-1]}
+hiring: Hiring {class: [zf-leaf; zf-accent-1]; link: layers.hiring}
+plan -- people: {class: zf-accent-1}
+people -- hiring: {class: zf-accent-1}
+layers.hiring: {
+  ...@zoomflow
+  hiring: Hiring {class: [zf-topic; zf-accent-1]}
+}
+```
+
+**New mind map** in the browser writes this structure from an indented outline.
