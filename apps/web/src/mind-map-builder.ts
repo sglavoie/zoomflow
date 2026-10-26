@@ -1,4 +1,4 @@
-import { guardBuilderDialog } from './builder-dialog';
+import { guardBuilderDialog, lookFields } from './builder-dialog';
 import { flowFilename } from './flow-model';
 import { countTopics, mindMapExample, mindMapSource, outlineText, parseOutline, readMindMap, type MindMap } from './mind-map-model';
 import type { PaneScope } from './pane-scope';
@@ -36,6 +36,7 @@ export function setupMindMapBuilder(create: (source: string, name: string) => vo
         <option value="4">Open level 4 topics on their own boards</option>
       </select></label>
       <p id="mind-map-split-help" class="flow-help">A topic at this level that has subtopics links to a board of its own. Click it in the diagram to zoom in.</p>
+      ${lookFields('mind-map')}
       <p id="mind-map-feedback" role="status"></p>
       <p id="mind-map-error" role="alert" hidden></p>
       <div class="flow-footer"><span id="mind-map-save-hint">Creates a new draft. Your current diagram is kept.</span><button type="button" data-close>Cancel</button><button class="button-primary" type="submit">Create mind map</button></div>
@@ -46,6 +47,8 @@ export function setupMindMapBuilder(create: (source: string, name: string) => vo
   const direction = dialog.querySelector<HTMLSelectElement>('#mind-map-direction')!;
   const outline = dialog.querySelector<HTMLTextAreaElement>('#mind-map-outline')!;
   const split = dialog.querySelector<HTMLSelectElement>('#mind-map-split')!;
+  const filled = dialog.querySelector<HTMLInputElement>('#mind-map-filled')!;
+  const compact = dialog.querySelector<HTMLInputElement>('#mind-map-compact')!;
   const feedback = dialog.querySelector<HTMLElement>('#mind-map-feedback')!;
   const error = dialog.querySelector<HTMLElement>('#mind-map-error')!;
   const submit = dialog.querySelector<HTMLButtonElement>('[type="submit"]')!;
@@ -53,13 +56,14 @@ export function setupMindMapBuilder(create: (source: string, name: string) => vo
   let original = '';
   /** The form when the builder opened; closing asks before discarding later changes. */
   let snapshot = '';
-  const formState = () => `${editing ? '' : name.value}\n${direction.value}\n${split.value}\n${outline.value}`;
+  const formState = () => `${editing ? '' : name.value}\n${direction.value}\n${split.value}\n${filled.checked} ${compact.checked}\n${outline.value}`;
   let returnFocus: HTMLElement = launch;
   let target: MindMapTarget = { read, update: () => {} };
 
   function current(): MindMap | undefined {
     const root = parseOutline(outline.value);
-    return root && { direction: direction.value as MindMap['direction'], split: Number(split.value), root };
+    return root && { direction: direction.value as MindMap['direction'], split: Number(split.value),
+      look: { filled: filled.checked, compact: compact.checked }, root };
   }
   function announce() {
     const map = current();
@@ -95,12 +99,14 @@ export function setupMindMapBuilder(create: (source: string, name: string) => vo
     if (isEditing && !existing) return;
     editing = isEditing;
     original = opened.source;
-    const map = existing ?? { direction: 'right', split: 2, root: parseOutline(mindMapExample)! };
+    const map: MindMap = existing ?? { direction: 'right', split: 2, look: { filled: false, compact: false }, root: parseOutline(mindMapExample)! };
     returnFocus = edit ?? launch;
     name.value = editing ? opened.name.replace(/\.d2$/i, '') : 'My mind map';
     name.setCustomValidity('');
     direction.value = map.direction;
     split.value = String(map.split);
+    filled.checked = map.look.filled;
+    compact.checked = map.look.compact;
     outline.value = outlineText(map.root);
     dialog.querySelector<HTMLElement>('#mind-map-name-field')!.hidden = editing;
     dialog.querySelector('h2')!.textContent = editing ? 'Edit mind map' : 'Create a mind map';

@@ -1,11 +1,13 @@
+import { lookClasses, readLook, type Look } from './flow-model';
+
 export type MindTopic = { label: string; children: MindTopic[] };
 /** `split` is the level whose topics open their subtopics on a detail board; 0 keeps one board. */
-export type MindMap = { direction: 'right' | 'down'; split: number; root: MindTopic };
+export type MindMap = { direction: 'right' | 'down'; split: number; look: Look; root: MindTopic };
 
 const heading = '# Created with the Zoomflow mind map builder.';
 const splitNote = (split: number) => split
   ? `# Level ${split} topics with subtopics open as detail boards.` : '# All topics stay on one board.';
-/** Every board in D2 starts fresh, so each one imports the library's mind map classes. */
+/** Detail boards inherit the root board's classes, so the library is imported once. */
 const library = '...@zoomflow';
 const accents = 6;
 // D2 also interpolates dollar signs inside double-quoted strings.
@@ -84,8 +86,9 @@ export function countTopics(map: MindMap) {
   return { topics, boards };
 }
 
-/** One board: its central topic, the topics within `split` levels, and detail boards for deeper ones. */
-function boardSource(center: MindTopic, map: MindMap, accent?: number): string[] {
+/** One board: its central topic, the topics within `split` levels, and detail boards for deeper ones.
+ * Earlier maps imported the library on every board; `legacy` writes that form so they still reopen. */
+function boardSource(center: MindTopic, map: MindMap, legacy: boolean, accent?: number): string[] {
   const shapes: string[] = [];
   const edges: string[] = [];
   const details: string[] = [];
@@ -99,9 +102,9 @@ function boardSource(center: MindTopic, map: MindMap, accent?: number): string[]
       for (let n = 2; names.has(name.toLowerCase()); n++) name = `${detailBoardName(topic.label)} ${n}`;
       names.add(name.toLowerCase());
       link = `; link: layers.${quote(name)}`;
-      details.push(`${quote(name)}: {`, ...boardSource(topic, map, tone).map(line => line && `  ${line}`), '}');
+      details.push(`${quote(name)}: {`, ...boardSource(topic, map, legacy, tone).map(line => line && `  ${line}`), '}');
     }
-    shapes.push(`${id}: ${quote(topic.label)} {class: ${tone ? `[${role}; zf-accent-${tone}]` : role}${link}}`);
+    shapes.push(`${id}: ${quote(topic.label)} {class: ${lookClasses(tone ? [role, `zf-accent-${tone}`] : [role], map.look)}${link}}`);
     if (detail) return;
     topic.children.forEach((child, i) => {
       // Each main branch keeps one colour on every board it reaches.
@@ -111,13 +114,14 @@ function boardSource(center: MindTopic, map: MindMap, accent?: number): string[]
     });
   };
   visit(center, 'n', 0, accent);
-  return [library, `direction: ${map.direction}`, '', ...shapes, '', ...edges,
+  const root = accent === undefined;
+  return [...legacy || root ? [library] : [], `direction: ${map.direction}`, '', ...shapes, '', ...edges,
     ...details.length ? ['', 'layers: {', ...details.map(line => line && `  ${line}`), '}'] : []];
 }
 
 /** Fixed identifiers keep labels, punctuation and duplicate names out of D2 syntax. */
-export function mindMapSource(map: MindMap): string {
-  return [heading, splitNote(map.split), ...boardSource(map.root, map), ''].join('\n');
+export function mindMapSource(map: MindMap, legacy = false): string {
+  return [heading, splitNote(map.split), ...boardSource(map.root, map, legacy), ''].join('\n');
 }
 
 /** Only reopen the builder's complete, losslessly understood subset of D2, like `readFlow`. */
@@ -130,7 +134,8 @@ export function readMindMap(source: string): MindMap | undefined {
   if (!split || !direction) return;
   type Board = { topics: Map<string, MindTopic>; links: Map<string, MindTopic> };
   const boards: (Board | undefined)[] = [{ topics: new Map(), links: new Map() }];
-  const topicLine = new RegExp(`^(n(?:_\\d+)*): (${quoted}) \\{class: (?:\\[[^\\]]*\\]|[\\w-]+)(?:; link: layers\\.(${quoted}))?\\}$`);
+  const topicLine = new RegExp(`^(n(?:_\\d+)*): (${quoted}) \\{class: (\\[[^\\]]*\\]|[\\w-]+)(?:; link: layers\\.(${quoted}))?\\}$`);
+  let look: Look | undefined;
   const layerLine = new RegExp(`^(${quoted}): \\{$`);
   try {
     for (const line of lines.slice(2).map(line => line.trim())) {
@@ -138,7 +143,8 @@ export function readMindMap(source: string): MindMap | undefined {
       const topic = topicLine.exec(line);
       const layer = layerLine.exec(line);
       if (topic) {
-        const [, id, label, link] = topic;
+        const [, id, label, classes, link] = topic;
+        look ??= readLook(classes)?.look;
         let node = board.topics.get(id);
         if (node && id !== 'n') return;
         if (!node) {
@@ -164,6 +170,7 @@ export function readMindMap(source: string): MindMap | undefined {
   collect(root);
   // The outline has one trimmed topic per line.
   if (labels.some(label => !label || label !== label.trim() || /[\r\n]/.test(label))) return;
-  const map: MindMap = { direction, split: Number(split), root };
-  return mindMapSource(map).trim() === normalized ? map : undefined;
+  if (!look) return;
+  const map: MindMap = { direction, split: Number(split), look, root };
+  return [mindMapSource(map), mindMapSource(map, true)].some(text => text.trim() === normalized) ? map : undefined;
 }

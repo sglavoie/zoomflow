@@ -33,6 +33,23 @@ classes: {
     shape: rectangle
     style: {border-radius: 8; stroke-width: 2}
   }
+  # Flows: the flow builder's actions, decisions and start or end points.
+  zf-step: {shape: rectangle}
+  zf-decision: {shape: diamond}
+  zf-terminal: {shape: oval}
+  # Roles for any diagram. Combine them with others, as in [zf-state; zf-muted].
+  zf-emphasis: {
+    style: {stroke-width: 3; bold: true}
+  }
+  zf-muted: {style.opacity: 0.5}
+  zf-external: {style.stroke-dash: 4}
+  zf-warning: {
+    style: {stroke: "#e38a1f"; stroke-width: 2}
+  }
+  zf-note: {
+    shape: page
+    style: {italic: true}
+  }
   # Mind maps: a central topic, main branches and deeper topics.
   # Add one zf-accent-N (1-6) per branch, to its topics and lines alike.
   zf-topic: {
@@ -50,4 +67,10 @@ classes: {
   zf-accent-4: {style.stroke: "#0090ff"}
   zf-accent-5: {style.stroke: "#8e4ec6"}
   zf-accent-6: {style.stroke: "#d6409f"}
+  # Looks the builders add after the other classes. The fixed fill and text colours
+  # read the same in light and dark themes.
+  zf-filled: {
+    style: {fill: "#e2e8f0"; font-color: "#1e293b"}
+  }
+  zf-compact: {style.font-size: 13}
 }

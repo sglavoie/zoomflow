@@ -32,3 +32,13 @@ export function guardBuilderDialog(dialog: HTMLDialogElement, discard: () => boo
     else if (event.key === 'Backspace' && !(event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement)) event.preventDefault();
   }, { capture: true });
 }
+
+/** Look choices for a builder whose ids start with `prefix`. They only add library classes,
+ * so a project's own zoomflow.d2 can restyle them. */
+export function lookFields(prefix: string) {
+  return `<fieldset class="builder-look" aria-describedby="${prefix}-look-help"><legend>Look</legend>
+        <label><input id="${prefix}-filled" type="checkbox" /> Filled shapes</label>
+        <label><input id="${prefix}-compact" type="checkbox" /> Compact text</label>
+        <p id="${prefix}-look-help" class="flow-help">Adds the library's zf-filled and zf-compact classes. Restyle them in your project's zoomflow.d2.</p>
+      </fieldset>`;
+}

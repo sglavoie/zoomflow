@@ -1,9 +1,11 @@
 import type { CompileResponse } from '@d2lang/d2';
 import { boardKey, classifyHref, indexBoards, type Board } from './index';
+import { definedClasses } from './classes';
 import { boundaryNeighbours } from './context';
 import { shapeRanges } from './source';
 
-export type LintRule = 'boundary-in' | 'boundary-out' | 'orphan-board' | 'dangling-link' | 'ignored-link' | 'missing-backlink';
+export type LintRule = 'boundary-in' | 'boundary-out' | 'orphan-board' | 'dangling-link' | 'ignored-link' | 'missing-backlink'
+  | 'undefined-class';
 export interface LintDiagnostic {
   rule: LintRule;
   severity: 'error' | 'warning';
@@ -135,10 +137,41 @@ export function boardLabel(id: string, boards: Map<string, Board>): string {
   return names.join(' > ');
 }
 
+/** Classes each board can use. Child boards carry compiler-expanded ASTs with every inherited and
+ * imported class; the root AST keeps its imports, so its files are read instead, when given. */
+function boardClasses(compiled: LintInput): Map<string, Set<string> | undefined> {
+  const classes = new Map<string, Set<string> | undefined>();
+  classes.set('root', compiled.fs && compiled.inputPath ? definedClasses(compiled.fs, compiled.inputPath) : undefined);
+  function visit(graph: LintGraph, id: string) {
+    for (const group of ['layers', 'scenarios', 'steps'] as const) {
+      for (const child of graph[group] ?? []) {
+        const childId = `${id}.${group}.${boardKey(child.name ?? '')}`;
+        const names = new Set<string>();
+        for (const node of child.ast?.nodes ?? []) {
+          const path = node.map_key?.key?.path?.map((part) => stringValue(part) ?? '') ?? [];
+          if (path[0] !== 'classes') continue;
+          if (path.length > 1) names.add(path[1]);
+          else for (const entry of node.map_key?.value?.map?.nodes ?? []) {
+            const name = stringValue(entry.map_key?.key?.path?.[0]);
+            if (name) names.add(name);
+          }
+        }
+        classes.set(childId, names);
+        visit(child, childId);
+      }
+    }
+  }
+  visit(compiled.graph as LintGraph, 'root');
+  return classes;
+}
+
+type LintInput = Pick<CompileResponse, 'diagram' | 'graph'> & Partial<Pick<CompileResponse, 'fs' | 'inputPath'>>;
+
 /** Lint a compiled document without following its cyclic navigation graph.
  * Shape identifiers, not display labels, are the boundary-port naming contract.
+ * Pass the compiler's `fs` and `inputPath` too, so undefined classes on the root board are found.
  */
-export function lint(compiled: Pick<CompileResponse, 'diagram' | 'graph'>, options: LintOptions = {}): LintResult {
+export function lint(compiled: LintInput, options: LintOptions = {}): LintResult {
   const boards = indexBoards(compiled.diagram);
   const diagnostics: LintDiagnostic[] = [];
   const boundaries: BoundaryEvaluation[] = [];
@@ -285,6 +318,26 @@ export function lint(compiled: Pick<CompileResponse, 'diagram' | 'graph'>, optio
     }
   }
   visitGraph(compiled.graph as LintGraph, 'root');
+
+  // D2 accepts a class nothing defines and changes nothing, which hides typos and a missing import.
+  // Boundary port classes mark ports for lint whether or not the library styles them.
+  const classes = boardClasses(compiled);
+  for (const board of boards.values()) {
+    const defined = classes.get(board.id);
+    if (!defined) continue;
+    const reported = new Set<string>();
+    for (const item of [...board.diagram.shapes, ...board.diagram.connections]) {
+      for (const name of item.classes ?? []) {
+        if (defined.has(name) || reported.has(name) || name === 'zf-in' || name === 'zf-out') continue;
+        reported.add(name);
+        const connection = 'route' in item;
+        diagnostics.push({ rule: 'undefined-class', severity: 'warning', board: board.id,
+          ...connection ? { connection: item.id } : { shape: item.id, range: shapeRange(board.id, item.id) },
+          message: `Class "${name}" is not defined, so it changes nothing.${name.startsWith('zf-')
+            ? ' Check the spelling, and import the Zoomflow library with ...@zoomflow.' : ' Check the spelling, or define it under classes.'}` });
+      }
+    }
+  }
 
   // Layers are reachable only by following links from root; like D2's own viewer,
   // a reachable board's scenarios and steps are reachable without a link.

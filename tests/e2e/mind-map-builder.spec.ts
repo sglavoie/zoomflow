@@ -13,6 +13,7 @@ test('creates a mind map from an outline, drills into a detail board and edits i
   await dialog.getByLabel('Mind map name').fill('Trip');
   await dialog.getByRole('textbox', { name: 'Topics' }).fill('Trip\n- Places\n  - Lisbon\n    - Alfama\n  - Porto\n- Budget "max" $2k');
   await expect(dialog.getByRole('status')).toHaveText('6 topics · 1 detail board');
+  await dialog.getByLabel('Compact text').check();
   await dialog.getByRole('button', { name: 'Create mind map', exact: true }).click();
   await ready(page);
   await expect(page.locator('#filename')).toHaveText('Trip.d2');
@@ -29,6 +30,7 @@ test('creates a mind map from an outline, drills into a detail board and edits i
   const outline = edit.getByRole('textbox', { name: 'Topics' });
   await expect(outline).toHaveValue('Trip\n  Places\n    Lisbon\n      Alfama\n    Porto\n  Budget "max" $2k');
   await expect(outline).toBeFocused();
+  await expect(edit.getByLabel('Compact text')).toBeChecked();
   await edit.getByLabel('Detail boards').selectOption('0');
   await edit.getByRole('button', { name: 'Apply changes', exact: true }).click();
   await ready(page);

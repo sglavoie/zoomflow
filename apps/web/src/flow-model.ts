@@ -1,17 +1,40 @@
 export type FlowStep = { id: string; label: string; shape: 'rectangle' | 'diamond' | 'oval' };
 export type FlowConnection = { from: string; to: string; label: string };
-export type Flow = { direction: 'down' | 'right'; steps: FlowStep[]; connections: FlowConnection[] };
+/** Optional library looks, written as classes after each step's role. */
+export type Look = { filled: boolean; compact: boolean };
+export type Flow = { direction: 'down' | 'right'; look: Look; steps: FlowStep[]; connections: FlowConnection[] };
 
 const heading = '# Created with the Zoomflow flow builder.';
+/** Steps use library classes, so restyling those classes restyles every flow. */
+const library = '...@zoomflow';
+const roles: Record<FlowStep['shape'], string> = { rectangle: 'zf-step', diamond: 'zf-decision', oval: 'zf-terminal' };
+const shapes = Object.fromEntries(Object.entries(roles).map(([shape, role]) => [role, shape])) as Record<string, FlowStep['shape']>;
+
 // D2 also interpolates dollar signs inside double-quoted strings.
 const quote = (text: string) => JSON.stringify(text).replaceAll('$', '\\$');
 const unquote = (text: string): string => JSON.parse(text.replaceAll('\\$', '$'));
+
+/** A shape's classes: its role first, then the looks that override it. */
+export function lookClasses(classes: string[], look: Look): string {
+  const all = [...classes, ...look.filled ? ['zf-filled'] : [], ...look.compact ? ['zf-compact'] : []];
+  return all.length === 1 ? all[0] : `[${all.join('; ')}]`;
+}
+/** The look of a class value `lookClasses` wrote, with the classes before it. */
+export function readLook(value: string): { classes: string[]; look: Look } | undefined {
+  const classes = (/^\[(.*)\]$/.exec(value)?.[1].split('; ') ?? [value]);
+  const look = { filled: false, compact: false };
+  if (classes.at(-1) === 'zf-compact') { classes.pop(); look.compact = true; }
+  if (classes.at(-1) === 'zf-filled') { classes.pop(); look.filled = true; }
+  if (lookClasses(classes, look) !== value) return;
+  return { classes, look };
+}
 
 export function flowTemplate(template: string): Flow {
   const approval = template === 'approval';
   const labels = approval ? ['Receive request', 'Approved?', 'Complete request', 'Request changes'] : ['Start', 'Do something', 'Done'];
   return {
     direction: 'down',
+    look: { filled: false, compact: false },
     steps: labels.map((label, i) => ({ id: `step_${i + 1}`, label,
       shape: approval && i === 1 ? 'diamond' : i === 0 || i === 2 ? 'oval' : 'rectangle' })),
     connections: approval ? [
@@ -25,6 +48,14 @@ export function flowTemplate(template: string): Flow {
 
 /** Fixed identifiers keep names, punctuation and duplicate labels out of D2 syntax. */
 export function flowSource(flow: Flow): string {
+  return [heading, library, `direction: ${flow.direction}`, '',
+    ...flow.steps.map(step => `${step.id}: ${quote(step.label)} {class: ${lookClasses([roles[step.shape]], flow.look)}}`), '',
+    ...flow.connections.map(edge => `${edge.from} -> ${edge.to}: ${quote(edge.label)}`), '',
+  ].join('\n');
+}
+
+/** Flows from before the library classes set each step's shape directly. */
+function legacyFlowSource(flow: Flow): string {
   return [heading, `direction: ${flow.direction}`, '',
     ...flow.steps.map(step => `${step.id}: ${quote(step.label)} {shape: ${step.shape}}`), '',
     ...flow.connections.map(edge => `${edge.from} -> ${edge.to}: ${quote(edge.label)}`), '',
@@ -37,22 +68,29 @@ export function readFlow(source: string): Flow | undefined {
   const normalized = source.replaceAll('\r\n', '\n').trim();
   if (!normalized.startsWith(`${heading}\n`)) return;
   const lines = normalized.split('\n');
-  const direction = lines[1]?.match(/^direction: (down|right)$/)?.[1] as Flow['direction'] | undefined;
+  const legacy = lines[1] !== library;
+  const direction = lines[legacy ? 1 : 2]?.match(/^direction: (down|right)$/)?.[1] as Flow['direction'] | undefined;
   if (!direction) return;
-  const flow: Flow = { direction, steps: [], connections: [] };
+  const flow: Flow = { direction, look: { filled: false, compact: false }, steps: [], connections: [] };
   try {
-    for (const line of lines.slice(2).filter(Boolean)) {
-      const step = line.match(/^(step_\d+): ("(?:[^"\\]|\\.)*") \{shape: (rectangle|diamond|oval)\}$/);
+    for (const line of lines.slice(legacy ? 2 : 3).filter(Boolean)) {
+      const step = line.match(/^(step_\d+): ("(?:[^"\\]|\\.)*") \{(shape|class): ([\w-]+|\[[\w; -]+\])\}$/);
       const edge = line.match(/^(step_\d+) -> (step_\d+): ("(?:[^"\\]|\\.)*")$/);
-      if (step) flow.steps.push({ id: step[1], label: unquote(step[2]), shape: step[3] as FlowStep['shape'] });
-      else if (edge) flow.connections.push({ from: edge[1], to: edge[2], label: unquote(edge[3]) });
+      if (step) {
+        const styled = step[3] === 'class' ? readLook(step[4]) : undefined;
+        const name = styled ? styled.classes[0] : step[4];
+        const shape = styled ? Object.hasOwn(shapes, name) && shapes[name] : Object.hasOwn(roles, name) && name as FlowStep['shape'];
+        if (!shape) return;
+        if (styled) flow.look = styled.look;
+        flow.steps.push({ id: step[1], label: unquote(step[2]), shape });
+      } else if (edge) flow.connections.push({ from: edge[1], to: edge[2], label: unquote(edge[3]) });
       else return;
     }
   } catch { return; }
   const ids = new Set(flow.steps.map(step => step.id));
   if (!ids.size || ids.size !== flow.steps.length || flow.steps.some(step => !step.label.trim()) ||
     flow.connections.some(edge => !ids.has(edge.from) || !ids.has(edge.to))) return;
-  return flowSource(flow).trim() === normalized ? flow : undefined;
+  return (legacy ? legacyFlowSource(flow) : flowSource(flow)).trim() === normalized ? flow : undefined;
 }
 
 export function flowFilename(title: string, fallback = 'My flow') {

@@ -263,6 +263,33 @@ header > strong {
   border: 1px solid var(--border);
   border-radius: var(--radius);
 }
+.builder-look {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-5);
+  margin: var(--space-4) 0 0;
+  padding: var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.builder-look legend {
+  color: var(--muted);
+  font-size: var(--font-size-sm);
+}
+:is(#flow-builder, #mind-map-builder) .builder-look label {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--font-size-md);
+}
+:is(#flow-builder, #mind-map-builder) .builder-look input {
+  width: auto;
+  min-height: 0;
+}
+.builder-look .flow-help {
+  flex-basis: 100%;
+  margin: 0;
+}
 #flow-starters legend {
   color: var(--muted);
   font-size: var(--font-size-sm);

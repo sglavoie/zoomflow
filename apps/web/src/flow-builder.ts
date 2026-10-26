@@ -1,4 +1,4 @@
-import { guardBuilderDialog } from './builder-dialog';
+import { guardBuilderDialog, lookFields } from './builder-dialog';
 import type { PaneScope } from './pane-scope';
 import { plural, setText } from './text';
 import { flowFilename, flowSource, flowTemplate, readFlow, type Flow, type FlowStep } from './flow-model';
@@ -21,6 +21,7 @@ export function setupFlowBuilder(create: (source: string, name: string) => void,
         <label id="flow-name-field">Flow name<input id="flow-name" value="My flow" required maxlength="100" /></label>
         <label>Layout<select id="flow-direction"><option value="down">Top to bottom</option><option value="right">Left to right</option></select></label>
       </div>
+      ${lookFields('flow')}
       <fieldset id="flow-starters"><legend>Start with an example</legend><button type="button" data-template="simple">Simple flow</button> <button type="button" data-template="approval">Approval with Yes / No</button></fieldset>
       <section aria-labelledby="flow-steps-heading">
         <h3 id="flow-steps-heading">1. Name the steps</h3>
@@ -42,6 +43,8 @@ export function setupFlowBuilder(create: (source: string, name: string) => void,
   const form = dialog.querySelector('form')!;
   const name = dialog.querySelector<HTMLInputElement>('#flow-name')!;
   const direction = dialog.querySelector<HTMLSelectElement>('#flow-direction')!;
+  const filled = dialog.querySelector<HTMLInputElement>('#flow-filled')!;
+  const compact = dialog.querySelector<HTMLInputElement>('#flow-compact')!;
   const steps = dialog.querySelector<HTMLElement>('#flow-steps')!;
   const connections = dialog.querySelector<HTMLElement>('#flow-connections')!;
   const feedback = dialog.querySelector<HTMLElement>('#flow-feedback')!;
@@ -145,6 +148,8 @@ export function setupFlowBuilder(create: (source: string, name: string) => void,
   }
   function render() {
     direction.value = flow.direction;
+    filled.checked = flow.look.filled;
+    compact.checked = flow.look.compact;
     renderSteps(); renderConnections();
   }
   function open(isEditing: boolean, edit?: HTMLElement) {
@@ -181,8 +186,10 @@ export function setupFlowBuilder(create: (source: string, name: string) => void,
   dialog.addEventListener('close', () => (returnFocus.isConnected && !returnFocus.closest('[hidden]') ? returnFocus : launch).focus({ preventScroll: true }));
   name.addEventListener('input', () => name.setCustomValidity(name.value.trim() ? '' : 'Give your flow a name.'));
   direction.addEventListener('change', () => { flow.direction = direction.value as Flow['direction']; });
+  filled.addEventListener('change', () => { flow.look.filled = filled.checked; });
+  compact.addEventListener('change', () => { flow.look.compact = compact.checked; });
   dialog.querySelectorAll<HTMLButtonElement>('[data-template]').forEach(button => button.addEventListener('click', () => {
-    flow = flowTemplate(button.dataset.template!);
+    flow = { ...flowTemplate(button.dataset.template!), look: flow.look };
     render();
   }));
   addStep.addEventListener('click', () => {

@@ -9,7 +9,8 @@ beforeAll(() => { d2 = new D2(); });
 afterAll(async () => { await d2?.dispose(); });
 
 const compile = (source: string) => d2.compile({ ...projectFileSystem('index.d2', {}, source), options: { layout: 'elk' } });
-const example = (split: number): MindMap => ({ direction: 'right', split, root: parseOutline(mindMapExample)! });
+const plain = { filled: false, compact: false };
+const example = (split: number): MindMap => ({ direction: 'right', split, look: plain, root: parseOutline(mindMapExample)! });
 
 it('reads indented outlines with optional bullets and headings', () => {
   expect(parseOutline('# Plan\n- A\n  * A1\n\n\t+ A2\nB\n  B1\n    B11\n  B2')).toEqual({ label: 'Plan', children: [
@@ -36,13 +37,14 @@ it('keeps every topic on one board unless asked to split', async () => {
 });
 
 it('opens deep branches as linked detail boards, recursively', async () => {
-  const map: MindMap = { direction: 'down', split: 1, root: parseOutline('Plan\n  Style\n    S1\n      S11\n  Style\n    T1\n  Lone')! };
+  const map: MindMap = { direction: 'down', split: 1, look: plain, root: parseOutline('Plan\n  Style\n    S1\n      S11\n  Style\n    T1\n  Lone')! };
   const source = mindMapSource(map);
   const compiled = await compile(source);
   const boards = [...indexBoards(compiled.diagram).values()].map(board => [board.name, board.parent, board.diagram.shapes.length]);
   expect(boards).toEqual([['Root', undefined, 4], ['style', 'root', 2], ['S1', 'root.layers.style', 2], ['style 2', 'root', 2]]);
   expect(compiled.diagram.shapes.filter(shape => shape.link).map(shape => shape.link)).toEqual(['root.layers.style', 'root.layers.style 2']);
-  // A main branch keeps its colour on its detail boards.
+  // Detail boards inherit the root's library import, and a main branch keeps its colour on them.
+  expect(source.match(/\.\.\.@zoomflow/g)).toHaveLength(1);
   const tone = compiled.diagram.shapes[1].stroke;
   expect(compiled.diagram.layers?.[0]?.shapes.map(shape => shape.stroke)).toEqual([tone, tone]);
   expect(readMindMap(source)).toEqual(map);
@@ -52,7 +54,7 @@ it('opens deep branches as linked detail boards, recursively', async () => {
 
 it('keeps labels literal and board names linkable', async () => {
   const label = 'Review "A": {B} -> C #tag; [x] \\path $5 ${hello} … 日本語';
-  const map: MindMap = { direction: 'right', split: 1, root: { label, children: [
+  const map: MindMap = { direction: 'right', split: 1, look: plain, root: { label, children: [
     { label, children: [{ label: 'x', children: [] }] },
     ...['Label', 'TOP', '_', '#'].map(name => ({ label: name, children: [{ label: 'y', children: [] }] })),
   ] } };
@@ -78,4 +80,25 @@ it('does not offer form editing when it would discard custom source', () => {
   expect(readMindMap(source.replace('"Pricing"', '"Price"'))?.root.children[2].children[0].label).toBe('Price');
   expect(readMindMap(source.replace('"Pricing"', '"  "'))).toBeUndefined();
   expect(readMindMap(source.replace('"Pricing"', '"Two\\nlines"'))).toBeUndefined();
+});
+
+it('writes looks as library classes that apply on every board', async () => {
+  const map: MindMap = { ...example(1), look: { filled: true, compact: true } };
+  const source = mindMapSource(map);
+  expect(source).toContain('n: "Product launch" {class: [zf-topic; zf-filled; zf-compact]}');
+  const compiled = await compile(source);
+  for (const board of indexBoards(compiled.diagram).values()) {
+    expect(board.diagram.shapes.every(shape => shape.fill === '#e2e8f0' && 'fontSize' in shape && shape.fontSize === 13)).toBe(true);
+  }
+  expect(readMindMap(source)).toEqual(map);
+  expect(readMindMap(mindMapSource({ ...map, look: { filled: true, compact: false } }))?.look).toEqual({ filled: true, compact: false });
+  // Every topic shares one look; a mix is custom source.
+  expect(readMindMap(source.replace('{class: [zf-topic; zf-filled; zf-compact]}', '{class: zf-topic}'))).toBeUndefined();
+});
+
+it('reopens maps written when every board imported the library', () => {
+  const map = example(1);
+  const legacy = mindMapSource(map, true);
+  expect(legacy.match(/\.\.\.@zoomflow/g)!.length).toBeGreaterThan(1);
+  expect(readMindMap(legacy)).toEqual(map);
 });

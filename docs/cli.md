@@ -42,6 +42,7 @@ failure. `--json` prints the core lint result; if there is no result (exit **2**
 it prints `{ "error": "<message>", "diagnostics": [] }` to stdout instead, with the
 human-readable message still on stderr. `--boundary-ports` opts into explicit
 port validation, and `--missing-backlink` opts into warnings for layers without a link back to their parent.
+Lint always warns about classes that nothing defines (`undefined-class`).
 Human diagnostics start with a clickable `path:line:column` (one-based, relative
 to the working directory, possibly an imported file) and name boards by their
 trail, for example `Root > checkout`, followed by the shape or connection ID such

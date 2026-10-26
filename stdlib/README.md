@@ -19,10 +19,55 @@ The library is opt-in; existing documents are not rewritten.
 - `zf-initial`: small filled circle.
 - `zf-final`: filled circle with a double border.
 - `zf-state`: rounded rectangle.
+- `zf-step` / `zf-decision` / `zf-terminal`: the flow builder's actions (rectangle),
+  decisions (diamond) and start or end points (oval).
 - `zf-topic` / `zf-branch` / `zf-leaf`: mind map pills for the central topic, its
   main branches and deeper topics.
 - `zf-accent-1` to `zf-accent-6`: a branch colour for the outlines of topics and the
   lines between them.
+- `zf-emphasis`, `zf-muted`, `zf-external`, `zf-warning`, `zf-note`: roles for any
+  diagram: a thick bold outline, half opacity, a dashed outline, an amber outline, and
+  an italic page shape. Combine them with other classes, as in `[zf-state; zf-muted]`.
+- `zf-filled` / `zf-compact`: the builders' **Look** options, a light fill with dark
+  text that reads the same in both themes, and smaller text. Put them last so they
+  override the classes before them.
+
+## Project style sheet
+
+Name what a shape is with a class, and keep how each class looks in one file. A
+`zoomflow.d2` beside your diagrams replaces the bundled one for `...@zoomflow`, in a
+folder opened in the browser and in the CLI. Copy this file, change the class
+styles and add your own classes; every diagram that imports it, including the
+builders' output, follows:
+
+```d2
+# zoomflow.d2 in your project: the bundled library with a house look.
+vars: {
+  d2-config: {
+    theme-id: 0
+    dark-theme-id: 200
+  }
+}
+classes: {
+  zf-decision: {
+    shape: diamond
+    style: {stroke: "#0090ff"; stroke-width: 2}
+  }
+  zf-emphasis: {style: {stroke-width: 3; bold: true; font-color: "#e5484d"}}
+  # ...the other classes, copied from the bundled zoomflow.d2.
+  service: {shape: hexagon}
+}
+```
+
+Keep every class the bundled file defines, since the builders and other documents may
+use any of them. For diagrams you write yourself, a smaller file works too: import the
+library and then your own, as in `...@zoomflow` then `...@house`. A later definition of
+a class merges into the earlier one, so `house.d2` needs only what changes:
+`classes.zf-decision.style.stroke: "#0090ff"` keeps the diamond and changes its outline.
+
+Classes defined on the root board apply on every board below it, so import once at the
+top. Lint warns about a class that nothing defines, which catches a misspelt name or a
+missing import.
 
 Boundary ports are optional. Ordinary drill-down diagrams need only a board link;
 the viewer infers parent connection hints without adding ports to your source.
@@ -60,12 +105,13 @@ incident edges but zero matched boundary pairs produces an error, including when
 edges are undirected. Scenario switches, sibling links and ancestor links do not
 establish a parent/child boundary contract.
 
-The state pieces use a fixed slate fill, while the other classes inherit D2's
-neutral palettes. Standard D2 style overrides remain available.
+The state pieces, `zf-filled` and the accent and warning outlines use fixed colours,
+while the other classes inherit D2's neutral palettes. Standard D2 style overrides
+remain available.
 
 Mind map classes combine a role with an accent. Use undirected `--` lines so the
-map has no arrowheads. Layers start fresh in D2, so a detail board needs its own
-import:
+map has no arrowheads. Detail boards inherit the root board's classes, so the import
+at the top covers them:
 
 ```d2
 ...@zoomflow
@@ -76,7 +122,6 @@ hiring: Hiring {class: [zf-leaf; zf-accent-1]; link: layers.hiring}
 plan -- people: {class: zf-accent-1}
 people -- hiring: {class: zf-accent-1}
 layers.hiring: {
-  ...@zoomflow
   hiring: Hiring {class: [zf-topic; zf-accent-1]}
 }
 ```

@@ -54,4 +54,8 @@ test('bundled stdlib and live lint diagnostics recover, with optional backlink w
   await open(fixture('labelled'));
   await expect(page.locator('#lint-summary')).toHaveText('No lint issues');
   await expect(page.locator('#compile-error')).toBeHidden();
+  // A misspelt library class is otherwise silent: D2 applies nothing.
+  await open('...@zoomflow\na.class: zf-stat');
+  await expect(page.locator('#lint-summary')).toHaveText('0 lint errors, 1 warning');
+  await expect(page.locator('.cm-panel-lint')).toContainText('Class "zf-stat" is not defined');
 });

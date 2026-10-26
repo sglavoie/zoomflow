@@ -54,6 +54,8 @@ good preview; **Go to error** and **Diagnostics** lead back to the relevant sour
 - [Workspace guide](docs/workspace.md): projects, saving and recovery, navigation,
   source editing, diagnostics, keyboard controls, reference, side-by-side diagrams,
   and exports.
+- [Standard library](stdlib/README.md): classes for flows, mind maps and common roles,
+  and a project style sheet that restyles every diagram that uses them.
 - [Ask AI](docs/ai.md): local Claude Code / Codex setup, configuration, cancellation,
   and undo.
 - [Command line and CI](docs/cli.md): linting, headless exports, exit codes, and workflows.

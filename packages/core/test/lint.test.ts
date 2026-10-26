@@ -275,3 +275,38 @@ layers.L: {up.link: _; over.link: _._; there.link: _.layers.L; e.link: mailto:a@
   ]);
   expect(result.diagnostics.every((item) => item.range?.startsWith('index,'))).toBe(true);
 });
+
+it('warns about classes nothing defines, on the root and in layers that inherit its classes', async () => {
+  const result = lint(await compile(`...@zoomflow
+classes.mine.style.bold: true
+a.class: [zf-state; zf-stat]
+b.class: mine
+c.class: zf-stat
+a -> b: {class: [zf-accent-1; edge-typo]}
+a.link: layers.detail
+layers.detail: {
+  d.class: [zf-leaf; mine]
+  e.class: missing
+  back.link: _
+}`));
+  expect(result.diagnostics.map(({ rule, board, shape, connection, message }) => ({ rule, board, item: shape ?? connection, message }))).toEqual([
+    { rule: 'undefined-class', board: 'root', item: 'a', message: 'Class "zf-stat" is not defined, so it changes nothing. Check the spelling, and import the Zoomflow library with ...@zoomflow.' },
+    { rule: 'undefined-class', board: 'root', item: '(a -> b)[0]', message: 'Class "edge-typo" is not defined, so it changes nothing. Check the spelling, or define it under classes.' },
+    { rule: 'undefined-class', board: 'root.layers.detail', item: 'e', message: 'Class "missing" is not defined, so it changes nothing. Check the spelling, or define it under classes.' },
+  ]);
+  expect(result.diagnostics[0].range).toMatch(/^index,/);
+});
+
+it('finds classes through nested and relative imports, and skips the root when it cannot follow one', async () => {
+  const files = { 'zoomflow.d2': library, 'lib/style.d2': '# Shared look\n...@../more\nclasses: {\n  "quoted.name": {style.fill: red}; plain: {label: "a: {b}"}\n}',
+    'more.d2': 'classes.deep.style.fill: blue\nnote: |md\n  classes.fake: x\n|' };
+  const run = async (index: string) => lint(await d2.compile({ fs: { index, ...files }, options: { layout: 'elk' } }))
+    .diagnostics.filter((item) => item.rule === 'undefined-class').map((item) => `${item.board}:${item.message.split('"')[1]}`);
+  expect(await run('...@lib/style\na.class: [plain; deep; "quoted.name"; fake]')).toEqual(['root:fake']);
+  expect(await run('classes: {...@zoomflow.classes}\na.class: [zf-leaf; zf-nope]')).toEqual(['root:zf-nope']);
+  // An import the scan cannot follow leaves the root unchecked, but layers still list their classes.
+  expect(await run('classes: @lib/style.classes\na.class: nope\nlayers.x: {b.class: [plain; nope]}')).toEqual(['root.layers.x:nope']);
+  expect(lint((await compile('a.class: nope')), {}).diagnostics).toHaveLength(1);
+  const { diagram, graph } = await compile('a.class: nope');
+  expect(lint({ diagram, graph }).diagnostics).toEqual([]);
+});
