@@ -1,4 +1,4 @@
-import { guardBuilderDialog, lookFields } from './builder-dialog';
+import { guardBuilderDialog, lookControls, lookFields } from './builder-dialog';
 import type { PaneScope } from './pane-scope';
 import { plural, setText } from './text';
 import { flowFilename, flowSource, flowTemplate, readFlow, type Flow, type FlowStep } from './flow-model';
@@ -43,8 +43,7 @@ export function setupFlowBuilder(create: (source: string, name: string) => void,
   const form = dialog.querySelector('form')!;
   const name = dialog.querySelector<HTMLInputElement>('#flow-name')!;
   const direction = dialog.querySelector<HTMLSelectElement>('#flow-direction')!;
-  const filled = dialog.querySelector<HTMLInputElement>('#flow-filled')!;
-  const compact = dialog.querySelector<HTMLInputElement>('#flow-compact')!;
+  const look = lookControls(dialog, 'flow');
   const steps = dialog.querySelector<HTMLElement>('#flow-steps')!;
   const connections = dialog.querySelector<HTMLElement>('#flow-connections')!;
   const feedback = dialog.querySelector<HTMLElement>('#flow-feedback')!;
@@ -148,8 +147,7 @@ export function setupFlowBuilder(create: (source: string, name: string) => void,
   }
   function render() {
     direction.value = flow.direction;
-    filled.checked = flow.look.filled;
-    compact.checked = flow.look.compact;
+    look.set(flow.look);
     renderSteps(); renderConnections();
   }
   function open(isEditing: boolean, edit?: HTMLElement) {
@@ -186,8 +184,7 @@ export function setupFlowBuilder(create: (source: string, name: string) => void,
   dialog.addEventListener('close', () => (returnFocus.isConnected && !returnFocus.closest('[hidden]') ? returnFocus : launch).focus({ preventScroll: true }));
   name.addEventListener('input', () => name.setCustomValidity(name.value.trim() ? '' : 'Give your flow a name.'));
   direction.addEventListener('change', () => { flow.direction = direction.value as Flow['direction']; });
-  filled.addEventListener('change', () => { flow.look.filled = filled.checked; });
-  compact.addEventListener('change', () => { flow.look.compact = compact.checked; });
+  for (const box of look.boxes) box.addEventListener('change', () => { flow.look = look.get(); });
   dialog.querySelectorAll<HTMLButtonElement>('[data-template]').forEach(button => button.addEventListener('click', () => {
     flow = { ...flowTemplate(button.dataset.template!), look: flow.look };
     render();

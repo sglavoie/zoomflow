@@ -20,6 +20,37 @@ it('compiles the importable stdlib, state pieces and neutral theme in real D2', 
   expect(await d2.render(result.diagram, result.renderOptions)).toContain('<svg');
 });
 
+it('compiles every library class in real D2 and lints them clean', async () => {
+  const names = [...library.matchAll(/^ {2}(zf-[\w-]+): \{/gm)].map((match) => match[1]);
+  const edges = ['zf-yes', 'zf-no', 'zf-async', 'zf-optional', 'zf-to-many'];
+  expect(names).toEqual(expect.arrayContaining([...edges, 'zf-icon-user', 'zf-lane', 'zf-shadow']));
+  const shapes = names.filter((name) => !edges.includes(name));
+  const source = ['...@zoomflow', ...shapes.map((name, i) => `s${i}.class: ${name}`),
+    ...edges.map((name, i) => `e${i} -> f${i}: {class: ${name}}`), 'group: {class: zf-lane; inner}'].join('\n');
+  const result = await compile(source);
+  expect(lint(result).diagnostics).toEqual([]);
+  const shape = (name: string) => result.diagram.shapes[shapes.indexOf(name)];
+  expect(shape('zf-icon-database').icon).toMatchObject({ Scheme: 'data' });
+  expect(shape('zf-stack')).toMatchObject({ multiple: true });
+  expect(shape('zf-code')).toMatchObject({ fontFamily: 'mono' });
+  expect(shape('zf-accent-3')).toMatchObject({ stroke: '#30a46c' });
+  // Unstyled lines keep a theme colour.
+  expect(result.diagram.connections.map((edge) => [edge.stroke.startsWith('#') ? edge.stroke : 'theme', edge.strokeDash, edge.animated, edge.dstArrow])).toEqual([
+    ['#30a46c', 0, false, 'triangle'], ['#e5484d', 4, false, 'triangle'], ['theme', 4, true, 'triangle'],
+    ['theme', 2, false, 'triangle'], ['theme', 0, false, 'cf-many']]);
+  const svg = await d2.render(result.diagram, result.renderOptions);
+  expect(svg).toContain('<image href="data:image/svg+xml;utf8,');
+});
+
+it('recolours every class from one palette value in a project copy of the library', async () => {
+  const copy = library.replace('zf-accent-3: "#30a46c"', 'zf-accent-3: "#123456"').replace('zf-yes: "#30a46c"', 'zf-yes: "#654321"');
+  const result = await d2.compile({ fs: { index: '...@zoomflow\na.class: zf-accent-3\na -> b: {class: zf-yes}\na.link: layers.x\nlayers.x: {c.class: zf-accent-3}',
+    'zoomflow.d2': copy }, options: { layout: 'elk' } });
+  expect(result.diagram.shapes[0].stroke).toBe('#123456');
+  expect(result.diagram.connections[0].stroke).toBe('#654321');
+  expect(result.diagram.layers?.[0]?.shapes[0].stroke).toBe('#123456');
+});
+
 it.each(['labelled', 'dotted', 'imported'])('evaluates real boundary pairs for %s nodes using identifiers, never labels', async (name) => {
   const result = strictLint(await compile(fixture(name)));
   expect(result.diagnostics).toEqual([]);
@@ -309,4 +340,18 @@ it('finds classes through nested and relative imports, and skips the root when i
   expect(lint((await compile('a.class: nope')), {}).diagnostics).toHaveLength(1);
   const { diagram, graph } = await compile('a.class: nope');
   expect(lint({ diagram, graph }).diagnostics).toEqual([]);
+});
+
+it('compiles every D2 example in the library guide', async () => {
+  const guide = readFileSync('stdlib/README.md', 'utf8');
+  const examples = [...guide.matchAll(/```d2\n([\s\S]*?)```/g)].map((match) => match[1]);
+  const house = examples.find((example) => example.startsWith('# house.d2'))!;
+  expect(examples.length).toBeGreaterThanOrEqual(5);
+  for (const example of examples) {
+    const result = await d2.compile({ fs: { index: example, 'zoomflow.d2': library, 'house.d2': house }, options: { layout: 'elk' } });
+    expect(lint(result).diagnostics.filter((item) => item.rule === 'undefined-class')).toEqual([]);
+  }
+  const styled = await d2.compile({ fs: { index: '...@zoomflow\n...@house\na.class: zf-decision', 'zoomflow.d2': library, 'house.d2': house }, options: { layout: 'elk' } });
+  expect(styled.diagram.shapes[0]).toMatchObject({ type: 'diamond', stroke: '#0090ff', fontFamily: 'mono' });
+  expect(styled.renderOptions).toMatchObject({ themeID: 0, darkThemeID: 200, themeOverrides: { b1: '#1d4ed8' } });
 });

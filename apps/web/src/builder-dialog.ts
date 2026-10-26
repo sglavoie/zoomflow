@@ -1,3 +1,5 @@
+import { lookNames, type Look } from './flow-model';
+
 /** Modal behaviour shared by the form builders. `discard` resolves whether closing may proceed,
  * asking first when that would discard changes made since the builder opened. `shortcut` handles
  * the dialog's own keys, returning whether it did, since workspace key handlers never see them. */
@@ -33,12 +35,23 @@ export function guardBuilderDialog(dialog: HTMLDialogElement, discard: () => boo
   }, { capture: true });
 }
 
+const lookLabels: Record<keyof Look, string> = { filled: 'Filled shapes', compact: 'Compact text', shadow: 'Shadows' };
+
 /** Look choices for a builder whose ids start with `prefix`. They only add library classes,
  * so a project's own zoomflow.d2 can restyle them. */
 export function lookFields(prefix: string) {
   return `<fieldset class="builder-look" aria-describedby="${prefix}-look-help"><legend>Look</legend>
-        <label><input id="${prefix}-filled" type="checkbox" /> Filled shapes</label>
-        <label><input id="${prefix}-compact" type="checkbox" /> Compact text</label>
-        <p id="${prefix}-look-help" class="flow-help">Adds the library's zf-filled and zf-compact classes. Restyle them in your project's zoomflow.d2.</p>
+        ${lookNames.map(name => `<label><input id="${prefix}-${name}" type="checkbox" /> ${lookLabels[name]}</label>`).join('\n        ')}
+        <p id="${prefix}-look-help" class="flow-help">Adds the library's ${lookNames.map(name => `zf-${name}`).join(', ')} classes. Restyle them in your project's zoomflow.d2.</p>
       </fieldset>`;
+}
+
+/** Read and set the checkboxes `lookFields` wrote. */
+export function lookControls(dialog: HTMLElement, prefix: string) {
+  const boxes = lookNames.map(name => [name, dialog.querySelector<HTMLInputElement>(`#${prefix}-${name}`)!] as const);
+  return {
+    boxes: boxes.map(([, box]) => box),
+    get: () => Object.fromEntries(boxes.map(([name, box]) => [name, box.checked])) as Look,
+    set(look: Look) { for (const [name, box] of boxes) box.checked = look[name]; },
+  };
 }

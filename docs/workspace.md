@@ -9,7 +9,8 @@ between the selected steps; optional labels such as Yes and No describe branches
 **Add step** connects the new step from the previous one automatically. Change
 that connection or add others to make branches and loops. Removing a step also
 removes its connections. Layout can run top to bottom or left to right.
-Under **Look**, **Filled shapes** and **Compact text** restyle every step at once.
+Under **Look**, **Filled shapes**, **Compact text** and **Shadows** restyle every step
+at once. Connections labelled Yes or No are drawn green and dashed red.
 
 **Create flow** opens a separate, unsaved draft and keeps the current diagram in
 the filename menu. **Edit flow** above the preview reopens the form, including
@@ -21,7 +22,8 @@ download a disk copy to keep your work.
 
 The builder writes ordinary D2 that imports the [standard library](../stdlib/README.md)
 and gives each step a class for its type: `zf-step`, `zf-decision` or `zf-terminal`.
-The looks add `zf-filled` and `zf-compact` after it. To restyle every flow in a
+The looks add `zf-filled`, `zf-compact` and `zf-shadow` after it, and Yes and No
+lines get `zf-yes` and `zf-no`. To restyle every flow in a
 project, change those classes in a [project style sheet](#style-diagrams-consistently).
 Flows saved before the builder used classes still reopen; applying changes rewrites
 them with classes. It can reopen its own generated source, including
@@ -54,15 +56,17 @@ unavailable so the outline cannot discard it.
 ## Style diagrams consistently
 
 Give shapes a class for what they are, and define how each class looks in one place.
-The [standard library](../stdlib/README.md) has classes for flows, mind maps, states and
-general roles such as `zf-emphasis`, `zf-muted` and `zf-external`; the builders write
-only these classes. Classes defined on the root board also apply on every board below it.
+The [standard library](../stdlib/README.md) has classes for flows, mind maps, states,
+connections, groups and swimlanes, icons, and general roles such as `zf-emphasis`,
+`zf-muted` and `zf-external`; the builders write only these classes. Classes defined on
+the root board also apply on every board below it.
 
 For a project's own look, open its folder with **Open folder** and add a `zoomflow.d2`
 beside your diagrams: a copy of the [bundled library](../stdlib/zoomflow.d2) with its
-class styles changed, plus any classes of your own. It replaces the bundled library for
-`...@zoomflow` in the browser and the [command line](cli.md), so every diagram and
-builder output that imports it picks up the change. A class that nothing defines
+palette, theme colours or class styles changed, plus any classes of your own. It
+replaces the bundled library for `...@zoomflow` in the browser and the
+[command line](cli.md), so every diagram and builder output that imports it picks up
+the change. A class that nothing defines
 changes nothing, so lint warns about it.
 
 ## Workspace and drafts

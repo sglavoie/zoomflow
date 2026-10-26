@@ -78,6 +78,11 @@ export function definedClasses(files: Record<string, string>, path: string, seen
     } else if (char === '#') {
       const end = text.indexOf('\n', i);
       i = (end < 0 ? text.length : end) - 1;
+    } else if (text.startsWith('${', i)) {
+      // A substitution's braces are not a map.
+      const end = text.indexOf('}', i);
+      append(text.slice(i, end < 0 ? text.length : end + 1));
+      i = end < 0 ? text.length : end;
     } else if (char === '"' || char === "'") {
       let end = i + 1;
       while (end < text.length && text[end] !== char && text[end] !== '\n') end += char === '"' && text[end] === '\\' ? 2 : 1;

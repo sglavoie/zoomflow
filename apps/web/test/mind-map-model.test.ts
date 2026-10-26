@@ -2,6 +2,7 @@ import { D2 } from '@d2lang/d2';
 import { afterAll, beforeAll, expect, it } from 'vitest';
 import { indexBoards } from '@zoomflow/core';
 import { countTopics, detailBoardName, mindMapExample, mindMapSource, outlineText, parseOutline, readMindMap, type MindMap } from '../src/mind-map-model';
+import { plainLook } from '../src/flow-model';
 import { projectFileSystem } from '../src/project-files';
 
 let d2: D2;
@@ -9,7 +10,7 @@ beforeAll(() => { d2 = new D2(); });
 afterAll(async () => { await d2?.dispose(); });
 
 const compile = (source: string) => d2.compile({ ...projectFileSystem('index.d2', {}, source), options: { layout: 'elk' } });
-const plain = { filled: false, compact: false };
+const plain = plainLook();
 const example = (split: number): MindMap => ({ direction: 'right', split, look: plain, root: parseOutline(mindMapExample)! });
 
 it('reads indented outlines with optional bullets and headings', () => {
@@ -83,7 +84,7 @@ it('does not offer form editing when it would discard custom source', () => {
 });
 
 it('writes looks as library classes that apply on every board', async () => {
-  const map: MindMap = { ...example(1), look: { filled: true, compact: true } };
+  const map: MindMap = { ...example(1), look: { filled: true, compact: true, shadow: false } };
   const source = mindMapSource(map);
   expect(source).toContain('n: "Product launch" {class: [zf-topic; zf-filled; zf-compact]}');
   const compiled = await compile(source);
@@ -91,7 +92,8 @@ it('writes looks as library classes that apply on every board', async () => {
     expect(board.diagram.shapes.every(shape => shape.fill === '#e2e8f0' && 'fontSize' in shape && shape.fontSize === 13)).toBe(true);
   }
   expect(readMindMap(source)).toEqual(map);
-  expect(readMindMap(mindMapSource({ ...map, look: { filled: true, compact: false } }))?.look).toEqual({ filled: true, compact: false });
+  const shadowed = { filled: false, compact: false, shadow: true };
+  expect(readMindMap(mindMapSource({ ...map, look: shadowed }))?.look).toEqual(shadowed);
   // Every topic shares one look; a mix is custom source.
   expect(readMindMap(source.replace('{class: [zf-topic; zf-filled; zf-compact]}', '{class: zf-topic}'))).toBeUndefined();
 });

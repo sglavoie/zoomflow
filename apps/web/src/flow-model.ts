@@ -1,7 +1,9 @@
 export type FlowStep = { id: string; label: string; shape: 'rectangle' | 'diamond' | 'oval' };
 export type FlowConnection = { from: string; to: string; label: string };
-/** Optional library looks, written as classes after each step's role. */
-export type Look = { filled: boolean; compact: boolean };
+/** Optional library looks, written in this order as `zf-<name>` classes after each shape's role. */
+export const lookNames = ['filled', 'compact', 'shadow'] as const;
+export type Look = Record<(typeof lookNames)[number], boolean>;
+export const plainLook = (): Look => ({ filled: false, compact: false, shadow: false });
 export type Flow = { direction: 'down' | 'right'; look: Look; steps: FlowStep[]; connections: FlowConnection[] };
 
 const heading = '# Created with the Zoomflow flow builder.';
@@ -16,15 +18,14 @@ const unquote = (text: string): string => JSON.parse(text.replaceAll('\\$', '$')
 
 /** A shape's classes: its role first, then the looks that override it. */
 export function lookClasses(classes: string[], look: Look): string {
-  const all = [...classes, ...look.filled ? ['zf-filled'] : [], ...look.compact ? ['zf-compact'] : []];
+  const all = [...classes, ...lookNames.filter(name => look[name]).map(name => `zf-${name}`)];
   return all.length === 1 ? all[0] : `[${all.join('; ')}]`;
 }
 /** The look of a class value `lookClasses` wrote, with the classes before it. */
 export function readLook(value: string): { classes: string[]; look: Look } | undefined {
   const classes = (/^\[(.*)\]$/.exec(value)?.[1].split('; ') ?? [value]);
-  const look = { filled: false, compact: false };
-  if (classes.at(-1) === 'zf-compact') { classes.pop(); look.compact = true; }
-  if (classes.at(-1) === 'zf-filled') { classes.pop(); look.filled = true; }
+  const look = plainLook();
+  for (const name of [...lookNames].reverse()) if (classes.at(-1) === `zf-${name}`) { classes.pop(); look[name] = true; }
   if (lookClasses(classes, look) !== value) return;
   return { classes, look };
 }
@@ -34,7 +35,7 @@ export function flowTemplate(template: string): Flow {
   const labels = approval ? ['Receive request', 'Approved?', 'Complete request', 'Request changes'] : ['Start', 'Do something', 'Done'];
   return {
     direction: 'down',
-    look: { filled: false, compact: false },
+    look: plainLook(),
     steps: labels.map((label, i) => ({ id: `step_${i + 1}`, label,
       shape: approval && i === 1 ? 'diamond' : i === 0 || i === 2 ? 'oval' : 'rectangle' })),
     connections: approval ? [
@@ -46,11 +47,17 @@ export function flowTemplate(template: string): Flow {
   };
 }
 
+/** Lines labelled Yes or No take the library's branch colours. */
+function connectionLine(edge: FlowConnection) {
+  const branch = /^(yes|no)$/i.exec(edge.label.trim())?.[1].toLowerCase();
+  return `${edge.from} -> ${edge.to}: ${quote(edge.label)}${branch ? ` {class: zf-${branch}}` : ''}`;
+}
+
 /** Fixed identifiers keep names, punctuation and duplicate labels out of D2 syntax. */
 export function flowSource(flow: Flow): string {
   return [heading, library, `direction: ${flow.direction}`, '',
     ...flow.steps.map(step => `${step.id}: ${quote(step.label)} {class: ${lookClasses([roles[step.shape]], flow.look)}}`), '',
-    ...flow.connections.map(edge => `${edge.from} -> ${edge.to}: ${quote(edge.label)}`), '',
+    ...flow.connections.map(connectionLine), '',
   ].join('\n');
 }
 
@@ -71,11 +78,11 @@ export function readFlow(source: string): Flow | undefined {
   const legacy = lines[1] !== library;
   const direction = lines[legacy ? 1 : 2]?.match(/^direction: (down|right)$/)?.[1] as Flow['direction'] | undefined;
   if (!direction) return;
-  const flow: Flow = { direction, look: { filled: false, compact: false }, steps: [], connections: [] };
+  const flow: Flow = { direction, look: plainLook(), steps: [], connections: [] };
   try {
     for (const line of lines.slice(legacy ? 2 : 3).filter(Boolean)) {
       const step = line.match(/^(step_\d+): ("(?:[^"\\]|\\.)*") \{(shape|class): ([\w-]+|\[[\w; -]+\])\}$/);
-      const edge = line.match(/^(step_\d+) -> (step_\d+): ("(?:[^"\\]|\\.)*")$/);
+      const edge = line.match(/^(step_\d+) -> (step_\d+): ("(?:[^"\\]|\\.)*")(?: \{class: zf-(?:yes|no)\})?$/);
       if (step) {
         const styled = step[3] === 'class' ? readLook(step[4]) : undefined;
         const name = styled ? styled.classes[0] : step[4];

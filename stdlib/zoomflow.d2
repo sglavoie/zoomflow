@@ -1,10 +1,25 @@
 # Spread-import with ...@zoomflow (the browser supplies zoomflow.d2).
 # Neutral D2 palettes keep the library legible in both light and dark exports.
+# The classes take their colours from the palette below, so a copy of this file
+# changes a colour everywhere by changing one value.
 vars: {
   d2-config: {
     theme-id: 0
     dark-theme-id: 200
   }
+  zf-accent-1: "#e5484d"
+  zf-accent-2: "#e38a1f"
+  zf-accent-3: "#30a46c"
+  zf-accent-4: "#0090ff"
+  zf-accent-5: "#8e4ec6"
+  zf-accent-6: "#d6409f"
+  zf-slate: "#64748b"
+  zf-warning: "#e38a1f"
+  zf-yes: "#30a46c"
+  zf-no: "#e5484d"
+  # A light surface with dark text reads the same in light and dark themes.
+  zf-surface: "#e2e8f0"
+  zf-ink: "#1e293b"
 }
 classes: {
   zf-in: {
@@ -20,14 +35,14 @@ classes: {
     label: ""
     width: 20
     height: 20
-    style: {fill: "#64748b"; stroke: "#64748b"}
+    style: {fill: ${zf-slate}; stroke: ${zf-slate}}
   }
   zf-final: {
     shape: circle
     label: ""
     width: 24
     height: 24
-    style: {fill: "#64748b"; stroke: "#64748b"; double-border: true}
+    style: {fill: ${zf-slate}; stroke: ${zf-slate}; double-border: true}
   }
   zf-state: {
     shape: rectangle
@@ -44,11 +59,56 @@ classes: {
   zf-muted: {style.opacity: 0.5}
   zf-external: {style.stroke-dash: 4}
   zf-warning: {
-    style: {stroke: "#e38a1f"; stroke-width: 2}
+    style: {stroke: ${zf-warning}; stroke-width: 2}
   }
   zf-note: {
     shape: page
     style: {italic: true}
+  }
+  zf-stack: {style.multiple: true}
+  zf-draft: {style.fill-pattern: lines}
+  zf-uniform: {
+    width: 160
+    height: 64
+  }
+  # Text.
+  zf-code: {style.font: mono}
+  zf-caption: {
+    style: {font-size: 12; italic: true}
+  }
+  # Groups: containers around related shapes, and swimlanes with the label at the top left.
+  zf-group: {
+    style: {fill: transparent; stroke-dash: 4; border-radius: 8}
+  }
+  zf-lane: {
+    label.near: top-left
+    style: {fill: transparent; stroke-width: 1; bold: true}
+  }
+  # Connections. The flow builder writes zf-yes and zf-no on lines labelled Yes and No.
+  zf-yes: {style.stroke: ${zf-yes}}
+  zf-no: {
+    style: {stroke: ${zf-no}; stroke-dash: 4}
+  }
+  zf-async: {
+    style: {stroke-dash: 4; animated: true}
+  }
+  zf-optional: {style.stroke-dash: 2}
+  zf-to-many: {target-arrowhead.shape: cf-many}
+  # Icons, drawn in the slate colour so they read in both themes. Inline, so exports stay offline.
+  zf-icon-user: {
+    icon: "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><circle cx='12' cy='8' r='4'/><path d='M4 21c0-4 4-6 8-6s8 2 8 6'/></svg>"
+  }
+  zf-icon-database: {
+    icon: "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><ellipse cx='12' cy='5' rx='8' ry='3'/><path d='M4 5v14c0 1.7 3.6 3 8 3s8-1.3 8-3V5'/><path d='M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3'/></svg>"
+  }
+  zf-icon-server: {
+    icon: "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><rect x='3' y='3' width='18' height='7' rx='2'/><rect x='3' y='14' width='18' height='7' rx='2'/><path d='M7 6.5h.01M7 17.5h.01'/></svg>"
+  }
+  zf-icon-cloud: {
+    icon: "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M7 19a5 5 0 0 1-.6-10A6 6 0 0 1 18 10a4.5 4.5 0 0 1-.5 9z'/></svg>"
+  }
+  zf-icon-document: {
+    icon: "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M14 3H6a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8z'/><path d='M14 3v5h5M9 13h6M9 17h6'/></svg>"
   }
   # Mind maps: a central topic, main branches and deeper topics.
   # Add one zf-accent-N (1-6) per branch, to its topics and lines alike.
@@ -61,16 +121,16 @@ classes: {
   zf-leaf: {
     style: {border-radius: 999; stroke-width: 1; bold: false}
   }
-  zf-accent-1: {style.stroke: "#e5484d"}
-  zf-accent-2: {style.stroke: "#e38a1f"}
-  zf-accent-3: {style.stroke: "#30a46c"}
-  zf-accent-4: {style.stroke: "#0090ff"}
-  zf-accent-5: {style.stroke: "#8e4ec6"}
-  zf-accent-6: {style.stroke: "#d6409f"}
-  # Looks the builders add after the other classes. The fixed fill and text colours
-  # read the same in light and dark themes.
+  zf-accent-1: {style.stroke: ${zf-accent-1}}
+  zf-accent-2: {style.stroke: ${zf-accent-2}}
+  zf-accent-3: {style.stroke: ${zf-accent-3}}
+  zf-accent-4: {style.stroke: ${zf-accent-4}}
+  zf-accent-5: {style.stroke: ${zf-accent-5}}
+  zf-accent-6: {style.stroke: ${zf-accent-6}}
+  # Looks the builders add after the other classes.
   zf-filled: {
-    style: {fill: "#e2e8f0"; font-color: "#1e293b"}
+    style: {fill: ${zf-surface}; font-color: ${zf-ink}}
   }
   zf-compact: {style.font-size: 13}
+  zf-shadow: {style.shadow: true}
 }

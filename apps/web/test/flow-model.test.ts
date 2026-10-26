@@ -61,14 +61,15 @@ it('styles steps with library classes, so restyling a class restyles every flow'
 });
 
 it('writes looks as classes after each role and reads them back', async () => {
-  const flow = { ...flowTemplate('simple'), look: { filled: true, compact: false } };
+  const flow = { ...flowTemplate('simple'), look: { filled: true, compact: false, shadow: false } };
   const source = flowSource(flow);
   expect(source).toContain('step_2: "Do something" {class: [zf-step; zf-filled]}');
   const compiled = await compile(source);
   expect(compiled.diagram.shapes.every(shape => shape.fill === '#e2e8f0')).toBe(true);
   expect(readFlow(source)).toEqual(flow);
-  const compact = { ...flow, look: { filled: true, compact: true } };
-  expect(readFlow(flowSource(compact))).toEqual(compact);
+  const all = { ...flow, look: { filled: true, compact: true, shadow: true } };
+  expect(flowSource(all)).toContain('{class: [zf-step; zf-filled; zf-compact; zf-shadow]}');
+  expect(readFlow(flowSource(all))).toEqual(all);
   // Every step shares one look; a mix is custom source.
   expect(readFlow(source.replace('[zf-step; zf-filled]', 'zf-step'))).toBeUndefined();
   expect(readFlow(source.replace('[zf-step; zf-filled]', '[zf-filled; zf-step]'))).toBeUndefined();
@@ -77,11 +78,26 @@ it('writes looks as classes after each role and reads them back', async () => {
 
 it('reopens flows written before steps used library classes', () => {
   const flow = flowTemplate('approval');
-  const legacy = flowSource(flow).replace('...@zoomflow\n', '')
+  const legacy = flowSource(flow).replace('...@zoomflow\n', '').replace(/ \{class: zf-(?:yes|no)\}/g, '')
     .replace(/\{class: zf-(\w+)\}/g, (_, role) => `{shape: ${({ step: 'rectangle', decision: 'diamond', terminal: 'oval' } as Record<string, string>)[role]}}`);
   expect(legacy).toContain('{shape: diamond}');
   expect(readFlow(legacy)).toEqual(flow);
   expect(readFlow(legacy.replace('{shape: diamond}', '{shape: circle}'))).toBeUndefined();
   expect(readFlow(legacy.replace('{shape: diamond}', '{shape: constructor}'))).toBeUndefined();
   expect(readFlow(legacy.replace('{shape: diamond}', '{class: zf-decision}'))).toBeUndefined();
+});
+
+it('colours lines labelled Yes and No with the library branch classes', async () => {
+  const flow = flowTemplate('approval');
+  flow.connections[2].label = ' no ';
+  const source = flowSource(flow);
+  expect(source).toContain('step_2 -> step_3: "Yes" {class: zf-yes}');
+  expect(source).toContain('step_2 -> step_4: " no " {class: zf-no}');
+  expect(source).toContain('step_4 -> step_2: "Try again"\n');
+  const compiled = await compile(source);
+  expect(compiled.diagram.connections.map(edge => edge.stroke)).toEqual(['B1', '#30a46c', '#e5484d', 'B1']);
+  expect(readFlow(source)).toEqual(flow);
+  // The class follows the label, so a class the label does not imply is custom source.
+  expect(readFlow(source.replace('"Try again"', '"Try again" {class: zf-yes}'))).toBeUndefined();
+  expect(readFlow(source.replace(' {class: zf-yes}', ''))).toBeUndefined();
 });

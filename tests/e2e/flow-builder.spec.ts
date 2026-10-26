@@ -14,11 +14,13 @@ test('creates, revisits, edits and recovers a flow without typing diagram syntax
   await dialog.getByLabel('Step 1 name').fill('Submit holiday request');
   await dialog.getByLabel('Layout').selectOption('right');
   await dialog.getByLabel('Filled shapes').check();
+  await dialog.getByLabel('Shadows').check();
   await dialog.getByRole('button', { name: 'Create flow', exact: true }).click();
   await ready(page);
   await expect(page.locator('#filename')).toHaveText('Holiday request.d2');
   // Looks are library classes, so a project's zoomflow.d2 restyles them.
-  await expect(source(page)).toContainText('step_2: "Approved?" {class: [zf-decision; zf-filled]}');
+  await expect(source(page)).toContainText('step_2: "Approved?" {class: [zf-decision; zf-filled; zf-shadow]}');
+  await expect(source(page)).toContainText('step_2 -> step_3: "Yes" {class: zf-yes}');
   await expect(page.locator('#lint-summary')).toHaveText('No lint issues');
   await expect(page.locator('#document-unsaved')).toBeVisible();
   await expect(page.locator('.zf-stage')).toContainText('Submit holiday request');
@@ -29,6 +31,7 @@ test('creates, revisits, edits and recovers a flow without typing diagram syntax
   const edit = page.getByRole('dialog', { name: 'Edit flow' });
   await expect(edit.getByLabel('Filled shapes')).toBeChecked();
   await expect(edit.getByLabel('Compact text')).not.toBeChecked();
+  await expect(edit.getByLabel('Shadows')).toBeChecked();
   await page.getByLabel('Step 1 name').fill('Request time off');
   await page.getByRole('button', { name: 'Apply changes' }).click();
   await ready(page);
