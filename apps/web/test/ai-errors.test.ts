@@ -11,6 +11,9 @@ test.each([
   [Response.json({ error: 'Request is too large.' }, { status: 413 }), 'too large. Keep the prompt'],
   [Response.json({ error: 'AI is available only from the local Zoomflow server.' }, { status: 403 }), 'opened through localhost'],
   [Response.json({ error: 'Environment line 1 must be NAME=value.' }, { status: 400 }), 'Environment line 1'],
+  [Response.json({ error: 'Working directory /missing does not exist or is not a directory.' }, { status: 400 }), 'Working directory /missing does not exist'],
+  [Response.json({ error: 'Invalid JSON request.' }, { status: 400 }), 'prompt under 8,000 characters'],
+  [Response.json({}, { status: 400 }), 'prompt under 8,000 characters'],
 ])('transport failures have actionable messages and separate details', async (response, message) => {
   try { await readAiResponse(response); throw new Error('Expected failure'); }
   catch (error) {

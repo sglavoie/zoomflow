@@ -516,6 +516,42 @@ test('saving a file that was moved or deleted on disk asks where to save it', as
   expect(await page.evaluate(() => (window as any).state)).toMatchObject({ opened: '', saved: 'gone: Again', pickerCalls: 2 });
 });
 
+test('Save writes back to an opened file after reload and still asks about outside changes', async ({ page, browserName }) => {
+  // A real handle from the origin-private file system can be kept in IndexedDB across reloads.
+  test.skip(browserName !== 'chromium', 'Writable origin-private file handles');
+  await page.addInitScript(() => {
+    const w = window as any;
+    w.pickerCalls = 0;
+    w.showSaveFilePicker = async () => { w.pickerCalls++; throw new DOMException('Canceled', 'AbortError'); };
+    w.showOpenFilePicker = async () => [await (await navigator.storage.getDirectory()).getFileHandle('kept.d2')];
+    w.writeDisk = async (text: string) => {
+      const writable = await (await (await navigator.storage.getDirectory()).getFileHandle('kept.d2', { create: true })).createWritable();
+      await writable.write(text); await writable.close();
+    };
+    w.readDisk = async () => (await (await (await navigator.storage.getDirectory()).getFileHandle('kept.d2')).getFile()).text();
+  });
+  await page.goto('/'); await previewReady(page);
+  await page.evaluate(() => (window as any).writeDisk('kept: Original'));
+  await page.locator('#file').click();
+  await expect(page.locator('#filename')).toHaveText('kept.d2'); await previewReady(page);
+  await page.reload(); await previewReady(page);
+  await expect(page.locator('#draft-status')).toHaveText('Saved to file');
+  await source(page).fill('kept: After reload');
+  await page.locator('#save-file').click();
+  await expect(page.locator('#draft-status')).toHaveText('Saved to file');
+  expect(await page.evaluate(() => (window as any).readDisk())).toBe('kept: After reload');
+  // Another program changes the file while the page is closed.
+  await page.waitForTimeout(20);
+  await page.evaluate(() => (window as any).writeDisk('kept: Edited elsewhere'));
+  await page.reload(); await previewReady(page);
+  await source(page).fill('kept: Mine');
+  await page.locator('#save-file').click();
+  const dialog = page.getByRole('dialog', { name: 'File changed on disk — overwrite?' });
+  await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
+  expect(await page.evaluate(() => (window as any).readDisk())).toBe('kept: Edited elsewhere');
+  expect(await page.evaluate(() => (window as any).pickerCalls)).toBe(0);
+});
+
 test('leaving the page asks first when edits exist only in memory because browser backup failed', async ({ page }) => {
   await page.addInitScript(() => { Storage.prototype.setItem = () => { throw new Error('Storage blocked'); }; });
   await page.goto('/'); await previewReady(page);

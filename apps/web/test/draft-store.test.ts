@@ -9,6 +9,15 @@ class MemoryStorage implements Storage {
   removeItem(key: string) { this.data.delete(key); }
   clear() { this.data.clear(); }
 }
+/** Storage that refuses writes beyond `limit` characters of stored values, as a browser quota does. */
+class LimitedStorage extends MemoryStorage {
+  constructor(public limit: number) { super(); }
+  override setItem(key: string, value: string) {
+    const used = [...this.data].reduce((total, [name, text]) => total + (name === key ? 0 : text.length), 0);
+    if (used + value.length > this.limit) throw new DOMException('Quota exceeded', 'QuotaExceededError');
+    super.setItem(key, value);
+  }
+}
 const draft = (key: string, source: string): Draft => ({ key, name: `${key}.d2`, title: key, description: '', source, baseline: 'original' });
 describe('draft recovery across tabs', () => {
   test('independent documents and concurrent edits both survive reload', () => {
@@ -184,5 +193,35 @@ describe('draft recovery across tabs', () => {
     expect(DraftStore.documentOf(changed)).toBe('order');
     expect(a.concurrentChanges(new Set([DraftStore.documentOf(changed)]))).toEqual(['order']);
     expect(a.concurrentChanges(new Set(['other']))).toEqual([]);
+  });
+  test('a baseline equal to the source is stored once and restored on load', () => {
+    const storage = new MemoryStorage();
+    const store = new DraftStore(storage, 'a'); store.load();
+    store.save([{ ...draft('saved', 'x'.repeat(100)), baseline: 'x'.repeat(100) }, draft('edited', 'changed')], 'saved');
+    const stored = (key: string) => JSON.parse([...storage.data].find(([name]) => name.includes(`v2:${key}:`))![1]).draft;
+    expect(stored('saved').baseline).toBeNull();
+    expect(stored('edited').baseline).toBe('original');
+    const loaded = new DraftStore(storage, 'reload').load().drafts;
+    expect(loaded.find((d) => d.key === 'saved')?.baseline).toBe('x'.repeat(100));
+    expect(loaded.find((d) => d.key === 'edited')?.baseline).toBe('original');
+  });
+  test('a full quota reclaims superseded revisions and retries before giving up on a draft', () => {
+    const storage = new LimitedStorage(Infinity);
+    const store = new DraftStore(storage, 'a'); store.load();
+    const big = (key: string, source: string) => draft(key, source.padEnd(400, '.'));
+    store.save([big('one', 'one'), big('two', 'two')], 'one');
+    // Room for three revisions: the second replacement fits only after the first one's ancestor is reclaimed.
+    storage.limit = [...storage.data.values()].reduce((total, text) => total + text.length, 0) * 1.6;
+    store.save([big('one', 'one v2'), big('two', 'two v2')], 'one');
+    expect(new DraftStore(storage, 'reload').load().drafts.map((d) => d.source.replace(/\.+$/, '')).sort()).toEqual(['one v2', 'two v2']);
+  });
+  test('a draft that cannot fit is skipped, the rest are saved, and it is retried next time', () => {
+    const storage = new LimitedStorage(2_000);
+    const store = new DraftStore(storage, 'a'); store.load();
+    expect(() => store.save([draft('huge', 'x'.repeat(5_000)), draft('small', 'kept')], 'small')).toThrow('Quota exceeded');
+    expect(new DraftStore(storage, 'reload').load()).toMatchObject({ drafts: [{ key: 'small', source: 'kept' }], current: 'small' });
+    storage.limit = Infinity;
+    store.save([draft('huge', 'x'.repeat(5_000)), draft('small', 'kept')], 'small');
+    expect(new DraftStore(storage, 'reload').load().drafts.map((d) => d.key).sort()).toEqual(['huge', 'small']);
   });
 });

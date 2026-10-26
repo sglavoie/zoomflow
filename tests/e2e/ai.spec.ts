@@ -54,7 +54,9 @@ test('Claude config directory is visible and sent with shared environment', asyn
   await page.goto('/'); await previewReady(page);
   await page.locator('#ai-assistant > summary').click();
   await page.locator('.ai-settings summary').click();
-  await expect(page.locator('#ai-claude-config-dir')).toHaveValue('~/.claude');
+  // Blank keeps the server's own CLAUDE_CONFIG_DIR, or ~/.claude.
+  await expect(page.locator('#ai-claude-config-dir')).toHaveValue('');
+  await expect(page.locator('#ai-claude-config-dir')).toHaveAttribute('placeholder', /~\/\.claude/);
   await page.locator('#ai-claude-config-dir').fill('~/work-claude');
   await page.locator('#ai-environment').fill('TEST_VALUE=claude');
   await page.getByRole('textbox', { name: 'Ask AI about this diagram' }).fill('Explain this board');

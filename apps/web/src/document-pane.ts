@@ -98,6 +98,10 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
   let blocks = new Map<string, SourceRange>();
   let mappedSource: string | undefined;
   let debounce: ReturnType<typeof setTimeout> | undefined;
+  /** The next change comes from the diagram or a builder, so it previews without waiting for more typing. */
+  let immediate = false;
+  /** A click on the background cleared the diagram's selection; it stays clear until the source selection changes. */
+  let selectionCleared: { from: number; to: number } | undefined;
   const lintSummary = part('lint-summary');
   const draftStatus = part('draft-status');
   const saveFileButton = part<HTMLButtonElement>('save-file');
@@ -185,9 +189,10 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
       invalidateSource();
       picker().updateCurrent(id, editor.source);
       clearTimeout(debounce);
-      debounce = setTimeout(() => void load(editor.source, documentName, true), 350);
+      debounce = setTimeout(() => void load(editor.source, documentName, true), immediate ? 0 : 350);
+      immediate = false;
     },
-    selected: () => void highlightSelection(false),
+    selected: () => { selectionCleared = undefined; void highlightSelection(false); },
     format: () => void formatSource(),
     reveal: () => void revealSelection(),
     label: id === 'a' ? 'D2 source' : 'D2 source, second diagram',
@@ -196,19 +201,22 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
     builders: { flow: shared.flowBuilder, 'mind map': shared.mindMapBuilder },
     source: () => editor.source,
     update: (source) => {
+      immediate = true;
       editor.replaceSource(source);
+      immediate = false;
       showView('preview');
     },
     selectSource: (shape, focusEditor) => {
       const entry = sourceMap.find((item) => item.board === viewer.currentBoard?.id && item.shape === shape);
       if (!entry || mappedSource !== editor.source) return;
+      selectionCleared = undefined;
       if (focusEditor) showView('source');
       editor.select(entry, focusEditor);
       void highlightSelection(false);
     },
     status: (message, kind) => setActivity(message, kind),
-    undo: () => editor.undo(),
-    redo: () => editor.redo(),
+    undo: () => { immediate = true; editor.undo(); immediate = false; },
+    redo: () => { immediate = true; editor.redo(); immediate = false; },
   });
   const linkPreview = setupLinkPreview(scope, viewer);
   /** Dim the source outside the board on view; `opened` scrolls to it unless someone is typing there. */
@@ -349,13 +357,14 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
   async function highlightSelection(navigate: boolean) {
     if (mappedSource !== editor.source) return;
     const { from, to, empty } = editor.selection;
+    if (selectionCleared?.from !== from || selectionCleared.to !== to) selectionCleared = undefined;
     const matches = sourceMap.filter((entry) => empty
       ? from >= entry.from && from < entry.to : from < entry.to && to > entry.from);
     const current = viewer.currentBoard?.id;
     const target = matches.find((entry) => entry.board === current) ?? matches[0];
     revealButton.disabled = !target;
     if (navigate && target && target.board !== current) await viewer.navigate(target.board);
-    const shapes = matches.filter((entry) => entry.board === viewer.currentBoard?.id).map((entry) => entry.shape);
+    const shapes = selectionCleared ? [] : matches.filter((entry) => entry.board === viewer.currentBoard?.id).map((entry) => entry.shape);
     viewer.highlightShapes(shapes);
     boardTools.select([...new Set(shapes)]);
   }
@@ -380,15 +389,18 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
     void highlightSelection(false);
   });
   function selectShape(event: MouseEvent | KeyboardEvent) {
-    if (mappedSource !== editor.source) return;
     const shape = event.target instanceof Element ? event.target.closest<SVGElement>('[data-shape-id]')
       ?? event.target.closest('a')?.querySelector<SVGElement>('[data-shape-id]') : null;
-    // A click on the background clears the selection on the diagram; the source cursor stays where it is.
+    // A click on the background clears the selection on the diagram, even before it updates; the source cursor
+    // stays where it is.
     if (!shape && event instanceof MouseEvent) {
+      const { from, to } = editor.selection;
+      selectionCleared = { from, to };
       viewer.highlightShapes([]);
       boardTools.select([]);
       return;
     }
+    if (mappedSource !== editor.source) return;
     const entry = shape && sourceMap.find((item) => item.board === viewer.currentBoard?.id && item.shape === shape.dataset.shapeId);
     if (!entry) return;
     const anchor = shape.closest('a');
@@ -405,6 +417,7 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
     const onCanvas = !linked && !event.altKey && boardTools.editsOnCanvas(entry.shape);
     if (onCanvas) shape.focus({ preventScroll: true });
     else if (!linked || event.altKey) showView('source');
+    selectionCleared = undefined;
     editor.select(entry, !onCanvas && (!linked || event.altKey));
     void highlightSelection(false);
   }
@@ -414,7 +427,7 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
     () => {
       if (root.hasAttribute('data-fullscreen')) root.querySelector<HTMLButtonElement>('.zf-fullscreen-toggle')!.click();
       showView('source'); editor.view.focus();
-    });
+    }, (target) => boardTools.canvasKeys(target));
 
   function load(source: string, name: string, preserveViewport = false) {
     return previewQueue.run(() => loadPreview(source, name, preserveViewport));

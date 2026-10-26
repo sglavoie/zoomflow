@@ -54,9 +54,12 @@ are separate from source diagnostics and can be retried. Recheck this contract
 and the startup browser tests when upgrading D2.
 
 The browser resolves local D2 imports when a folder is opened. A single opened file
-can use the bundled `zoomflow.d2` import. Browser file handles are kept for the current
-page session; after reload, choose a destination again to save to disk. The CLI resolves
-local D2 imports within its project root. Rich HTML labels (`foreignObject`) remain unsupported.
+can use the bundled `zoomflow.d2` import. Browser file handles, with each file's last known
+modification time, are kept per draft in IndexedDB (`file-handles.ts`), so Save writes back
+after a reload once the browser grants write permission again; browsers that cannot store
+handles keep them for the page session only. The CLI resolves
+local D2 imports within its project root. Markdown labels render as native SVG text, but
+Markdown images are dropped and rich HTML labels (`foreignObject`) remain unsupported.
 
 ## Source locations and lint contracts
 

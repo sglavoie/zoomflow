@@ -28,6 +28,9 @@ export class Viewer {
   private readonly breadcrumbs = setupBreadcrumbs(this.crumbs);
   private readonly context = document.createElement('div');
   private readonly message = document.createElement('div');
+  private readonly status = document.createElement('span');
+  private readonly alert = document.createElement('span');
+  private messageTimer?: ReturnType<typeof setTimeout>;
   private readonly announcement = document.createElement('div');
   private boards = new Map<string, Board>();
   private diagnostics: readonly LintDiagnostic[] = [];
@@ -54,7 +57,10 @@ export class Viewer {
     this.context.setAttribute('aria-label', 'Parent connections');
     this.context.hidden = true;
     this.message.className = 'zf-message';
-    this.message.setAttribute('role', 'status');
+    // Fixed live regions: screen readers can miss text set as a region changes role.
+    this.status.setAttribute('role', 'status');
+    this.alert.setAttribute('role', 'alert');
+    this.message.append(this.status, this.alert);
     this.announcement.className = 'zf-visually-hidden';
     this.announcement.setAttribute('aria-live', 'polite');
     this.stage.className = 'zf-stage';
@@ -96,8 +102,13 @@ export class Viewer {
   }
 
   setMessage(text: string, error = false) {
-    this.message.setAttribute('role', error ? 'alert' : 'status');
-    this.message.textContent = text;
+    clearTimeout(this.messageTimer);
+    const region = error ? this.alert : this.status;
+    // Clear, then set a repeated message later, so the unchanged text is announced again.
+    const repeat = Boolean(text) && region.textContent === text;
+    this.status.textContent = this.alert.textContent = '';
+    if (repeat) this.messageTimer = setTimeout(() => { region.textContent = text; }, 100);
+    else region.textContent = text;
   }
 
   setBusy(busy: boolean) { this.host.setAttribute('aria-busy', String(busy)); }
@@ -113,7 +124,7 @@ export class Viewer {
   /** Choose the board the next document opens on, without navigating now. */
   setRoute(route?: ViewerRoute) {
     if (!this.history) { this.memoryRoute = { hash: route?.hash || '#/', trail: route?.trail }; return; }
-    history.replaceState({ zoomflowTrail: route?.trail }, '', `${location.pathname}${location.search}${route?.hash ?? '#/'}`);
+    history.replaceState({ ...history.state, zoomflowTrail: route?.trail }, '', `${location.pathname}${location.search}${route?.hash ?? '#/'}`);
   }
 
   /** Invalidate a render already in flight when the source changes. */
@@ -181,12 +192,15 @@ export class Viewer {
     element.setAttribute('preserveAspectRatio', 'xMidYMid meet');
     restoreMissingLinks(element, this.diagnostics.filter((item) => item.board === board.id));
     prepareLinks(element, this.resolve);
+    // The first group in document order carrying each class, and this board's source shapes.
+    const groups = new Map<string, SVGGElement>();
+    for (const node of element.querySelectorAll('g')) for (const name of node.classList) if (!groups.has(name)) groups.set(name, node);
+    const sources = new Set(this.sourceShapes.filter((entry) => entry.board === board.id).map((entry) => entry.shape));
     for (const shape of board.diagram.shapes) {
-      const encoded = shapeClass(shape.id);
-      const group = [...element.querySelectorAll('g')].find((node) => node.classList.contains(encoded));
+      const group = groups.get(shapeClass(shape.id));
       if (group) {
         group.dataset.shapeId = shape.id;
-        if (!group.closest('a') && this.sourceShapes.some((entry) => entry.board === board.id && entry.shape === shape.id)) {
+        if (!group.closest('a') && sources.has(shape.id)) {
           group.setAttribute('tabindex', '0');
           group.setAttribute('role', 'button');
           group.setAttribute('aria-label', `Select source for ${group.querySelector('text')?.textContent || shape.id}`);
@@ -292,5 +306,5 @@ export class Viewer {
   }
 
   /** Also tears down a viewport attached to this stage with setupViewport(). */
-  destroy() { ++this.revision; this.stage.dispatchEvent(new Event('zf-destroy')); this.events.abort(); this.keys?.abort(); this.breadcrumbs.destroy(); this.cancelTransition(); }
+  destroy() { ++this.revision; clearTimeout(this.messageTimer); this.stage.dispatchEvent(new Event('zf-destroy')); this.events.abort(); this.keys?.abort(); this.breadcrumbs.destroy(); this.cancelTransition(); }
 }

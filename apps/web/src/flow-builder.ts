@@ -54,6 +54,8 @@ export function setupFlowBuilder(create: (source: string, name: string) => void,
   let snapshot = '';
   const formState = () => `${editing ? '' : name.value}\n${flowSource(flow)}`;
   let returnFocus: HTMLElement = launch;
+  /** Where focus goes when `returnFocus` is gone or hidden by the time the builder closes. */
+  let fallbackFocus: HTMLElement | undefined;
   const draft = (): BuilderTarget => ({ mode: 'draft', name: 'My flow', apply: (source, title) => { create(source, flowFilename(title)); } });
   let target = draft();
 
@@ -147,13 +149,14 @@ export function setupFlowBuilder(create: (source: string, name: string) => void,
     look.set(flow.look);
     renderSteps(); renderConnections();
   }
-  function open(next: BuilderTarget, edit?: HTMLElement) {
+  function open(next: BuilderTarget, edit?: HTMLElement, fallback?: HTMLElement) {
     const existing = next.mode === 'edit' ? readFlow(next.source ?? '') : undefined;
     if (next.mode === 'edit' && !existing) return;
     target = next;
     editing = next.mode === 'edit';
     flow = existing ?? flowTemplate('simple');
     returnFocus = edit ?? launch;
+    fallbackFocus = fallback;
     name.value = next.name;
     name.setCustomValidity('');
     dialog.querySelector('#flow-name-field span')!.textContent = next.mode === 'board' ? 'Board name' : 'Flow name';
@@ -163,8 +166,8 @@ export function setupFlowBuilder(create: (source: string, name: string) => void,
     submit.textContent = { draft: 'Create flow', board: 'Add board', edit: 'Apply changes' }[next.mode];
     dialog.querySelector('#flow-save-hint')!.textContent = {
       draft: 'Creates a new draft. Your current diagram is kept.',
-      board: 'Adds a board that opens from the shape. You can undo in the source editor.',
-      edit: 'Updates this flow. You can undo in the source editor.' }[next.mode];
+      board: 'Adds a board that opens from the shape. Undo with ⌘Z / Ctrl+Z on the diagram or in the source.',
+      edit: 'Updates this flow. Undo with ⌘Z / Ctrl+Z on the diagram or in the source.' }[next.mode];
     render();
     snapshot = formState();
     returnFocus.focus({ preventScroll: true });
@@ -180,7 +183,8 @@ export function setupFlowBuilder(create: (source: string, name: string) => void,
         : `Closing the builder discards the flow you started. ${target.mode === 'board' ? 'No board is added.' : 'No draft is created.'}`,
       'Discard changes', () => (focused instanceof HTMLElement && dialog.contains(focused) ? focused : submit).focus({ preventScroll: true }));
   });
-  dialog.addEventListener('close', () => (returnFocus.isConnected && !returnFocus.closest('[hidden]') ? returnFocus : launch).focus({ preventScroll: true }));
+  dialog.addEventListener('close', () => ([returnFocus, fallbackFocus].find(element => element?.isConnected && !element.closest('[hidden]')) ?? launch)
+    .focus({ preventScroll: true }));
   name.addEventListener('input', () => name.setCustomValidity(name.value.trim() ? '' : `Give your ${target.mode === 'board' ? 'board' : 'flow'} a name.`));
   direction.addEventListener('change', () => { flow.direction = direction.value as Flow['direction']; });
   for (const box of look.boxes) box.addEventListener('change', () => { flow.look = look.get(); });
@@ -213,7 +217,7 @@ export function setupFlowBuilder(create: (source: string, name: string) => void,
     dialog.close();
   });
   return {
-    /** Add a flow board or edit one; `returnFocus` regains focus when the builder closes. */
-    open: (next: BuilderTarget, returnFocus: HTMLElement) => open(next, returnFocus),
+    /** Add a flow board or edit one; `returnFocus`, else `fallback`, regains focus when the builder closes. */
+    open: (next: BuilderTarget, returnFocus: HTMLElement, fallback?: HTMLElement) => open(next, returnFocus, fallback),
   };
 }

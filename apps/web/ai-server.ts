@@ -75,7 +75,7 @@ function parseEnvironment(text: string): Record<string, string> {
 }
 
 /** Expand `~` to the home directory and resolve relative paths from `base`. */
-function expandPath(setting: string, label: string, base = process.cwd()) {
+function expandPath(setting: string, label: string, base: string) {
   const path = setting.trim();
   if (!path) throw new Error(`${label} cannot be empty.`);
   if (path.startsWith('~') && path !== '~' && !path.startsWith('~/')) {
@@ -84,14 +84,18 @@ function expandPath(setting: string, label: string, base = process.cwd()) {
   return path === '~' ? homedir() : path.startsWith('~/') ? resolve(homedir(), path.slice(2)) : resolve(base, path);
 }
 
-function processEnvironment(request: StatusRequest): NodeJS.ProcessEnv {
-  const env: NodeJS.ProcessEnv = { ...process.env, ...parseEnvironment(request.environment ?? '') };
-  if (request.provider === 'claude') env.CLAUDE_CONFIG_DIR = expandPath(request.claudeConfigDir ?? '~/.claude', 'CLAUDE_CONFIG_DIR');
-  return env;
-}
-
 /** pnpm and npm record where `pnpm dev` was typed, usually the repository root rather than apps/web. */
 const launchDirectory = () => process.env.INIT_CWD || process.cwd();
+
+/** A blank CLAUDE_CONFIG_DIR field keeps the value from the Environment field or the server, else ~/.claude. */
+function processEnvironment(request: StatusRequest): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = { ...process.env, ...parseEnvironment(request.environment ?? '') };
+  if (request.provider === 'claude') {
+    const setting = request.claudeConfigDir?.trim() || env.CLAUDE_CONFIG_DIR?.trim() || '~/.claude';
+    env.CLAUDE_CONFIG_DIR = expandPath(setting, 'CLAUDE_CONFIG_DIR', launchDirectory());
+  }
+  return env;
+}
 
 /** The directory a full-access request works in: the setting, or where the local server was started. */
 export async function workingDirectory(setting: string | undefined) {

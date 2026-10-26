@@ -18,7 +18,16 @@ test('adds a mind map board to a selected flow step, and edits each board with i
   await approvalFlow(page);
   await shape(page, 'step_3').click();
   const selected = page.getByRole('group', { name: 'Selected: Complete request' });
-  await selected.getByRole('button', { name: 'Add board…', exact: true }).click();
+  const boards = selected.getByRole('button', { name: 'Add board…', exact: true });
+  await expect(boards).toHaveAttribute('aria-expanded', 'false');
+  await boards.click();
+  await expect(boards).toHaveAttribute('aria-expanded', 'true');
+  await expect(page.locator(`#${await boards.getAttribute('aria-controls')}`)).toBeVisible();
+  // The button closes its menu too.
+  await boards.click();
+  await expect(page.getByRole('menu')).toBeHidden();
+  await expect(boards).toHaveAttribute('aria-expanded', 'false');
+  await boards.click();
   await page.getByRole('menu', { name: 'Actions for Complete request' }).getByRole('menuitem', { name: 'Add mind map board…' }).click();
   const dialog = page.getByRole('dialog', { name: 'Add a mind map board' });
   await expect(dialog.getByLabel('Board name')).toHaveValue('Complete request');
@@ -34,6 +43,8 @@ test('adds a mind map board to a selected flow step, and edits each board with i
   const map = page.getByRole('dialog', { name: 'Edit mind map' });
   await map.getByRole('textbox', { name: 'Topics' }).fill('Complete request\n  Notify team\n  Archive\n  Celebrate');
   await map.getByRole('button', { name: 'Apply changes', exact: true }).click();
+  // The edit button hides while the board recompiles, so the diagram takes focus.
+  await expect(page.locator('.zf-stage')).toBeFocused();
   await ready(page);
   await expect(page.locator('.zf-stage')).toContainText('Celebrate');
 

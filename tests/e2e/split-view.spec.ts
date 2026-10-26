@@ -131,7 +131,7 @@ test('closing the split releases the second pane\'s page-level listeners until i
     const listeners: { type: string; signal?: AbortSignal }[] = [];
     const add = EventTarget.prototype.addEventListener;
     EventTarget.prototype.addEventListener = function (type: string, listener: EventListenerOrEventListenerObject | null, options?: boolean | AddEventListenerOptions) {
-      if (this === window) listeners.push({ type, signal: typeof options === 'object' ? options.signal : undefined });
+      if (this === window || this === document) listeners.push({ type, signal: typeof options === 'object' ? options.signal : undefined });
       return add.call(this, type, listener, options);
     };
     (window as unknown as { keyListeners: () => number }).keyListeners = () =>
@@ -146,8 +146,9 @@ test('closing the split releases the second pane\'s page-level listeners until i
   await page.selectOption('#layout', 'single');
   await expect(page.locator('#pane-b')).toBeHidden();
   // The second viewer's Escape/Backspace key, its viewport's Space pan keys (keydown, keyup, blur),
-  // fullscreen's Escape key, and canvas guidance's input tracking (keydown, pointerdown).
-  expect(await keyListeners()).toBe(open - 7);
+  // fullscreen's Escape key, canvas guidance's input tracking (keydown, pointerdown), the link preview's
+  // Escape key, and the board menu's and boards outline's outside presses (pointerdown).
+  expect(await keyListeners()).toBe(open - 10);
 
   await page.selectOption('#layout', 'tabs');
   expect(await keyListeners()).toBe(open);

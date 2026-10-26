@@ -138,7 +138,9 @@ export async function stageIcons(diagram: Diagram, input: string, root: string, 
 
 async function regularFile(path: string, shown: string): Promise<boolean> {
   try { return (await lstat(path)).isFile(); } catch (error) {
-    if ((error as { code?: string }).code === 'ENOENT') throw new Error(`cannot read ${shown}: no such file`);
+    const code = (error as { code?: string }).code;
+    if (code === 'ENOENT') throw new Error(`Cannot read ${shown}: no such file`);
+    if (code === 'EACCES' || code === 'EPERM') throw new Error(`Cannot read ${shown}: permission denied`);
     throw error;
   }
 }
@@ -173,8 +175,8 @@ async function save(output: string, data: string | Uint8Array) {
     } finally { await rm(staging, { recursive: true, force: true }); }
   } catch (error) {
     const code = (error as { code?: string }).code;
-    if (code === 'EACCES' || code === 'EPERM') throw new Error(`cannot write ${output}: permission denied`);
-    if (code === 'EROFS') throw new Error(`cannot write ${output}: read-only file system`);
+    if (code === 'EACCES' || code === 'EPERM') throw new Error(`Cannot write ${output}: permission denied`);
+    if (code === 'EROFS') throw new Error(`Cannot write ${output}: read-only file system`);
     throw error;
   }
 }
@@ -182,7 +184,8 @@ async function save(output: string, data: string | Uint8Array) {
 export async function main(args = process.argv.slice(2)): Promise<number> {
   // Show paths as the user would type them: relative to cwd for root-relative D2 paths.
   let shown = (path: string) => path;
-  let json = false;
+  // Known before parsing, so a lint --json usage error still prints JSON.
+  let json = args.find((arg) => !arg.startsWith('-')) === 'lint' && args.includes('--json');
   try {
     const { values, positionals } = (() => {
       try {
@@ -215,6 +218,7 @@ export async function main(args = process.argv.slice(2)): Promise<number> {
     }
     const root = resolve(values.root ?? dirname(input));
     const realRoot = await realpath(root).catch(() => { throw new Error(`Root directory not found: ${root}`); });
+    if (!(await stat(realRoot)).isDirectory()) throw new Error(`Root is not a directory: ${root}`);
     if (!within(root, input) || !within(realRoot, await realpath(input))) throw new Error('Input must be inside --root.');
     shown = (path) => {
       const rel = relative(process.cwd(), join(root, path));

@@ -1,6 +1,7 @@
 import { classifyHref, type Board } from '@zoomflow/core';
 import type { RenderBoard, Viewer } from '@zoomflow/viewer';
 import type { BoardSites } from './board-model';
+import { pageListeners } from './canvas-guidance';
 import type { PaneScope } from './pane-scope';
 import { plural } from './text';
 
@@ -81,7 +82,13 @@ export function setupLinkPreview(scope: PaneScope, viewer: Viewer) {
   });
   viewer.stage.addEventListener('focusout', hide);
   for (const type of ['wheel', 'pointerdown', 'zf-boardchange', 'zf-sourcechange']) viewer.stage.addEventListener(type, hide);
-  addEventListener('keydown', event => { if (event.key === 'Escape' && !card.hidden) hide(); }, true);
+  // Escape dismisses a shown card only, so the viewer does not also go up a board.
+  pageListeners(viewer.stage, signal => addEventListener('keydown', event => {
+    if (event.key !== 'Escape' || card.hidden) return;
+    hide();
+    event.preventDefault();
+    event.stopPropagation();
+  }, { capture: true, signal }));
 
   return {
     /** The compiled document, whose boards the links open. */

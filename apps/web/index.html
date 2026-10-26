@@ -193,7 +193,7 @@
         <div class="source-tools">
         <details id="ai-assistant" data-part="ai-assistant">
           <summary>Ask AI about this diagram</summary>
-          <form id="ai-form" data-part="ai-form" aria-label="AI diagram assistant">
+          <form id="ai-form" data-part="ai-form" aria-label="AI diagram assistant" autocomplete="off">
             <div class="ai-composer">
               <textarea id="ai-prompt" aria-label="Ask AI about this diagram" placeholder="Describe a change or ask about this diagram…" rows="2" maxlength="8000" required disabled></textarea>
               <div class="ai-actions"><span id="ai-elapsed" data-part="ai-elapsed" aria-live="off"></span><button id="ai-cancel" type="button" hidden>Cancel</button><button id="ai-send" data-part="ai-send" type="submit" aria-keyshortcuts="Meta+Enter Control+Enter" title="Send (⌘Enter or Ctrl+Enter)" disabled>Send</button></div>
@@ -205,16 +205,16 @@
                 <label for="ai-provider">AI</label>
                 <select id="ai-provider"><option value="claude">Claude Code</option><option value="codex">Codex</option></select>
               </div>
-              <label id="ai-claude-config" data-part="ai-claude-config" class="ai-field" for="ai-claude-config-dir">CLAUDE_CONFIG_DIR <span>Overrides the same name below</span>
-                <input id="ai-claude-config-dir" type="text" value="~/.claude" spellcheck="false" autocomplete="off" required />
+              <label id="ai-claude-config" data-part="ai-claude-config" class="ai-field" for="ai-claude-config-dir">CLAUDE_CONFIG_DIR <span>Overrides the same name below; blank keeps the server's value</span>
+                <input id="ai-claude-config-dir" type="text" spellcheck="false" autocomplete="off" maxlength="4000" placeholder="Server default ($CLAUDE_CONFIG_DIR or ~/.claude)" />
               </label>
               <label class="ai-field" for="ai-environment">Environment <span>One NAME=value per line; values are literal</span>
-                <textarea id="ai-environment" data-part="ai-environment" rows="2" spellcheck="false" autocomplete="off" autocapitalize="off" placeholder="EXAMPLE_KEY=value"></textarea>
+                <textarea id="ai-environment" data-part="ai-environment" rows="2" maxlength="8000" spellcheck="false" autocomplete="off" autocapitalize="off" placeholder="EXAMPLE_KEY=value"></textarea>
               </label>
               <label class="ai-full-access" for="ai-full-access"><input id="ai-full-access" type="checkbox" aria-describedby="ai-full-access-note" /> Full access (bypass permissions)</label>
               <p id="ai-full-access-note" class="ai-full-access-note">Lets the AI read and change files and run commands without asking. A diagram you didn't write could steer it.</p>
               <label id="ai-working-config" data-part="ai-working-config" class="ai-field" for="ai-working-directory" hidden>Working directory <span>Blank uses the folder where the local server started</span>
-                <input id="ai-working-directory" type="text" spellcheck="false" autocomplete="off" placeholder="~/projects/example" disabled />
+                <input id="ai-working-directory" type="text" maxlength="4000" spellcheck="false" autocomplete="off" placeholder="~/projects/example" disabled />
               </label>
             </details>
           </form>

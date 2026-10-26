@@ -36,7 +36,7 @@ use **Retry preview** to try again without losing your source.
    boards; **Edit mind map** reopens the outline. Select or right-click any shape to
    give it a flow or mind map board of its own, so flows and mind maps can open from
    each other. On those boards, rename, add and remove steps and topics right on the
-   diagram with F2, Tab, Enter and Delete. Or change the D2 source on the right and watch
+   diagram with F2, ⌘/Ctrl+Enter, Enter and Delete. Or change the D2 source on the right and watch
    the preview update. Use the
    filename menu for built-in examples, **Open .d2** for a file, or **Open folder** for
    a project with relative imports. **D2 reference** contains searchable examples.

@@ -13,8 +13,8 @@ export const viewerStyle = `
 .zf-breadcrumbs button[aria-current] { color: inherit; background: var(--hover); }
 .zf-context { padding-top: 8px; font-size: 13px; line-height: 1.5; overflow-wrap: anywhere; }
 .zf-message { min-height: 26px; padding: 6px 0; }
-.zf-message:empty { min-height: 12px; padding: 0; }
-.zf-message[role="alert"] { color: #d64e52; }
+.zf-message:not(:has(> :not(:empty))) { min-height: 12px; padding: 0; }
+.zf-message > [role="alert"] { color: #d64e52; }
 .zf-stage-area { position: relative; flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-rows: minmax(0, 1fr) minmax(40px, max-content); gap: var(--space-2); }
 .zf-zoom-controls { grid-row: 2; grid-column: 1; justify-self: start; align-self: center; display: flex; align-items: center; gap: 2px; padding: 2px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); }
 .zf-zoom-controls button { border: 0; min-width: 36px; min-height: 32px; padding: 5px; background: transparent; }

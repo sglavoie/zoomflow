@@ -13,6 +13,7 @@ import { cloneSecondPane, nameParts, paneScope } from './pane-scope';
 import { findEngineNotice } from './engine-notice';
 import { setupExportMenu } from './export-menu';
 import { setupFileOpen } from './file-open';
+import { FileHandles } from './file-handles';
 
 const canvasStyle = document.createElement('style');
 canvasStyle.textContent = viewerStyle;
@@ -36,6 +37,8 @@ function secondPaneMarkup() {
   }
   return [...copy.childNodes];
 }
+// Full access starts off on every load, even when the browser restores form fields.
+document.querySelector<HTMLInputElement>('#ai-full-access')!.checked = false;
 const secondPane = secondPaneMarkup();
 
 setupShortcuts();
@@ -78,7 +81,7 @@ engine.retry.addEventListener('click', () => {
   for (const pane of Object.values(panes)) pane.retry(restart);
 });
 const documentRoutes = new Map<string, ViewerRoute>();
-const fileHandles = new Map<string, FileSystemFileHandle>();
+const fileHandles = new FileHandles();
 const files = setupFileOpen({ picker: () => examplePicker, activePane, fileHandles, paneRoots, setActive });
 
 /** Builders create a separate draft from the active pane's point of view. */
@@ -288,3 +291,5 @@ updateTheme();
 exportMenu.updateExportLabel();
 panes.a.open(examplePicker.initial);
 applyLayout();
+// Save writes back to the files drafts came from, after a reload too.
+void fileHandles.restore().then((restored) => { if (restored) examplePicker.refresh(); });

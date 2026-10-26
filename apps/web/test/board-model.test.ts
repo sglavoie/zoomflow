@@ -2,6 +2,7 @@ import { D2 } from '@d2lang/d2';
 import { afterAll, beforeAll, expect, it } from 'vitest';
 import { boardBlocks, indexBoards } from '@zoomflow/core';
 import { blockText, boardSites, joinBoard, reattach, splitBoard } from '../src/board-model';
+import { editOnCanvas } from '../src/canvas-model';
 import { flowSource, flowTemplate, readFlow } from '../src/flow-model';
 import { mindMapSource, parseOutline, readMindMap, type MindMap } from '../src/mind-map-model';
 import { plainLook } from '../src/flow-model';
@@ -115,4 +116,24 @@ it('moves attached boards with their topics and explains what it cannot keep', (
     .toBe('The step “Request changes” opens the board “Changes”. Keep the step, or delete its board in the source first.');
   expect(reattach(flowSource(steps), flowSource({ ...steps, direction: 'right' }), flowAttachments)).toBe(flowAttachments);
   expect(readMindMap(before)).toBeTruthy();
+});
+
+it('keeps attached boards on renamed topics', () => {
+  const before = mindMapSource(map('Plan\n  People\n    Hiring\n  Money\n    Hiring'));
+  const attachments = [{ shape: 'n_2_1', name: 'Budget hiring', body: flow }];
+  // Renamed on the diagram: the edit says where each topic went.
+  const renamed = editOnCanvas(before, [], 'n_2_1', { type: 'rename', label: 'Contractors' })!;
+  expect(reattach(before, renamed.own, attachments, renamed.moved)).toEqual(attachments);
+  const parent = editOnCanvas(before, [], 'n_2', { type: 'rename', label: 'Budget' })!;
+  expect(reattach(before, parent.own, attachments, parent.moved)).toEqual(attachments);
+  const removed = editOnCanvas(before, [], 'n_1', { type: 'remove' })!;
+  expect(reattach(before, removed.own, attachments, removed.moved)).toEqual([{ ...attachments[0], shape: 'n_1_1' }]);
+  // A removed topic's board is not moved to another topic with the same label.
+  const gone = editOnCanvas(before, [], 'n_2', { type: 'remove' })!;
+  expect(reattach(before, gone.own, attachments, gone.moved)).toMatch(/^The topic “Hiring” opens the board/);
+  // Renamed in the outline: a renamed ancestor or topic keeps its place when no topic was added or removed.
+  expect(reattach(before, mindMapSource(map('Plan\n  People\n    Hiring\n  Budget\n    Hiring')), attachments)).toEqual(attachments);
+  expect(reattach(before, mindMapSource(map('Plan\n  People\n    Hiring\n  Money\n    Contractors')), attachments)).toEqual(attachments);
+  expect(reattach(before, mindMapSource(map('Plan\n  People\n    Hiring\n  Money\n    Contractors\n  Risks')), attachments))
+    .toMatch(/^The topic “Hiring” opens the board/);
 });

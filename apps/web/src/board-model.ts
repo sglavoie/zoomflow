@@ -1,6 +1,6 @@
 import type { Board, SourceRange } from '@zoomflow/core';
 import { readFlow } from './flow-model';
-import { boardTopics, readMindMap, uniqueBoardName } from './mind-map-model';
+import { boardTopics, readMindMap, uniqueBoardName, type BoardTopic } from './mind-map-model';
 
 export type BuilderKind = 'flow' | 'mind map';
 /** A board that opens from a shape, kept in a section at the end of the board it opens from. */
@@ -79,8 +79,9 @@ export function builderKind(own: string): BuilderKind | undefined {
 }
 
 /** Keep each attached board on the same step or topic after a builder rewrites the own text, or explain why it cannot.
- * Flow steps keep their identifiers; mind map topics are found again by their labels. */
-export function reattach(before: string, after: string, attachments: Attachment[]): Attachment[] | string {
+ * Flow steps keep their identifiers. Mind map topics follow `moved`, each topic's new identifier by its old one, when
+ * the edit knows it; otherwise they are found again by their labels, or in place when only labels changed. */
+export function reattach(before: string, after: string, attachments: Attachment[], moved?: Map<string, string>): Attachment[] | string {
   if (!attachments.length) return attachments;
   const flows = [readFlow(before), readFlow(after)];
   if (flows[0] && flows[1]) {
@@ -94,13 +95,21 @@ export function reattach(before: string, after: string, attachments: Attachment[
   if (!maps[0] || !maps[1]) return 'This board changed type. Delete its attached boards in the source first.';
   const [old, next] = maps.map(map => boardTopics(map!));
   const taken = new Map(next.filter(topic => topic.board).map(topic => [topic.board!.toLowerCase(), topic]));
+  const sameShape = old.length === next.length && old.every((topic, i) => topic.id === next[i].id);
   const kept: Attachment[] = [];
   for (const item of attachments) {
     const from = old.find(topic => topic.id === item.shape);
     if (!from) { kept.push(item); continue; }
     const label = from.path.at(-1)!;
+    const path = (topic: BoardTopic) => topic.path.join('\n');
+    // A topic moved elsewhere is found by its label when that is unique, and not on a topic that was already there.
     const sameLabel = next.filter(topic => topic.path.at(-1) === label);
-    const to = next.find(topic => topic.path.join('\n') === from.path.join('\n')) ?? (sameLabel.length === 1 ? sameLabel[0] : undefined);
+    const elsewhere = sameLabel.length === 1 && !old.some(topic => topic.id === sameLabel[0].id && path(topic) === path(sameLabel[0]));
+    const inPlace = next.find(topic => topic.id === from.id);
+    const to = moved ? next.find(topic => topic.id === moved.get(from.id))
+      : next.find(topic => path(topic) === path(from)) ?? (elsewhere ? sameLabel[0]
+        // A renamed ancestor keeps the topic in place; so does a renamed topic when no topic was added or removed.
+        : inPlace && (inPlace.path.at(-1) === label || sameShape) ? inPlace : undefined);
     if (!to) return `The topic “${label}” opens the board “${item.name}”. Keep the topic, or delete its board in the source first.`;
     if (to.board) return `The topic “${label}” would open a detail board and the board “${item.name}”. Choose fewer detail boards, or delete its board in the source first.`;
     if (taken.has(item.name.toLowerCase())) return `The board “${item.name}” that opens from “${label}” has the same name as a detail board. Rename the topic “${taken.get(item.name.toLowerCase())!.path.at(-1)}”.`;
@@ -178,9 +187,9 @@ export function boardSites(source: string, blocks: Map<string, SourceRange>, boa
         attachments: [...current.parts.attachments, { shape, name, body: own }] })) };
     },
     /** The document with a builder board's own text replaced, or why its attached boards prevent that. */
-    update(board: string, own: string): { source: string } | { error: string } {
+    update(board: string, own: string, moved?: Map<string, string>): { source: string } | { error: string } {
       const current = site(board)!;
-      const attachments = reattach(current.parts.own, own, current.parts.attachments);
+      const attachments = reattach(current.parts.own, own, current.parts.attachments, moved);
       if (typeof attachments === 'string') return { error: attachments };
       return { source: current.replace(joinBoard({ own, attachments })) };
     },

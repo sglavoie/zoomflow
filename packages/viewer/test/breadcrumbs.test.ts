@@ -66,6 +66,26 @@ describe('setupBreadcrumbs', () => {
     expect(document.activeElement).toBe(toggle);
   });
 
+  it('places the menu right after its toggle in tab order', () => {
+    const { container, toggle, menu } = mount(['Root', 'a', 'b', 'c', 'd']);
+    expect(toggle!.nextElementSibling).toBe(menu);
+    expect(container.lastElementChild!.textContent).toBe('d');
+  });
+
+  it('closes when focus leaves the menu and its toggle, but not when moving between them', () => {
+    const { container, toggle, menu } = mount(['Root', 'a', 'b', 'c', 'd']);
+    const focusFrom = (from: Element, to: Element | null) =>
+      from.dispatchEvent(new FocusEvent('focusout', { bubbles: true, relatedTarget: to }));
+    toggle!.click();
+    const items = [...menu.querySelectorAll('button')];
+    focusFrom(items[0], items[1]);
+    focusFrom(items[1], toggle);
+    expect(menu.hidden).toBe(false);
+    focusFrom(toggle!, container.querySelector('button[aria-current]'));
+    expect(menu.hidden).toBe(true);
+    expect(toggle!.getAttribute('aria-expanded')).toBe('false');
+  });
+
   it('activates a collapsed board and closes the menu', () => {
     const { toggle, menu, activated } = mount(['Root', 'a', 'b', 'c', 'd']);
     toggle!.click();

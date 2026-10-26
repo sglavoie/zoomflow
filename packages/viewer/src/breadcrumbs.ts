@@ -24,8 +24,10 @@ export function setupBreadcrumbs(container: HTMLElement) {
   document.addEventListener('click', event => {
     if (event.target instanceof Node && !container.contains(event.target)) close();
   }, options);
+  // Close once focus moves anywhere but the menu or its toggle, including other crumbs.
   container.addEventListener('focusout', event => {
-    if (event.relatedTarget instanceof Node && !container.contains(event.relatedTarget)) close();
+    const next = event.relatedTarget;
+    if (!menu.hidden && next instanceof Node && next !== trigger && !menu.contains(next)) close();
   }, options);
   container.addEventListener('keydown', event => {
     if (menu.hidden) return;
@@ -86,7 +88,10 @@ export function setupBreadcrumbs(container: HTMLElement) {
           append(trigger);
         } else append(button(index));
       });
-      container.append(menu);
+      // Right after its toggle, so Tab moves from the toggle into the open menu.
+      // TypeScript cannot see the assignment in the callback above.
+      const toggle = trigger as HTMLButtonElement | undefined;
+      if (toggle) toggle.after(menu); else container.append(menu);
     },
     destroy() { events.abort(); menu.remove(); },
   };

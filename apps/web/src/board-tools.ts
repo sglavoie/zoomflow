@@ -2,12 +2,13 @@ import { boardKey, type Board } from '@zoomflow/core';
 import type { Viewer } from '@zoomflow/viewer';
 import type { BuilderTarget } from './builder-dialog';
 import { boardSites, type BoardSites, type BuilderKind, type ShapeAction } from './board-model';
-import { canvasShape, editOnCanvas, type CanvasEdit, type CanvasShape } from './canvas-model';
+import { canvasShapes, editOnCanvas, type CanvasEdit, type CanvasShape } from './canvas-model';
+import { pageListeners } from './canvas-guidance';
 import { setupBoardOutline } from './board-outline';
 import type { PaneScope } from './pane-scope';
 import { setText } from './text';
 
-type Builder = { open: (target: BuilderTarget, returnFocus: HTMLElement) => void };
+type Builder = { open: (target: BuilderTarget, returnFocus: HTMLElement, fallback?: HTMLElement) => void };
 type BoardToolsOptions = {
   builders: Record<BuilderKind, Builder>;
   source: () => string;
@@ -23,6 +24,10 @@ type Item = (label: string, run: (returnFocus: HTMLElement) => void, options?: {
 
 const stale = 'This diagram changed while the builder was open. Close and reopen the builder to use the latest version.';
 const undoHint = 'Undo with ⌘Z / Ctrl+Z.';
+/** Adds the next step or a subtopic; Tab stays free to leave the diagram. */
+const addKeys = '⌘/Ctrl+Enter';
+const isAdd = (event: KeyboardEvent) => event.key === 'Insert' && !event.metaKey && !event.ctrlKey && !event.shiftKey
+  || event.key === 'Enter' && (event.metaKey || event.ctrlKey) && !event.shiftKey;
 
 /** Builder actions for the board on view and for the selected shape: a toolbar above the diagram, a bar over it for
  * the selected shape, and the same actions in a context menu on each shape. Shapes on builder boards are also
@@ -52,6 +57,9 @@ export function setupBoardTools(scope: PaneScope, viewer: Viewer, options: Board
   menu.id = scope.id('board-menu');
   menu.setAttribute('role', 'menu');
   menu.hidden = true;
+  let menuTrigger: HTMLElement | undefined;
+  /** The menu's button when a press on it closed the menu, so the click that follows does not reopen it. */
+  let toggled: HTMLElement | undefined;
   scope.root.append(menu);
   const outline = setupBoardOutline(toolbar, viewer, (board, focus) => edit(board, focus));
 
@@ -65,6 +73,7 @@ export function setupBoardTools(scope: PaneScope, viewer: Viewer, options: Board
   let menuReturn: HTMLElement | SVGElement | undefined;
   let renaming: { shape: string; element: SVGElement; frame: number } | undefined;
   let lastBoard: string | undefined;
+  let shapeCache: { own: string; trail: string; find: (shape: string) => CanvasShape | undefined } | undefined;
 
   const ready = () => Boolean(sites) && compiledSource === options.source();
   const current = () => {
@@ -96,14 +105,15 @@ export function setupBoardTools(scope: PaneScope, viewer: Viewer, options: Board
     const builder = current().builder(board);
     if (!builder) return;
     // Editing hides the name, but the builders' name fields stay required.
-    options.builders[builder.kind].open(target('edit', 'Board', (site, source) => site.update(board, source), builder.own), returnFocus);
+    // Its button may be hidden by the time the builder closes, so the diagram takes focus instead.
+    options.builders[builder.kind].open(target('edit', 'Board', (site, source) => site.update(board, source), builder.own), returnFocus, viewer.stage);
   }
   function add(kind: BuilderKind, board: string, shape: string, returnFocus: HTMLElement) {
     options.builders[kind].open(target('board', shapeLabel(board, shape), (site, source, name) => {
       const added = site.add(board, shape, source, name);
       pending = { board: `${board}.layers.${boardKey(added.name)}` };
       return added.source;
-    }), returnFocus);
+    }), returnFocus, viewer.stage);
   }
   function shapeAction(shape: string): ShapeAction {
     if (!ready()) return { action: 'none', reason: 'Wait for the preview to update.' };
@@ -112,26 +122,33 @@ export function setupBoardTools(scope: PaneScope, viewer: Viewer, options: Board
   /** The shape as a step or topic of the builder board that writes the board on view. */
   function canvasTarget(shape: string): CanvasShape | undefined {
     const canvas = ready() ? sites!.canvas(boardId()) : undefined;
-    return canvas && canvasShape(canvas.own, canvas.trail, shape);
+    if (!canvas) return;
+    // Every shape on the board is looked up on each refresh, so the board's text is read once.
+    const trail = canvas.trail.join('\n');
+    if (shapeCache?.own !== canvas.own || shapeCache.trail !== trail) shapeCache = { own: canvas.own, trail, find: canvasShapes(canvas.own, canvas.trail) };
+    return shapeCache.find(shape);
   }
 
   /** Apply edits made on the diagram in one change, so one undo reverts them together. */
   function applyCanvas(shape: string, edits: CanvasEdit[]) {
     const canvas = ready() ? sites!.canvas(boardId()) : undefined;
     if (!canvas) return;
-    const label = canvasShape(canvas.own, canvas.trail, shape)?.label ?? shape;
+    const label = canvasTarget(shape)?.label ?? shape;
     let own = canvas.own;
     let trail = canvas.trail;
     let result: ReturnType<typeof editOnCanvas>;
+    let moved: Map<string, string> | undefined;
     for (const change of edits) {
       const next = editOnCanvas(own, trail, shape, change);
       if (!next) continue;
       result = next;
       own = next.own;
       trail = next.trail ?? trail;
+      // Chain each edit's moves, so attached boards follow their topics through all of them.
+      if (next.moved) moved = moved ? new Map([...moved].filter(([, id]) => next.moved!.has(id)).map(([old, id]) => [old, next.moved!.get(id)!])) : next.moved;
     }
     if (!result) return;
-    const updated = sites!.update(canvas.owner, own);
+    const updated = sites!.update(canvas.owner, own, moved);
     if ('error' in updated) { options.status(updated.error, 'error'); return; }
     const board = trail === canvas.trail ? boardId() : canvas.owner + trail.map(name => `.layers.${boardKey(name)}`).join('');
     const added = edits.some(change => change.type === 'add' || change.type === 'sibling');
@@ -147,7 +164,7 @@ export function setupBoardTools(scope: PaneScope, viewer: Viewer, options: Board
     stopRename(false);
     rename.value = target.label;
     rename.setAttribute('aria-label', `Rename ${target.label}`);
-    rename.title = `Enter renames. ${target.add} with Tab. Escape cancels.`;
+    rename.title = `Enter renames. ${target.add} with ${addKeys}. Escape cancels.`;
     rename.hidden = false;
     // Follow the shape while the diagram pans or zooms.
     const place = () => {
@@ -177,9 +194,11 @@ export function setupBoardTools(scope: PaneScope, viewer: Viewer, options: Board
     if (edits.length) applyCanvas(shape, edits);
   }
   rename.addEventListener('keydown', event => {
-    if (event.key === 'Enter' && !event.isComposing) stopRename(true);
+    if (event.isComposing) return;
+    if (isAdd(event) && event.key === 'Enter') stopRename(true, { type: 'add' });
+    // Tab applies the name and stays on the shape, so it never adds shapes by accident.
+    else if (event.key === 'Enter' || event.key === 'Tab' && !event.shiftKey) stopRename(true);
     else if (event.key === 'Escape') stopRename(false);
-    else if (event.key === 'Tab' && !event.shiftKey) stopRename(true, { type: 'add' });
     else return;
     event.preventDefault();
     event.stopPropagation();
@@ -192,7 +211,7 @@ export function setupBoardTools(scope: PaneScope, viewer: Viewer, options: Board
     const canvas = boardsOnly ? undefined : canvasTarget(shape);
     if (canvas) {
       items.push(item('Rename', () => startRename(shape), { keys: 'F2' }),
-        item(canvas.add, () => applyCanvas(shape, [{ type: 'add' }]), { keys: 'Tab' }));
+        item(canvas.add, () => applyCanvas(shape, [{ type: 'add' }]), { keys: 'Control+Enter Meta+Enter Insert' }));
       if (canvas.sibling) items.push(item('Add sibling topic', () => applyCanvas(shape, [{ type: 'sibling' }]), { keys: 'Enter' }));
       if (canvas.remove) items.push(item('Delete', () => applyCanvas(shape, [{ type: 'remove' }]), { keys: 'Delete' }));
     }
@@ -224,7 +243,10 @@ export function setupBoardTools(scope: PaneScope, viewer: Viewer, options: Board
       // Keyboard users reach these through shortcuts and Shift+F10, so Tab still leaves the diagram.
       element.tabIndex = -1;
       element.textContent = label.replace(/^((Add|Edit) (flow|mind map) board)…$/, '$1');
-      if (keys) { element.setAttribute('aria-keyshortcuts', keys); element.title = `${label} (${keys === 'F2' ? 'F2 or double-click' : keys})`; }
+      if (keys) {
+        element.setAttribute('aria-keyshortcuts', keys);
+        element.title = `${label} (${keys === 'F2' ? 'F2 or double-click' : keys.includes('Insert') ? `${addKeys} or Insert` : keys})`;
+      }
       // A button that relinks the shape is gone when the builder closes, so focus returns to the diagram.
       element.addEventListener('click', () => run(relinks ? viewer.stage : element));
       return element;
@@ -234,7 +256,11 @@ export function setupBoardTools(scope: PaneScope, viewer: Viewer, options: Board
     if (shape && canvasTarget(shape) && shapeAction(shape).action === 'add') {
       const boardsButton = button('Add board…', () => {});
       boardsButton.setAttribute('aria-haspopup', 'menu');
+      boardsButton.setAttribute('aria-controls', menu.id);
+      boardsButton.setAttribute('aria-expanded', 'false');
       boardsButton.addEventListener('click', () => {
+        // A click on the button while its menu is open closes the menu.
+        if (toggled === boardsButton) { toggled = undefined; return; }
         const box = boardsButton.getBoundingClientRect();
         openMenu(shape, boardsButton, box.left, box.bottom + 4, true);
       });
@@ -312,6 +338,8 @@ export function setupBoardTools(scope: PaneScope, viewer: Viewer, options: Board
   function closeMenu(restore = true) {
     if (menu.hidden) return;
     menu.hidden = true;
+    menuTrigger?.setAttribute('aria-expanded', 'false');
+    menuTrigger = undefined;
     if (restore && menuReturn?.isConnected) menuReturn.focus({ preventScroll: true });
     menuReturn = undefined;
   }
@@ -331,19 +359,23 @@ export function setupBoardTools(scope: PaneScope, viewer: Viewer, options: Board
     };
     const items = actions(shape, item, boardsOnly);
     const action = shapeAction(shape);
-    const heading = document.createElement('p');
-    heading.textContent = shapeLabel(boardId(), shape);
+    // A menu holds only its items: the heading repeats its name, and the note is its description.
+    const text = (content: string, className?: string) => Object.assign(document.createElement('p'),
+      { textContent: content, ...className ? { className, id: scope.id('board-menu-note') } : {} });
+    const heading = text(shapeLabel(boardId(), shape));
     const parts: HTMLElement[] = [heading, ...items];
-    if (action.action === 'none' && !canvasTarget(shape)) {
-      const note = document.createElement('p');
-      note.className = 'board-menu-note';
-      note.textContent = action.reason;
-      parts.push(note);
-    }
+    const note = action.action === 'none' && !canvasTarget(shape) ? text(action.reason, 'board-menu-note') : undefined;
+    if (note) parts.push(note);
+    for (const part of [heading, note]) { part?.setAttribute('role', 'none'); part?.setAttribute('aria-hidden', 'true'); }
     if (!boardsOnly) parts.push(item('Select in source', () => options.selectSource(shape, true)));
     menu.replaceChildren(...parts);
     menu.setAttribute('aria-label', `Actions for ${heading.textContent}`);
+    if (note) menu.setAttribute('aria-describedby', note.id); else menu.removeAttribute('aria-describedby');
     menuReturn = element;
+    if (element instanceof HTMLElement && element.hasAttribute('aria-expanded')) {
+      menuTrigger = element;
+      element.setAttribute('aria-expanded', 'true');
+    }
     menu.hidden = false;
     // Keep the menu on screen beside the pointer or shape.
     const { width, height } = menu.getBoundingClientRect();
@@ -400,7 +432,7 @@ export function setupBoardTools(scope: PaneScope, viewer: Viewer, options: Board
     if (!canvas || event.altKey) return;
     const plain = !event.metaKey && !event.ctrlKey && !event.shiftKey;
     const change: CanvasEdit | 'rename' | undefined = event.key === 'F2' && plain ? 'rename'
-      : event.key === 'Tab' && plain ? { type: 'add' }
+      : isAdd(event) ? { type: 'add' }
         // In a mind map, Enter adds a sibling; the centre has none, so it adds a main branch. Enter on a topic
         // that opens a board opens it, as on any link.
         : event.key === 'Enter' && plain && canvas.kind === 'mind map' && shape.focus.localName !== 'a'
@@ -424,7 +456,12 @@ export function setupBoardTools(scope: PaneScope, viewer: Viewer, options: Board
     event.preventDefault();
     event.stopPropagation();
   });
-  document.addEventListener('pointerdown', event => { if (!menu.contains(event.target as Node)) closeMenu(false); }, true);
+  pageListeners(viewer.stage, signal => document.addEventListener('pointerdown', event => {
+    toggled = undefined;
+    if (menu.contains(event.target as Node)) return;
+    if (!menu.hidden && menuTrigger?.contains(event.target as Node)) toggled = menuTrigger;
+    closeMenu(false);
+  }, { capture: true, signal }));
   menu.addEventListener('focusout', event => { if (!menu.contains(event.relatedTarget as Node)) closeMenu(false); });
 
   /** Select a shape on the board on view, keeping focus on the diagram. */
@@ -440,6 +477,17 @@ export function setupBoardTools(scope: PaneScope, viewer: Viewer, options: Board
     refresh,
     /** Whether a shape on the board on view is edited on the diagram, so clicking it keeps focus there. */
     editsOnCanvas: (shape: string) => Boolean(canvasTarget(shape)),
+    /** The diagram keys for the step or topic at `target`, for keyboard guidance. */
+    canvasKeys(target: Element) {
+      const shape = shapeAt(target);
+      const canvas = shape && canvasTarget(shape.id);
+      if (!canvas) return;
+      const keys = ['F2 renames', `${addKeys} ${canvas.add.replace('Add', 'adds')}`];
+      // Enter on a topic that opens a board opens it instead.
+      if (canvas.kind === 'mind map' && shape.focus.localName !== 'a') keys.push(`Enter adds ${canvas.sibling ? 'a sibling' : 'a branch'}`);
+      if (canvas.remove) keys.push('Delete removes');
+      return keys.join(' · ');
+    },
     /** The source changed: board actions wait for it to compile, except editing the root board. */
     invalidate() { closeMenu(false); stopRename(false); refresh(); },
     /** The document compiled: index its boards. */
@@ -449,12 +497,15 @@ export function setupBoardTools(scope: PaneScope, viewer: Viewer, options: Board
       compiledSource = source;
       refresh();
     },
-    /** The preview shows the compiled document: open a board just added or renamed, then select a shape just made. */
+    /** The preview shows the compiled document: open a board just added or renamed, then select a shape just made,
+     * unless focus moved on meanwhile. Redrawing the diagram drops focus from the shape it was on, to the page. */
     async settled() {
       const show = pending;
       pending = undefined;
       if (show?.board && boards.has(show.board) && show.board !== boardId()) await viewer.navigate(show.board);
-      if (show?.shape) selectShape(show.shape, show.rename);
+      const focused = document.activeElement;
+      const stayed = !focused || focused === document.body || viewer.stage.contains(focused) || shapeGroup.contains(focused);
+      if (show?.shape && stayed) selectShape(show.shape, show.rename);
     },
     /** Another board is on view. Going up selects the shape that leads back down, with its actions. */
     boardChanged() {

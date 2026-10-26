@@ -62,13 +62,29 @@ export async function prepareExportSvg(svg: string, dark?: boolean): Promise<{ s
   return { svg: new XMLSerializer().serializeToString(root), warnings: [...new Set(warnings)] };
 }
 
-/** Rasterize a prepared SVG at its native viewBox size, independent of viewport fit. */
+// Canvas limits: 16384 px per side works in every engine, Safari included; the area caps memory.
+const maxSide = 16_384;
+const maxArea = 64_000_000;
+
+/** The PNG size of an SVG root: its native viewBox size, scaled down to fit canvas limits. */
+export function rasterSize(root: Element): { width: number; height: number; native: [number, number] } {
+  const viewBox = root.getAttribute('viewBox')?.trim().split(/[\s,]+/).map(Number);
+  const native: [number, number] = viewBox ? [viewBox[2], viewBox[3]]
+    : [parseFloat(root.getAttribute('width') ?? ''), parseFloat(root.getAttribute('height') ?? '')];
+  if (!native.every((side) => Number.isFinite(side) && side > 0)) throw new Error('Diagram has no valid size: its SVG viewBox is missing or invalid.');
+  const [w, h] = native;
+  const scale = Math.min(1, maxSide / w, maxSide / h, Math.sqrt(maxArea / (w * h)));
+  const size = (side: number) => scale < 1 ? Math.max(1, Math.floor(side * scale)) : Math.ceil(side);
+  return { width: size(w), height: size(h), native };
+}
+
+/** Rasterize a prepared SVG at its native viewBox size, independent of viewport fit.
+ * Diagrams beyond canvas limits are scaled down to fit rather than failing. */
 export async function rasterizeSvg(svg: string): Promise<Blob> {
   const root = new DOMParser().parseFromString(svg, 'image/svg+xml').documentElement;
-  const viewBox = root.getAttribute('viewBox')?.trim().split(/[\s,]+/).map(Number);
-  const width = Math.ceil(viewBox?.[2] ?? parseFloat(root.getAttribute('width') ?? ''));
-  const height = Math.ceil(viewBox?.[3] ?? parseFloat(root.getAttribute('height') ?? ''));
-  if (!(width > 0 && height > 0) || width * height > 64_000_000) throw new Error('Diagram dimensions exceed the PNG export limit.');
+  const { width, height, native } = rasterSize(root);
+  // Without a viewBox, a smaller width and height would crop instead of scaling.
+  if (!root.hasAttribute('viewBox')) root.setAttribute('viewBox', `0 0 ${native[0]} ${native[1]}`);
   root.setAttribute('width', String(width));
   root.setAttribute('height', String(height));
   const url = URL.createObjectURL(new Blob([new XMLSerializer().serializeToString(root)], { type: 'image/svg+xml' }));
@@ -81,7 +97,7 @@ export async function rasterizeSvg(svg: string): Promise<Blob> {
     canvas.height = height;
     const context = canvas.getContext('2d');
     if (!context) throw new Error('Canvas is unavailable.');
-    context.drawImage(image, 0, 0);
+    context.drawImage(image, 0, 0, width, height);
     return await new Promise<Blob>((resolve, reject) => canvas.toBlob((blob) => blob ? resolve(blob) : reject(new Error('PNG encoding failed.')), 'image/png'));
   } finally { URL.revokeObjectURL(url); }
 }
@@ -106,7 +122,18 @@ function offlineViewer(lib: typeof runtime) {
   const crumbs = document.querySelector<HTMLElement>('.zf-breadcrumbs')!;
   const breadcrumbs = lib.setupBreadcrumbs(crumbs);
   const context = document.querySelector<HTMLElement>('.zf-context')!;
-  const message = document.querySelector<HTMLElement>('.zf-message')!;
+  const statusRegion = document.querySelector<HTMLElement>('.zf-message > [role="status"]')!;
+  const alertRegion = document.querySelector<HTMLElement>('.zf-message > [role="alert"]')!;
+  let messageTimer: ReturnType<typeof setTimeout> | undefined;
+  // Same fixed live regions as Viewer.setMessage: a repeated message is set again after a pause.
+  function setMessage(text: string, error = false) {
+    clearTimeout(messageTimer);
+    const region = error ? alertRegion : statusRegion;
+    const repeat = Boolean(text) && region.textContent === text;
+    statusRegion.textContent = alertRegion.textContent = '';
+    if (repeat) messageTimer = setTimeout(() => { region.textContent = text; }, 100);
+    else region.textContent = text;
+  }
   const announcement = document.querySelector<HTMLElement>('.zf-visually-hidden')!;
   const area = document.createElement('div');
   area.className = 'zf-stage-area';
@@ -130,16 +157,14 @@ function offlineViewer(lib: typeof runtime) {
     const previous = current.id;
     current = board;
     trail = lib.simplifyTrail(visits);
-    message.textContent = notice;
-    message.setAttribute('role', 'status');
+    setMessage(notice);
     if (board.empty) stage.textContent = 'This board is empty.';
     else {
       const doc = new DOMParser().parseFromString(board.svg, 'image/svg+xml');
       // Sanitize while the parsed SVG is still inert, before importing it into this document.
       if (doc.querySelector('parsererror') || !lib.sanitizeSvg(doc.documentElement)) {
         stage.textContent = 'This board could not be displayed.';
-        message.setAttribute('role', 'alert');
-        message.textContent = `Invalid SVG for ${board.name}`;
+        setMessage(`Invalid SVG for ${board.name}`, true);
       } else {
         const svg = document.importNode(doc.documentElement, true);
         svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
@@ -177,7 +202,7 @@ function offlineViewer(lib: typeof runtime) {
   function follow(event: MouseEvent | KeyboardEvent) {
     const action = lib.followLink(event, resolve);
     if (action?.kind === 'board') show(byId.get(action.target)!, [...trail, action.target]);
-    else if (action?.kind === 'missing') { message.setAttribute('role', 'alert'); message.textContent = `Missing board: ${describe(action.target)}`; }
+    else if (action?.kind === 'missing') setMessage(`Missing board: ${describe(action.target)}`, true);
   }
   stage.addEventListener('click', follow);
   stage.addEventListener('keydown', (event) => { if (event.key === 'Enter') follow(event); });

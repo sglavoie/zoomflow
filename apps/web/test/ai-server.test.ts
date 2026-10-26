@@ -8,9 +8,14 @@ import { Readable } from 'node:stream';
 import { handle, isLoopbackAddress, providerStatus, readBody, runAi } from '../ai-server';
 
 const originalPath = process.env.PATH;
+const original = { CLAUDE_CONFIG_DIR: process.env.CLAUDE_CONFIG_DIR, INIT_CWD: process.env.INIT_CWD };
+// The server's own CLAUDE_CONFIG_DIR is the blank field's default; start each test without one.
+delete process.env.CLAUDE_CONFIG_DIR;
 let fakeBin: string | undefined;
 afterEach(async () => {
   process.env.PATH = originalPath;
+  delete process.env.CLAUDE_CONFIG_DIR;
+  if (original.INIT_CWD === undefined) delete process.env.INIT_CWD; else process.env.INIT_CWD = original.INIT_CWD;
   if (fakeBin) await rm(fakeBin, { recursive: true, force: true });
   fakeBin = undefined;
 });
@@ -135,6 +140,20 @@ it('passes custom environment and lets the Claude config field take precedence',
     .resolves.toEqual({ reply: 'Done.', source: null });
 });
 
+it('a blank Claude config field keeps the Environment or server value, resolved from the launch folder', async () => {
+  const reply = { is_error: false, structured_output: { reply: 'Done.', source: null } };
+  await fakeCommand('claude', reply, 0, { CLAUDE_CONFIG_DIR: join(homedir(), '.claude') });
+  await expect(runAi({ ...request, provider: 'claude', claudeConfigDir: ' ' })).resolves.toEqual({ reply: 'Done.', source: null });
+  process.env.CLAUDE_CONFIG_DIR = 'server-claude';
+  process.env.INIT_CWD = '/launch';
+  await fakeCommand('claude', reply, 0, { CLAUDE_CONFIG_DIR: '/launch/server-claude' });
+  await expect(runAi({ ...request, provider: 'claude', claudeConfigDir: '' })).resolves.toEqual({ reply: 'Done.', source: null });
+  await fakeCommand('claude', reply, 0, { CLAUDE_CONFIG_DIR: '/launch/from-field' });
+  await expect(runAi({ ...request, provider: 'claude', environment: 'CLAUDE_CONFIG_DIR=from-field' })).resolves.toEqual({ reply: 'Done.', source: null });
+  await fakeCommand('claude', reply, 0, { CLAUDE_CONFIG_DIR: '/launch/relative' });
+  await expect(runAi({ ...request, provider: 'claude', claudeConfigDir: 'relative' })).resolves.toEqual({ reply: 'Done.', source: null });
+});
+
 it('runs Codex and accepts an answer without a source change', async () => {
   await fakeCommand('codex', { reply: 'This is the checkout board.', source: null }, 0, { TEST_VALUE: 'codex' });
   await expect(runAi({ ...request, provider: 'codex', environment: 'TEST_VALUE=codex' }))
@@ -144,8 +163,8 @@ it('runs Codex and accepts an answer without a source change', async () => {
 it('rejects malformed environment lines before starting a CLI', async () => {
   await expect(runAi({ ...request, provider: 'codex', environment: 'bad name=value' }))
     .rejects.toThrow('Environment line 1 must be NAME=value.');
-  await expect(runAi({ ...request, provider: 'claude', claudeConfigDir: ' ' }))
-    .rejects.toThrow('CLAUDE_CONFIG_DIR cannot be empty.');
+  await expect(runAi({ ...request, provider: 'claude', claudeConfigDir: '~other' }))
+    .rejects.toThrow('CLAUDE_CONFIG_DIR supports ~ or ~/ for the home directory.');
 });
 
 it('reports CLI failure and malformed output', async () => {

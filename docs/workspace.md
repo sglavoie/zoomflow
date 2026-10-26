@@ -96,9 +96,10 @@ same actions as these keys. The bar follows the shape as you pan and zoom. Its b
 are for the pointer; from the keyboard, use these keys or Shift+F10.
 
 - **F2** or double-click renames it. Enter applies the name and Escape cancels.
-- **Tab** adds the next step after a flow step, or a subtopic under a topic, and starts
-  naming it. Tab while naming applies the name and adds another, so a map grows as fast
-  as you type.
+- **⌘/Ctrl+Enter** (or Insert) adds the next step after a flow step, or a subtopic under
+  a topic, and starts naming it. ⌘/Ctrl+Enter while naming applies the name and adds
+  another, so a map grows as fast as you type. Tab applies the name and leaves the shape
+  selected.
 - **Enter** on a mind map topic adds a sibling topic after it; on the central topic it
   adds a main branch. On a topic that opens a board, Enter opens the board instead.
 - **Delete**, or ⌘/Ctrl+Backspace, removes the step and its connections, or the topic
@@ -165,14 +166,17 @@ Use **Save .d2** above the editor or **⌘S / Ctrl+S** to save a disk copy.
 Use **Clear** beside Format to empty the current source and start from scratch.
 The editor receives focus immediately; **⌘Z / Ctrl+Z** restores the cleared text.
 Browsers with file-system access can write back to a file you opened or a destination
-you choose. Other browsers download the source and label the button **Download .d2**.
+you choose, also after a reload: Zoomflow keeps each draft's file handle in browser
+storage, and the browser may ask again for permission to edit the file when you
+save. If permission is refused, Save asks where to save instead. Other browsers download the source and label the button **Download .d2**.
 **Export → Download .d2 source** always starts a separate download.
 The status beside the save controls reports file state; its tooltip describes browser
 recovery. Successful background backups stay quiet, while unavailable recovery is
 shown explicitly. A disk save that takes longer than 700 ms shows progress.
 If another program changed the file since Zoomflow opened or last saved it, Save
 asks before overwriting it; cancelling leaves the file on disk unchanged. This also
-applies to files of an opened folder.
+applies after a reload, to files of an opened folder, and when the file cannot be
+read to check. A file that was moved or deleted makes Save ask where to save instead.
 While browser recovery is unavailable, leaving or reloading the page with edits
 that are not saved to disk asks for confirmation first.
 Saving an example creates a separate named draft, labeled with its original template.
@@ -199,7 +203,7 @@ or project and report unsaved changes. A 30-second **Undo** notice restores remo
 drafts or the previous example, including its editor history and view. The timer pauses
 while the notice has keyboard focus or the pointer is over it. Editing a restored
 example retires its Restore undo, so undoing cannot overwrite new work. Removing
-drafts and then undoing also restores their file handles within the page session.
+drafts and then undoing also restores their file handles.
 Project files are grouped under their folder name;
 unsaved files carry a dot and each project shows its unsaved-file count. These compare
 source with the last file-save baseline, independently of browser recovery.
@@ -219,8 +223,9 @@ Open a project with **Open folder** (also in the filename menu on narrow screens
 Zoomflow loads its `.d2` files into a shared virtual filesystem, so relative imports
 resolve from each file's folder. Pick another project file from the filename menu to
 edit it; changes to imported files appear when you return to the main diagram.
-Project drafts survive reload in browser storage. In browsers that support directory
-access, **Save .d2** writes the active project file to its original folder. Other
+Project drafts and their file handles survive reload in browser storage. In browsers
+that support directory access, **Save .d2** writes the active project file to its
+original folder, after a reload too. Other
 browsers offer a Save dialog or source download. **Export → Download project .zip**
 keeps all project sources and their relative paths together. Local image assets are
 not yet loaded with folder projects.
@@ -429,8 +434,9 @@ on a board without focusable shapes, plain arrows pan too. Focused
 shapes are brought into view. Unlinked shapes with source locations are
 keyboard-focusable: press Enter or Space
 to select their source. Alt+Enter selects a linked shape’s source without navigating.
-Steps and topics of builder boards add F2, Tab, Enter and Delete, as described in
-[Edit on the diagram](#edit-on-the-diagram); Shift+Tab still leaves the diagram.
+Steps and topics of builder boards add F2, ⌘/Ctrl+Enter, Enter and Delete, as described in
+[Edit on the diagram](#edit-on-the-diagram); Tab and Shift+Tab still leave the diagram.
+Escape first dismisses an open board preview card; press it again to go up a board.
 Recompiling the same board retains focus on a surviving shape. Wheel zoom normalizes
 pixel, line and page deltas; pinch zoom works from Fit. Touch devices show the pinch
 hint even at Fit. Link badges stay 24 screen pixels across zoom levels, and touch hit areas

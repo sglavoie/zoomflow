@@ -22,6 +22,8 @@
   --danger-text: var(--danger);
   --danger-border: #a7353955;
   --border-strong: #8192a466;
+  /* Form control outlines keep 3:1 contrast against the surface and page (WCAG 1.4.11). */
+  --control-border: #7d8da0;
   --grip: #8192a4;
   --accent-soft: #477de522;
   --accent-surface: #eef5ff;
@@ -96,6 +98,7 @@
   --hover: #92bcff14;
   --hover-subtle: #92bcff12;
   --border-strong: #8d9db170;
+  --control-border: #6b7b90;
   --grip: #73849a;
   --danger-border: #ffb4ae55;
   --backdrop: #000a;
@@ -417,7 +420,7 @@ header > strong {
   width: 100%;
   min-height: 40px;
   padding: var(--space-2);
-  border: 1px solid var(--border);
+  border: 1px solid var(--control-border);
   border-radius: var(--radius);
   font: inherit;
   font-size: var(--font-size-base);
@@ -805,7 +808,7 @@ select,
   font: inherit;
   line-height: 20px;
   min-height: 36px;
-  border: 1px solid var(--border);
+  border: 1px solid var(--control-border);
   border-radius: var(--radius);
   background: var(--surface);
   color: inherit;
@@ -956,7 +959,7 @@ select:focus-visible {
   min-height: 36px;
   padding: 7px 10px;
   font: inherit;
-  border: 1px solid var(--border);
+  border: 1px solid var(--control-border);
   border-radius: var(--radius);
   background: var(--surface);
   color: inherit;
@@ -1271,7 +1274,7 @@ footer {
   font-size: var(--font-size-md);
   color: inherit;
   background: transparent;
-  border: 1px solid var(--border-strong);
+  border: 1px solid var(--control-border);
   border-radius: var(--radius);
   padding: 7px 10px;
 }
@@ -1520,7 +1523,7 @@ footer {
   min-width: 0;
   font: inherit;
   font-size: var(--font-size-md);
-  border: 1px solid var(--border-strong);
+  border: 1px solid var(--control-border);
   border-radius: var(--radius);
   background: transparent;
   color: inherit;

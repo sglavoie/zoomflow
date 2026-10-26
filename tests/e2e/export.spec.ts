@@ -173,7 +173,8 @@ test('inlines remote images for PNG and reports a placeholder when fetching fail
   await page.unroute('https://assets.example/icon.svg');
   await page.route('https://assets.example/icon.svg', (route) => route.abort());
   await download(page, 'png', info);
-  await expect(page.getByRole('alert')).toContainText('used a placeholder');
+  // The viewer keeps its own alert region in the page, empty until it has a message.
+  await expect(page.getByRole('alert').filter({ hasText: 'used a placeholder' })).toBeVisible();
 });
 
 test('invalid current file cannot export the previous diagram', async ({ page }) => {
@@ -432,5 +433,5 @@ test('interactive HTML is titled with the document name without its .d2 extensio
   await page.goto('/'); await previewReady(page);
   const html = await readFile(await download(page, 'html', info), 'utf8');
   expect(html).toContain('<title>order</title>');
-  expect(html).toContain('<header><strong>order</strong></header>');
+  expect(html).toContain('<header><h1>order</h1></header>');
 });

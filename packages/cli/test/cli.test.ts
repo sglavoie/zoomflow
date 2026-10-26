@@ -225,7 +225,7 @@ describe.concurrent('zoomflow CLI', () => {
     await symlink(real, linked);
     const diagram = { name: '', shapes: [{ link: '', icon: './missing.png' }], connections: [], root: { link: '' } } as unknown as Diagram;
     await expect(stageIcons(diagram, join(linked, 'a.d2'), linked, join(temp, 'linked-stage')))
-      .rejects.toThrow(/^cannot read .*missing\.png: no such file$/);
+      .rejects.toThrow(/^Cannot read .*missing\.png: no such file$/);
   });
 
   it('keeps local images inside --root, through symlinked folders too, and requires regular files', async () => {
@@ -280,12 +280,17 @@ describe.concurrent('zoomflow CLI', () => {
     const result = await run(['lint', input, '--json']);
     expect(result.code).toBe(2);
     expect(JSON.parse(result.stdout)).toEqual({ error: `${input}:1:4: maps must be terminated with }`, diagnostics: [] });
-    const usage = await Promise.all([['lint', 'a.d2', '--json', '--all'], ['lint', '--json'], ['lint', 'a.d2', 'b.d2', '--json']].map((args) => run(args)));
+    const usage = await Promise.all([['lint', 'a.d2', '--json', '--all'], ['lint', '--json'], ['lint', 'a.d2', 'b.d2', '--json'],
+      ['lint', 'a.d2', '--json', '--bogus'], ['lint', 'a.d2', '--json', '--root']].map((args) => run(args)));
     expect(usage.map((item) => [item.code, JSON.parse(item.stdout)])).toEqual([
       [2, { error: 'Export options cannot be used with lint.', diagnostics: [] }],
       [2, { error: 'lint takes exactly one .d2 file.', diagnostics: [] }],
       [2, { error: 'lint takes exactly one .d2 file.', diagnostics: [] }],
+      [2, { error: expect.stringContaining("Unknown option '--bogus'"), diagnostics: [] }],
+      [2, { error: expect.stringContaining("Option '--root <value>' argument missing"), diagnostics: [] }],
     ]);
+    // Parse failures outside lint --json keep stdout empty.
+    expect((await run(['lint', 'a.d2', '--bogus'])).stdout).toBe('');
   });
 
   it('names directories and symlinks given as input, and unwritable output folders', async () => {
@@ -300,9 +305,24 @@ describe.concurrent('zoomflow CLI', () => {
       expect(directory.stderr).toBe('zoomflow: Input must be a regular file.\n');
       expect(link.stderr).toBe('zoomflow: Input must be a regular file; symlinks are not followed.\n');
       expect(unwritable.code).toBe(2);
-      expect(unwritable.stderr).toBe(`zoomflow: cannot write ${join(locked, 'order.svg')}: permission denied\n`);
+      expect(unwritable.stderr).toBe(`zoomflow: Cannot write ${join(locked, 'order.svg')}: permission denied\n`);
     } finally { await chmod(locked, 0o755); }
   }, 180_000);
+
+  it('names unreadable inputs and a --root that is not a directory', async () => {
+    const locked = join(temp, 'unreadable');
+    await mkdir(locked, { recursive: true });
+    await writeFile(join(locked, 'a.d2'), 'a');
+    await chmod(locked, 0o000);
+    try {
+      const [unreadable, file] = await Promise.all([run(['lint', join(locked, 'a.d2')]),
+        run(['lint', 'fixtures/order.d2', '--root', 'fixtures/order.d2'])]);
+      expect(unreadable.code).toBe(2);
+      expect(unreadable.stderr).toBe(`zoomflow: Cannot read ${join(locked, 'a.d2')}: permission denied\n`);
+      expect(file.code).toBe(2);
+      expect(file.stderr).toBe(`zoomflow: Root is not a directory: ${resolve(repo, 'fixtures/order.d2')}\n`);
+    } finally { await chmod(locked, 0o755); }
+  });
 
   it('rejects an output directory before rendering', async () => {
     const output = join(temp, 'output.svg');
@@ -354,7 +374,7 @@ describe.concurrent('zoomflow CLI', () => {
     ]);
     for (const result of results) expect(result.code).toBe(2);
     const [, , absent, , invalid, missing, , zip, htm] = results;
-    expect(absent.stderr).toBe('zoomflow: cannot read fixtures/missing.d2: no such file\n');
+    expect(absent.stderr).toBe('zoomflow: Cannot read fixtures/missing.d2: no such file\n');
     expect(invalid.stderr).toBe(`${input}:2:1: connection missing destination\n${input}:1:4: maps must be terminated with }\n`);
     expect(missing.stderr).toContain('D2 executable not found');
     expect(zip.stderr).toBe(`zoomflow: Output must end in .zip for --all --format svg: ${output}\n`);

@@ -28,7 +28,7 @@ export function decorateLinks(svg: Element, boards: Map<string, { name: string; 
   // Read live: the primary pointer can change, and an attached viewport re-measures when it does.
   const coarse = matchMedia('(pointer: coarse)');
   const cues: { link: SVGAElement; shape: SVGGraphicsElement; badge: SVGGElement; hit: SVGRectElement; x: number; y: number;
-    toReference?: DOMMatrix; bounds?: Rect; obstacles: { node: Element; bounds: Rect; link: boolean }[] }[] = [];
+    toReference?: DOMMatrix; bounds?: Rect; obstacles: { node: Element; bounds: Rect; link: boolean; gap: number }[] }[] = [];
   function ancestor(parent: string, child: string): boolean {
     for (let id = boards.get(child)?.parent; id; id = boards.get(id)?.parent) if (id === parent) return true;
     return false;
@@ -48,6 +48,11 @@ export function decorateLinks(svg: Element, boards: Map<string, { name: string; 
     link.setAttribute('aria-label', label);
   }
   function attachCues() {
+    // Index free badges once; one moved into a link is taken.
+    const icons = [...svg.querySelectorAll<SVGGElement>('g.appendix-icon')].flatMap((icon) => {
+      const matrix = !icon.querySelector('title') && !icon.closest('a') && icon.transform.baseVal.consolidate()?.matrix;
+      return matrix ? [{ icon, e: matrix.e, f: matrix.f }] : [];
+    });
     for (const link of svg.querySelectorAll<SVGAElement>('a[data-link-kind]')) {
       if (link.querySelector('.appendix-icon')) continue;
       const external = link.dataset.linkKind === 'external';
@@ -56,13 +61,12 @@ export function decorateLinks(svg: Element, boards: Map<string, { name: string; 
       // Tooltip badges carry a title and must keep their original content.
       const bounds = link.getBBox();
       if (!bounds.width && !bounds.height) continue;
-      const badge = [...svg.querySelectorAll<SVGGElement>('g.appendix-icon')].find((icon) => {
-        if (icon.querySelector('title') || icon.closest('a')) return false;
-        const matrix = icon.transform.baseVal.consolidate()?.matrix;
-        const dx = matrix ? bounds.x + bounds.width - matrix.e - 16 : Infinity;
-        return matrix && (Math.abs(dx) < 2 || Math.abs(dx - 32) < 2) && Math.abs(matrix.f + 16 - bounds.y) < 2;
+      const index = icons.findIndex(({ e, f }) => {
+        const dx = bounds.x + bounds.width - e - 16;
+        return (Math.abs(dx) < 2 || Math.abs(dx - 32) < 2) && Math.abs(f + 16 - bounds.y) < 2;
       });
-      if (!badge) continue;
+      if (index < 0) continue;
+      const badge = icons.splice(index, 1)[0].icon;
       const circle = document.createElementNS(ns, 'circle');
       circle.setAttribute('cx', '16'); circle.setAttribute('cy', '16'); circle.setAttribute('r', '12');
       // Frozen exported SVGs supply their own theme; live CSS follows the appearance selector.
@@ -129,7 +133,11 @@ export function decorateLinks(svg: Element, boards: Map<string, { name: string; 
       if (!link || !own) continue;
       cue.toReference = inverse.multiply(link);
       cue.bounds = own;
-      cue.obstacles = obstacles.filter((obstacle) => obstacle.node !== cue.link && !obstacle.node.contains(cue.link));
+      // Nearest first by their larger axis gap, so each frame stops at the first one out of reach.
+      cue.obstacles = obstacles.filter((obstacle) => obstacle.node !== cue.link && !obstacle.node.contains(cue.link))
+        .map((obstacle) => ({ ...obstacle, gap: Math.max(obstacle.bounds.left - own.right, own.left - obstacle.bounds.right,
+          obstacle.bounds.top - own.bottom, own.top - obstacle.bounds.bottom) }))
+        .sort((a, b) => a.gap - b.gap);
     }
     return true;
   }
@@ -150,13 +158,20 @@ export function decorateLinks(svg: Element, boards: Map<string, { name: string; 
       const dy = enabled ? Math.max(0, (44 / Math.abs(screen.d) - (rect.bottom - rect.top)) / 2) : 0;
       return { left: rect.left - dx, right: rect.right + dx, top: rect.top - dy, bottom: rect.bottom + dy };
     };
+    // A hit area and an obstacle's area each grow by at most 22 screen pixels per side, so an
+    // obstacle at least this far away on either axis can never overlap; without touch, only overlaps count.
+    const reach = touch ? 44 / Math.min(Math.abs(screen.a), Math.abs(screen.d)) : 0;
     // Compute everything first, then write: no layout reads between attribute writes.
     const updates = cues.flatMap((cue) => {
       if (!cue.toReference || !cue.bounds) return [];
       const link = screen.multiply(cue.toReference);
       if (!link.a || !link.d) return [];
-      const area = split(cue.bounds, expand(cue.bounds, touch),
-        cue.obstacles.map((obstacle) => ({ bounds: obstacle.bounds, area: expand(obstacle.bounds, touch && obstacle.link) })));
+      const nearby: { bounds: Rect; area: Rect }[] = [];
+      for (const obstacle of cue.obstacles) {
+        if (obstacle.gap >= reach) break;
+        nearby.push({ bounds: obstacle.bounds, area: expand(obstacle.bounds, touch && obstacle.link) });
+      }
+      const area = split(cue.bounds, expand(cue.bounds, touch), nearby);
       const fromReference = cue.toReference.inverse();
       const start = new DOMPoint(area.left, area.top).matrixTransform(fromReference);
       const end = new DOMPoint(area.right, area.bottom).matrixTransform(fromReference);

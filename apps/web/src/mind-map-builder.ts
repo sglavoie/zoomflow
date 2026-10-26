@@ -32,7 +32,7 @@ export function setupMindMapBuilder(create: (source: string, name: string) => vo
         <option value="3">Open level 3 topics on their own boards</option>
         <option value="4">Open level 4 topics on their own boards</option>
       </select></label>
-      <p id="mind-map-split-help" class="flow-help">A topic at this level that has subtopics links to a board of its own. Click it in the diagram to zoom in.</p>
+      <p id="mind-map-split-help" class="flow-help">A topic at this level that has subtopics links to a board of its own. The arrow badge on it in the diagram opens that board.</p>
       ${lookFields('mind-map')}
       <p id="mind-map-feedback" role="status"></p>
       <p id="mind-map-error" role="alert" hidden></p>
@@ -53,6 +53,8 @@ export function setupMindMapBuilder(create: (source: string, name: string) => vo
   let snapshot = '';
   const formState = () => `${editing ? '' : name.value}\n${direction.value}\n${split.value}\n${JSON.stringify(look.get())}\n${outline.value}`;
   let returnFocus: HTMLElement = launch;
+  /** Where focus goes when `returnFocus` is gone or hidden by the time the builder closes. */
+  let fallbackFocus: HTMLElement | undefined;
   const draft = (): BuilderTarget => ({ mode: 'draft', name: 'My mind map',
     apply: (source, title) => { create(source, flowFilename(title, 'My mind map')); } });
   let target = draft();
@@ -90,7 +92,7 @@ export function setupMindMapBuilder(create: (source: string, name: string) => vo
     } else outline.setSelectionRange(start, start + text.length);
     announce();
   }
-  function open(next: BuilderTarget, edit?: HTMLElement) {
+  function open(next: BuilderTarget, edit?: HTMLElement, fallback?: HTMLElement) {
     const existing = next.mode === 'edit' ? readMindMap(next.source ?? '') : undefined;
     if (next.mode === 'edit' && !existing) return;
     target = next;
@@ -99,6 +101,7 @@ export function setupMindMapBuilder(create: (source: string, name: string) => vo
     const example = next.mode === 'board' ? `${next.name.replace(/\s+/g, ' ').trim() || 'Topic'}\n  First idea\n  Second idea` : mindMapExample;
     const map: MindMap = existing ?? { direction: 'right', split: 2, look: plainLook(), root: parseOutline(example)! };
     returnFocus = edit ?? launch;
+    fallbackFocus = fallback;
     name.value = next.name;
     name.setCustomValidity('');
     dialog.querySelector('#mind-map-name-field span')!.textContent = next.mode === 'board' ? 'Board name' : 'Mind map name';
@@ -111,8 +114,8 @@ export function setupMindMapBuilder(create: (source: string, name: string) => vo
     submit.textContent = { draft: 'Create mind map', board: 'Add board', edit: 'Apply changes' }[next.mode];
     dialog.querySelector('#mind-map-save-hint')!.textContent = {
       draft: 'Creates a new draft. Your current diagram is kept.',
-      board: 'Adds a board that opens from the shape. You can undo in the source editor.',
-      edit: 'Updates this mind map. You can undo in the source editor.' }[next.mode];
+      board: 'Adds a board that opens from the shape. Undo with ⌘Z / Ctrl+Z on the diagram or in the source.',
+      edit: 'Updates this mind map. Undo with ⌘Z / Ctrl+Z on the diagram or in the source.' }[next.mode];
     announce();
     snapshot = formState();
     returnFocus.focus({ preventScroll: true });
@@ -141,7 +144,8 @@ export function setupMindMapBuilder(create: (source: string, name: string) => vo
     shift(event.key === ']' ? 1 : -1);
     return true;
   });
-  dialog.addEventListener('close', () => (returnFocus.isConnected && !returnFocus.closest('[hidden]') ? returnFocus : launch).focus({ preventScroll: true }));
+  dialog.addEventListener('close', () => ([returnFocus, fallbackFocus].find(element => element?.isConnected && !element.closest('[hidden]')) ?? launch)
+    .focus({ preventScroll: true }));
   name.addEventListener('input', () => name.setCustomValidity(name.value.trim() ? '' : `Give your ${target.mode === 'board' ? 'board' : 'mind map'} a name.`));
   outline.addEventListener('input', announce);
   split.addEventListener('change', announce);
@@ -158,7 +162,7 @@ export function setupMindMapBuilder(create: (source: string, name: string) => vo
     dialog.close();
   });
   return {
-    /** Add a mind map board or edit one; `returnFocus` regains focus when the builder closes. */
-    open: (next: BuilderTarget, returnFocus: HTMLElement) => open(next, returnFocus),
+    /** Add a mind map board or edit one; `returnFocus`, else `fallback`, regains focus when the builder closes. */
+    open: (next: BuilderTarget, returnFocus: HTMLElement, fallback?: HTMLElement) => open(next, returnFocus, fallback),
   };
 }

@@ -38,8 +38,8 @@ test('renames, adds and removes flow steps on the diagram, and undoes there', as
   await expect(stage(page)).toContainText('Brainstorm');
   await expect(shape(page, 'step_1')).toBeFocused();
 
-  // Tab adds the next step and names it at once.
-  await page.keyboard.press('Tab');
+  // ⌘/Ctrl+Enter adds the next step and names it at once; Tab stays free to leave the diagram.
+  await page.keyboard.press('ControlOrMeta+Enter');
   await ready(page);
   const named = page.getByRole('textbox', { name: 'Rename New step' });
   await expect(named).toBeFocused();
@@ -49,10 +49,16 @@ test('renames, adds and removes flow steps on the diagram, and undoes there', as
   await expect(stage(page)).toContainText('Gather feedback');
   expect(await editorText(page)).toContain('step_1 -> step_6: ""');
 
+  await page.keyboard.press('Tab');
+  await expect(stage(page).locator(':focus')).toHaveCount(0);
+  expect(await editorText(page)).not.toContain('step_7');
   await shape(page, 'step_6').focus();
   await page.keyboard.press('Delete');
   await ready(page);
   await expect(stage(page)).not.toContainText('Gather feedback');
+  // The step that led to it takes the selection and focus.
+  await expect(shape(page, 'step_1')).toBeFocused();
+  await expect(shape(page, 'step_1')).toHaveClass(/zf-canvas-selected/);
   await expect(page.locator('#activity-status')).toHaveText('Removed “Gather feedback”. Undo with ⌘Z / Ctrl+Z.');
   await stage(page).press('ControlOrMeta+z');
   await ready(page);
@@ -67,9 +73,13 @@ test('renames, adds and removes flow steps on the diagram, and undoes there', as
   await expect(stage(page)).toContainText('Launched');
   await expect(page.getByRole('group', { name: 'Selected: Launched' }).getByRole('button'))
     .toHaveText(['Rename', 'Add next step', 'Delete', 'Add board…']);
+  // Keyboard guidance names the keys that edit steps.
+  await shape(page, 'step_5').focus();
+  await page.keyboard.press('Home');
+  await expect(page.locator('.zf-pan-hint')).toContainText('F2 renames · ⌘/Ctrl+Enter adds next step · Delete removes');
 });
 
-test('adds subtopics and siblings on a mind map board with Tab and Enter', async ({ page }) => {
+test('adds subtopics and siblings on a mind map board with Enter and ⌘/Ctrl+Enter', async ({ page }) => {
   await mixed(page);
   await openFromBadge(page, 'Open Plan the launch board');
   await board(page, 'root.layers.Plan the launch');
@@ -78,8 +88,8 @@ test('adds subtopics and siblings on a mind map board with Tab and Enter', async
   await ready(page);
   const sibling = page.getByRole('textbox', { name: 'Rename New topic' });
   await sibling.fill('Budget');
-  // Tab names the topic and adds a subtopic under it.
-  await sibling.press('Tab');
+  // ⌘/Ctrl+Enter names the topic and adds a subtopic under it.
+  await sibling.press('ControlOrMeta+Enter');
   await ready(page);
   const child = page.getByRole('textbox', { name: 'Rename New topic' });
   await child.fill('Ads');
@@ -131,6 +141,16 @@ test('a link to a board previews it before drilling in', async ({ page }) => {
   await expect(preview.locator('img')).toBeVisible();
   await page.mouse.move(5, 5);
   await expect(preview).toBeHidden();
+  // Escape dismisses a shown card without also going up a board.
+  await openFromBadge(page, 'Open Plan the launch board');
+  await board(page, 'root.layers.Plan the launch');
+  await page.getByRole('link', { name: 'Open Onboarding board', exact: true }).hover();
+  await expect(preview).toContainText('Onboarding');
+  await page.keyboard.press('Escape');
+  await expect(preview).toBeHidden();
+  await expect(stage(page)).toHaveAttribute('data-board', 'root.layers.Plan the launch');
+  await page.keyboard.press('Escape');
+  await board(page, 'root');
 });
 
 test('a step that opens a board selects and renames on click, and opens from its arrow', async ({ page }) => {

@@ -43,6 +43,8 @@ export class DraftStore {
       if (!key.startsWith(prefix) || keys && !keys.has(DraftStore.documentOf(key))) continue;
       try {
         const v = JSON.parse(this.storage.getItem(key)!);
+        // A baseline equal to the source is stored once, as null.
+        if (v?.draft && v.draft.baseline === null) v.draft.baseline = v.draft.source;
         if (typeof v.id === 'string' && typeof v.key === 'string' && Number.isFinite(v.savedAt) && v.clock &&
           Object.values(v.clock).every((n) => Number.isSafeInteger(n) && Number(n) > 0) &&
           (v.draft === null || validDraft(v.draft) && v.draft.key === v.key)) records.push({ ...v, slot: key });
@@ -111,9 +113,12 @@ export class DraftStore {
   }
 
   /** `second` is the document open in the split view's second pane, if any. */
+  /** A draft that does not fit in storage is skipped so the others are still saved; the save then
+   * throws once every other draft and the selection were written, and retries the skipped drafts next time. */
   save(drafts: Draft[], current: string, second?: string) {
     const next = new Map(drafts.map((draft) => [draft.key, draft]));
     const written = new Map<string, Version>();
+    let failure: unknown;
     for (const key of new Set([...next.keys(), ...this.baselines.keys()])) {
       const draft = next.get(key) ?? null;
       const baseline = this.baselines.get(key);
@@ -124,7 +129,13 @@ export class DraftStore {
       clock[this.writer] = (clock[this.writer] ?? 0) + 1;
       const version: Version = { id: `${this.writer}-${clock[this.writer]}`, key, clock, savedAt: Date.now(), draft };
       const slot = `${prefix}${encodeURIComponent(key)}:${version.id}`;
-      this.storage.setItem(slot, JSON.stringify(version));
+      const value = JSON.stringify(draft && draft.baseline === draft.source ? { ...version, draft: { ...draft, baseline: null } } : version);
+      try { this.storage.setItem(slot, value); }
+      catch {
+        // Storage is likely full: reclaim superseded revisions, including this save's, and try once more.
+        try { this.prune(); this.storage.setItem(slot, value); }
+        catch (error) { failure ??= error; continue; }
+      }
       this.clocks.set(key, clock);
       this.pendingMigration.delete(key);
       this.pendingCopies.delete(key);
@@ -142,6 +153,16 @@ export class DraftStore {
     this.storage.setItem(selectionKey, current);
     if (second) this.storage.setItem(secondSelectionKey, second);
     else this.storage.removeItem(secondSelectionKey);
+    if (failure) throw failure;
+  }
+
+  /** Remove revisions that a strictly newer stored revision of the same document supersedes. */
+  private prune() {
+    const records = this.versions();
+    for (const record of records) {
+      if (record.slot === `${prefix}${encodeURIComponent(record.key)}:${record.id}` && records.some((other) => other.key === record.key &&
+        dominates(other.clock, record.clock) && !dominates(record.clock, other.clock))) this.storage.removeItem(record.slot);
+    }
   }
 
   /** The documents another tab saved without this tab seeing those versions.

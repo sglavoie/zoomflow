@@ -328,6 +328,25 @@ layers.detail: {
   expect(result.diagnostics[0].range).toMatch(/^index,/);
 });
 
+it('warns about Markdown images, which D2 drops, but not about ordinary Markdown, code or LaTeX', async () => {
+  const result = lint(await compile(`ok: |md **bold** [link](https://example.com)|
+code: |go x := "![a](b)"|
+math: |latex x^2|
+pic: |\`md
+  Logo ![logo](https://example.com/logo.png)
+\`|
+a -> b: |\`md ![arrow](a.png)\`|
+ok.link: layers.x
+layers.x: {c: |\`md ![c](c.png)\`|}`));
+  expect(result.diagnostics.map(({ rule, severity, board, shape, connection }) => ({ rule, severity, board, item: shape ?? connection }))).toEqual([
+    { rule: 'unsupported-label', severity: 'warning', board: 'root', item: 'pic' },
+    { rule: 'unsupported-label', severity: 'warning', board: 'root', item: '(a -> b)[0]' },
+    { rule: 'unsupported-label', severity: 'warning', board: 'root.layers.x', item: 'c' },
+  ]);
+  expect(result.diagnostics[0].message).toBe('Markdown images are not rendered, so this label shows without them. Use an icon or an image shape instead.');
+  expect(result.diagnostics[0].range).toMatch(/^index,/);
+});
+
 it('finds classes through nested and relative imports, and skips the root when it cannot follow one', async () => {
   const files = { 'zoomflow.d2': library, 'lib/style.d2': '# Shared look\n...@../more\nclasses: {\n  "quoted.name": {style.fill: red}; plain: {label: "a: {b}"}\n}',
     'more.d2': 'classes.deep.style.fill: blue\nnote: |md\n  classes.fake: x\n|' };

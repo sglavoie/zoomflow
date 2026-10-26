@@ -3,10 +3,15 @@ import { shapeClass, type LintDiagnostic } from '@zoomflow/core';
 /** Restore shape anchors removed by D2. Keep self-contained for offline HTML, which
  * passes its own serialized `classOf`: the default is never evaluated there. */
 export function restoreMissingLinks(svg: Element, diagnostics: readonly LintDiagnostic[], classOf: (id: string) => string = shapeClass) {
+  // The first group in document order carrying each class, indexed once when needed.
+  let groups: Map<string, Element> | undefined;
   for (const item of diagnostics) {
     if (item.rule !== 'dangling-link' || !item.shape || !item.target) continue;
-    const encoded = classOf(item.shape);
-    const group = [...svg.querySelectorAll('g')].find((node) => node.classList.contains(encoded));
+    if (!groups) {
+      groups = new Map();
+      for (const node of svg.querySelectorAll('g')) for (const name of node.classList) if (!groups.has(name)) groups.set(name, node);
+    }
+    const group = groups.get(classOf(item.shape));
     if (!group) continue;
     // A linked container can surround an independently linked child shape.
     let link: Element | undefined = group.parentElement?.localName === 'a' ? group.parentElement : undefined;

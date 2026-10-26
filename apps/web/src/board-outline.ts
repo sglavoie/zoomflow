@@ -1,6 +1,7 @@
 import type { Board } from '@zoomflow/core';
 import type { Viewer } from '@zoomflow/viewer';
 import type { BoardSites } from './board-model';
+import { pageListeners } from './canvas-guidance';
 
 const kinds: Record<Board['kind'], string> = { root: 'Board', layers: 'Board', scenarios: 'Scenario', steps: 'Step' };
 
@@ -75,7 +76,9 @@ export function setupBoardOutline(host: HTMLElement, viewer: Viewer, edit: (boar
     details.open = false;
     summary.focus();
   });
-  document.addEventListener('pointerdown', event => { if (details.open && !details.contains(event.target as Node)) details.open = false; }, true);
+  pageListeners(viewer.stage, signal => document.addEventListener('pointerdown', event => {
+    if (details.open && !details.contains(event.target as Node)) details.open = false;
+  }, { capture: true, signal }));
   return {
     render,
     get hidden() { return details.hidden; },

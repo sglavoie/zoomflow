@@ -44,7 +44,7 @@ export function setupFileOpen({ picker, activePane, fileHandles, paneRoots, setA
       const source = await file.text();
       setFileError('');
       const key = picker().rememberFile(file.name, source, source, await sameEntries(fileHandles, () => handle));
-      if (handle) { fileHandles.set(key, handle); rememberDiskVersion(handle, file); }
+      if (handle) { rememberDiskVersion(handle, file); fileHandles.set(key, handle); }
       picker().refresh();
       await activePane().replaceDocument(source, file.name, key);
       return true;

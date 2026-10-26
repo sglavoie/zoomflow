@@ -141,7 +141,8 @@ test('missing board link has a dashed outline and names its target in the viewer
     await expect(link).toHaveCSS('outline-width', '2px');
     await link.click();
     await expect(page.locator('.zf-message')).toBeVisible();
-    await expect(page.locator('.zf-message')).toHaveText(`Missing board: ${label}`);
+    await expect(page.locator('.zf-message > [role="alert"]')).toHaveText(`Missing board: ${label}`);
+    await expect(page.locator('.zf-message > [role="status"]')).toBeEmpty();
     await expect(page.locator('.zf-stage')).toHaveAttribute('data-board', current);
     await expect(link).toHaveCSS('outline-style', 'dashed');
     await link.focus();
@@ -236,7 +237,7 @@ test('handles external links, theme changes, invalid files and missing deep link
   await selectMenuOption(page, '#theme', 'light');
   await expect.poll(background).toBe(light);
   await page.locator('#file').setInputFiles({ name: 'bad.d2', mimeType: 'text/plain', buffer: Buffer.from('broken: {') });
-  await expect(page.getByRole('alert')).toContainText('Error');
+  await expect(page.getByRole('alert').filter({ hasText: 'Error' })).toBeVisible();
   await board(page, 'root');
   await drill(page, 'root.layers.checkout');
 });
@@ -326,7 +327,8 @@ for (const offline of [false, true]) {
     const message = page.locator('.zf-message').first();
     await expect(stage).toHaveAttribute('data-board', 'root');
     await expect(message).toHaveText('Board "nope/deeper" not found; showing Root');
-    await expect(message).toHaveAttribute('role', 'status');
+    await expect(message.locator('[role="status"]')).toHaveText('Board "nope/deeper" not found; showing Root');
+    await expect(message.locator('[role="alert"]')).toBeEmpty();
     expect(await page.evaluate(() => location.hash)).toBe('#/');
     await page.locator('.zf-stage a[href="root.layers.checkout"]').click();
     await expect(stage).toHaveAttribute('data-board', 'root.layers.checkout');

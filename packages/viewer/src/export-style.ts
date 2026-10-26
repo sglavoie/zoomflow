@@ -7,6 +7,7 @@ export const offlineViewerStyle = viewerStyle + `
 *{box-sizing:border-box}
 body{margin:0;height:100dvh;display:flex;flex-direction:column;background:var(--zf-page);color:var(--zf-text);font:15px system-ui,sans-serif}
 header{overflow-wrap:anywhere;padding:16px 24px;border-bottom:1px solid var(--zf-border);font-size:20px}
+header h1{margin:0;font:inherit;font-weight:bold}
 main{flex:1;min-height:0;overflow:auto;display:flex;flex-direction:column;padding:16px 24px}
 button{font:inherit;line-height:20px;min-height:36px;padding:7px 10px;border:1px solid var(--zf-border);border-radius:6px;background:var(--zf-surface);color:inherit;cursor:pointer}
 button:not(:disabled):hover{background:#477de512}

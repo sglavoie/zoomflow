@@ -1,5 +1,6 @@
 import type { setupExamplePicker } from './example-picker';
 import { changedOnDisk, refreshDiskVersion } from './disk-version';
+import { writePermission } from './file-handles';
 import { describeError } from './text';
 
 type PickerWindow = Window & { showSaveFilePicker?: (options?: object) => Promise<FileSystemFileHandle> };
@@ -25,6 +26,8 @@ export type SaveFileTarget = {
 
 /** Save writes the source back to its file, asks for one, or falls back to a download. */
 export function setupSaveFile(button: HTMLButtonElement, target: SaveFileTarget) {
+  /** Notices that a file needs a new destination, cleared once a save succeeds. */
+  const notices = new Set([moved]);
   button.addEventListener('click', async () => {
     if (!target.key()) return;
     button.disabled = true;
@@ -32,8 +35,14 @@ export function setupSaveFile(button: HTMLButtonElement, target: SaveFileTarget)
     const source = target.source();
     const name = target.name();
     let saving: ReturnType<typeof setTimeout> | undefined;
+    const notify = (message: string) => { notices.add(message); if (target.key() === key) target.setActivity(message); };
     try {
       let handle = target.fileHandles.get(key);
+      // A handle restored after a reload needs permission again; without it, ask where to save.
+      if (handle && !await writePermission(handle)) {
+        notify(`Zoomflow may not write ${handle.name}; choose where to save.`);
+        handle = undefined;
+      }
       if (handle && await changedOnDisk(handle)) {
         const focused = document.activeElement;
         const overwrite = await target.picker().confirm('File changed on disk — overwrite?',
@@ -52,7 +61,7 @@ export function setupSaveFile(button: HTMLButtonElement, target: SaveFileTarget)
           if (!(error instanceof DOMException && error.name === 'NotFoundError')) throw error;
           target.fileHandles.delete(key);
           handle = undefined;
-          if (target.key() === key) target.setActivity(moved);
+          notify(moved);
         }
       }
       if (!handle && pickerWindow.showSaveFilePicker) {
@@ -72,7 +81,7 @@ export function setupSaveFile(button: HTMLButtonElement, target: SaveFileTarget)
       if (!saved) return; // The draft may have been removed while the file dialog was open.
       target.fileHandles.set(saved.key, handle);
       if (target.key() === key) target.adopt(saved);
-      if (target.key() === key && target.activity() === moved) target.setActivity('');
+      if (target.key() === key && notices.has(target.activity() ?? '')) target.setActivity('');
     } catch (error) {
       if (target.key() === key && !(error instanceof DOMException && error.name === 'AbortError')) target.setActivity(`Could not save file: ${describeError(error)}`, 'error');
     } finally {

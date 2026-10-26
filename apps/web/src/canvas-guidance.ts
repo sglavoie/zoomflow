@@ -1,6 +1,20 @@
-/** Workspace guidance follows the current task; offline viewers keep navigation-only hints. */
+/** Listen to the page only while the viewer is shown: a hidden pane (closed split view) stops until it resumes. */
+export function pageListeners(stage: HTMLElement, listen: (signal: AbortSignal) => void) {
+  let listening: AbortController | undefined;
+  const start = () => {
+    listening?.abort();
+    listening = new AbortController();
+    listen(listening.signal);
+  };
+  start();
+  stage.addEventListener('zf-resume', start);
+  for (const type of ['zf-suspend', 'zf-destroy']) stage.addEventListener(type, () => listening?.abort());
+}
+
+/** Workspace guidance follows the current task; offline viewers keep navigation-only hints. `canvasKeys` names the
+ * keys that edit a step or topic on the diagram. */
 export function setupCanvasGuidance(stage: HTMLElement, setGuidance: (text: string, priority?: boolean) => void,
-  canSelectSource: () => boolean, editSource: () => void) {
+  canSelectSource: () => boolean, editSource: () => void, canvasKeys: (target: Element) => string | undefined = () => undefined) {
   let input: 'keyboard' | 'touch' | 'mouse' = matchMedia('(pointer: coarse)').matches ? 'touch' : 'mouse';
   let hovered: Element | null = null;
   function update() {
@@ -12,7 +26,10 @@ export function setupCanvasGuidance(stage: HTMLElement, setGuidance: (text: stri
     const activate = input === 'touch' ? 'Tap' : 'Click';
     let text: string;
     if (input === 'keyboard' && focused) {
-      text = link ? `Enter: ${link.getAttribute('aria-label')}${source ? ' · Alt+Enter selects source' : ''}`
+      // Steps and topics edit on the diagram, where Enter may add a topic instead of selecting source.
+      const keys = canvasKeys(focused);
+      text = link ? `Enter: ${link.getAttribute('aria-label')}${keys ? ` · ${keys}` : source ? ' · Alt+Enter selects source' : ''}`
+        : keys ? `${keys} · Tab leaves the diagram`
         : shape && source ? 'Enter selects source · Arrow keys move between shapes'
         : 'Arrow keys move between shapes · Tab leaves the diagram';
     } else if (link && link.getAttribute('data-follow') === 'badge' && !target?.closest('.appendix-icon')) {
@@ -41,22 +58,14 @@ export function setupCanvasGuidance(stage: HTMLElement, setGuidance: (text: stri
     update();
   });
   stage.addEventListener('pointerleave', () => { hovered = null; update(); });
-  // A hidden pane (closed split view) stops listening to the page until the viewer resumes.
-  let listening: AbortController | undefined;
-  const listen = () => {
-    listening?.abort();
-    listening = new AbortController();
-    const { signal } = listening;
+  pageListeners(stage, signal => {
     window.addEventListener('pointerdown', (event) => { input = event.pointerType === 'touch' ? 'touch' : 'mouse'; update(); }, { signal });
     window.addEventListener('keydown', (event) => {
       if (['Tab', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) {
         input = 'keyboard'; update();
       }
     }, { capture: true, signal });
-  };
-  listen();
-  stage.addEventListener('zf-resume', listen);
-  for (const type of ['zf-suspend', 'zf-destroy']) stage.addEventListener(type, () => listening?.abort());
+  });
   stage.addEventListener('focusin', update);
   stage.addEventListener('focusout', () => queueMicrotask(update));
   stage.addEventListener('zf-sourcechange', update);

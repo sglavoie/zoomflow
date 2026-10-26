@@ -17,6 +17,9 @@ it('renames, adds after and removes flow steps', () => {
   const added = editOnCanvas(flow, [], 'step_3', { type: 'add' })!;
   expect(added.select).toBe('step_5');
   expect(readFlow(added.own)!.connections.at(-1)).toEqual({ from: 'step_3', to: 'step_5', label: '' });
+  // Removing a step selects the step that led to it, else the one before it.
+  expect(editOnCanvas(flow, [], 'step_3', { type: 'remove' })!.select).toBe('step_2');
+  expect(editOnCanvas(flow, [], 'step_1', { type: 'remove' })!.select).toBe('step_2');
   const removed = readFlow(editOnCanvas(flow, [], 'step_2', { type: 'remove' })!.own)!;
   expect(removed.steps.map(step => step.id)).toEqual(['step_1', 'step_3', 'step_4']);
   expect(removed.connections).toEqual([]);
@@ -56,4 +59,12 @@ it('edits topics on detail boards and follows a renamed detail board', () => {
   const deeper = editOnCanvas(own, [], 'n_1_2', { type: 'add' })!;
   expect(outline(deeper.own)).toContain('    Porto\n      New topic');
   expect(deeper.select).toBe('n_1_2');
+});
+
+it('reports where each main board topic moved, so attached boards follow renames and removals', () => {
+  const own = mindMapSource(map('Plan\n  People\n    Hiring\n  Money\n    Hiring'));
+  expect(editOnCanvas(own, [], 'n_1_1', { type: 'rename', label: 'Recruiting' })!.moved!.get('n_1_1')).toBe('n_1_1');
+  const removed = editOnCanvas(own, [], 'n_1', { type: 'remove' })!.moved!;
+  expect([...removed]).toEqual([['n', 'n'], ['n_2', 'n_1'], ['n_2_1', 'n_1_1']]);
+  expect(editOnCanvas(own, [], 'n_1', { type: 'sibling' })!.moved!.get('n_2_1')).toBe('n_3_1');
 });

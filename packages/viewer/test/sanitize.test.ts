@@ -44,6 +44,19 @@ describe('sanitizeSvg', () => {
     expect(root.querySelector('#b')!.getAttribute('xlink:href')).toBe('https://example.com/icon.svg');
   });
 
+  it('keeps data: URLs only on images and same-document references only on use', () => {
+    const root = svg('<image id="img" href="data:image/png;base64,AAAA"/><filter><feImage id="fe" xlink:href="data:image/png;base64,AAAA"/></filter>' +
+      '<use id="local" href="#shape"/><use id="remote" href="https://example.com/sprite.svg#a"/><use id="useData" xlink:href="data:image/svg+xml,&lt;svg/&gt;#a"/>' +
+      '<textPath id="text" href="data:image/svg+xml,x"/><linearGradient id="gradient" href=" data:x"/><pattern id="pattern" href="#p"/>');
+    sanitizeSvg(root);
+    const href = (id: string) => root.querySelector(`#${id}`)!.getAttribute('href') ?? root.querySelector(`#${id}`)!.getAttribute('xlink:href');
+    expect(href('img')).toBe('data:image/png;base64,AAAA');
+    expect(href('fe')).toBe('data:image/png;base64,AAAA');
+    expect(href('local')).toBe('#shape');
+    expect(href('pattern')).toBe('#p');
+    for (const id of ['remote', 'useData', 'text', 'gradient']) expect(href(id)).toBeNull();
+  });
+
   it('removes HTML-namespaced elements whatever their prefix, and odd-case script', () => {
     const root = new DOMParser().parseFromString(`<svg xmlns="${svgNs}" xmlns:h="http://www.w3.org/1999/xhtml">` +
       '<h:iframe src="javascript:parent.x=1"/><h:object data="javascript:parent.x=1"/><h:embed src="javascript:parent.x=1"/>' +

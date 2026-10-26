@@ -35,11 +35,13 @@ unchanged lines, selection, and the editor's scroll anchor intact. Large rewrite
 may be grouped into a single highlighted region.
 
 Provider and environment fields are under **AI settings**.
-For Claude Code, the `CLAUDE_CONFIG_DIR` field defaults to `~/.claude`;
-`~` expands to your home directory, and relative paths resolve from the server's
-working directory. Both providers accept environment overrides in the shared
+For Claude Code, the `CLAUDE_CONFIG_DIR` field starts blank: Claude Code then uses
+`CLAUDE_CONFIG_DIR` from the shared field below, else the one the local server was
+started with, else `~/.claude`. `~` expands to your home directory, and relative
+paths resolve from the folder where you ran `pnpm dev`. Typing `~/.claude` in the
+field is explicit and overrides the server's own `CLAUDE_CONFIG_DIR`. Both providers accept environment overrides in the shared
 field, one literal `NAME=value` per line (blank lines and `#` comment lines are
-ignored). Values may contain `=`. The Claude config field takes precedence over
+ignored). Values may contain `=`. A non-blank Claude config field takes precedence over
 `CLAUDE_CONFIG_DIR` in the shared field. These values are passed only to the
 selected CLI process and are kept in the current page, not saved by Zoomflow.
 Variables that change which programs or code the CLI loads are refused with an

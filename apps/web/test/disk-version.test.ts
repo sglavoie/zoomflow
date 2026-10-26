@@ -22,14 +22,19 @@ it('reports external changes since a file was opened or last saved', async () =>
   await expect(changedOnDisk(file)).resolves.toBe(false);
 });
 
-it('treats unknown and unreadable handles as unchanged', async () => {
+it('treats unknown and missing handles as unchanged but asks about unreadable files', async () => {
   const { file, disk } = handle(5);
   await expect(changedOnDisk(file)).resolves.toBe(false);
   rememberDiskVersion(file, await file.getFile());
   disk.readable = false;
+  // A missing file has nothing to overwrite; writing to it reports the move instead.
   await expect(changedOnDisk(file)).resolves.toBe(false);
+  // A failed refresh keeps the last known version rather than forgetting it.
   await refreshDiskVersion(file);
   disk.readable = true;
   disk.modified = 6;
-  await expect(changedOnDisk(file)).resolves.toBe(false);
+  await expect(changedOnDisk(file)).resolves.toBe(true);
+  const denied = { name: 'doc.d2', getFile: async () => { throw new DOMException('Denied', 'NotAllowedError'); } } as unknown as FileSystemFileHandle;
+  rememberDiskVersion(denied, { lastModified: 5 });
+  await expect(changedOnDisk(denied)).resolves.toBe(true);
 });

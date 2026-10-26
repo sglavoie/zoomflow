@@ -5,7 +5,7 @@ import { boundaryNeighbours } from './context';
 import { shapeRanges } from './source';
 
 export type LintRule = 'boundary-in' | 'boundary-out' | 'orphan-board' | 'dangling-link' | 'ignored-link' | 'missing-backlink'
-  | 'undefined-class';
+  | 'undefined-class' | 'unsupported-label';
 export interface LintDiagnostic {
   rule: LintRule;
   severity: 'error' | 'warning';
@@ -336,6 +336,19 @@ export function lint(compiled: LintInput, options: LintOptions = {}): LintResult
           message: `Class "${name}" is not defined, so it changes nothing.${name.startsWith('zf-')
             ? ' Check the spelling, and import the Zoomflow library with ...@zoomflow.' : ' Check the spelling, or define it under classes.'}` });
       }
+    }
+  }
+
+  // D2 draws Markdown as SVG text and silently drops its images; it rejects other HTML when compiling.
+  for (const board of boards.values()) {
+    for (const item of [...board.diagram.shapes, ...board.diagram.connections]) {
+      // Class and table shapes have neither field.
+      const { language, label } = item as { language?: string; label?: string };
+      if (language !== 'markdown' || !/!\[[^\]]*\]\(/.test(label ?? '')) continue;
+      const connection = 'route' in item;
+      diagnostics.push({ rule: 'unsupported-label', severity: 'warning', board: board.id,
+        ...connection ? { connection: item.id } : { shape: item.id, range: shapeRange(board.id, item.id) },
+        message: 'Markdown images are not rendered, so this label shows without them. Use an icon or an image shape instead.' });
     }
   }
 
