@@ -411,9 +411,9 @@ export async function main(args = process.argv.slice(2)): Promise<number> {
         // A lone board's links to other boards lead nowhere.
         if (!all) await save(output, format === 'svg' ? safeLinks((await render(inputPath, '', format)).toString('utf8'), false) : await render(inputPath, '', format));
         else {
-          // File links are kept only when the export holds their file, which needs more than one file.
-          const atlas = documents.length > 1;
+          // File links are kept only when the export holds their file, which may be the entry file itself.
           const bundled = new Set(documents.map((file) => file.path));
+          const atlas = documents.some((file) => linkedFiles(file.compiled.diagram, file.path).some((target) => bundled.has(target)));
           const binaries = new Map<string, Buffer>();
           const rendered: AtlasDocument[] = [];
           for (const file of documents) {
