@@ -1075,11 +1075,13 @@ select:focus-visible {
   margin-left: var(--space-2);
 }
 #open-folder-picker,
+#new-atlas-picker,
 #new-mind-map-picker {
   margin: var(--space-2);
   width: calc(100% - 16px);
   text-align: left;
 }
+#new-atlas-picker,
 #new-mind-map-picker {
   margin-top: 0;
 }

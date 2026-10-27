@@ -372,6 +372,60 @@ test('the atlas map draws every project file and file link, groups unlinked file
   await showing(page, 'health.d2');
 });
 
+test('New atlas starts a home board in an empty folder and creates linked files there', async ({ page }) => {
+  await page.addInitScript(() => {
+    // An empty folder the browser can write to; written files land in `window.atlasFiles`.
+    const written: Record<string, string> = Object.create(null);
+    (window as typeof window & { atlasFiles?: Record<string, string> }).atlasFiles = written;
+    const fileHandle = (name: string) => ({
+      kind: 'file', name,
+      getFile: async () => new File([written[name] ?? ''], name, { lastModified: 1 }),
+      createWritable: async () => ({ write: async (text: string) => { written[name] = text; }, close: async () => {}, abort: async () => {} }),
+      isSameEntry: async (other: { name: string }) => other.name === name,
+    });
+    (window as typeof window & { showDirectoryPicker?: () => Promise<unknown> }).showDirectoryPicker = async () => ({
+      kind: 'directory', name: 'my-atlas',
+      queryPermission: async () => 'granted', requestPermission: async () => 'granted',
+      async *values() { for (const name of Object.keys(written)) yield fileHandle(name); },
+      async getFileHandle(name: string, options?: { create?: boolean }) {
+        if (!(name in written) && !options?.create) throw new DOMException('Not found', 'NotFoundError');
+        written[name] ??= '';
+        return fileHandle(name);
+      },
+    });
+  });
+  await page.goto('/'); await previewReady(page);
+  await page.locator('#example-picker > summary').click();
+  await page.getByRole('button', { name: 'New atlas in an empty folder' }).click();
+  await expect(page.locator('#filename')).toHaveAttribute('title', 'my-atlas/index.d2');
+  await previewReady(page);
+  await expect(page.locator('#activity-status')).toHaveText('Created index.d2. Select a shape and choose New linked diagram… to add a file it opens.');
+  const written = () => page.evaluate(() => (window as typeof window & { atlasFiles: Record<string, string> }).atlasFiles);
+  expect((await written())['index.d2']).toContain('"my-atlas"');
+
+  await (await shapeMenu(page, 'my-atlas', 'my-atlas')).getByRole('menuitem', { name: 'New linked diagram…' }).click();
+  const dialog = page.getByRole('dialog', { name: 'New linked diagram' });
+  await dialog.getByLabel('File name').fill('Health');
+  await dialog.getByRole('button', { name: 'Create and open', exact: true }).click();
+  await expect(page.locator('#filename')).toHaveAttribute('title', 'my-atlas/Health.d2');
+  await previewReady(page);
+  // The folder's handle writes the new file into it, so it is saved rather than a draft.
+  expect(Object.keys(await written()).sort()).toEqual(['Health.d2', 'index.d2']);
+  await expect(page.locator('#draft-status')).not.toHaveText('File has unsaved changes');
+});
+
+test('New atlas without folder access starts a draft project', async ({ page }) => {
+  await page.addInitScript(() => { delete (window as typeof window & { showDirectoryPicker?: unknown }).showDirectoryPicker; });
+  await page.goto('/'); await previewReady(page);
+  await page.locator('#example-picker > summary').click();
+  await page.getByRole('button', { name: 'New atlas in an empty folder' }).click();
+  await expect(page.locator('#filename')).toHaveAttribute('title', 'atlas/index.d2');
+  await previewReady(page);
+  await expect(page.locator('#activity-status')).toContainText('the atlas is a draft');
+  // Linking needs a folder project, which the draft is.
+  await expect((await shapeMenu(page, 'atlas', 'atlas')).getByRole('menuitem', { name: 'New linked diagram…' })).toBeVisible();
+});
+
 /** A folder `name` whose index.d2 links to target.d2, which draws and boards only what it imports from parts.d2. */
 function importingProject(name: string, parts: string) {
   const folder = join(mkdtempSync(join(tmpdir(), 'zoomflow-imports-')), name);

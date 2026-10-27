@@ -42,7 +42,8 @@ use **Retry preview** to try again without losing your source.
    filename menu for built-in examples, **Open .d2** for a file, or **Open folder** for
    a project with relative imports. In a folder, **Link to diagram…** and **New linked
    diagram…** on a shape's menu make it open another file of the project
-   ([atlas guide](docs/workspace.md#link-diagrams-into-an-atlas)). **D2 reference**
+   ([atlas guide](docs/workspace.md#link-diagrams-into-an-atlas)); **New atlas in an empty
+   folder** in the filename menu starts one from nothing. **D2 reference**
    contains searchable examples.
 2. **Explore:** click **Checkout** in the default diagram, then **Charge** to drill
    deeper. Use breadcrumbs or **Boards** to move around, hover a link to preview its

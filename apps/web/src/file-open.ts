@@ -2,12 +2,13 @@ import type { DocumentPane, PaneId } from './document-pane';
 import type { setupExamplePicker } from './example-picker';
 import { readDirectoryHandle, readFolderInput } from './project-files';
 import { rememberDiskVersion } from './disk-version';
-import type { DirectoryHandles, FileHandles } from './file-handles';
+import { createProjectFile, type DirectoryHandles, type FileHandles } from './file-handles';
+import { quote } from './flow-model';
 import { describeError } from './text';
 
 type PickerWindow = Window & {
   showOpenFilePicker?: (options?: object) => Promise<FileSystemFileHandle[]>;
-  showDirectoryPicker?: () => Promise<FileSystemDirectoryHandle>;
+  showDirectoryPicker?: (options?: { mode?: 'read' | 'readwrite' }) => Promise<FileSystemDirectoryHandle>;
 };
 
 export type FileOpenHost = {
@@ -30,7 +31,12 @@ export async function sameEntries(fileHandles: Map<string, FileSystemFileHandle>
   return (key: string) => known.get(key);
 }
 
-/** Open .d2, Open folder and dropped files, which open in the active pane. */
+/** The home board a new atlas starts from: one shape, named after its folder, to link the first file from. */
+export function atlasHome(name: string) {
+  return `# Home board of this atlas. Select a shape and choose New linked diagram… to add a file it opens.\n${quote(name)}\n`;
+}
+
+/** Open .d2, Open folder, New atlas and dropped files, which open in the active pane. */
 export function setupFileOpen({ picker, activePane, fileHandles, directoryHandles, paneRoots, setActive }: FileOpenHost) {
   const pickerWindow = window as PickerWindow;
   const fileStatus = document.querySelector<HTMLElement>('#file-status')!;
@@ -93,6 +99,31 @@ export function setupFileOpen({ picker, activePane, fileHandles, directoryHandle
   }
   document.querySelector<HTMLButtonElement>('#open-folder')!.addEventListener('click', () => void chooseFolder());
   document.querySelector<HTMLButtonElement>('#open-folder-picker')!.addEventListener('click', () => void chooseFolder());
+  /** New atlas: an `index.d2` home board in a folder the person picks, opened as a project to link files from.
+   * A folder that already has diagrams opens unchanged; a browser that cannot write to folders keeps a draft project. */
+  async function newAtlas() {
+    if (!pickerWindow.showDirectoryPicker) {
+      await openFolder({ name: 'atlas', files: [{ path: 'index.d2', source: atlasHome('atlas') }] });
+      activePane().setActivity('This browser cannot write to folders, so the atlas is a draft. Export → Download project .zip keeps its files together.');
+      return;
+    }
+    try {
+      const directory = await pickerWindow.showDirectoryPicker({ mode: 'readwrite' });
+      const existing = await readDirectoryHandle(directory, true);
+      if (existing.files.length) {
+        await openFolder(existing);
+        activePane().setActivity(`${directory.name} already has diagrams, so it opened as a project.`);
+        return;
+      }
+      if (await createProjectFile(directory, 'index.d2', atlasHome(directory.name)) === 'refused')
+        throw new Error('Zoomflow needs permission to write to the folder.');
+      await openFolder(await readDirectoryHandle(directory));
+      activePane().setActivity('Created index.d2. Select a shape and choose New linked diagram… to add a file it opens.');
+    } catch (error) {
+      if (!(error instanceof DOMException && error.name === 'AbortError')) setFileError(`Could not create the atlas: ${describeError(error)}`);
+    }
+  }
+  document.querySelector<HTMLButtonElement>('#new-atlas-picker')!.addEventListener('click', () => void newAtlas());
   folderInput.addEventListener('change', async () => {
     const files = folderInput.files;
     try { if (files?.length) await openFolder(await readFolderInput(files)); }

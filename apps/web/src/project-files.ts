@@ -46,7 +46,8 @@ export async function readFolderInput(files: FileList): Promise<{ name: string; 
 
 type IterableDirectory = FileSystemDirectoryHandle & { values(): AsyncIterable<FileSystemHandle> };
 
-export async function readDirectoryHandle(root: FileSystemDirectoryHandle) {
+/** The `.d2` files of a chosen folder and their handles; a folder without any is an error unless `allowEmpty`. */
+export async function readDirectoryHandle(root: FileSystemDirectoryHandle, allowEmpty = false) {
   const files: ProjectSource[] = [];
   const handles: Record<string, FileSystemFileHandle> = Object.create(null);
   async function visit(directory: FileSystemDirectoryHandle, prefix: string) {
@@ -65,7 +66,7 @@ export async function readDirectoryHandle(root: FileSystemDirectoryHandle) {
     }
   }
   await visit(root, '');
-  if (!files.length) throw new Error('The selected folder has no .d2 files.');
+  if (!files.length && !allowEmpty) throw new Error('The selected folder has no .d2 files.');
   files.sort((a, b) => a.path.localeCompare(b.path));
   return { name: root.name, files, handles, directory: root };
 }
