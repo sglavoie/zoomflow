@@ -374,7 +374,11 @@ export async function main(args = process.argv.slice(2)): Promise<number> {
         return result.diagnostics.some((item) => item.severity === 'error') ? 1 : 0;
       }
       // A lone board cannot follow links, so only multi-board exports bundle linked files.
-      const documents = (await reach(all, true)).map((file) => ({ ...file, diagnostics: lint(file.compiled, { files: file.links }).diagnostics }));
+      const reached = await reach(all, true);
+      // A bundle holds every file its links reach that compiles; links to a file left out then dangle like links to absent files.
+      const held = new Set(reached.map((file) => file.path));
+      const documents = reached.map((file) => ({ ...file, diagnostics: lint(file.compiled, {
+        files: all ? { ...file.links, exists: (target: string) => held.has(target) } : file.links }).diagnostics }));
       const temp = await mkdtemp(join(tmpdir(), 'zoomflow-'));
       try {
         for (const file of documents) {
