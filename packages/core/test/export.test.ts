@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { D2, type Diagram } from '@d2lang/d2';
 import { strFromU8, unzipSync } from 'fflate';
 import { afterAll, describe, expect, it } from 'vitest';
-import { exportBoardsHtml, exportBoardsZip, exportGlyphSource, exportSourcesZip, renderExportBoards, type ExportBoard } from '../src/index';
+import { exportAtlasHtml, exportAtlasZip, exportBoardsHtml, exportBoardsZip, exportGlyphSource, exportSourcesZip, renderExportBoards, type ExportBoard } from '../src/index';
 
 const d2 = new D2();
 afterAll(() => d2.dispose());
@@ -184,5 +184,57 @@ steps: {first: {Step}}`, { layout: 'elk' });
     expect(exportGlyphSource([{ empty: false, svg: '<svg><text> </text></svg>' }, { empty: false, svg: '<svg/>' }] as ExportBoard[])).toBeUndefined();
     // Styles are shared only between two or more shown boards, so one would waste the render.
     expect(exportGlyphSource(boards.slice(0, 2))).toBeUndefined();
+  });
+});
+
+describe('atlas exports', () => {
+  const svg = (label: string, href = '') => `<svg>${href ? `<a href="${href}">` : ''}<text>${label}</text>${href ? '</a>' : ''}</svg>`;
+  async function documents() {
+    const index = await renderExportBoards((await d2.compile('Health: {link: ./health.d2}\nlayers: {Work: {Plan: {link: "./work/plan.d2#/Q1"}}}', { layout: 'elk' })).diagram,
+      async (target) => target ? svg('Plan', './work/plan.d2#/Q1') : svg('Health', './health.d2'));
+    const health = await renderExportBoards((await d2.compile('Sleep\nHome: {link: ./index.d2}', { layout: 'elk' })).diagram, async () => svg('Home', './index.d2'));
+    const plan = await renderExportBoards((await d2.compile('Up: {link: "../health.d2"}\nlayers: {Q1: {Goal}}', { layout: 'elk' })).diagram,
+      async (target) => target ? svg('Goal') : svg('Up', '../health.d2'));
+    return [{ path: 'index.d2', name: 'index', boards: index }, { path: 'health.d2', name: 'health', boards: health },
+      { path: 'work/plan.d2', name: 'work/plan', boards: plan }];
+  }
+
+  it('bundles every file in one offline HTML, routing other files under #/@file/', async () => {
+    const html = exportAtlasHtml(await documents(), { title: 'Life', script: 'void 0;', style: '' });
+    expect(html).toContain(`content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; font-src data:; connect-src 'none'; base-uri 'none'; form-action 'none'"`);
+    const boards: ExportBoard[] = JSON.parse(html.match(/id="zoomflow-data" type="application\/json">(.*?)<\/script>/s)![1]);
+    expect(boards.map((board) => [board.file, board.id, board.hash])).toEqual([
+      ['index.d2', 'root', '#/'], ['index.d2', 'root.layers.Work', '#/Work'],
+      ['health.d2', 'root', '#/@file/health.d2'],
+      ['work/plan.d2', 'root', '#/@file/work%2Fplan.d2'], ['work/plan.d2', 'root.layers.Q1', '#/@file/work%2Fplan.d2/Q1'],
+    ]);
+    expect(JSON.parse(html.match(/id="zoomflow-files" type="application\/json">(.*?)<\/script>/s)![1])).toEqual([
+      { path: 'index.d2', name: 'index' }, { path: 'health.d2', name: 'health' }, { path: 'work/plan.d2', name: 'work/plan' }]);
+    // One file's HTML export stays without file names.
+    expect(exportBoardsHtml((await documents())[0].boards, { title: 't', script: '', style: '' })).not.toContain('zoomflow-files');
+  });
+
+  it('zips other files in their own folders and points file links at their root SVGs', async () => {
+    const files = unzipSync(exportAtlasZip(await documents()));
+    expect(Object.keys(files)).toEqual(['root.svg', 'Work.svg', '@files/health.d2/root.svg', '@files/work/plan.d2/root.svg', '@files/work/plan.d2/Q1.svg']);
+    expect(strFromU8(files['root.svg'])).toContain('href="@files/health.d2/root.svg"');
+    expect(strFromU8(files['Work.svg'])).toContain('href="@files/work/plan.d2/root.svg"');
+    expect(strFromU8(files['@files/health.d2/root.svg'])).toContain('href="../../root.svg"');
+    expect(strFromU8(files['@files/work/plan.d2/root.svg'])).toContain('href="../../health.d2/root.svg"');
+  });
+
+  it('keeps links to files outside the export and avoids a board folder named @files', async () => {
+    const [index, health] = await documents();
+    index.boards.push({ ...index.boards[1], id: 'x', path: '@files/x.svg' });
+    const files = unzipSync(exportAtlasZip([index, health]));
+    expect(Object.keys(files)).toContain('@@files/health.d2/root.svg');
+    expect(strFromU8(files['Work.svg'])).toContain('href="./work/plan.d2#/Q1"');
+  });
+
+  it('keeps missing file links for the offline viewer to restore', async () => {
+    const compiled = await d2.compile('Gone: {link: ./gone.d2}', { layout: 'elk' });
+    const diagnostic = { rule: 'dangling-file-link', severity: 'error', message: 'Missing', board: 'root', shape: 'Gone', target: './gone.d2' } as const;
+    const boards = await renderExportBoards(compiled.diagram, async () => '<svg/>', [diagnostic]);
+    expect(boards[0].missingLinks).toEqual([diagnostic]);
   });
 });

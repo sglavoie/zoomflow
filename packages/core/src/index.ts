@@ -1,6 +1,6 @@
 import type { Diagram } from '@d2lang/d2';
 export { parentContext, type ParentContext } from './context';
-export { renderExportBoards, exportBoardsZip, exportSourcesZip, exportBoardsHtml, exportGlyphSource, type ExportBoard } from './export';
+export { renderExportBoards, exportBoardsZip, exportSourcesZip, exportBoardsHtml, exportGlyphSource, exportAtlasHtml, exportAtlasZip, type ExportBoard, type AtlasDocument } from './export';
 export type { Diagram, CompileResponse, RenderOptions } from '@d2lang/d2';
 export { boardBlocks, indexShapeSources, parseSourceRange, shapeRanges, type SourceRange, type ShapeSource } from './source';
 export { lint, boardLabel, type LintRule, type LintDiagnostic, type LintOptions, type LintResult, type BoundaryEvaluation } from './lint';

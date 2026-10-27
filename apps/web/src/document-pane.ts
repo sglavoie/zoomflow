@@ -327,6 +327,14 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
     return result;
   }
 
+  /** Compile another file of this pane's folder project for an export that follows file links. */
+  async function compileProjectFile(path: string, fs: Record<string, string>): Promise<Pick<DocumentExport, 'diagram' | 'render' | 'diagnostics'>> {
+    const { d2 } = await shared.compiler.get();
+    const compiled = await compileSource(fs[path]!, { inputPath: path, fs });
+    const render: RenderBoard = (target) => d2.render(compiled.diagram, { ...compiled.renderOptions, target, noXMLTag: true });
+    return { diagram: compiled.diagram, render, diagnostics: lint(compiled, { files: lintFiles(path) }).diagnostics };
+  }
+
   function setFileStack(stack: FileVisit[]) {
     fileStack = stack;
     viewer.setTrailPrefix(stack.map((visit, index) => ({ name: projectLabel(visit.path), activate: () => void returnToFile(index) })));
@@ -709,6 +717,7 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
     get generation() { return generation; },
     get documentExport() { return documentExport; },
     get sourceError() { return sourceError; },
+    compileProjectFile,
     /** The preview reflects the current source, so exports and source selection are valid. */
     get current() { return mappedSource === editor.source; },
     replaceDocument,

@@ -1,5 +1,5 @@
 import { strToU8, zipSync } from 'fflate';
-import { indexBoards, type Diagram } from './index';
+import { atlasHash, classifyHref, indexBoards, resolveFilePath, type Diagram } from './index';
 import type { LintDiagnostic } from './lint';
 import { parentContext, type ParentContext } from './context';
 
@@ -13,7 +13,12 @@ export interface ExportBoard {
   svg: string;
   missingLinks?: LintDiagnostic[];
   parentContext?: ParentContext[];
+  /** The project path of the diagram file this board belongs to, in atlas exports. */
+  file?: string;
 }
+
+/** One diagram file of an atlas: its project path, the name its breadcrumb shows, and its rendered boards. */
+export interface AtlasDocument { path: string; name: string; boards: ExportBoard[] }
 
 /** Keep Unicode names; replace only what archives or Windows/macOS/Linux file systems reject. */
 function segment(name: string): string {
@@ -60,7 +65,7 @@ export async function renderExportBoards(diagram: Diagram, render: (target: stri
     result.push({ id: board.id, name: board.name, hash: board.hash, parent: board.parent,
       path: `${parent}${name}.svg`, empty: board.diagram.shapes.length === 0, svg: '',
       parentContext: parentContext(board, boards),
-      missingLinks: diagnostics.filter((item) => item.rule === 'dangling-link' && item.board === board.id && item.shape && item.target) });
+      missingLinks: diagnostics.filter((item) => (item.rule === 'dangling-link' || item.rule === 'dangling-file-link') && item.board === board.id && item.shape && item.target) });
   }
   const targets = [...boards.values()].map((board) => board.target);
   const pending = result.map((_, index) => index).filter((index) => !(options.skipEmpty && result[index].empty));
@@ -86,6 +91,34 @@ export function exportBoardsZip(boards: readonly ExportBoard[],
     files[board.path] = typeof data === 'string' ? strToU8(data) : data;
   }
   return new Uint8Array(zipSync(files));
+}
+
+/** The relative path from the file at `from` to the file at `to`, both ZIP paths. */
+function relativePath(from: string, to: string): string {
+  const base = from.split('/').slice(0, -1);
+  const parts = to.split('/');
+  let common = 0;
+  while (common < base.length && common < parts.length - 1 && base[common] === parts[common]) common++;
+  return [...base.slice(common).map(() => '..'), ...parts.slice(common)].join('/');
+}
+
+/** Zip every board of every atlas file. The entry file keeps its usual layout; other files go in
+ * `@files/<project path>/` folders, and file links point at the relative path of their target's root SVG. */
+export function exportAtlasZip(documents: readonly AtlasDocument[]): Uint8Array<ArrayBuffer> {
+  const taken = documents[0].boards.map((board) => board.path.normalize('NFC').toLowerCase());
+  let folder = '@files';
+  while (taken.some((path) => path === `${folder}.svg` || path.startsWith(`${folder}/`))) folder = `@${folder}`;
+  const placed = documents.map((document, index) => document.boards.map((board) =>
+    ({ ...board, file: document.path, path: index ? `${folder}/${document.path}/${board.path}` : board.path })));
+  const roots = new Map(documents.map((document, index) => [document.path, (placed[index].find((board) => board.id === 'root') ?? placed[index][0])?.path]));
+  return exportBoardsZip(placed.flat().map((board) => ({ ...board, svg: board.svg.replace(/((?:xlink:)?href=")([^"]*)"/g, (match, prefix: string, href: string) => {
+    const link = classifyHref(unescapeXml(href));
+    const target = link.kind === 'file' ? resolveFilePath(board.file, link.path) : undefined;
+    const root = target === undefined ? undefined : roots.get(target);
+    if (root === undefined) return match;
+    const relative = encodeURI(relativePath(board.path, root)).replace(/[#?]/g, encodeURIComponent);
+    return `${prefix}${relative.replace(/&/g, '&amp;')}"`;
+  }) })));
 }
 
 /** Keep the relative D2 tree intact when a browser project has no writable folder handle. */
@@ -174,16 +207,30 @@ function shareStyles(svgs: string[], glyphs?: string): { svgs: string[]; style: 
   return { svgs: result, style };
 }
 
+type HtmlOptions = { title: string; script: string; style: string; /** Rendered {@link exportGlyphSource}. */ glyphs?: string };
+
 /** The caller supplies its DOM runtime; core stays usable in Node without a DOM. */
-export function exportBoardsHtml(boards: readonly ExportBoard[],
-  options: { title: string; script: string; style: string; /** Rendered {@link exportGlyphSource}. */ glyphs?: string }): string {
+export function exportBoardsHtml(boards: readonly ExportBoard[], options: HtmlOptions): string {
+  return boardsHtml(boards, options);
+}
+
+/** One offline HTML for several diagram files, the entry file first. Its boards keep their routes;
+ * the boards of other files use {@link atlasHash} routes, so file links open them in place. */
+export function exportAtlasHtml(documents: readonly AtlasDocument[], options: HtmlOptions): string {
+  const boards = documents.flatMap((document, index) => document.boards.map((board) =>
+    ({ ...board, file: document.path, hash: index ? atlasHash(document.path, board.hash) : board.hash })));
+  return boardsHtml(boards, options, documents.map(({ path, name }) => ({ path, name })));
+}
+
+function boardsHtml(boards: readonly ExportBoard[], options: HtmlOptions, files?: { path: string; name: string }[]): string {
   const title = options.title.replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char]!);
   // The viewer never shows an empty board's SVG.
   const shown = boards.filter((board) => !board.empty);
   const shared = shareStyles(shown.map((board) => board.svg), options.glyphs);
   const embedded = boards.map((board) => ({ ...board, svg: board.empty ? '' : shared.svgs[shown.indexOf(board)] }));
   // SVG labels can contain HTML closing tags. Never embed unescaped JSON in a script.
-  const data = JSON.stringify(embedded).replace(/</g, '\\u003c').replace(/\u2028/g, '\\u2028').replace(/\u2029/g, '\\u2029');
+  const json = (value: unknown) => JSON.stringify(value).replace(/</g, '\\u003c').replace(/\u2028/g, '\\u2028').replace(/\u2029/g, '\\u2029');
+  const data = json(embedded);
   const style = shared.style;
   // Offline and self-contained: only the inline runtime and styles, with embedded images and fonts.
   const csp = "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; font-src data:; connect-src 'none'; base-uri 'none'; form-action 'none'";
@@ -192,5 +239,5 @@ export function exportBoardsHtml(boards: readonly ExportBoard[],
 <title>${title}</title><style>${options.style}</style>${style ? `<style id="zoomflow-svg-style">${style}</style>` : ''}</head><body>
 <header><h1>${title}</h1></header><main id="viewer"><nav class="zf-breadcrumbs" aria-label="Breadcrumb"></nav><div class="zf-context" role="group" aria-label="Parent connections" hidden></div><div class="zf-message"><span role="status"></span><span role="alert"></span></div><div class="zf-visually-hidden" aria-live="polite"></div><div class="zf-stage" role="region" aria-label="Diagram" tabindex="-1"></div></main>
 <footer>Select a linked shape to explore · Esc or Backspace goes up</footer>
-<script id="zoomflow-data" type="application/json">${data}</script><script>${options.script}</script></body></html>`;
+<script id="zoomflow-data" type="application/json">${data}</script>${files ? `<script id="zoomflow-files" type="application/json">${json(files)}</script>` : ''}<script>${options.script}</script></body></html>`;
 }

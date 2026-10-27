@@ -771,6 +771,9 @@ header > strong {
   border-radius: var(--radius);
   cursor: pointer;
 }
+#export-format .export-choice[hidden] {
+  display: none;
+}
 .export-choice:has(:checked) {
   background: var(--hover);
   border-color: var(--accent) !important;

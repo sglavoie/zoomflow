@@ -1,8 +1,8 @@
 import { expect, test, type Page, type TestInfo } from '@playwright/test';
-import { pathToFileURL } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { readFile } from 'node:fs/promises';
 import { selectMenuOption, downloadExport } from './menu';
-import { source, previewReady, stubAiStatus, board, drill, comparesVisuals, regularFont } from './helpers';
+import { source, previewReady, stubAiStatus, board, drill, comparesVisuals, regularFont, openFolder } from './helpers';
 
 async function download(page: Page, format: string, info: TestInfo) {
   await selectMenuOption(page, '#export-format', format);
@@ -440,4 +440,54 @@ test('interactive HTML is titled with the document name without its .d2 extensio
   const html = await readFile(await download(page, 'html', info), 'utf8');
   expect(html).toContain('<title>order</title>');
   expect(html).toContain('<header><h1>order</h1></header>');
+});
+
+test('exports a folder project as one offline atlas and links file SVGs in the ZIP', async ({ page, context }, info) => {
+  await page.goto('/');
+  await openFolder(page, fileURLToPath(new URL('../../fixtures/atlas', import.meta.url)));
+  await expect(page.locator('#filename')).toHaveAttribute('title', 'atlas/index.d2');
+  await previewReady(page);
+  await selectMenuOption(page, '#export-format', 'atlas');
+  await expect(page.locator('#export-scope')).toHaveText('This file and every file it links to · Interactive atlas HTML');
+  const pending = page.waitForEvent('download');
+  await downloadExport(page);
+  const result = await pending;
+  expect(result.suggestedFilename()).toBe('index-atlas.html');
+  const path = info.outputPath(result.suggestedFilename());
+  await result.saveAs(path);
+  await expect(page.locator('#export')).toBeEnabled();
+  const html = await readFile(path, 'utf8');
+  // Every file the home board reaches, and none it does not.
+  for (const file of ['health.d2', 'work%2Findex.d2', 'projects%2Fzoomflow.d2']) expect(html).toContain(`#/@file/${file}`);
+  expect(html).not.toContain('broken');
+
+  // ZIP entry names are stored as plain text; core tests cover the rewritten links.
+  const zip = (await readFile(await download(page, 'zip', info))).toString('latin1');
+  for (const file of ['root.svg', '@files/health.d2/root.svg', '@files/work/index.d2/root.svg', '@files/projects/zoomflow.d2/Viewer.svg']) expect(zip).toContain(file);
+
+  await context.setOffline(true);
+  const offline = await context.newPage();
+  await offline.goto(pathToFileURL(path).href);
+  const stage = offline.locator('.zf-stage');
+  const crumbs = offline.locator('.zf-breadcrumbs button');
+  await expect(stage).toHaveAttribute('data-file', 'index.d2');
+  await offline.locator('.zf-stage a[data-file="./work/index.d2"]').click();
+  await expect(stage).toHaveAttribute('data-file', 'work/index.d2');
+  expect(await offline.evaluate(() => location.hash)).toBe('#/@file/work%2Findex.d2');
+  await expect(crumbs).toHaveText(['index', 'Root']);
+  // The fragment opens the linked file's board.
+  await offline.locator('.zf-stage a[data-file="../projects/zoomflow.d2#/Viewer"]').click();
+  await expect(stage).toHaveAttribute('data-file', 'projects/zoomflow.d2');
+  await expect(stage).toHaveAttribute('data-board', 'root.layers.Viewer');
+  await expect(crumbs).toHaveText(['index', '…', 'work/index', 'Root', 'Viewer']);
+  // Back moves across files; a reload keeps the place and its trail.
+  await offline.goBack();
+  await expect(stage).toHaveAttribute('data-file', 'work/index.d2');
+  await offline.reload();
+  await expect(stage).toHaveAttribute('data-file', 'work/index.d2');
+  await expect(crumbs).toHaveText(['index', 'Root']);
+  await stage.focus();
+  await offline.keyboard.press('Escape');
+  await expect(stage).toHaveAttribute('data-file', 'index.d2');
+  await expect(crumbs).toHaveText(['Root']);
 });

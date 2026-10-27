@@ -1,4 +1,4 @@
-import { boardLabel, classifyHref, type ExportBoard, shapeClass } from '@zoomflow/core';
+import { atlasHash, boardLabel, classifyHref, type ExportBoard, parseAtlasHash, resolveFilePath, shapeClass } from '@zoomflow/core';
 import { restoreMissingLinks } from './missing-links';
 import { childToward, renderParentContext, resolveRouteHash, restoreTrail, routeFallbackNotice, simplifyTrail, watchHistory } from './navigation';
 import { clampBox, createViewport, revealBox } from './viewport';
@@ -109,18 +109,54 @@ export async function rasterizeSvg(svg: string): Promise<Blob> {
 // compiled source text, so they cannot reach module imports or one another directly.
 const runtime = { classifyHref, shapeClass, boardLabel, sanitizeSvg, restoreMissingLinks, simplifyTrail, renderParentContext,
   createViewport, clampBox, revealBox, decorateLinks, splitHitArea, setupBreadcrumbs, resolveRouteHash, routeFallbackNotice,
-  restoreTrail, watchHistory, childToward, resolveLink, prepareLinks, followLink, linkTo };
+  restoreTrail, watchHistory, childToward, resolveLink, prepareLinks, followLink, linkTo, atlasHash, parseAtlasHash, resolveFilePath };
 
 // Keep this runtime self-contained: its compiled function body is embedded in HTML.
 // It consumes the same board IDs, hashes, parent and visited-trail model as Viewer.
+// An atlas embeds several files: boards carry their `file`, and `#zoomflow-files` names each file.
 function offlineViewer(lib: typeof runtime) {
   const boards: ExportBoard[] = JSON.parse(document.getElementById('zoomflow-data')!.textContent!);
-  const byId = new Map(boards.map((board) => [board.id, board]));
-  const exists = (id: string) => byId.has(id);
-  const parentOf = (id: string) => byId.get(id)?.parent;
-  const resolve = (href: string) => lib.resolveLink(href, exists, lib.classifyHref);
+  const fileData = document.getElementById('zoomflow-files');
+  const names = new Map<string, string>(fileData ? (JSON.parse(fileData.textContent!) as { path: string; name: string }[]).map((file) => [file.path, file.name]) : []);
+  type Doc = { file: string; boards: ExportBoard[]; byId: Map<string, ExportBoard>; byRoute: Map<string, ExportBoard> };
+  const docs = new Map<string, Doc>();
+  for (const board of boards) {
+    const file = board.file ?? '';
+    if (!docs.has(file)) docs.set(file, { file, boards: [], byId: new Map(), byRoute: new Map() });
+    const owner = docs.get(file)!;
+    owner.boards.push(board);
+    owner.byId.set(board.id, board);
+    // Routes within the file, as its own links name them.
+    owner.byRoute.set(lib.parseAtlasHash(board.hash).hash, board);
+  }
+  const entry = docs.get(boards[0].file ?? '')!;
+  let doc = entry;
+  /** The project path a file link of the shown file opens, when the export holds that file. */
+  const fileOf = (path: string) => {
+    const target = names.size ? lib.resolveFilePath(doc.file, path) : undefined;
+    return target !== undefined && docs.has(target) ? target : undefined;
+  };
+  const exists = (id: string) => doc.byId.has(id);
+  const parentOf = (id: string) => doc.byId.get(id)?.parent;
+  const resolve = (href: string) => lib.resolveLink(href, exists, lib.classifyHref, (path) => fileOf(path) !== undefined);
   // boardLabel reads only `name` and `parent`, which export boards share with live ones.
-  const describe = (id: string) => lib.boardLabel(id, byId as unknown as Parameters<typeof boardLabel>[1]);
+  const describe = (id: string) => lib.boardLabel(id, doc.byId as unknown as Parameters<typeof boardLabel>[1]);
+  const describeFile = (path: string) => {
+    const target = lib.resolveFilePath(doc.file, path);
+    return (target !== undefined && names.get(target)) || (target ?? path).replace(/^.*\//, '').replace(/\.d2$/i, '');
+  };
+  /** The board a file link opens: its fragment's board, or the nearest existing ancestor. */
+  function fileTarget(path: string, hash: string) {
+    const target = docs.get(fileOf(path)!)!;
+    // An authored fragment names boards as written, so `#/My Board` names `#/My%20Board`.
+    const requested = (hash || '#/').split('/').map((segment, index) => {
+      if (index === 0 || segment.startsWith('@')) return segment;
+      try { return encodeURIComponent(decodeURIComponent(segment)); } catch { return segment; }
+    }).join('/') || '#/';
+    const route = lib.resolveRouteHash(requested, (item) => target.byRoute.has(item));
+    const board = target.byRoute.get(route) ?? target.boards[0];
+    return { target, board, notice: lib.routeFallbackNotice(requested, route, board.name) };
+  }
   const stage = document.querySelector<HTMLElement>('.zf-stage')!;
   const crumbs = document.querySelector<HTMLElement>('.zf-breadcrumbs')!;
   const breadcrumbs = lib.setupBreadcrumbs(crumbs);
@@ -145,8 +181,11 @@ function offlineViewer(lib: typeof runtime) {
   lib.createViewport(stage, area, lib.clampBox, lib.revealBox);
   let current = boards[0];
   let trail: string[] = [];
-  function ancestors(board: ExportBoard): string[] {
-    return board.parent ? [...ancestors(byId.get(board.parent)!), board.id] : [board.id];
+  /** The files passed through on the way to the shown one, each with the trail it was left on. */
+  type Visit = { file: string; trail: string[] };
+  let stack: Visit[] = [];
+  function ancestors(board: ExportBoard, owner = doc): string[] {
+    return board.parent ? [...ancestors(owner.byId.get(board.parent)!, owner), board.id] : [board.id];
   }
   function syncBackground() {
     const background = stage.querySelector('svg > rect');
@@ -154,68 +193,106 @@ function offlineViewer(lib: typeof runtime) {
   }
   // D2's styles follow the reader's color scheme; keep the letterboxing around the SVG in step.
   matchMedia('(prefers-color-scheme: dark)').addEventListener('change', syncBackground);
-  function show(board: ExportBoard, visits: string[], replace = false, notice = '') {
+  function show(board: ExportBoard, visits: string[], replace = false, notice = '', owner = doc) {
     const focusStage = stage.contains(document.activeElement);
     const focusCrumb = crumbs.contains(document.activeElement);
-    const previous = current.id;
+    const previous = owner === doc ? current.id : undefined;
+    doc = owner;
     current = board;
     trail = lib.simplifyTrail(visits);
     setMessage(notice);
     if (board.empty) stage.textContent = 'This board is empty.';
     else {
-      const doc = new DOMParser().parseFromString(board.svg, 'image/svg+xml');
+      const parsed = new DOMParser().parseFromString(board.svg, 'image/svg+xml');
       // Sanitize while the parsed SVG is still inert, before importing it into this document.
-      if (doc.querySelector('parsererror') || !lib.sanitizeSvg(doc.documentElement)) {
+      if (parsed.querySelector('parsererror') || !lib.sanitizeSvg(parsed.documentElement)) {
         stage.textContent = 'This board could not be displayed.';
         setMessage(`Invalid SVG for ${board.name}`, true);
       } else {
-        const svg = document.importNode(doc.documentElement, true);
+        const svg = document.importNode(parsed.documentElement, true);
         svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
         lib.restoreMissingLinks(svg, board.missingLinks ?? [], lib.shapeClass);
-        lib.prepareLinks(svg, resolve, (id) => byId.get(id)?.hash);
+        lib.prepareLinks(svg, resolve, (id) => doc.byId.get(id)?.hash, (path, hash) => fileTarget(path, hash).board.hash);
         stage.replaceChildren(svg);
-        lib.decorateLinks(svg, byId, board.id, lib.splitHitArea, describe);
+        lib.decorateLinks(svg, doc.byId, board.id, lib.splitHitArea, describe, describeFile);
       }
     }
     syncBackground();
     stage.dataset.board = board.id;
+    if (names.size) stage.dataset.file = doc.file;
     stage.dispatchEvent(new Event('zf-boardchange'));
     stage.setAttribute('aria-label', `${board.name} diagram`);
     announcement.textContent = `${board.name} board`;
     lib.renderParentContext(context, board.parentContext ?? []);
     const visited = trail;
-    breadcrumbs.render(visited.map((id, index) => ({ name: byId.get(id)!.name,
-      activate: () => show(byId.get(id)!, visited.slice(0, index + 1)) })));
+    const shown = doc;
+    const files = stack;
+    breadcrumbs.render([...files.map((visit, index) => ({ name: names.get(visit.file) ?? visit.file, activate: () => returnTo(index) })),
+      ...visited.map((id, index) => ({ name: shown.byId.get(id)!.name, activate: () => show(shown.byId.get(id)!, visited.slice(0, index + 1)) }))]);
     if (focusStage || focusCrumb) {
       // Going up keeps the keyboard position: focus the link leading back down, which the
       // viewport reveals as it receives focus. Other crumb moves keep focus in the trail.
-      const child = lib.childToward(previous, board.id, parentOf);
+      const child = previous && lib.childToward(previous, board.id, parentOf);
       const link = child && lib.linkTo(stage, child);
       (link || (focusStage ? stage : crumbs.querySelector<HTMLButtonElement>('button[aria-current]')))?.focus({ preventScroll: true });
     }
-    history[replace || location.hash === board.hash ? 'replaceState' : 'pushState']({ zoomflowTrail: trail }, '', board.hash);
+    history[replace || location.hash === board.hash ? 'replaceState' : 'pushState']({ zoomflowTrail: trail, zoomflowFiles: stack }, '', board.hash);
   }
+  /** Open an earlier file of the stack where it was left. */
+  function returnTo(index: number) {
+    const visit = stack[index];
+    const owner = docs.get(visit.file)!;
+    stack = stack.slice(0, index);
+    show(owner.byId.get(visit.trail.at(-1)!)!, visit.trail, false, '', owner);
+  }
+  function openFile(path: string, hash: string) {
+    const { target, board, notice } = fileTarget(path, hash);
+    if (target === doc) { show(board, [...trail, board.id], false, notice); return; }
+    // Following a link back to a file already passed through returns to that point of the stack.
+    const index = stack.findIndex((visit) => visit.file === target.file);
+    stack = index >= 0 ? stack.slice(0, index) : [...stack, { file: doc.file, trail }];
+    show(board, ancestors(board, target), false, notice, target);
+  }
+  const validVisit = (visit: unknown): visit is Visit => {
+    const { file, trail: visits } = (visit ?? {}) as Partial<Visit>;
+    const owner = typeof file === 'string' ? docs.get(file) : undefined;
+    return Boolean(owner) && Array.isArray(visits) && visits.length > 0 && visits.every((id) => typeof id === 'string' && owner!.byId.has(id));
+  };
   function restore() {
     const requested = location.hash;
-    const hash = lib.resolveRouteHash(requested, (item) => boards.some((entry) => entry.hash === item));
-    const board = boards.find((item) => item.hash === hash) ?? boards[0];
-    show(board, lib.restoreTrail(history.state?.zoomflowTrail, board.id, exists, () => ancestors(board)), true,
-      lib.routeFallbackNotice(requested, board.hash, board.name));
+    const { path, hash } = lib.parseAtlasHash(requested);
+    const owner = path === undefined ? entry : docs.get(path);
+    const target = owner ?? entry;
+    const route = lib.resolveRouteHash(owner ? hash : '#/', (item) => target.byRoute.has(item));
+    const board = target.byRoute.get(route) ?? target.boards[0];
+    const saved = history.state?.zoomflowFiles;
+    // Opened straight from an address, another file leads back to the entry file.
+    stack = Array.isArray(saved) && saved.every(validVisit) ? saved.map((visit) => ({ file: visit.file, trail: [...visit.trail] }))
+      : target === entry ? [] : [{ file: entry.file, trail: [entry.boards[0].id] }];
+    const savedTrail = history.state?.zoomflowTrail;
+    const notice = owner ? lib.routeFallbackNotice(hash, route, board.name) : `Missing file: ${path}; showing ${board.name}`;
+    show(board, lib.restoreTrail(savedTrail, board.id, (id) => target.byId.has(id), () => ancestors(board, target)), true, notice, target);
   }
   function follow(event: MouseEvent | KeyboardEvent) {
     const action = lib.followLink(event, resolve);
-    if (action?.kind === 'board') show(byId.get(action.target)!, [...trail, action.target]);
+    if (action?.kind === 'board') show(doc.byId.get(action.target)!, [...trail, action.target]);
+    else if (action?.kind === 'file') openFile(action.path, action.hash);
     else if (action?.kind === 'missing') setMessage(`Missing board: ${describe(action.target)}`, true);
-    else if (action?.kind === 'missing-file') setMessage(`Missing file: ${action.path}`, true);
+    else if (action?.kind === 'missing-file') setMessage(`Missing file: ${describeFile(action.path)}`, true);
   }
   stage.addEventListener('click', follow);
   stage.addEventListener('auxclick', (event) => lib.followLink(event, resolve));
   stage.addEventListener('keydown', (event) => { if (event.key === 'Enter') follow(event); });
   window.addEventListener('keydown', (event) => {
-    if (!event.defaultPrevented && !event.repeat && !event.altKey && !event.ctrlKey && !event.metaKey &&
-      (event.key === 'Escape' || event.key === 'Backspace') && current.parent) {
+    if (event.defaultPrevented || event.repeat || event.altKey || event.ctrlKey || event.metaKey ||
+      (event.key !== 'Escape' && event.key !== 'Backspace')) return;
+    if (current.parent) {
       event.preventDefault();
-      show(byId.get(current.parent)!, [...trail, current.parent]);
+      show(doc.byId.get(current.parent)!, [...trail, current.parent]);
+    } else if (stack.length) {
+      // On a file's root board, go back to the file that opened it.
+      event.preventDefault();
+      returnTo(stack.length - 1);
     }
   });
   lib.watchHistory(window, restore);
