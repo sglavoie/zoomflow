@@ -431,6 +431,7 @@ export function setupBoardTools(scope: PaneScope, viewer: Viewer, options: Board
   function closeMenu(restore = true) {
     if (menu.hidden) return;
     menu.hidden = true;
+    delete shapeGroup.dataset.behindMenu;
     menuTrigger?.setAttribute('aria-expanded', 'false');
     menuTrigger = undefined;
     if (restore && menuReturn?.isConnected) menuReturn.focus({ preventScroll: true });
@@ -472,6 +473,8 @@ export function setupBoardTools(scope: PaneScope, viewer: Viewer, options: Board
       element.setAttribute('aria-expanded', 'true');
     }
     menu.hidden = false;
+    // A shape's menu repeats the bar's actions, so the bar steps aside; the bar's own Add board… menu keeps it.
+    if (boardsOnly) delete shapeGroup.dataset.behindMenu; else shapeGroup.dataset.behindMenu = '';
     // Keep the menu on screen beside the pointer or shape.
     const { width, height } = menu.getBoundingClientRect();
     menu.style.left = `${Math.max(8, Math.min(x, innerWidth - width - 8))}px`;

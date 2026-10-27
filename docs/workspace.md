@@ -242,9 +242,10 @@ opens a project, and that project opens its architecture. A folder opens at
 `index.d2` (or `main.d2`) when it has one.
 
 To start an atlas from nothing, choose **New atlas in an empty folder** in the filename
-menu and pick or create an empty folder. Zoomflow writes an `index.d2` home board there
-with one shape named after the folder and opens the folder as a project; select that
-shape and choose **New linked diagram…** to add the first file it opens. A folder that
+menu and pick or create an empty folder. Zoomflow writes an `index.d2` home board there,
+a mind map whose root topic is named after the folder, and opens the folder as a project.
+Select the root and choose **Add subtopic** (⌘/Ctrl+Enter) for each area, then
+**New linked diagram…** on a topic to add the file it opens. A folder that
 already has `.d2` files opens as a project unchanged. In browsers that cannot write to
 folders, the atlas starts as a draft project named `atlas`: its files are drafts that
 **Save .d2** or **Export → Download project .zip** keeps.

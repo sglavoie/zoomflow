@@ -190,6 +190,9 @@ header > strong {
 .board-selection[hidden] {
   display: none;
 }
+.board-selection[data-behind-menu] {
+  visibility: hidden;
+}
 .board-selection strong {
   color: var(--text);
 }

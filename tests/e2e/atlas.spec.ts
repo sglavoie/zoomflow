@@ -372,7 +372,7 @@ test('the atlas map draws every project file and file link, groups unlinked file
   await showing(page, 'health.d2');
 });
 
-test('New atlas starts a home board in an empty folder and creates linked files there', async ({ page }) => {
+test('New atlas starts a mind map home board in an empty folder and links a file from each topic', async ({ page }) => {
   await page.addInitScript(() => {
     // An empty folder the browser can write to; written files land in `window.atlasFiles`.
     const written: Record<string, string> = Object.create(null);
@@ -399,19 +399,37 @@ test('New atlas starts a home board in an empty folder and creates linked files 
   await page.getByRole('button', { name: 'New atlas in an empty folder' }).click();
   await expect(page.locator('#filename')).toHaveAttribute('title', 'my-atlas/index.d2');
   await previewReady(page);
-  await expect(page.locator('#activity-status')).toHaveText('Created index.d2. Select a shape and choose New linked diagram… to add a file it opens.');
+  await expect(page.locator('#activity-status')).toHaveText('Created index.d2. Add a subtopic for each area, then choose New linked diagram… on it to add the file it opens.');
   const written = () => page.evaluate(() => (window as typeof window & { atlasFiles: Record<string, string> }).atlasFiles);
   expect((await written())['index.d2']).toContain('"my-atlas"');
 
-  await (await shapeMenu(page, 'my-atlas', 'my-atlas')).getByRole('menuitem', { name: 'New linked diagram…' }).click();
-  const dialog = page.getByRole('dialog', { name: 'New linked diagram' });
-  await dialog.getByLabel('File name').fill('Health');
-  await dialog.getByRole('button', { name: 'Create and open', exact: true }).click();
-  await expect(page.locator('#filename')).toHaveAttribute('title', 'my-atlas/Health.d2');
-  await previewReady(page);
-  // The folder's handle writes the new file into it, so it is saved rather than a draft.
-  expect(Object.keys(await written()).sort()).toEqual(['Health.d2', 'index.d2']);
-  await expect(page.locator('#draft-status')).not.toHaveText('File has unsaved changes');
+  // Each area is a topic added on the home board, and each topic links its own new file.
+  for (const [topic, name] of [['n_1', 'Health'], ['n_2', 'Work']]) {
+    await page.locator('#viewer .zf-stage [data-shape-id="n"]').click();
+    await page.keyboard.press('ControlOrMeta+Enter');
+    await previewReady(page);
+    const rename = page.getByRole('textbox', { name: 'Rename New topic' });
+    await rename.fill(name);
+    await rename.press('Enter');
+    await previewReady(page);
+    await (await shapeMenu(page, topic, name)).getByRole('menuitem', { name: 'New linked diagram…' }).click();
+    const dialog = page.getByRole('dialog', { name: 'New linked diagram' });
+    await expect(dialog.getByLabel('File name')).toHaveValue(name);
+    await dialog.getByRole('button', { name: 'Create and open', exact: true }).click();
+    await expect(page.locator('#filename')).toHaveAttribute('title', `my-atlas/${name}.d2`);
+    await previewReady(page);
+    // The folder's handle writes the new file into it, so it is saved rather than a draft.
+    await expect(page.locator('#draft-status')).not.toHaveText('File has unsaved changes');
+    await page.locator('#viewer .zf-stage').focus();
+    await page.keyboard.press('Escape');
+    await expect(page.locator('#filename')).toHaveAttribute('title', 'my-atlas/index.d2');
+    await previewReady(page);
+  }
+  expect(Object.keys(await written()).sort()).toEqual(['Health.d2', 'Work.d2', 'index.d2']);
+  // The home board stays a mind map that links both files.
+  await expect(page.getByRole('button', { name: 'Edit mind map', exact: true })).toBeVisible();
+  await expect(page.locator('#viewer .zf-stage a[data-file="./Health.d2"]')).toHaveCount(1);
+  await expect(page.locator('#viewer .zf-stage a[data-file="./Work.d2"]')).toHaveCount(1);
 });
 
 test('New atlas without folder access starts a draft project', async ({ page }) => {
@@ -423,7 +441,7 @@ test('New atlas without folder access starts a draft project', async ({ page }) 
   await previewReady(page);
   await expect(page.locator('#activity-status')).toContainText('the atlas is a draft');
   // Linking needs a folder project, which the draft is.
-  await expect((await shapeMenu(page, 'atlas', 'atlas')).getByRole('menuitem', { name: 'New linked diagram…' })).toBeVisible();
+  await expect((await shapeMenu(page, 'n', 'atlas')).getByRole('menuitem', { name: 'New linked diagram…' })).toBeVisible();
 });
 
 /** A folder `name` whose index.d2 links to target.d2, which draws and boards only what it imports from parts.d2. */

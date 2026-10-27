@@ -218,6 +218,23 @@ test('adds subtopics and siblings on a mind map board with Enter and ⌘/Ctrl+En
   expect(await editorText(page)).toContain('n_3_2.link: layers."Onboarding"');
 });
 
+test('a shape\'s context menu replaces its selection bar until it closes', async ({ page }) => {
+  await mixed(page);
+  const bar = page.getByRole('group', { name: 'Selected: New idea' });
+  await shape(page, 'step_1').click();
+  await expect(bar).toBeVisible();
+  await shape(page, 'step_1').click({ button: 'right' });
+  await expect(page.getByRole('menu', { name: 'Actions for New idea' })).toBeVisible();
+  await expect(bar).toBeHidden();
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('menu', { name: 'Actions for New idea' })).toBeHidden();
+  await expect(bar).toBeVisible();
+  // The bar's own Add board… menu opens from the bar, which stays.
+  await bar.getByRole('button', { name: 'Add board…' }).click();
+  await expect(page.getByRole('menu', { name: 'Actions for New idea' })).toBeVisible();
+  await expect(bar).toBeVisible();
+});
+
 test('going up selects the shape that led down, with its actions', async ({ page }) => {
   await mixed(page);
   await openFromBadge(page, 'Open Build and test board');

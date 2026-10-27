@@ -3,7 +3,8 @@ import type { setupExamplePicker } from './example-picker';
 import { readDirectoryHandle, readFolderInput } from './project-files';
 import { rememberDiskVersion } from './disk-version';
 import { createProjectFile, type DirectoryHandles, type FileHandles } from './file-handles';
-import { quote } from './flow-model';
+import { plainLook } from './flow-model';
+import { mindMapSource } from './mind-map-model';
 import { describeError } from './text';
 
 type PickerWindow = Window & {
@@ -31,9 +32,10 @@ export async function sameEntries(fileHandles: Map<string, FileSystemFileHandle>
   return (key: string) => known.get(key);
 }
 
-/** The home board a new atlas starts from: one shape, named after its folder, to link the first file from. */
+/** The home board a new atlas starts from: a mind map rooted at its folder's name, whose topics are added
+ * on the board and each linked to a file it opens. */
 export function atlasHome(name: string) {
-  return `# Home board of this atlas. Select a shape and choose New linked diagram… to add a file it opens.\n${quote(name)}\n`;
+  return mindMapSource({ direction: 'right', split: 0, look: plainLook(), root: { label: name, children: [] } });
 }
 
 /** Open .d2, Open folder, New atlas and dropped files, which open in the active pane. */
@@ -118,7 +120,7 @@ export function setupFileOpen({ picker, activePane, fileHandles, directoryHandle
       if (await createProjectFile(directory, 'index.d2', atlasHome(directory.name)) === 'refused')
         throw new Error('Zoomflow needs permission to write to the folder.');
       await openFolder(await readDirectoryHandle(directory));
-      activePane().setActivity('Created index.d2. Select a shape and choose New linked diagram… to add a file it opens.');
+      activePane().setActivity('Created index.d2. Add a subtopic for each area, then choose New linked diagram… on it to add the file it opens.');
     } catch (error) {
       if (!(error instanceof DOMException && error.name === 'AbortError')) setFileError(`Could not create the atlas: ${describeError(error)}`);
     }
