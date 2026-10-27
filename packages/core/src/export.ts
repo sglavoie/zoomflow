@@ -110,12 +110,24 @@ export function exportAtlasZip(documents: readonly AtlasDocument[],
   const taken = documents[0].boards.map((board) => board.path.normalize('NFC').toLowerCase());
   let folder = '@files';
   while (taken.some((path) => path === `${folder}.svg` || path.startsWith(`${folder}/`))) folder = `@${folder}`;
-  const placed = documents.map((document, index) => document.boards.map((board) =>
-    ({ ...board, file: document.path, path: index ? `${folder}/${document.path}/${board.path}` : board.path })));
+  // Folders compare case-insensitively (Windows, macOS), so `A.d2` and `a.d2` would merge; mark the later one as boards are.
+  const used = new Set<string>();
+  const place = (path: string) => {
+    const slash = path.lastIndexOf('/') + 1;
+    let name = path.slice(slash);
+    while (used.has(`${path.slice(0, slash)}${name}`.normalize('NFC').toLowerCase())) name = `@${name}`;
+    used.add(`${path.slice(0, slash)}${name}`.normalize('NFC').toLowerCase());
+    return `${folder}/${path.slice(0, slash)}${name}/`;
+  };
+  const placed = documents.map((document, index) => {
+    const base = index ? place(document.path) : '';
+    return document.boards.map((board) => ({ ...board, file: document.path, path: `${base}${board.path}` }));
+  });
   const roots = new Map(documents.map((document, index) => [document.path, (placed[index].find((board) => board.id === 'root') ?? placed[index][0])?.path]));
   return exportBoardsZip(placed.flat().map((board) => ({ ...board, svg: board.svg.replace(/((?:xlink:)?href=")([^"]*)"/g, (match, prefix: string, href: string) => {
     const link = classifyHref(unescapeXml(href));
-    const target = link.kind === 'file' ? resolveFilePath(board.file, link.path) : undefined;
+    // Only exported files have a root here, so any folder may hold one.
+    const target = link.kind === 'file' ? resolveFilePath(board.file, link.path, false) : undefined;
     const root = target === undefined ? undefined : roots.get(target);
     if (root === undefined) return match;
     const relative = encodeURI(relativePath(board.path, root)).replace(/[#?]/g, encodeURIComponent);

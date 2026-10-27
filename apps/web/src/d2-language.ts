@@ -13,10 +13,11 @@ export const d2Parser: StreamParser<State> = {
   },
   token(stream, state) {
     if (state.block) {
-      // A closing delimiter may be indented or appear after text on the same line.
+      // A closing delimiter may be indented or appear after text on the same line. D2 has no escapes in block
+      // strings, so a backslash before it, as in a Windows path, still closes the string.
       while (!stream.eol()) {
         if (stream.match(state.block)) { state.block = null; break; }
-        if (stream.next() === '\\') stream.next();
+        stream.next();
       }
       return 'string';
     }
@@ -31,7 +32,8 @@ export const d2Parser: StreamParser<State> = {
     if (stream.match(/\.\.\.@[^\s;{}]+/)) return 'keyword';
     if (stream.match(/\$\{[^}]*\}/)) return 'variable';
     if (stream.match(/(?:https?:\/\/|mailto:)[^\s;,}]+/)) return 'url';
-    if (stream.match(/"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'/)) return 'string';
+    // Single-quoted strings have no backslash escapes; a doubled quote is a quote.
+    if (stream.match(/"(?:\\.|[^"\\])*"|'(?:[^']|'')*'/)) return 'string';
     if (stream.match(/(?:layers|scenarios|steps|classes|vars)\s*(?=:)/)) return 'keyword';
     if (stream.match(/[\w.-]+\s*(?=:)/)) return 'property';
     if (stream.match(/(?:-->|<--|<->|->|<-|--)/)) return 'operator';

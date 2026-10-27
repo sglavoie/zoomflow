@@ -231,6 +231,16 @@ describe('atlas exports', () => {
     expect(strFromU8(files['Work.svg'])).toContain('href="./work/plan.d2#/Q1"');
   });
 
+  it('gives files whose paths differ only in case their own folders, which macOS and Windows would merge', async () => {
+    const [index, health] = await documents();
+    const upper = { ...health, path: 'Health.d2', name: 'Health' };
+    index.boards[0] = { ...index.boards[0], svg: '<svg><a href="./health.d2"/><a href="./Health.d2"/></svg>' };
+    const files = unzipSync(exportAtlasZip([index, health, upper]));
+    expect(Object.keys(files)).toContain('@files/health.d2/root.svg');
+    expect(Object.keys(files)).toContain('@files/@Health.d2/root.svg');
+    expect(strFromU8(files['root.svg'])).toContain('href="@files/@Health.d2/root.svg"');
+  });
+
   it('keeps missing file links for the offline viewer to restore', async () => {
     const compiled = await d2.compile('Gone: {link: ./gone.d2}', { layout: 'elk' });
     const diagnostic = { rule: 'dangling-file-link', severity: 'error', message: 'Missing', board: 'root', shape: 'Gone', target: './gone.d2' } as const;

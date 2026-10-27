@@ -599,6 +599,51 @@ describe.concurrent('zoomflow CLI', () => {
     expect(hrefs('@files/b.d2/root.svg')).toEqual(['../../root.svg', '../../root.svg']);
   }, 180_000);
 
+  it('resolves file links in imports from the file that wrote them, into any folder inside --root', async () => {
+    const root = join(temp, 'atlas-imported');
+    await Promise.all(['sub', 'dist', '.hidden'].map((folder) => mkdir(join(root, folder), { recursive: true })));
+    await Promise.all([
+      writeFile(join(root, 'index.d2'), '...@sub/part\nd.link: ./dist/x.d2\nh.link: ./.hidden/y.d2'),
+      writeFile(join(root, 'sub', 'part.d2'), 'a.link: ./other.d2\nb.link: ../x.d2'),
+      writeFile(join(root, 'sub', 'other.d2'), 'o'), writeFile(join(root, 'x.d2'), 'x'),
+      writeFile(join(root, 'dist', 'x.d2'), 'dx'), writeFile(join(root, '.hidden', 'y.d2'), 'y'),
+    ]);
+    const zip = join(temp, 'atlas-imported.zip');
+    const [linted, followed, exported] = await Promise.all([run(['lint', join(root, 'index.d2')]),
+      run(['lint', join(root, 'index.d2'), '--follow', '--json']), run(['export', join(root, 'index.d2'), '--all', '-o', zip])]);
+    success(linted);
+    expect(linted.stdout).toBe('0 errors, 0 warnings.\n');
+    success(followed);
+    expect(JSON.parse(followed.stdout).files).toEqual(['index.d2', 'sub/other.d2', 'dist/x.d2', 'x.d2', '.hidden/y.d2']);
+    success(exported);
+    const files = unzipSync(await readFile(zip));
+    // Links written in the import are rewritten to resolve from the input, as the export resolves them.
+    expect([...strFromU8(files['root.svg']).matchAll(/ href="([^"]*)"/g)].map((match) => match[1])).toEqual([
+      '@files/sub/other.d2/root.svg', '@files/dist/x.d2/root.svg', '@files/x.d2/root.svg', '@files/.hidden/y.d2/root.svg']);
+  }, 180_000);
+
+  it('reads no linked file for a lone SVG or PNG, but does for HTML', async () => {
+    const root = join(temp, 'lone-board');
+    await mkdir(root, { recursive: true });
+    const preload = join(root, 'log-reads.cjs');
+    await Promise.all([writeFile(join(root, 'index.d2'), 'a.link: ./linked.d2\nb.link: ./absent.d2'), writeFile(join(root, 'linked.d2'), 'l'),
+      // Log every file the CLI reads, through the ESM bindings it imports.
+      writeFile(preload, `const fs = require('node:fs/promises');
+const readFile = fs.readFile;
+fs.readFile = (path, ...rest) => { process.stderr.write(\`read \${path}\\n\`); return readFile(path, ...rest); };
+require('node:module').syncBuiltinESMExports();`)]);
+    const env = { ...process.env, NODE_OPTIONS: `--require ${preload}` };
+    const [svg, html] = await Promise.all([run(['export', join(root, 'index.d2'), '-o', join(root, 'lone.svg')], { env }),
+      run(['export', join(root, 'index.d2'), '-o', join(root, 'lone.html')], { env })]);
+    success(svg);
+    expect(svg.stderr).toContain(`read ${join(root, 'index.d2')}`);
+    expect(svg.stderr).not.toContain('linked.d2');
+    // A missing file still counts as a dangling link, found without reading.
+    expect(svg.stderr).toContain('zoomflow: 1 dangling link (run zoomflow lint)');
+    success(html);
+    expect(html.stderr).toContain(`read ${join(root, 'linked.d2')}`);
+  }, 180_000);
+
   it('exports linked files into ZIPs under folders named after them, file links pointing at their root SVG', async () => {
     const [svg, png] = [join(temp, 'atlas-svg.zip'), join(temp, 'atlas-png.zip')];
     const results = await Promise.all([run(['export', 'fixtures/atlas/index.d2', '--all', '-o', svg]),

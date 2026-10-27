@@ -65,14 +65,18 @@ function isStatusRequest(value: unknown): value is StatusRequest {
     && optionalText(item.environment, 8_000) && optionalText(item.claudeConfigDir, 4_000);
 }
 
-function isRequest(value: unknown): value is AiRequest {
-  if (!isStatusRequest(value)) return false;
+/** Why the page's request cannot run, naming what to change when it is a size limit; undefined when it can run.
+ * Board ids are full paths (`root.layers.a.layers.b…`), so deep boards need far more than a name's length. */
+export function requestProblem(value: unknown): string | undefined {
+  if (!isStatusRequest(value)) return 'Invalid AI request.';
   const item = value as Partial<AiRequest>;
-  return typeof item.prompt === 'string' && item.prompt.trim().length > 0 && item.prompt.length <= 8_000
-    && typeof item.source === 'string' && item.source.length <= 180_000
-    && typeof item.name === 'string' && item.name.length <= 300
-    && typeof item.board === 'string' && item.board.length <= 300
-    && (item.fullAccess === undefined || typeof item.fullAccess === 'boolean') && optionalText(item.workingDirectory, 4_000);
+  if (typeof item.prompt === 'string' && item.prompt.length > 8_000) return 'The prompt is too long. Keep it under 8,000 characters, then try again.';
+  if (typeof item.source === 'string' && item.source.length > 180_000) return 'The diagram is too large for AI. Keep it under 180,000 characters, then try again.';
+  if (typeof item.board === 'string' && item.board.length > 8_000) return 'The current board is nested too deeply for AI. Open a board nearer the top, then try again.';
+  return typeof item.prompt === 'string' && item.prompt.trim().length > 0 && typeof item.source === 'string'
+    && typeof item.name === 'string' && item.name.length <= 300 && typeof item.board === 'string'
+    && (item.fullAccess === undefined || typeof item.fullAccess === 'boolean') && optionalText(item.workingDirectory, 4_000)
+    ? undefined : 'Invalid AI request.';
 }
 
 /** Variables that load code or change which programs run would let a page run arbitrary commands. Every `GIT_*`
@@ -326,14 +330,16 @@ export async function handle(request: IncomingMessage, response: ServerResponse)
     let payload: unknown;
     try { payload = JSON.parse(body); }
     catch { send(response, 400, { error: 'Invalid JSON request.' }); return; }
-    if (!isRequest(payload)) { send(response, 400, { error: 'Invalid AI request.' }); return; }
-    try { processEnvironment(payload); if (payload.fullAccess) await workingDirectory(payload.workingDirectory); }
+    const problem = requestProblem(payload);
+    if (problem) { send(response, 400, { error: problem }); return; }
+    const ai = payload as AiRequest;
+    try { processEnvironment(ai); if (ai.fullAccess) await workingDirectory(ai.workingDirectory); }
     catch (error) { send(response, 400, { error: message(error) }); return; }
     const controller = new AbortController();
     const disconnect = () => controller.abort();
     response.on('close', disconnect);
     if (response.destroyed) controller.abort();
-    try { send(response, 200, await runAi(payload, controller.signal)); }
+    try { send(response, 200, await runAi(ai, controller.signal)); }
     finally { response.off('close', disconnect); }
   } catch (error) {
     send(response, 500, { error: message(error) });

@@ -62,9 +62,9 @@ describe('offline atlas runtime', () => {
     vi.spyOn(Element.prototype, 'getClientRects').mockReturnValue([] as unknown as DOMRectList);
   });
 
-  function load(hash = '') {
+  function load(hash = '', files = documents()) {
     history.replaceState(null, '', `/${hash}`);
-    const html = exportAtlasHtml(documents(), { title: 'Life', script: offlineViewerScript(), style: '' });
+    const html = exportAtlasHtml(files, { title: 'Life', script: offlineViewerScript(), style: '' });
     const body = new DOMParser().parseFromString(html, 'text/html').body;
     const script = body.querySelector('script:not([type])')!;
     script.remove();
@@ -83,31 +83,39 @@ describe('offline atlas runtime', () => {
 
     link('./health.d2').dispatchEvent(new MouseEvent('click', { bubbles: true }));
     expect([stage().dataset.file, stage().dataset.board, location.hash]).toEqual(['health.d2', 'root', '#/@file/health.d2']);
-    expect(crumbs()).toEqual(['index', 'Root']);
+    expect(crumbs()).toEqual(['index', 'health']);
     stage().querySelector('a[data-board="root.layers.Sleep"]')!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     // The fragment names its board as written.
     expect(link('./work/plan.d2#/Q 1').getAttribute('href')).toBe('#/@file/work%2Fplan.d2/Q%201');
     link('./work/plan.d2#/Q 1').dispatchEvent(new MouseEvent('click', { bubbles: true }));
     expect([stage().dataset.file, stage().dataset.board]).toEqual(['work/plan.d2', 'root.layers.Q 1']);
     // More than three crumbs fold the middle ones into a menu, as in the live viewer.
-    expect(crumbs()).toEqual(['index', '…', 'health', 'Root', 'Q 1']);
+    expect(crumbs()).toEqual(['index', '…', 'health', 'work/plan', 'Q 1']);
 
     // Escape climbs this file's boards, then returns to the file and board that opened it.
     pressEscape();
     expect([stage().dataset.file, stage().dataset.board]).toEqual(['work/plan.d2', 'root']);
     pressEscape();
     expect([stage().dataset.file, stage().dataset.board]).toEqual(['health.d2', 'root.layers.Sleep']);
-    expect(crumbs()).toEqual(['index', 'Root', 'Sleep']);
+    expect(crumbs()).toEqual(['index', 'health', 'Sleep']);
     (document.querySelector('.zf-breadcrumbs button') as HTMLButtonElement).click();
     expect([stage().dataset.file, location.hash]).toEqual(['index.d2', '#/']);
-    expect(crumbs()).toEqual(['Root']);
+    expect(crumbs()).toEqual(['index']);
+  });
+
+  it('follows file links into build and hidden folders the export holds, as the CLI bundles them', () => {
+    load('', [{ path: 'index.d2', name: 'index', boards: [board('root', 'Root', '#/', svg(['Built', './dist/out.d2']))] },
+      { path: 'dist/out.d2', name: 'dist/out', boards: [board('root', 'Root', '#/', svg(['Done']))] }]);
+    expect(link('./dist/out.d2').hasAttribute('data-missing')).toBe(false);
+    link('./dist/out.d2').dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    expect(stage().dataset.file).toBe('dist/out.d2');
   });
 
   it('opens a file route directly, falling back to the nearest board and leading home', () => {
     load('#/@file/work%2Fplan.d2/Q%201/Gone');
     expect([stage().dataset.file, stage().dataset.board]).toEqual(['work/plan.d2', 'root.layers.Q 1']);
     expect(document.querySelector('[role="status"]')!.textContent).toBe('Board "Q 1/Gone" not found; showing Q 1');
-    expect(crumbs()).toEqual(['index', 'Root', 'Q 1']);
+    expect(crumbs()).toEqual(['index', 'work/plan', 'Q 1']);
     pressEscape();
     pressEscape();
     expect(stage().dataset.file).toBe('index.d2');
@@ -115,5 +123,40 @@ describe('offline atlas runtime', () => {
     load('#/@file/nowhere.d2');
     expect([stage().dataset.file, stage().dataset.board]).toEqual(['index.d2', 'root']);
     expect(document.querySelector('[role="status"]')!.textContent).toBe('Missing file: nowhere.d2; showing Root');
+  });
+
+  it('opens each file fitted and restores its own view on return, though their boards share IDs', () => {
+    load();
+    const amount = () => document.querySelector('.zf-zoom-controls span')!.textContent;
+    const zoomIn = () => document.querySelector<HTMLButtonElement>('.zf-zoom-controls button[aria-label="Zoom in"]')!.click();
+    zoomIn();
+    expect(amount()).toBe('150%');
+    link('./health.d2').dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    expect([stage().dataset.file, stage().dataset.board]).toEqual(['health.d2', 'root']);
+    expect(amount()).toBe('Fit');
+    zoomIn();
+    zoomIn();
+    expect(amount()).toBe('225%');
+    pressEscape();
+    expect(stage().dataset.file).toBe('index.d2');
+    expect(amount()).toBe('150%');
+  });
+
+  it('keeps Backspace from going back in history on the top board', () => {
+    // Runtimes loaded by earlier tests still listen on window, so press only this one's handler.
+    const listen = vi.spyOn(window, 'addEventListener');
+    load();
+    const handler = listen.mock.calls.filter(([type]) => type === 'keydown').at(-1)![1] as (event: KeyboardEvent) => void;
+    listen.mockRestore();
+    const press = (key: string) => {
+      const event = new KeyboardEvent('keydown', { key, cancelable: true });
+      handler(event);
+      return event.defaultPrevented;
+    };
+    expect(stage().dataset.board).toBe('root');
+    expect(press('Backspace')).toBe(true);
+    // Escape has no browser default to suppress.
+    expect(press('Escape')).toBe(false);
+    expect([stage().dataset.file, stage().dataset.board]).toEqual(['index.d2', 'root']);
   });
 });

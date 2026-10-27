@@ -1,6 +1,7 @@
 import { guardBuilderDialog } from './builder-dialog';
 import { flowSource, flowTemplate, plainLook } from './flow-model';
 import { mindMapSource } from './mind-map-model';
+import { boardRoute } from './link-preview';
 import { setText } from './text';
 
 export type NewFileKind = 'flow' | 'mind map' | 'empty';
@@ -15,6 +16,7 @@ type LinkRequest = {
   shape: string;
 };
 
+const decodeSegment = (segment: string) => { try { return decodeURIComponent(segment); } catch { return segment; } };
 const kinds: [NewFileKind, string][] = [['flow', 'Flow'], ['mind map', 'Mind map'], ['empty', 'Empty diagram']];
 let shared: ReturnType<typeof create> | undefined;
 
@@ -84,16 +86,23 @@ function create() {
   async function loadBoards(request: LinkRequest, selected = '') {
     const attempt = ++loading;
     const path = file.value;
-    board.replaceChildren(new Option('Its home board', ''));
+    // The link's own board stays chosen while boards load, and when they cannot be read or no longer list it, so
+    // submitting without touching the board never drops it from the link.
+    const route = selected && selected !== '#/' ? boardRoute(selected) : '';
+    const kept = route ? [new Option(selected.slice(2).split('/').map(decodeSegment).join(' › '), selected, true, true)] : [];
+    board.replaceChildren(new Option('Its home board', ''), ...kept);
     board.disabled = true;
     setText(status, 'Finding the boards in this file…');
     try {
       const boards = await request.boards(path);
       if (attempt !== loading) return;
-      board.append(...boards.map(item => new Option(item.label, item.hash, false, item.hash === selected)));
+      // Compiled hashes are encoded, so an authored `#/My Board` is the listed `#/My%20Board`.
+      const listed = boards.some(item => boardRoute(item.hash) === route);
+      if (listed) kept[0]?.remove();
+      board.append(...boards.map(item => new Option(item.label, item.hash, false, listed && boardRoute(item.hash) === route)));
       setText(status, '');
     } catch {
-      if (attempt === loading) setText(status, 'This file’s boards could not be read. The link opens its home board.');
+      if (attempt === loading) setText(status, `This file’s boards could not be read. The link opens ${route ? 'the board it opened before' : 'its home board'}.`);
     } finally {
       if (attempt === loading) board.disabled = false;
     }

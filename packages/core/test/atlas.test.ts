@@ -28,6 +28,14 @@ describe('resolveFilePath', () => {
   ])('from %s, %s is not a project file', (from, relative) => {
     expect(resolveFilePath(from, relative)).toBeUndefined();
   });
+  it('opens hidden and build folders only when the web app\'s scan exclusions are off', () => {
+    for (const relative of ['./.hidden/x.d2', './node_modules/x.d2', './dist/x.d2', './coverage/x.d2']) {
+      expect(resolveFilePath('index.d2', relative)).toBeUndefined();
+      expect(resolveFilePath('index.d2', relative, false)).toBe(relative.slice(2));
+    }
+    expect(resolveFilePath('dist/index.d2', './x.d2', false)).toBe('dist/x.d2');
+    for (const relative of ['../outside.d2', './a//b.d2', './a.txt']) expect(resolveFilePath('index.d2', relative, false)).toBeUndefined();
+  });
 });
 
 describe('atlas hashes', () => {

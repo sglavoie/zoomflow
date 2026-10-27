@@ -80,11 +80,12 @@ export function setupFileOpen({ picker, activePane, fileHandles, directoryHandle
     if (file) void openFile(file);
   });
   async function openFolder(folder: { name: string; files: { path: string; source: string }[];
-    handles?: Record<string, FileSystemFileHandle>; directory?: FileSystemDirectoryHandle }) {
+    handles?: Record<string, FileSystemFileHandle>; directory?: FileSystemDirectoryHandle; saved?: boolean }) {
     setFileError('');
     await fileHandles.ready();
     const selection = picker().rememberFolder(folder.name, folder.files,
-      await sameEntries(fileHandles, (key) => key.startsWith('project:') ? folder.handles?.[key.split(':').slice(2).join(':')] : undefined));
+      await sameEntries(fileHandles, (key) => key.startsWith('project:') ? folder.handles?.[key.split(':').slice(2).join(':')] : undefined),
+      folder.saved);
     for (const [path, handle] of Object.entries(folder.handles ?? {})) fileHandles.set(selection.keys[path], handle);
     // New linked files are created in the folder; a folder chosen without a handle keeps new files as drafts.
     if (folder.directory) directoryHandles.set(selection.projectId, folder.directory);
@@ -105,7 +106,8 @@ export function setupFileOpen({ picker, activePane, fileHandles, directoryHandle
    * A folder that already has diagrams opens unchanged; a browser that cannot write to folders keeps a draft project. */
   async function newAtlas() {
     if (!pickerWindow.showDirectoryPicker) {
-      await openFolder({ name: 'atlas', files: [{ path: 'index.d2', source: atlasHome('atlas') }] });
+      // Nothing is on disk, so the home board counts as unsaved until it is saved or exported.
+      await openFolder({ name: 'atlas', files: [{ path: 'index.d2', source: atlasHome('atlas') }], saved: false });
       activePane().setActivity('This browser cannot write to folders, so the atlas is a draft. Export → Download project .zip keeps its files together.');
       return;
     }

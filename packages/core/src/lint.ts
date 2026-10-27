@@ -2,7 +2,7 @@ import type { CompileResponse } from '@d2lang/d2';
 import { boardKey, classifyHref, indexBoards, resolveFilePath, type Board } from './index';
 import { definedClasses } from './classes';
 import { boundaryNeighbours } from './context';
-import { shapeRanges } from './source';
+import { linkSources, shapeRanges } from './source';
 
 export type LintRule = 'boundary-in' | 'boundary-out' | 'orphan-board' | 'dangling-link' | 'ignored-link' | 'missing-backlink'
   | 'undefined-class' | 'unsupported-label' | 'dangling-file-link' | 'missing-file-board' | 'bare-file-link';
@@ -26,8 +26,10 @@ export interface LintOptions {
   /** The project around the linted file, so links to other `.d2` files can be checked.
    * Without it, file links are not reported: a single file cannot know its neighbours. */
   files?: {
-    /** Project path of the linted file, which file links resolve against. */
+    /** Project path of the linted file. File links resolve from the file that wrote them, this one or an import. */
     inputPath: string;
+    /** Whether links may not open hidden or build folders, which the web app's project scan leaves out (default true). */
+    scanned?: boolean;
     /** Whether a project path names a `.d2` file in the project. */
     exists(path: string): boolean;
     /** Board hashes (as `indexBoards` gives them) of a project file, when known. */
@@ -136,9 +138,9 @@ export function boardLabel(id: string, boards: Map<string, Board>): string {
   // Missing segments keep D2's quoting (`layers."x.y"`); name them as authored.
   const names: string[] = [];
   let named = true;
-  for (const [, quoted, plain] of rest.matchAll(/"((?:[^"\\]|\\.)*)"|([^."]+)/g)) {
+  for (const [, quoted, single, plain] of rest.matchAll(/"((?:[^"\\]|\\.)*)"|'([^']*)'|([^."']+)/g)) {
     if (named && plain && ['layers', 'scenarios', 'steps'].includes(plain)) { named = false; continue; }
-    const name = quoted?.replace(/\\(.)/g, '$1') ?? plain;
+    const name = quoted?.replace(/\\(.)/g, '$1') ?? single ?? plain;
     if (named && names.length) names[names.length - 1] += `.${name}`;
     else names.push(name);
     named = true;
@@ -190,7 +192,7 @@ export function lint(compiled: LintInput, options: LintOptions = {}): LintResult
   const boardRanges = new Map<string, string>();
   const owners = new Map<string, { board: Board; shape: string; child: Board }[]>();
   const label = (id: string) => boardLabel(id, boards);
-  let ranges: Map<string, string> | undefined;
+  let ranges: Map<string, string> | undefined, sources: Map<string, string> | undefined;
   const shapeRange = (board: string, shape: string) =>
     (ranges ??= shapeRanges(compiled.diagram, compiled.graph)).get(JSON.stringify([board, shape]));
   function checkFileLink(href: string, path: string, hash: string, board: Board, shape?: string, range?: string, connection?: string) {
@@ -198,10 +200,15 @@ export function lint(compiled: LintInput, options: LintOptions = {}): LintResult
     if (!files) return;
     const key = JSON.stringify([board.id, shape ?? connection, href]);
     if (linkKeys.has(key)) return;
-    const resolved = resolveFilePath(files.inputPath, path);
+    // `inputPath` names the compiled entry file in the project, whatever the compiler called it.
+    const source = (sources ??= linkSources(compiled)).get(JSON.stringify([board.id, shape ?? connection]));
+    const from = source !== undefined && source !== (compiled.inputPath ?? files.inputPath) ? source : files.inputPath;
+    const resolved = resolveFilePath(from, path, files.scanned);
     let diagnostic: Pick<LintDiagnostic, 'rule' | 'severity' | 'message'> | undefined;
     if (!resolved) diagnostic = { rule: 'dangling-file-link', severity: 'error',
-      message: `Link "${href}" points outside the project folder or at a file that cannot be a diagram.` };
+      message: files.scanned !== false && resolveFilePath(from, path, false)
+        ? `Link "${href}" opens a hidden or build folder, which the project leaves out.`
+        : `Link "${href}" points outside the project folder or at a file that cannot be a diagram.` };
     else if (!files.exists(resolved)) diagnostic = { rule: 'dangling-file-link', severity: 'error',
       message: `Link targets missing file "${resolved}".` };
     else if (hash && hash !== '#/') {
@@ -223,7 +230,8 @@ export function lint(compiled: LintInput, options: LintOptions = {}): LintResult
     diagnostics.push({ ...diagnostic, board: board.id, shape, connection, range,
       ...(diagnostic.rule === 'dangling-file-link' ? { target: href } : {}) });
   }
-  function checkLink(href: string, board: Board, shape?: string, range?: string, connection?: string) {
+  /** `dropped` marks an authored link that D2 removed from the compiled shape. */
+  function checkLink(href: string, board: Board, shape?: string, range?: string, connection?: string, dropped = false) {
     const classified = classifyHref(href);
     if (classified.kind === 'file') return checkFileLink(href, classified.path, classified.hash, board, shape, range, connection);
     const target = boardTarget(href, board, boards);
@@ -247,6 +255,16 @@ export function lint(compiled: LintInput, options: LintOptions = {}): LintResult
       diagnostics.push({ rule: 'ignored-link', severity: 'warning', board: board.id, shape, connection, range,
         message: above ? `Link "${href}" goes above the root board, so the viewer ignores it.`
           : `Link "${href}" is not a board or web address, so the viewer ignores it.` });
+      return;
+    }
+    if (boards.has(target) && dropped && target !== board.id) {
+      // D2 drops links to a link's own board, harmlessly, but also to some board names, such as `NULL`.
+      const key = JSON.stringify([board.id, shape, target]);
+      if (linkKeys.has(key)) return;
+      linkKeys.add(key);
+      if (!range || range.startsWith(',')) range = shape ? shapeRange(board.id, shape) : undefined;
+      diagnostics.push({ rule: 'ignored-link', severity: 'warning', board: board.id, shape, range,
+        message: `D2 drops the link to board "${label(target)}", so the viewer ignores it. Rename the board to link to it.` });
       return;
     }
     if (boards.has(target)) {
@@ -312,10 +330,11 @@ export function lint(compiled: LintInput, options: LintOptions = {}): LintResult
         const names = path.map((part) => stringValue(part) ?? '');
         if (['classes', 'vars', 'style', 'source-arrowhead', 'target-arrowhead'].includes(names[0])) continue;
         if (['layers', 'scenarios', 'steps'].includes(names[0])) {
-          for (const child of entry.value?.map?.nodes ?? []) {
-            const key = child.map_key;
-            const name = stringValue(key?.key?.path?.[0]);
-            const range = scalarRange(key?.key?.path?.[0]);
+          // `layers.x: ...` names its board in the key; bare `layers: {x: ...}` in each child key.
+          const children = path.length > 1 ? [path[1]] : (entry.value?.map?.nodes ?? []).map((child) => child.map_key?.key?.path?.[0]);
+          for (const part of children) {
+            const name = stringValue(part);
+            const range = scalarRange(part);
             if (name && range) boardRanges.set(`${id}.${names[0]}.${boardKey(name)}`, range);
           }
           continue; // Each child has its own compiler-expanded graph AST.
@@ -349,7 +368,7 @@ export function lint(compiled: LintInput, options: LintOptions = {}): LintResult
       // Only recover links D2 dropped; a kept link was already checked in its compiled form.
       // Skip templates and removed objects; a board-level link has no shape.
       const compiled = shape ? board.diagram.shapes.find((item) => item.id.toLowerCase() === shape) : board.diagram.root;
-      if (compiled && !compiled.link) checkLink(canonicalLink(link.href), board, shape ? compiled.id : undefined, link.range);
+      if (compiled && !compiled.link && link.href) checkLink(canonicalLink(link.href), board, shape ? compiled.id : undefined, link.range, undefined, true);
     }
     // Pair each connection with its authored link by edge identity. A declaration is paired by
     // its order only when every compiled edge of that identity was declared here; else omit the range.

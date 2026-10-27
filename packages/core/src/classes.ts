@@ -92,12 +92,13 @@ export function definedClasses(files: Record<string, string>, path: string, seen
       append(text.slice(i, closed ? end + 1 : end));
       i = closed ? end : end - 1;
     } else if (char === '|' && current.colon && !current.value.trim()) {
-      // Block strings close with the same run of pipes that opened them, on the same line too.
-      // A pipe later in a value, as in `x: in | out`, is label text.
-      const pipes = /^\|+/.exec(text.slice(i))![0];
-      const end = text.indexOf(pipes, i + pipes.length);
+      // Block strings close with the reverse of the pipes and backticks that opened them, as `|`md` closes
+      // with `` `| ``, on the same line too. A pipe later in a value, as in `x: in | out`, is label text.
+      const open = /^\|+`*/.exec(text.slice(i))![0];
+      const close = [...open].reverse().join('');
+      const end = text.indexOf(close, i + open.length);
       if (end < 0) return;
-      i = end + pipes.length - 1;
+      i = end + close.length - 1;
     } else if (char === '[') {
       current.brackets++;
       append(char);

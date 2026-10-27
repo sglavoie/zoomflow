@@ -2,7 +2,7 @@ import type { Diagram } from '@d2lang/d2';
 export { parentContext, type ParentContext } from './context';
 export { renderExportBoards, exportBoardsZip, exportSourcesZip, exportBoardsHtml, exportGlyphSource, exportAtlasHtml, exportAtlasZip, type ExportBoard, type AtlasDocument } from './export';
 export type { Diagram, CompileResponse, RenderOptions } from '@d2lang/d2';
-export { boardBlocks, indexShapeSources, parseSourceRange, shapeRanges, type SourceRange, type ShapeSource } from './source';
+export { boardBlocks, indexShapeSources, linkSources, parseSourceRange, rebaseFileLinks, shapeRanges, type SourceRange, type ShapeSource } from './source';
 export { lint, boardLabel, type LintRule, type LintDiagnostic, type LintOptions, type LintResult, type BoundaryEvaluation } from './lint';
 
 export interface Board {
@@ -16,10 +16,12 @@ export interface Board {
 }
 
 /** Quote a board name as the pinned D2 compiler does in the link IDs it emits:
- * key specials, `--`, a trailing `-` or edge whitespace force double quotes.
- * Names containing a quote or backslash never survive as compiled links, so escaping them is moot.
+ * key specials, `--`, a trailing `-` or edge whitespace force double quotes, and `null` is single-quoted
+ * (D2 drops links to other casings of it). Names containing a quote or backslash never survive as
+ * compiled links, so escaping them is moot.
  */
 export function boardKey(name: string): string {
+  if (name === 'null') return "'null'";
   return name === '' || /["'.:;|*&()<>@#$\\{}[\]]|--|-$|^\s|\s$/.test(name)
     ? `"${name.replace(/["\\]/g, '\\$&')}"` : name;
 }
@@ -75,8 +77,9 @@ export function classifyHref(href: string): ClassifiedHref {
 
 /** Resolve a file link against the project path of the file that contains it, as D2 resolves imports.
  * Undefined when the result climbs above the project root or is not a valid project `.d2` path.
- * Self-contained because the offline viewer embeds its source. */
-export function resolveFilePath(fromPath: string, relativePath: string): string | undefined {
+ * `scanned` also rejects the folders the web app leaves out of a project scan (hidden and build folders);
+ * the CLI reads any folder inside --root, as imports do. Self-contained because the offline viewer embeds its source. */
+export function resolveFilePath(fromPath: string, relativePath: string, scanned = true): string | undefined {
   const parts = fromPath.split('/').slice(0, -1);
   for (const part of relativePath.split('/')) {
     if (part === '.') continue;
@@ -86,9 +89,9 @@ export function resolveFilePath(fromPath: string, relativePath: string): string 
     } else parts.push(part);
   }
   const path = parts.join('/');
-  // The rules of `validProjectPath`: no empty, dot or hidden folder segments, and no build folders.
-  const valid = parts.length > 0 && parts.every((part, index) => part && part !== '.' && part !== '..' &&
-    (index === parts.length - 1 || !part.startsWith('.')) && !['node_modules', 'dist', 'coverage'].includes(part)) &&
+  // The rules of `validProjectPath`: no empty or dot segments and, when `scanned`, no hidden or build folders.
+  const valid = parts.length > 0 && parts.every((part, index) => part && part !== '.' && part !== '..' && (!scanned ||
+    ((index === parts.length - 1 || !part.startsWith('.')) && !['node_modules', 'dist', 'coverage'].includes(part)))) &&
     path.endsWith('.d2') && !path.includes('\\') && !path.includes('\0') && !/^[A-Za-z]:/.test(path);
   return valid ? path : undefined;
 }

@@ -1,6 +1,7 @@
 import { D2 } from '@d2lang/d2';
 import { boardLabel, classifyHref, exportAtlasHtml, exportAtlasZip, exportBoardsHtml, exportBoardsZip, exportGlyphSource, indexBoards, lint,
-  renderExportBoards, resolveFilePath, shapeClass, type AtlasDocument, type Diagram, type ExportBoard, type LintOptions, type LintResult } from '@zoomflow/core';
+  linkSources, renderExportBoards, resolveFilePath, shapeClass, type AtlasDocument, type CompileResponse, type Diagram, type ExportBoard,
+  type LintOptions, type LintResult } from '@zoomflow/core';
 import { offlineViewerScript, offlineViewerStyle } from '@zoomflow/viewer';
 import { execFile } from 'node:child_process';
 import { copyFile, lstat, mkdir, mkdtemp, readFile, realpath, rename, rm, stat, writeFile } from 'node:fs/promises';
@@ -19,8 +20,8 @@ const fontArgs = Object.entries({
  * Recover the exact compiler links using D2's encoded shape wrapper identity.
  * This matches renderer-generated tags, not authored D2 or arbitrary HTML.
  */
-function compilerLinks(svg: string, diagram: Diagram): string {
-  const links = new Map(diagram.shapes.map((shape) => [shapeClass(shape.id), shape.link]));
+function compilerLinks(svg: string, diagram: Diagram, link = (shape: Diagram['shapes'][number]) => shape.link): string {
+  const links = new Map(diagram.shapes.map((shape) => [shapeClass(shape.id), link(shape)]));
   return svg.replace(/(<a\b[^>]*>)(\s*<g\b[^>]*\bclass="([^"]*)")/g, (match, anchor: string, group: string, classes: string) => {
     const link = classes.split(/\s+/).map((name) => links.get(name)).find(Boolean);
     if (!link) return match;
@@ -42,17 +43,30 @@ function safeLinks(svg: string, boards: boolean, files?: (path: string) => boole
     return link.kind === 'external' || (boards && link.kind === 'board') || (link.kind === 'file' && files?.(link.path)) ? attribute : '';
   }));
 }
-/** The project paths of the files a diagram's file links open, in board order, each once. */
-function linkedFiles(diagram: Diagram, path: string): string[] {
+type Compilation = Pick<CompileResponse, 'diagram' | 'graph' | 'fs'>;
+/** The project paths of the files a diagram's file links open, in board order, each once.
+ * Each link resolves from the file that wrote it, the input or one it imports, from any folder inside --root. */
+function linkedFiles(compiled: Compilation, path: string): string[] {
   const paths = new Set<string>();
-  for (const board of indexBoards(diagram).values()) {
+  const sources = linkSources(compiled);
+  for (const board of indexBoards(compiled.diagram).values()) {
     for (const item of [...board.diagram.shapes, ...board.diagram.connections]) {
       const link = classifyHref(item.link ?? '');
-      const target = link.kind === 'file' ? resolveFilePath(path, link.path) : undefined;
+      const from = sources.get(JSON.stringify([board.id, item.id])) ?? path;
+      const target = link.kind === 'file' ? resolveFilePath(from, link.path, false) : undefined;
       if (target !== undefined) paths.add(target);
     }
   }
   return [...paths];
+}
+/** A file link written in an imported file, rewritten to open the same file from the input, as viewers resolve it. */
+function inputLink(href: string, from: string | undefined, input: string): string {
+  const link = classifyHref(href);
+  if (link.kind !== 'file' || from === undefined || from === input) return href;
+  const target = resolveFilePath(from, link.path, false);
+  if (target === undefined) return href;
+  const path = posix.relative(posix.dirname(input), target);
+  return `${path.startsWith('../') ? '' : './'}${path}${link.hash}`;
 }
 /** Point board links at the relative paths of their files in the ZIP, keeping other links. */
 function zipLinks(svg: string, from: string, paths: Map<string, string>): string {
@@ -76,8 +90,9 @@ HTML and --all also include every file reachable through file links (link: ./oth
 Default output: file.svg, file.png, file.html, or file-svg.zip / file-png.zip;
  -o, --output must use the same extension, which sets the format when --format is absent.
 --root bounds local imports and images (default: the input file's directory);
- pass it to import from parent folders. Only the input and the files it imports
- are read. Local zoomflow.d2 files override the bundled stdlib.
+ pass it to import from parent folders. SVG/PNG export without --all reads only the
+ input and the files it imports; lint, HTML and --all also read the files that file
+ links open. Local zoomflow.d2 files override the bundled stdlib.
 Export requires D2 v0.9.0 on PATH. Lint uses the bundled D2 compiler.
 Boundary ports are optional; --boundary-ports checks explicit zf-in/zf-out contracts.
 --missing-backlink warns about layers without a link back to their parent.
@@ -318,19 +333,20 @@ export async function main(args = process.argv.slice(2)): Promise<number> {
         if (!compiledFiles.has(path)) compiledFiles.set(path, compileSources(d2, root, realRoot, path));
         return compiledFiles.get(path)!;
       };
-      /** Check file links against the .d2 files inside --root; compiling each linked file names its boards. */
-      const fileLinks = async (path: string, diagram: Diagram): Promise<FileLinks> => {
+      /** Check file links against the .d2 files inside --root; with `read`, compiling each linked file names its boards. */
+      const fileLinks = async (path: string, compiled: Compilation, read: boolean): Promise<FileLinks> => {
         const found = new Map<string, ReadonlySet<string> | undefined>();
-        for (const target of linkedFiles(diagram, path)) {
+        for (const target of linkedFiles(compiled, path)) {
           if (!(await projectFile(root, realRoot, target))) continue;
-          const linked = await compileFile(target).catch(() => undefined);
+          const linked = read ? await compileFile(target).catch(() => undefined) : undefined;
           found.set(target, linked && new Set([...indexBoards(linked.compiled.diagram).values()].map((board) => board.hash)));
         }
-        return { inputPath: path, exists: (target) => found.has(target), boards: (target) => found.get(target) };
+        return { inputPath: path, scanned: false, exists: (target) => found.has(target), boards: (target) => found.get(target) };
       };
       /** The input, then with `follow` every file its file links reach, breadth first and each once, so cycles end.
-       * With `skip`, a linked file that does not compile is left out with a warning instead of failing. */
-      const reach = async (follow: boolean, skip: boolean) => {
+       * With `skip`, a linked file that does not compile is left out with a warning instead of failing.
+       * Without `read`, linked files are only checked to exist, never compiled. */
+      const reach = async (follow: boolean, skip: boolean, read = true) => {
         const queue = [inputPath];
         const reached: (Compiled & { path: string; links: FileLinks })[] = [];
         for (const path of queue) {
@@ -341,9 +357,9 @@ export async function main(args = process.argv.slice(2)): Promise<number> {
             console.error(`zoomflow: left out ${shown(path)}, which links open: ${compileErrors(message, shown, problems) ?? message}`);
             continue;
           }
-          const links = await fileLinks(path, file.compiled.diagram);
+          const links = await fileLinks(path, file.compiled, read);
           reached.push({ ...file, path, links });
-          if (follow) queue.push(...linkedFiles(file.compiled.diagram, path).filter((target) => links.exists(target) && !queue.includes(target)));
+          if (follow) queue.push(...linkedFiles(file.compiled, path).filter((target) => links.exists(target) && !queue.includes(target)));
         }
         return reached;
       };
@@ -373,8 +389,8 @@ export async function main(args = process.argv.slice(2)): Promise<number> {
         }
         return result.diagnostics.some((item) => item.severity === 'error') ? 1 : 0;
       }
-      // A lone board cannot follow links, so only multi-board exports bundle linked files.
-      const reached = await reach(all, true);
+      // A lone board cannot follow links, so only multi-board exports bundle, or even read, linked files.
+      const reached = await reach(all, true, all);
       // A bundle holds every file its links reach that compiles; links to a file left out then dangle like links to absent files.
       const held = new Set(reached.map((file) => file.path));
       const documents = reached.map((file) => ({ ...file, diagnostics: lint(file.compiled, {
@@ -417,17 +433,21 @@ export async function main(args = process.argv.slice(2)): Promise<number> {
         else {
           // File links are kept only when the export holds their file, which may be the entry file itself.
           const bundled = new Set(documents.map((file) => file.path));
-          const atlas = documents.some((file) => linkedFiles(file.compiled.diagram, file.path).some((target) => bundled.has(target)));
+          const atlas = documents.some((file) => linkedFiles(file.compiled, file.path).some((target) => bundled.has(target)));
           const binaries = new Map<string, Buffer>();
           const rendered: AtlasDocument[] = [];
           for (const file of documents) {
             const boards = [...indexBoards(file.compiled.diagram).values()];
             const byTarget = new Map(boards.map((board) => [board.target, board]));
-            const follows = atlas ? (path: string) => bundled.has(resolveFilePath(file.path, path) ?? '') : undefined;
+            const follows = atlas ? (path: string) => bundled.has(resolveFilePath(file.path, path, false) ?? '') : undefined;
+            const sources = linkSources(file.compiled);
             const exported = await renderExportBoards(file.compiled.diagram, async (target) => {
               const data = await render(file.path, target, format === 'html' ? 'svg' : format);
-              if (format === 'png') binaries.set(JSON.stringify([file.path, byTarget.get(target)!.id]), data);
-              return format === 'png' ? '' : safeLinks(compilerLinks(data.toString('utf8'), byTarget.get(target)!.diagram), true, follows);
+              const board = byTarget.get(target)!;
+              if (format === 'png') binaries.set(JSON.stringify([file.path, board.id]), data);
+              // Links from imported files are rewritten to resolve from this file, as the atlas resolves them.
+              const link = (shape: Diagram['shapes'][number]) => inputLink(shape.link, sources.get(JSON.stringify([board.id, shape.id])), file.path);
+              return format === 'png' ? '' : safeLinks(compilerLinks(data.toString('utf8'), board.diagram, link), true, follows);
             }, format === 'html' ? file.diagnostics : [], { concurrency: availableParallelism(), skipEmpty: format === 'html' });
             rendered.push({ path: file.path, name: file.path.replace(/\.d2$/i, ''), boards: exported });
           }

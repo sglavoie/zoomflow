@@ -474,20 +474,20 @@ test('exports a folder project as one offline atlas and links file SVGs in the Z
   await offline.locator('.zf-stage a[data-file="./work/index.d2"]').click();
   await expect(stage).toHaveAttribute('data-file', 'work/index.d2');
   expect(await offline.evaluate(() => location.hash)).toBe('#/@file/work%2Findex.d2');
-  await expect(crumbs).toHaveText(['index', 'Root']);
+  await expect(crumbs).toHaveText(['index', 'work/index']);
   // The fragment opens the linked file's board.
   await offline.locator('.zf-stage a[data-file="../projects/zoomflow.d2#/Viewer"]').click();
   await expect(stage).toHaveAttribute('data-file', 'projects/zoomflow.d2');
   await expect(stage).toHaveAttribute('data-board', 'root.layers.Viewer');
-  await expect(crumbs).toHaveText(['index', '…', 'work/index', 'Root', 'Viewer']);
+  await expect(crumbs).toHaveText(['index', '…', 'work/index', 'projects/zoomflow', 'Viewer']);
   // Back moves across files; a reload keeps the place and its trail.
   await offline.goBack();
   await expect(stage).toHaveAttribute('data-file', 'work/index.d2');
   await offline.reload();
   await expect(stage).toHaveAttribute('data-file', 'work/index.d2');
-  await expect(crumbs).toHaveText(['index', 'Root']);
+  await expect(crumbs).toHaveText(['index', 'work/index']);
   await stage.focus();
   await offline.keyboard.press('Escape');
   await expect(stage).toHaveAttribute('data-file', 'index.d2');
-  await expect(crumbs).toHaveText(['Root']);
+  await expect(crumbs).toHaveText(['index']);
 });

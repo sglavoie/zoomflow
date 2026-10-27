@@ -1,7 +1,8 @@
 import { D2 } from '@d2lang/d2';
 import { readFileSync } from 'node:fs';
 import { afterAll, expect, it } from 'vitest';
-import { boardLabel, indexBoards, lint, type LintDiagnostic } from '../src';
+import { boardKey, boardLabel, indexBoards, lint, rebaseFileLinks, type LintDiagnostic } from '../src';
+import { definedClasses } from '../src/classes';
 
 const d2 = new D2();
 afterAll(() => d2.dispose());
@@ -443,4 +444,70 @@ it('names a board that a link cannot reach because its name has a backslash or q
     'Link targets missing board "Root > bs". Did you mean "Root > b\\s"? Board names with backslashes or quotes cannot be link targets, so rename it.',
   ]);
   expect(lint(await compile('a.link: layers.qx\nlayers."q\\"y": {c}')).diagnostics[0].message).toBe('Link targets missing board "Root > qx".');
+});
+
+it('resolves file links in imported files from the file that wrote them', async () => {
+  const result = await d2.compile({ fs: { index: '...@sub/part\nlayers.L: {...@sub/part}\nhome.link: ./sub/other.d2',
+    'sub/part.d2': 'a.link: ./other.d2\nb: {link: ../x.d2}\nc.link: ./gone.d2\na -> b: {link: ./other.d2}' }, inputPath: 'index', options: { layout: 'elk' } });
+  const files = { inputPath: 'index', exists: (path: string) => ['sub/other.d2', 'x.d2'].includes(path) };
+  expect(lint(result, { files }).diagnostics.map(({ board, shape, message }) => [board, shape, message])).toEqual([
+    ['root', 'c', 'Link targets missing file "sub/gone.d2".'],
+    ['root.layers.L', 'c', 'Link targets missing file "sub/gone.d2".'],
+    ['root.layers.L', undefined, 'Layer "Root > L" has no incoming board link.'],
+  ]);
+});
+
+it('rewrites file links of imported files to open from the entry file, leaving the compiled diagram for lint', async () => {
+  const result = await d2.compile({ fs: { 'work/index.d2': '...@sub/part\nhome.link: ./sub/other.d2',
+    'work/sub/part.d2': 'a.link: ./other.d2\nb: {link: "../../x.d2#/Q"}\na -> b: {link: ./other.d2}' }, inputPath: 'work/index.d2', options: { layout: 'elk' } });
+  const links = (diagram: typeof result.diagram) => [...diagram.shapes, ...diagram.connections].map((item) => [item.id, item.link]);
+  const before = links(result.diagram);
+  expect(links(rebaseFileLinks(result, 'work/index.d2'))).toEqual([
+    ['a', './sub/other.d2'], ['home', './sub/other.d2'], ['b', '../x.d2#/Q'], ['(a -> b)[0]', './sub/other.d2'],
+  ]);
+  expect(links(result.diagram)).toEqual(before);
+  const plain = await compile('a.link: ./other.d2');
+  expect(rebaseFileLinks(plain, 'index.d2')).toBe(plain.diagram);
+});
+
+it('checks file links into hidden and build folders by the caller\'s project rules', async () => {
+  const result = await compile('a.link: ./dist/x.d2\nb.link: ./.hidden/y.d2');
+  const files = { inputPath: 'index.d2', exists: () => true };
+  expect(lint(result, { files }).diagnostics.map((item) => item.message)).toEqual([
+    'Link "./dist/x.d2" opens a hidden or build folder, which the project leaves out.',
+    'Link "./.hidden/y.d2" opens a hidden or build folder, which the project leaves out.',
+  ]);
+  expect(lint(result, { files: { ...files, scanned: false } }).diagnostics).toEqual([]);
+});
+
+it('quotes a board named null as D2 does, and warns when D2 drops a link to another casing of it', async () => {
+  expect(boardKey('null')).toBe("'null'");
+  expect(boardKey('NULL')).toBe('NULL');
+  expect(lint(await compile('s.link: layers."null"\nlayers."null": {t; u.link: _}')).diagnostics).toEqual([]);
+  const dropped = lint(await compile('s.link: layers."NULL"\nlayers."NULL": {t; u.link: _}')).diagnostics;
+  expect(dropped.map(({ rule, shape, message }) => [rule, shape, message])).toEqual([
+    ['ignored-link', 's', 'D2 drops the link to board "Root > NULL", so the viewer ignores it. Rename the board to link to it.'],
+    ['orphan-board', undefined, 'Layer "Root > NULL" has no incoming board link.'],
+  ]);
+  expect(dropped[0].range).toMatch(/^index,0:/);
+  expect(boardLabel("root.layers.'null'.layers.x", indexBoards((await compile('a')).diagram))).toBe('Root > null > x');
+});
+
+it('scans past Markdown block strings fenced with backticks for classes', async () => {
+  const index = 'x: |`md\n| a | b {\n`|\nclasses.k: {style.fill: red}\ny.class: k';
+  expect(definedClasses({ index }, 'index')).toEqual(new Set(['k']));
+  expect(definedClasses({ index: 'x: ||`md\n| a |` b |\n`||\nclasses.k: {}' }, 'index')).toEqual(new Set(['k']));
+  expect(lint(await d2.compile({ fs: { index }, options: { layout: 'elk' } })).diagnostics).toEqual([]);
+});
+
+it('locates boards declared through dotted layers keys at their own name', async () => {
+  const result = lint(await compile('a\nlayers.x: {t}\nlayers.t: {u}\nlayers.y.z: 1\nlayers: {w: {v}}'), { missingBacklink: true });
+  expect(result.diagnostics.filter((item) => item.rule === 'orphan-board').map(({ board, range }) => [board, range])).toEqual([
+    ['root.layers.x', 'index,1:7:9-1:8:10'],
+    ['root.layers.t', 'index,2:7:23-2:8:24'],
+    ['root.layers.y', 'index,3:7:37-3:8:38'],
+    ['root.layers.w', 'index,4:9:53-4:10:54'],
+  ]);
+  expect(result.diagnostics.filter((item) => item.rule === 'missing-backlink').map(({ board, range }) => [board, range?.split(',')[1].split('-')[0]]))
+    .toEqual([['root.layers.x', '1:7:9'], ['root.layers.t', '2:7:23'], ['root.layers.y', '3:7:37'], ['root.layers.w', '4:9:53']]);
 });

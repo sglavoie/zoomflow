@@ -565,3 +565,17 @@ test('review F5 atlas map rejects AI source changes', async ({ page }) => {
   expect(await editorText(page)).toBe('file_1: Altered');
   await expect(stage).toContainText('Altered');
 });
+
+test('a file link written in an imported file opens from the folder of the file that wrote it', async ({ page }) => {
+  const folder = join(mkdtempSync(join(tmpdir(), 'zoomflow-imports-')), 'nested');
+  mkdirSync(join(folder, 'sub'), { recursive: true });
+  writeFileSync(join(folder, 'index.d2'), '...@sub/part\n');
+  writeFileSync(join(folder, 'sub/part.d2'), 'Go: { link: ./other.d2 }\n');
+  writeFileSync(join(folder, 'sub/other.d2'), 'Arrived\n');
+  await page.goto('/');
+  await openFolder(page, folder);
+  await showingProjectFile(page, 'nested', 'index.d2');
+  await page.locator('#viewer .zf-stage a[data-file="./sub/other.d2"]').click();
+  await showingProjectFile(page, 'nested', 'sub/other.d2');
+  await expect(crumbs(page)).toHaveText(['index', 'sub/other']);
+});

@@ -133,7 +133,7 @@ function offlineViewer(lib: typeof runtime) {
   let doc = entry;
   /** The project path a file link of the shown file opens, when the export holds that file. */
   const fileOf = (path: string) => {
-    const target = names.size ? lib.resolveFilePath(doc.file, path) : undefined;
+    const target = names.size ? lib.resolveFilePath(doc.file, path, false) : undefined;
     return target !== undefined && docs.has(target) ? target : undefined;
   };
   const exists = (id: string) => doc.byId.has(id);
@@ -142,7 +142,7 @@ function offlineViewer(lib: typeof runtime) {
   // boardLabel reads only `name` and `parent`, which export boards share with live ones.
   const describe = (id: string) => lib.boardLabel(id, doc.byId as unknown as Parameters<typeof boardLabel>[1]);
   const describeFile = (path: string) => {
-    const target = lib.resolveFilePath(doc.file, path);
+    const target = lib.resolveFilePath(doc.file, path, false);
     return (target !== undefined && names.get(target)) || (target ?? path).replace(/^.*\//, '').replace(/\.d2$/i, '');
   };
   /** The board a file link opens: its fragment's board, or the nearest existing ancestor. */
@@ -178,7 +178,9 @@ function offlineViewer(lib: typeof runtime) {
   area.className = 'zf-stage-area';
   stage.before(area);
   area.append(stage);
-  lib.createViewport(stage, area, lib.clampBox, lib.revealBox);
+  const viewport = lib.createViewport(stage, area, lib.clampBox, lib.revealBox);
+  // Each file keeps its own saved views, as in the live viewer, so same-named boards never share one.
+  viewport.setDocument(doc.file);
   let current = boards[0];
   let trail: string[] = [];
   /** The files passed through on the way to the shown one, each with the trail it was left on. */
@@ -197,6 +199,7 @@ function offlineViewer(lib: typeof runtime) {
     const focusStage = stage.contains(document.activeElement);
     const focusCrumb = crumbs.contains(document.activeElement);
     const previous = owner === doc ? current.id : undefined;
+    if (owner !== doc) viewport.setDocument(owner.file);
     doc = owner;
     current = board;
     trail = lib.simplifyTrail(visits);
@@ -228,7 +231,9 @@ function offlineViewer(lib: typeof runtime) {
     const shown = doc;
     const files = stack;
     breadcrumbs.render([...files.map((visit, index) => ({ name: names.get(visit.file) ?? visit.file, activate: () => returnTo(index) })),
-      ...visited.map((id, index) => ({ name: shown.byId.get(id)!.name, activate: () => show(shown.byId.get(id)!, visited.slice(0, index + 1)) }))]);
+      // Like the live viewer, a file's root crumb is named after the file.
+      ...visited.map((id, index) => ({ name: id === 'root' && names.get(shown.file) || shown.byId.get(id)!.name,
+        activate: () => show(shown.byId.get(id)!, visited.slice(0, index + 1)) }))]);
     if (focusStage || focusCrumb) {
       // Going up keeps the keyboard position: focus the link leading back down, which the
       // viewport reveals as it receives focus. Other crumb moves keep focus in the trail.
@@ -294,6 +299,8 @@ function offlineViewer(lib: typeof runtime) {
       event.preventDefault();
       returnTo(stack.length - 1);
     }
+    // Backspace goes up here, so with nowhere to go it does nothing, rather than WebKit's history Back.
+    else if (event.key === 'Backspace') event.preventDefault();
   });
   lib.watchHistory(window, restore);
   restore();

@@ -1,4 +1,4 @@
-import { boardBlocks, classifyHref, indexBoards, indexShapeSources, parseSourceRange, lint, resolveFilePath, type CompileResponse, type ShapeSource, type SourceRange, type Diagram, type LintDiagnostic, type LintResult } from '@zoomflow/core';
+import { boardBlocks, classifyHref, indexBoards, indexShapeSources, parseSourceRange, lint, rebaseFileLinks, resolveFilePath, type CompileResponse, type ShapeSource, type SourceRange, type Diagram, type LintDiagnostic, type LintResult } from '@zoomflow/core';
 import { Viewer, openFolderMessage, setupViewport, type RenderBoard, type ViewerRoute } from '@zoomflow/viewer';
 import { SourceEditor } from './editor';
 import { compilerDiagnostics, lintDiagnostics, type SourceDiagnostic } from './diagnostics';
@@ -326,9 +326,10 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
     const result = (async () => {
       const { d2 } = await shared.compiler.get();
       const compiled = await compileSource(source, { inputPath: path, fs: context.fs });
-      const boards = indexBoards(compiled.diagram);
+      const diagram = rebaseFileLinks(compiled, path);
+      const boards = indexBoards(diagram);
       compiledBoards.set(key, new Set([...boards.values()].map((board) => board.hash)));
-      const render: RenderBoard = (target) => d2.render(compiled.diagram, { ...compiled.renderOptions, target, noXMLTag: true });
+      const render: RenderBoard = (target) => d2.render(diagram, { ...compiled.renderOptions, target, noXMLTag: true });
       return { boards, render };
     })();
     linkedCompiles.set(key, { sources, result });
@@ -340,8 +341,9 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
   async function compileProjectFile(path: string, fs: Record<string, string>): Promise<Pick<DocumentExport, 'diagram' | 'render' | 'diagnostics'>> {
     const { d2 } = await shared.compiler.get();
     const compiled = await compileSource(fs[path]!, { inputPath: path, fs });
-    const render: RenderBoard = (target) => d2.render(compiled.diagram, { ...compiled.renderOptions, target, noXMLTag: true });
-    return { diagram: compiled.diagram, render, diagnostics: lint(compiled, { files: lintFiles(path) }).diagnostics };
+    const diagram = rebaseFileLinks(compiled, path);
+    const render: RenderBoard = (target) => d2.render(diagram, { ...compiled.renderOptions, target, noXMLTag: true });
+    return { diagram, render, diagnostics: lint(compiled, { files: lintFiles(path) }).diagnostics };
   }
 
   function setFileStack(stack: FileVisit[]) {
@@ -408,7 +410,7 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
         setActivity(`Drawing the atlas map: ${path} (${index + 1} of ${paths.length})…`);
         try {
           const compiled = await compileSource(fs[path], { inputPath: path, fs });
-          files.push({ path, links: linksOfFile(compiled.diagram, path) });
+          files.push({ path, links: linksOfFile(rebaseFileLinks(compiled, path), path) });
         } catch (error) {
           if (error instanceof CompilerStartupError) throw error;
           files.push({ path, links: [], failed: true });
@@ -678,16 +680,18 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
       }, 15_000);
       const compiled = await compileSource(source);
       if (request !== generation) return;
+      // Links written in imported files open what they name from the file shown; lint reads them where written.
+      const diagram = rebaseFileLinks(compiled, picker().inputPath(id));
       // D2 registers fonts at compile time for both text measurement and rendering.
       // This diagram carries that family into every viewer/export render call.
-      const render: RenderBoard = (target) => d2.render(compiled.diagram, {
+      const render: RenderBoard = (target) => d2.render(diagram, {
         ...compiled.renderOptions, target, noXMLTag: true,
       });
       const linted = lint(compiled, { files: lintFiles(compiled.inputPath) });
       const { diagnostics } = linted;
       const compiledSources = indexShapeSources(compiled.diagram, compiled.graph, source, compiled.inputPath);
       viewer.setSourceShapes(compiledSources);
-      await viewer.setDocument(compiled.diagram, render, diagnostics, preserveViewport);
+      await viewer.setDocument(diagram, render, diagnostics, preserveViewport);
       if (request === generation) {
         sourceMap = compiledSources;
         mappedSource = source;
@@ -695,7 +699,7 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
         defaultLint = linted;
         updateLint();
         compileError.hide(true);
-        const boards = indexBoards(compiled.diagram);
+        const boards = indexBoards(diagram);
         if (currentDocumentKey?.startsWith('project:')) compiledBoards.set(currentDocumentKey, new Set([...boards.values()].map((board) => board.hash)));
         blocks = boardBlocks(compiled.graph, source, compiled.inputPath);
         const sites = boardSites(source, blocks, boards);
@@ -709,7 +713,7 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
           return engine.render(result.diagram, { ...result.renderOptions, noXMLTag: true });
         };
         sourceError = false;
-        documentExport = { diagram: compiled.diagram, render, name, diagnostics, renderSource };
+        documentExport = { diagram, render, name, diagnostics, renderSource };
         shared.exportChanged();
         setPreviewState('ready');
         // Show a board or shape an edit just made.

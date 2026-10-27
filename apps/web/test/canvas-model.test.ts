@@ -61,6 +61,24 @@ it('edits topics on detail boards and follows a renamed detail board', () => {
   expect(deeper.select).toBe('n_1_2');
 });
 
+it('goes up a board with its centre selected when a remove takes a detail board’s last subtopic', () => {
+  // Boards “A” and “A 2”: once the first A has no subtopics, the second takes the name “A”.
+  const own = mindMapSource(map('Root\n  A\n    first child\n  A\n    second child', 1));
+  const removed = editOnCanvas(own, ['A'], 'n_1', { type: 'remove' })!;
+  expect(outline(removed.own)).toBe('Root\n  A\n  A\n    second child');
+  expect(removed.trail).toEqual([]);
+  expect(removed.select).toBe('n_1');
+  // A board that keeps a subtopic, or loses a deeper one, stays on view.
+  const nested = mindMapSource(map('Trip\n  Places\n    Lisbon\n      Alfama\n        Castle\n      Belém', 2));
+  expect(editOnCanvas(nested, ['Lisbon'], 'n_2', { type: 'remove' })!.trail).toBeUndefined();
+  const deeper = editOnCanvas(nested, ['Lisbon'], 'n_1_1', { type: 'remove' })!;
+  expect(deeper.trail).toBeUndefined();
+  expect(deeper.select).toBe('n_1');
+  const last = editOnCanvas(editOnCanvas(nested, ['Lisbon'], 'n_2', { type: 'remove' })!.own, ['Lisbon'], 'n_1', { type: 'remove' })!;
+  expect(last.trail).toEqual([]);
+  expect(last.select).toBe('n_1_1');
+});
+
 it('reports where each main board topic moved, so attached boards follow renames and removals', () => {
   const own = mindMapSource(map('Plan\n  People\n    Hiring\n  Money\n    Hiring'));
   expect(editOnCanvas(own, [], 'n_1_1', { type: 'rename', label: 'Recruiting' })!.moved!.get('n_1_1')).toBe('n_1_1');

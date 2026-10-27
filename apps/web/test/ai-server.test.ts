@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { createServer, request as httpRequest, type IncomingMessage, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { Readable } from 'node:stream';
-import { handle, isLoopbackAddress, providerStatus, readBody, runAi, stopRunning } from '../ai-server';
+import { handle, isLoopbackAddress, providerStatus, readBody, requestProblem, runAi, stopRunning } from '../ai-server';
 
 const originalPath = process.env.PATH;
 const original = { CLAUDE_CONFIG_DIR: process.env.CLAUDE_CONFIG_DIR, INIT_CWD: process.env.INIT_CWD };
@@ -269,6 +269,18 @@ it('answers non-JSON requests with 415 and other methods with 405', async () => 
     await expect(call('POST', '/api/ai', 'text/plain')).resolves.toEqual({ status: 415, error: 'Send the AI request as JSON.' });
     await expect(call('GET', '/api/ai')).resolves.toEqual({ status: 405, error: 'Send a JSON POST request.' });
   } finally { await new Promise((done) => server.close(done)); }
+});
+
+it('accepts deeply nested board ids and names the limit a request breaks', () => {
+  // Board ids are full paths, so a board seven levels down passes 300 characters.
+  const deep = ['root', ...Array.from({ length: 7 }, (_, i) => `layers.${'Quarterly planning topic '.repeat(2)}${i}`)].join('.');
+  expect(deep.length).toBeGreaterThan(300);
+  expect(requestProblem({ ...request, provider: 'codex', board: deep })).toBeUndefined();
+  expect(requestProblem({ ...request, provider: 'codex', board: 'x'.repeat(8_001) })).toContain('nested too deeply');
+  expect(requestProblem({ ...request, provider: 'codex', prompt: 'x'.repeat(8_001) })).toContain('prompt is too long');
+  expect(requestProblem({ ...request, provider: 'codex', source: 'x'.repeat(180_001) })).toContain('diagram is too large');
+  expect(requestProblem({ ...request, provider: 'codex', prompt: ' ' })).toBe('Invalid AI request.');
+  expect(requestProblem({ ...request, provider: 'gpt' })).toBe('Invalid AI request.');
 });
 
 it('refuses environment variables that change which programs or code the CLI loads', async () => {

@@ -259,7 +259,10 @@ Home: {link: ../index.d2}
 
 - **Syntax:** a file link is a path that starts with `./` or `../` and ends in `.d2`.
   It resolves from the linking file's folder, like an import, and must stay inside the
-  project folder. The `./` matters: D2 reads `link: health.d2` or `link: work/plan.d2`
+  project folder. A link written in an imported file resolves from that file's folder,
+  except a `link:` at the top of the imported file, or one that two files both write on
+  the same shape: D2 does not say which file wrote those, so they resolve from the file
+  that imports them. The `./` matters: D2 reads `link: health.d2` or `link: work/plan.d2`
   as a board path and silently drops it; lint reports those as `bare-file-link` with
   the link to write instead. Paths with spaces work, for example `"./My Life.d2"`.
 - **Fragments:** add `#/` and a board path to open another board of that file, written

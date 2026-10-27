@@ -93,6 +93,8 @@ export function setupBoardTools(scope: PaneScope, viewer: Viewer, options: Board
   let menuReturn: HTMLElement | SVGElement | undefined;
   let renaming: { shape: string; element: SVGElement; frame: number } | undefined;
   let lastBoard: string | undefined;
+  /** The last edit on the diagram that moved the board on view, by the source and board before and after it. */
+  let lastMove: { before: { source: string; board: string }; after: { source: string; board: string } } | undefined;
   let shapeCache: { own: string; trail: string; find: (shape: string) => CanvasShape | undefined } | undefined;
 
   const ready = () => Boolean(sites) && compiledSource === options.source();
@@ -213,13 +215,23 @@ export function setupBoardTools(scope: PaneScope, viewer: Viewer, options: Board
     if ('error' in updated) { options.status(updated.error, 'error'); return; }
     const board = trail === canvas.trail ? boardId() : canvas.owner + trail.map(name => `.layers.${boardKey(name)}`).join('');
     const added = edits.some(change => change.type === 'add' || change.type === 'sibling');
-    // A rename that renames the board replaces it in history, since the old board is gone.
-    const moves = board !== boardId() ? { board, replace: !added && !edits.some(change => change.type === 'remove') } : {};
+    // A rename that renames the board, or a remove that removes it, replaces it in history, since the old board is gone.
+    const moves = board !== boardId() ? { board, replace: true } : {};
+    if (board !== boardId()) lastMove = { before: { source: options.source(), board: boardId() }, after: { source: updated.source, board } };
     // A press elsewhere on the diagram that finished a rename selects what it landed on instead.
     const shown = landed !== undefined ? landed ?? undefined : result.select;
     pending = { source: updated.source, ...moves, ...shown ? { shape: shown, rename: added && shown === result.select && shown !== shape } : {} };
     options.update(updated.source);
     if (edits.some(change => change.type === 'remove')) options.status(`Removed “${label}”. ${undoHint}`);
+  }
+  /** Undo and redo of an edit that moved the board on view move it back and forth too, since its board is gone. */
+  function followHistory() {
+    const source = options.source();
+    if (!lastMove || pending?.source === source) return;
+    const { before, after } = lastMove;
+    const board = source === before.source && boardId() === after.board ? before.board
+      : source === after.source && boardId() === before.board ? after.board : undefined;
+    if (board) pending = { source, board, replace: true };
   }
 
   function startRename(shape: string) {
@@ -556,7 +568,14 @@ export function setupBoardTools(scope: PaneScope, viewer: Viewer, options: Board
     if (move !== undefined) items[(move + items.length) % items.length].focus();
     else if (event.key === 'Escape') closeMenu();
     else if (event.key === 'Tab') closeMenu(false);
-    else return;
+    // Backspace in the menu would otherwise reach the viewer and go up a board.
+    else if (event.key !== 'Backspace') return;
+    event.preventDefault();
+    event.stopPropagation();
+  });
+  // So would Backspace on the selection bar's buttons; it removes a shape only while the shape has focus.
+  shapeGroup.addEventListener('keydown', event => {
+    if (event.key !== 'Backspace') return;
     event.preventDefault();
     event.stopPropagation();
   });
@@ -593,7 +612,7 @@ export function setupBoardTools(scope: PaneScope, viewer: Viewer, options: Board
       return keys.join(' · ');
     },
     /** The source changed: board actions wait for it to compile, except editing the root board. */
-    invalidate() { closeMenu(false); stopRename(false); pressed = undefined; refresh(); },
+    invalidate() { closeMenu(false); stopRename(false); pressed = undefined; followHistory(); refresh(); },
     /** The document compiled: index its boards. */
     compiled(source: string, next: BoardSites, nextBoards: Map<string, Board>) {
       sites = next;

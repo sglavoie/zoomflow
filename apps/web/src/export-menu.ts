@@ -6,12 +6,13 @@ import type { DocumentExport, DocumentPane } from './document-pane';
 import type { setupExamplePicker } from './example-picker';
 import { describeError, plural, safeFilename } from './text';
 
-/** The project paths of the files a diagram's file links open, in board order. */
-function linkedFiles(diagram: Diagram, path: string): string[] {
+/** The project paths of the files a diagram's file links open, in board order. Connections link files too, as
+ * the CLI, lint and the atlas map follow them. */
+export function linkedFiles(diagram: Diagram, path: string): string[] {
   const paths: string[] = [];
   for (const board of indexBoards(diagram).values()) {
-    for (const shape of board.diagram.shapes) {
-      const link = classifyHref(shape.link ?? '');
+    for (const item of [...board.diagram.shapes, ...board.diagram.connections]) {
+      const link = classifyHref(item.link ?? '');
       const target = link.kind === 'file' ? resolveFilePath(path, link.path) : undefined;
       if (target !== undefined && !paths.includes(target)) paths.push(target);
     }

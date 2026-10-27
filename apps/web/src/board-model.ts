@@ -120,16 +120,18 @@ export function reattach(before: string, after: string, attachments: Attachment[
     if (!from) { kept.push(item); continue; }
     const label = from.path.at(-1)!;
     const path = (topic: BoardTopic) => topic.path.join('\n');
+    // A topic with the labels of another topic that was already there is that topic, whatever its new identifier.
+    const another = (topic: BoardTopic) => old.some(other => other !== from && path(other) === path(topic));
     // A topic moved elsewhere is found by its label when that is unique, and not on a topic that was already there.
     const sameLabel = next.filter(topic => topic.path.at(-1) === label);
-    const elsewhere = sameLabel.length === 1 && !old.some(topic => topic.id === sameLabel[0].id && path(topic) === path(sameLabel[0]));
+    const elsewhere = sameLabel.length === 1 && !another(sameLabel[0]);
     const inPlace = next.find(topic => topic.id === from.id);
     // Topics with the same labels from the centre down are told apart by their place.
     const samePath = next.filter(topic => path(topic) === path(from));
     const to = moved ? next.find(topic => topic.id === moved.get(from.id))
       : (inPlace && path(inPlace) === path(from) ? inPlace : samePath.length === 1 ? samePath[0] : undefined) ?? (elsewhere ? sameLabel[0]
         // A renamed ancestor keeps the topic in place; so does a renamed topic when no topic was added or removed.
-        : inPlace && (inPlace.path.at(-1) === label || sameShape) ? inPlace : undefined);
+        : inPlace && !another(inPlace) && (inPlace.path.at(-1) === label || sameShape) ? inPlace : undefined);
     if (isFileAttachment(item)) {
       if (!to) continue;
       if (to.board) return `The topic “${label}” would open a detail board and the file “${item.file}”. Choose fewer detail boards, or remove its link first.`;

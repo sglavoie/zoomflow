@@ -25,9 +25,11 @@ export async function readAiResponse(response: Response): Promise<Record<string,
         ? 'The AI request took too long. Try a smaller change or check the selected provider, then send again.'
         : /not installed|not on.*PATH|sign in|login|environment|config/i.test(detail) ? detail
           : response.status === 403 ? 'AI works only when Zoomflow is opened through localhost on this computer. Open it at a localhost address, then try again.'
-            // The server names what to fix, such as a missing working directory; only its generic rejections need the limits.
+            // The server names what to fix, such as a missing working directory or a prompt over its limit.
             : response.status === 400 && typeof result.error === 'string' && !/^Invalid (AI|JSON|provider status) request\.$/.test(detail) ? detail
-            : response.status === 400 || response.status === 413 ? `The AI request was ${response.status === 413 ? 'too large' : 'invalid or too large'}. Keep the prompt under 8,000 characters and the diagram under 180,000 characters, then try again.`
+            : response.status === 413 ? 'The AI request was too large. Keep the prompt under 8,000 characters and the diagram under 180,000 characters, then try again.'
+              // A malformed request is not about size; the server names every limit it enforces.
+              : response.status === 400 ? 'The AI server could not read this request. Reload Zoomflow, then try again.'
               : 'The AI provider could not complete the request. Check its installation and sign-in, then try again.';
     throw new AiError(message, detail);
   }

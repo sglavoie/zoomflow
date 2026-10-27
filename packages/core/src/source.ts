@@ -1,4 +1,4 @@
-import { boardKey, indexBoards, type Diagram } from './index';
+import { boardKey, classifyHref, indexBoards, resolveFilePath, type Diagram } from './index';
 
 export interface SourceRange { from: number; to: number }
 export interface ShapeSource extends SourceRange { board: string; shape: string }
@@ -12,12 +12,21 @@ export function parseSourceRange(range: string, source: string, filename = 'inde
   return { from, to };
 }
 
+// Single-quoted keys carry their text as a plain string; other strings as a list of pieces.
+type AstKeySegment = Record<string, { range?: string; value?: string | { string?: string }[] }>;
+const keyText = (part: AstKeySegment) => {
+  const values = Object.values(part)[0]?.value;
+  if (typeof values === 'string') return values;
+  return Array.isArray(values) && values.every((value) => typeof value.string === 'string') ? values.map((value) => value.string).join('') : undefined;
+};
+
+interface SourceReference { key?: { range?: string; path?: AstKeySegment[] }; key_path_index?: number }
 // D2's public types omit these serialized graph fields (including parents).
 interface SourceGraph {
   name?: string;
   objects?: {
     box?: { TopLeft?: { x: number; y: number }; Width: number; Height: number };
-    references?: { key?: { range?: string; path?: Record<string, { range?: string }>[] }; key_path_index?: number }[];
+    references?: SourceReference[];
   }[];
   layers?: SourceGraph[];
   scenarios?: SourceGraph[];
@@ -28,7 +37,8 @@ interface SourceGraph {
  * names (which collide in containers). These boxes are never animation geometry.
  * Yields every raw D2 reference range, which may name an imported file.
  */
-function visitShapeReferences(diagram: Diagram, graph: unknown, visitor: (board: string, shape: string, range: string) => void) {
+function visitShapeReferences(diagram: Diagram, graph: unknown,
+  visitor: (board: string, shape: string, range: string, reference: SourceReference) => void) {
   const boards = indexBoards(diagram);
   function visit(node: SourceGraph, id: string) {
     const board = boards.get(id);
@@ -43,7 +53,7 @@ function visitShapeReferences(diagram: Diagram, graph: unknown, visitor: (board:
       for (const reference of object.references ?? []) {
         const part = reference.key?.path?.[reference.key_path_index ?? 0];
         const raw = part ? Object.values(part).find((value) => value.range)?.range : reference.key?.range;
-        if (raw) visitor(id, shapes[0].id, raw);
+        if (raw) visitor(id, shapes[0].id, raw, reference);
       }
     }
     for (const group of ['layers', 'scenarios', 'steps'] as const) {
@@ -73,10 +83,86 @@ export function shapeRanges(diagram: Diagram, graph: unknown): Map<string, strin
   return result;
 }
 
+/** The file each kept shape and connection link was written in, keyed by board ID and shape or connection ID.
+ * D2 rewrites the image paths of imported files but keeps their links verbatim, so a file link resolves from
+ * the file that wrote it: that of a `shape.link` reference, else the one file that mentions the shape (both
+ * ends, for a connection), else the one such file whose text holds the link. Links left out cannot be told
+ * apart; callers resolve them from the entry file.
+ */
+export function linkSources(compiled: { diagram: Diagram; graph: unknown; fs?: Record<string, string> }): Map<string, string> {
+  const files = new Map<string, Set<string>>();
+  const explicit = new Map<string, string>();
+  visitShapeReferences(compiled.diagram, compiled.graph, (board, shape, raw, reference) => {
+    // Compiler-expanded ASTs carry placeholder ranges without a file.
+    const file = /^(.+),\d+:\d+:\d+-\d+:\d+:\d+$/.exec(raw)?.[1];
+    if (file === undefined) return;
+    const key = JSON.stringify([board, shape]);
+    if (!files.has(key)) files.set(key, new Set());
+    files.get(key)!.add(file);
+    const path = reference.key?.path ?? [];
+    const index = reference.key_path_index ?? 0;
+    if (path.length === index + 2 && keyText(path[index + 1]) === 'link') explicit.set(key, file);
+  });
+  const pick = (candidates: string[], link: string) => {
+    if (candidates.length < 2) return candidates[0];
+    const holding = candidates.filter((file) => compiled.fs?.[file]?.includes(link));
+    return holding.length === 1 ? holding[0] : undefined;
+  };
+  const result = new Map<string, string>();
+  for (const board of indexBoards(compiled.diagram).values()) {
+    const mentions = (id: string) => [...files.get(JSON.stringify([board.id, id])) ?? []];
+    for (const shape of board.diagram.shapes) {
+      const key = JSON.stringify([board.id, shape.id]);
+      const file = shape.link ? explicit.get(key) ?? pick(mentions(shape.id), shape.link) : undefined;
+      if (file !== undefined) result.set(key, file);
+    }
+    for (const connection of board.diagram.connections) {
+      const dst = mentions(connection.dst);
+      const file = connection.link ? pick(mentions(connection.src).filter((item) => dst.includes(item)), connection.link) : undefined;
+      if (file !== undefined) result.set(JSON.stringify([board.id, connection.id]), file);
+    }
+  }
+  return result;
+}
+
+/** The compiled diagram with each file link written in an imported file rewritten to open the same file from
+ * `inputPath`, the entry file's project path, since viewers resolve links from the file they show. The diagram is
+ * copied when a link changes, so lint can still trace each link to the file that wrote it. */
+export function rebaseFileLinks(compiled: { diagram: Diagram; graph: unknown; fs?: Record<string, string>; inputPath?: string },
+  inputPath: string, scanned = true): Diagram {
+  const sources = linkSources(compiled);
+  const entry = compiled.inputPath ?? inputPath;
+  const rebased = (href: string, from: string | undefined) => {
+    const link = classifyHref(href);
+    if (link.kind !== 'file' || from === undefined || from === entry || from === inputPath) return href;
+    const target = resolveFilePath(from, link.path, scanned);
+    if (target === undefined) return href;
+    const base = inputPath.split('/').slice(0, -1);
+    const parts = target.split('/');
+    let common = 0;
+    while (common < base.length && common < parts.length - 1 && base[common] === parts[common]) common++;
+    const path = [...base.slice(common).map(() => '..'), ...parts.slice(common)].join('/');
+    return `${path.startsWith('../') ? '' : './'}${path}${link.hash}`;
+  };
+  const changes: [string, string, string][] = [];
+  for (const board of indexBoards(compiled.diagram).values()) {
+    for (const item of [...board.diagram.shapes, ...board.diagram.connections]) {
+      const href = item.link ? rebased(item.link, sources.get(JSON.stringify([board.id, item.id]))) : undefined;
+      if (href !== undefined && href !== item.link) changes.push([board.id, item.id, href]);
+    }
+  }
+  if (!changes.length) return compiled.diagram;
+  const diagram: Diagram = JSON.parse(JSON.stringify(compiled.diagram));
+  const boards = indexBoards(diagram);
+  for (const [board, id, href] of changes) {
+    const { shapes, connections } = boards.get(board)!.diagram;
+    [...shapes, ...connections].find((item) => item.id === id)!.link = href;
+  }
+  return diagram;
+}
+
 // The serialized AST of the main file, with UTF-16 ranges like object references.
 interface AstMap { range?: string; nodes?: { map_key?: AstMapKey }[] }
-// Single-quoted keys carry their text as a plain string; other strings as a list of pieces.
-type AstKeySegment = Record<string, { value?: string | { string?: string }[] }>;
 interface AstMapKey { key?: { path?: AstKeySegment[] }; value?: { map?: AstMap } }
 
 /** The text between the braces of each board's block in the main file; the whole file for the root board.
@@ -84,16 +170,11 @@ interface AstMapKey { key?: { path?: AstKeySegment[] }; value?: { map?: AstMap }
 export function boardBlocks(graph: unknown, source: string, filename = 'index'): Map<string, SourceRange> {
   const blocks = new Map<string, SourceRange>([['root', { from: 0, to: source.length }]]);
   const declarations = new Map<string, number>();
-  const segment = (part: AstKeySegment) => {
-    const values = Object.values(part)[0]?.value;
-    if (typeof values === 'string') return values;
-    return Array.isArray(values) && values.every((value) => typeof value.string === 'string') ? values.map((value) => value.string).join('') : undefined;
-  };
   function declare(path: (string | undefined)[], value: AstMapKey['value'], board: string) {
     if (path[0] !== 'layers' || path.length < 2) {
       if (path.length === 1 && path[0] === 'layers' && value?.map) {
         for (const node of value.map.nodes ?? []) {
-          const child = node.map_key?.key?.path?.map(segment);
+          const child = node.map_key?.key?.path?.map(keyText);
           if (child) declare(['layers', ...child], node.map_key!.value, board);
         }
       }
@@ -109,7 +190,7 @@ export function boardBlocks(graph: unknown, source: string, filename = 'index'):
   }
   function visit(map: AstMap, board: string) {
     for (const node of map.nodes ?? []) {
-      const path = node.map_key?.key?.path?.map(segment);
+      const path = node.map_key?.key?.path?.map(keyText);
       if (path) declare(path, node.map_key!.value, board);
     }
   }

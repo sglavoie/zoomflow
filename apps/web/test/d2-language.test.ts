@@ -13,6 +13,7 @@ const examples = [
   `note: ||md\n  A pipe | in text, and {braces}\n||\na: After`,
   `a -> b: Yes | No\nlayers: {\n  detail: {\n    c: x | y\n  }\n}`,
   'code: |`ts\n  const x = a || b; if (x) { y\n`|\nlayers: {\n  detail: {\n    c\n  }\n}',
+  'path: |md\n  C:\\ path\\|\nlayers: {\n  detail: {\n    c\n  }\n}',
 ];
 
 it.each(examples)('folds real D2 structures without interpreting label text: %s', async (source) => {
@@ -65,6 +66,39 @@ it('ends indented and inline multiline strings so following D2 regains highlight
   expect(tokens).toContainEqual({ text: 'a', style: 'property' });
   expect(tokens).toContainEqual({ text: 'b', style: 'property' });
   expect(state.block).toBeNull();
+  expect(state.depth).toBe(0);
+});
+
+it('ends a multiline string at a delimiter after a backslash, since D2 has no escapes in it', () => {
+  const state = d2Parser.startState!(2);
+  const tokens: { text: string; style: string | null }[] = [];
+  for (const line of ['a: |md C:\\|', 'b: {', '  c', '}']) {
+    const stream = new StringStream(line, 4, 2);
+    while (!stream.eol()) {
+      stream.start = stream.pos;
+      const style = d2Parser.token(stream, state);
+      tokens.push({ text: stream.current(), style });
+    }
+  }
+  expect(tokens).toContainEqual({ text: ' C:\\|', style: 'string' });
+  expect(tokens).toContainEqual({ text: 'b', style: 'property' });
+  expect(state.block).toBeNull();
+  expect(state.depth).toBe(0);
+});
+
+it('ends a single-quoted string at a quote after a backslash, as D2 does, and reads a doubled quote as a quote', () => {
+  const state = d2Parser.startState!(2);
+  const tokens: { text: string; style: string | null }[] = [];
+  for (const line of ["a: 'C:\\' {", "  b: 'it''s'", '}']) {
+    const stream = new StringStream(line, 4, 2);
+    while (!stream.eol()) {
+      stream.start = stream.pos;
+      const style = d2Parser.token(stream, state);
+      tokens.push({ text: stream.current(), style });
+    }
+  }
+  expect(tokens).toContainEqual({ text: "'C:\\'", style: 'string' });
+  expect(tokens).toContainEqual({ text: "'it''s'", style: 'string' });
   expect(state.depth).toBe(0);
 });
 

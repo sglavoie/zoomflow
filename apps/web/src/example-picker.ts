@@ -484,15 +484,17 @@ export function setupExamplePicker({ readSource, open, onState, forget, checkpoi
       persist();
       return key;
     },
-    /** Reopening an unchanged project reuses its drafts; see `rememberFile` for `match`. */
-    rememberFolder(folderName: string, files: { path: string; source: string }[], match: (key: string) => boolean | undefined = () => undefined) {
+    /** Reopening an unchanged project reuses its drafts; see `rememberFile` for `match`. An unsaved project, such as
+     * a draft atlas in a browser that cannot write to folders, is not on disk, so all of its source counts as unsaved. */
+    rememberFolder(folderName: string, files: { path: string; source: string }[], match: (key: string) => boolean | undefined = () => undefined,
+      saved = true) {
       syncSources();
       const sources = new Map(files.map((file) => [file.path, file.source]));
-      const project = [...projectGroups.keys()].find((id) => {
+      const project = saved ? [...projectGroups.keys()].find((id) => {
         const members = [...drafts.values()].filter((item) => item.projectId === id);
         return members.length === files.length && members.every((item) => !item.recoveredFrom && reusable(item) &&
           item.title === `${folderName}/${item.path}` && sources.has(item.path!) && (match(item.key) ?? item.baseline === sources.get(item.path!)));
-      });
+      }) : undefined;
       const projectId = project ?? `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
       const keys: Record<string, string> = Object.create(null);
       for (const file of files) {
@@ -506,7 +508,7 @@ export function setupExamplePicker({ readSource, open, onState, forget, checkpoi
         }
         const name = file.path.split('/').at(-1)!;
         const item: Draft = { key, name, title: `${folderName}/${file.path}`, description: 'Project file',
-          source: file.source, baseline: file.source, projectId, path: file.path, updatedAt: Date.now() };
+          source: file.source, baseline: saved ? file.source : '', projectId, path: file.path, updatedAt: Date.now() };
         keys[file.path] = key;
         drafts.set(key, item);
         addOption(item);

@@ -160,6 +160,21 @@ it('keeps attached boards on renamed topics', () => {
     .toMatch(/^The topic “Hiring” opens the board/);
 });
 
+it('does not move an attached board onto a topic that was already there when the outline removes its topic', () => {
+  // Removing an earlier branch shifts the identifiers, so the remaining topics take the removed topic's.
+  const hiring = [{ shape: 'n_1_1', name: 'People hiring', body: flow }];
+  expect(reattach(mindMapSource(map('Plan\n  People\n    Hiring\n  Money\n    Hiring')), mindMapSource(map('Plan\n  Money\n    Hiring')), hiring))
+    .toMatch(/^The topic “Hiring” opens the board “People hiring”. Keep the topic/);
+  const first = [{ shape: 'n_1', name: 'A board', body: flow }];
+  expect(reattach(mindMapSource(map('Plan\n  A\n  B')), mindMapSource(map('Plan\n  B\n  C')), first)).toMatch(/^The topic “A” opens the board “A board”. Keep the topic/);
+  expect(reattach(mindMapSource(map('Plan\n  A\n    x\n  B\n    y')), mindMapSource(map('Plan\n  B\n    y\n  C\n    z')), [{ ...first[0], shape: 'n_1_1' }]))
+    .toMatch(/^The topic “x” opens the board/);
+  // A topic renamed in place, or moved to a new place, still keeps its board.
+  expect(reattach(mindMapSource(map('Plan\n  A\n  B')), mindMapSource(map('Plan\n  Z\n  B')), first)).toEqual(first);
+  expect(reattach(mindMapSource(map('Plan\n  People\n    Hiring\n  Money')), mindMapSource(map('Plan\n  Money\n    Hiring')), hiring))
+    .toEqual(hiring);
+});
+
 it('keeps file links in the attachment section, beside attached boards, and reads only file links there', () => {
   const parts = { own: flow, attachments: [{ shape: 'step_1', file: './health.d2' }, { shape: 'step_3', name: 'Ideas', body: 'a -> b' },
     { shape: 'step_4', file: '../My Life.d2#/Sleep/Night' }] };
