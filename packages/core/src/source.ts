@@ -75,16 +75,19 @@ export function shapeRanges(diagram: Diagram, graph: unknown): Map<string, strin
 
 // The serialized AST of the main file, with UTF-16 ranges like object references.
 interface AstMap { range?: string; nodes?: { map_key?: AstMapKey }[] }
-interface AstMapKey { key?: { path?: Record<string, { value?: { string?: string }[] }>[] }; value?: { map?: AstMap } }
+// Single-quoted keys carry their text as a plain string; other strings as a list of pieces.
+type AstKeySegment = Record<string, { value?: string | { string?: string }[] }>;
+interface AstMapKey { key?: { path?: AstKeySegment[] }; value?: { map?: AstMap } }
 
 /** The text between the braces of each board's block in the main file; the whole file for the root board.
  * Boards declared in more than one place, imported, or under scenarios and steps have no single block, so they are left out. */
 export function boardBlocks(graph: unknown, source: string, filename = 'index'): Map<string, SourceRange> {
   const blocks = new Map<string, SourceRange>([['root', { from: 0, to: source.length }]]);
   const declarations = new Map<string, number>();
-  const segment = (part: Record<string, { value?: { string?: string }[] }>) => {
+  const segment = (part: AstKeySegment) => {
     const values = Object.values(part)[0]?.value;
-    return values?.every((value) => typeof value.string === 'string') ? values.map((value) => value.string).join('') : undefined;
+    if (typeof values === 'string') return values;
+    return Array.isArray(values) && values.every((value) => typeof value.string === 'string') ? values.map((value) => value.string).join('') : undefined;
   };
   function declare(path: (string | undefined)[], value: AstMapKey['value'], board: string) {
     if (path[0] !== 'layers' || path.length < 2) {

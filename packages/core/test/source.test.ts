@@ -60,3 +60,10 @@ it('finds the block of each board declared once in the main file', async () => {
   expect(blocks.has('root.layers.imp')).toBe(false);
   expect(blocks.has('root.scenarios.s')).toBe(false);
 });
+
+it('finds board blocks past single-quoted keys', async () => {
+  const source = "'null'.link: layers.b\na.'q': x\nlayers.'b': {c}\n";
+  const compiled = await d2.compile(source, { layout: 'elk' });
+  const range = boardBlocks(compiled.graph, source).get('root.layers.b');
+  expect(range && source.slice(range.from, range.to)).toBe('c');
+});

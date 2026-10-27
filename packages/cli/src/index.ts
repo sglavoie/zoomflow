@@ -126,13 +126,15 @@ export async function stageIcons(diagram: Diagram, input: string, root: string, 
   for (const board of indexBoards(diagram).values()) {
     for (const shape of [board.diagram.root, ...board.diagram.shapes]) {
       // The compiler serializes Go's url.URL as an object, despite its loose TS type.
-      const icon = shape.icon as string | { Scheme?: string; Host?: string; Path?: string } | undefined;
-      if (!icon || (typeof icon === 'object' && (icon.Scheme || icon.Host))) continue;
-      let path = typeof icon === 'string' ? undefined : icon.Path;
+      const icon = shape.icon as string | { Scheme?: string; Host?: string; Path?: string; Opaque?: string } | undefined;
+      // A one-letter scheme is a Windows drive (`C:\\img.png`), so the path is local.
+      const drive = !!icon && typeof icon === 'object' && /^[a-z]$/i.test(icon.Scheme ?? '') && !icon.Host;
+      if (!icon || (typeof icon === 'object' && (icon.Scheme || icon.Host) && !drive)) continue;
+      let path = typeof icon === 'string' ? undefined : drive ? `${icon.Scheme}:${icon.Opaque || icon.Path}` : icon.Path;
       if (typeof icon === 'string') {
         try { path = decodeURIComponent(icon); } catch { throw new Error(`Local image path is not valid URL encoding: ${icon}`); }
       }
-      if (!path || /^(?:[a-z][\w+.-]*:|\/\/|#)/i.test(path)) continue;
+      if (!path || (/^(?:[a-z][\w+.-]*:|\/\/|#)/i.test(path) && !/^[a-z]:/i.test(path))) continue;
       const asset = resolve(dirname(input), path);
       if (copied.has(asset)) continue;
       // Compare real paths too, so a symlinked directory cannot reach outside the root.
@@ -145,9 +147,23 @@ export async function stageIcons(diagram: Diagram, input: string, root: string, 
       const staged = join(temp, relative(root, asset));
       await mkdir(dirname(staged), { recursive: true });
       await copyFile(asset, staged);
+      // D2 0.9 opens the URL-escaped path beside the entry file, as `my%20icon.svg`, so stage that name too.
+      const escaped = join(temp, dirname(relative(root, input)), relative(dirname(input), asset).split(sep).map(escapePath).join(sep));
+      if (escaped !== staged) {
+        await mkdir(dirname(escaped), { recursive: true });
+        await copyFile(asset, escaped);
+      }
       copied.add(asset);
     }
   }
+}
+
+/** Escape a path segment as Go's url.URL does. */
+function escapePath(segment: string) {
+  return [...new TextEncoder().encode(segment)].map((byte) => {
+    const char = String.fromCharCode(byte);
+    return /[\w.~$&+,:;=@-]/.test(char) ? char : `%${byte.toString(16).toUpperCase().padStart(2, '0')}`;
+  }).join('');
 }
 
 async function regularFile(path: string, shown: string): Promise<boolean> {
@@ -223,12 +239,13 @@ export async function main(args = process.argv.slice(2)): Promise<number> {
     const [command, filename] = positionals;
     if (!['lint', 'export'].includes(command)) throw new UsageError(command ? `Unknown command: ${command}` : 'Missing command.');
     if (positionals.length !== 2) throw new UsageError(`${command} takes exactly one .d2 file.`);
-    if (command === 'lint' && (values.all || values.format || values.output)) throw new UsageError('Export options cannot be used with lint.');
+    if (command === 'lint' && (values.all || values.format !== undefined || values.output !== undefined)) throw new UsageError('Export options cannot be used with lint.');
     if (command === 'export' && (values.json || values['missing-backlink'] || values['boundary-ports'])) throw new UsageError('Lint options cannot be used with export.');
     // Without --format, an -o extension other than .zip chooses it.
     const implied = /^\.(svg|png|html)$/i.exec(extname(values.output ?? ''))?.[1];
     const format = (values.format ?? implied ?? 'svg').toLowerCase();
-    if (!['svg', 'png', 'html'].includes(format)) throw new UsageError(`Unsupported format: ${values.format}`);
+    if (!['svg', 'png', 'html'].includes(format)) throw new UsageError(`Unsupported format: ${values.format || '""'}`);
+    if (values.output === '') throw new UsageError('Output path is empty.');
     let input = resolve(filename);
     if (extname(input).toLowerCase() !== '.d2') throw new UsageError('Input must be a .d2 file.');
     if (!(await regularFile(input, filename))) {
@@ -256,7 +273,14 @@ export async function main(args = process.argv.slice(2)): Promise<number> {
     if (command === 'export' && (output === input || extname(output).toLowerCase() === '.d2')) throw new Error('Output must not overwrite D2 source files.');
     if (command === 'export' && !all && extname(output).toLowerCase() === '.zip') throw new Error(`A .zip output needs --all: ${values.output}`);
     if (command === 'export' && extname(output).toLowerCase() !== extension) {
-      throw new Error(`Output must end in ${extension} for ${extension === '.zip' ? `--all --format ${format}` : `--format ${format}`}: ${values.output}`);
+      // Name --format only when it was given; otherwise the format came from -o or the default.
+      if (values.format !== undefined) {
+        throw new Error(`Output must end in ${extension} for ${extension === '.zip' ? `--all --format ${format}` : `--format ${format}`}: ${values.output}`);
+      }
+      if (extension === '.zip') {
+        throw new Error(`Output must end in .zip, since --all writes every board: ${values.output}${format === 'png' ? '. For PNG images, use -o out.zip --format png.' : ''}`);
+      }
+      throw new Error(`Output must end in .svg, .png or .html, or pass --format: ${values.output}`);
     }
     if (command === 'export' && (await stat(output).catch(() => undefined))?.isDirectory()) throw new Error(`Output is a directory: ${output}`);
     const d2 = new D2();
@@ -287,7 +311,7 @@ export async function main(args = process.argv.slice(2)): Promise<number> {
         }
         await stageIcons(compiled.diagram, input, root, temp);
         // D2 logs progress for every board; keep warnings and errors once, naming the user's files.
-        const staged = new RegExp(String.raw`[^\s"'()]*${basename(temp)}/([^\s"'():]*)`, 'g');
+        const staged = new RegExp(String.raw`[^\s"'()]*${basename(temp)}[\\/]([^\s"'():]*)`, 'g');
         const reported = new Set<string>();
         const messages = (stderr: string) => stderr.split(/\r?\n/)
           .filter((line) => line.trim() && !/^(?:\x1b\[[\d;]*m)*(?:info|success|debug):/.test(line))

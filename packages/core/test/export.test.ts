@@ -79,8 +79,14 @@ steps: {first: {Step}}`, { layout: 'elk' });
     const boards = await renderExportBoards(compiled.diagram, async (target) => `<svg>${target}</svg>`);
     expect(boards.map((board) => board.path)).toEqual(['root.svg', 'Café.svg', 'v1.2.svg', 'a_b_c.svg', 'x_______.svg',
       '_CON.svg', '_lpt1.txt.svg', 'end__.svg', '_.svg', '__.svg', 'Ébène.svg', 'Ébène/inner.svg', '@e\u0301bène.svg', '@e\u0301bène/inner.svg',
-      'ébène.svg.svg', '@@ébène.svg/deep.svg']);
+      '@@ébène.svg.svg', '@@ébène.svg/deep.svg']);
     expect(Object.keys(unzipSync(exportBoardsZip(boards)))).toHaveLength(boards.length);
+  });
+
+  it('puts child boards in the folder named after their own board file when names collide', async () => {
+    const compiled = await d2.compile('layers: {\n  "a:b": {x}\n  a_b: {y; layers: {i: {z}}}\n}', { layout: 'elk' });
+    const boards = await renderExportBoards(compiled.diagram, async (target) => `<svg>${target}</svg>`);
+    expect(boards.map((board) => board.path)).toEqual(['root.svg', 'a_b.svg', '@a_b.svg', '@a_b/i.svg']);
   });
 
   it('zips substituted board contents and rejects duplicate paths', () => {

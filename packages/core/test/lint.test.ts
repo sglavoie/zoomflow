@@ -242,6 +242,12 @@ it('accepts a port that matches any one of several nodes drilling into the same 
     message: 'zf-out port "z" has no matching outgoing neighbour of "A" or "B" in "Root".' }]);
 });
 
+it('matches boundary ports to neighbours regardless of case, as D2 IDs are', async () => {
+  const result = strictLint(await compile('API -> svc\nsvc.link: layers.svc\nlayers.svc: {api.class: zf-in}'));
+  expect(result.diagnostics).toEqual([]);
+  expect(result.boundaries).toMatchObject([{ shape: 'svc', expected: 1, evaluated: 1 }]);
+});
+
 it('reports each dangling connection link separately at its own source line', async () => {
   const result = lint(await compile('c -> d: {link: layers.nope}\ne -> f: {link: layers.nope}\nk.link: layers.k\nlayers.k: {g -> h: {link: layers.zz}}'));
   expect(result.diagnostics.filter((item) => item.rule === 'dangling-link')).toMatchObject([
@@ -289,6 +295,12 @@ it('names missing boards with quoted segments as authored', async () => {
   expect(result.diagnostics.filter((item) => item.rule === 'dangling-link').map((item) => item.message)).toEqual([
     'Link targets missing board "Root > x.y".', 'Link targets missing board "Root > k > m n > x.layers.y".',
   ]);
+});
+
+it('points an unquoted dotted link at the board whose name has the dots', async () => {
+  const result = lint(await compile('e.link: "layers.x.y"\nf.link: layers.x.y\nlayers."x.y": {k}'));
+  expect(result.diagnostics.filter((item) => item.rule === 'dangling-link').map((item) => item.message)).toEqual(Array(2).fill(
+    'Link targets missing board "Root > x.y". A board named "x.y" exists; quote names with dots to link to it, as in layers."x.y".'));
 });
 
 it('warns about links the viewer ignores, such as a parent of root or a relative path', async () => {
@@ -375,7 +387,7 @@ it('compiles every D2 example in the library guide', async () => {
   expect(styled.renderOptions).toMatchObject({ themeID: 0, darkThemeID: 200, themeOverrides: { b1: '#1d4ed8' } });
 });
 
-it('keeps scanning classes after apostrophes, inch marks and one-line block strings in labels', async () => {
+it('keeps scanning classes after apostrophes, inch marks, pipes and one-line block strings in labels', async () => {
   const undefinedClasses = async (index: string) => lint(await d2.compile({ fs: { index }, options: { layout: 'elk' } }))
     .diagnostics.filter((item) => item.rule === 'undefined-class').map((item) => item.message.split('"')[1]);
   const classes = 'classes: {k: {style.fill: red}}\ny.class: k';
@@ -383,6 +395,8 @@ it('keeps scanning classes after apostrophes, inch marks and one-line block stri
   expect(await undefinedClasses(`tv: 55" TV\n${classes}`)).toEqual([]);
   expect(await undefinedClasses(`a: |md x|\n${classes}\nz.class: nope`)).toEqual(['nope']);
   expect(await undefinedClasses(`${classes}\nb: |md last line|`)).toEqual([]);
+  expect(await undefinedClasses(`x: in | out\n${classes}\nw: yes | no\nz.class: nope`)).toEqual(['nope']);
+  expect(await undefinedClasses(`x: in | out\n${classes}\nz.class: nope`)).toEqual(['nope']);
 });
 
 it('names a board that a link cannot reach because its name has a backslash or quote', async () => {

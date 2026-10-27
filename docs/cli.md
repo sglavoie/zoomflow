@@ -26,7 +26,8 @@ board names, including Unicode; only characters and names that archives or commo
 file systems reject (`/ \ < > : " | ? *`, control characters, trailing dots or
 spaces, `.`/`..`, and Windows device names such as `CON` or `LPT1`) are replaced
 with `_` or prefixed, and names that differ only by case or Unicode normalization
-gain an `@` prefix. HTML always includes the whole board tree, titled after the
+gain an `@` prefix; a board's child boards sit in the folder named like its own file,
+so `@a_b.svg` keeps its children in `@a_b/`. HTML always includes the whole board tree, titled after the
 input file without `.d2`, and a minified offline navigation runtime. Its
 Content-Security-Policy allows only the inline runtime and styles and embedded
 (`data:`) images and fonts, and no network requests. When two or more boards have
@@ -77,8 +78,9 @@ asset bundling and one explicit board target per process, running up to one
 process per available CPU and skipping empty boards in HTML. D2's progress output
 is dropped; its warnings and errors are printed once, with staging paths replaced
 by your source paths. Local icon/image paths resolve
-from the original input directory, must be regular files within the project root,
-and are staged alongside the sources; remote images must be accessible during export.
+from the original input directory (Windows drive paths such as `C:\img.png` included),
+must be regular files within the project root, and are staged alongside the sources,
+so paths with spaces work too; remote images must be accessible during export.
 D2 embeds the shipped fonts and bundled assets; HTML needs no compiler or network
 at viewing time. Native D2 handles PNG rendering. No Go or Bun is needed for the CLI build.
 

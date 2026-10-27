@@ -34,10 +34,11 @@ export async function renderExportBoards(diagram: Diagram, render: (target: stri
   const boards = indexBoards(diagram);
   // Names compare case-insensitively (Windows, macOS); a file and folder may not share one.
   const used = new Set<string>();
-  const claim = (folder: string, name: string, suffix = '') => {
-    const key = (value: string) => `${folder}${value}${suffix}`.normalize('NFC').toLowerCase();
-    while (used.has(key(name))) name = `@${name}`;
-    used.add(key(name));
+  // A board's file and the folder for its children share one name, so both must be free.
+  const claim = (folder: string, name: string, suffixes = ['']) => {
+    const keys = (value: string) => suffixes.map((suffix) => `${folder}${value}${suffix}`.normalize('NFC').toLowerCase());
+    while (keys(name).some((key) => used.has(key))) name = `@${name}`;
+    for (const key of keys(name)) used.add(key);
     return name;
   };
   const places = new Map<string, { folder: string; name: string }>();
@@ -46,8 +47,7 @@ export async function renderExportBoards(diagram: Diagram, render: (target: stri
     const cached = folders.get(`${id}\0${kind}`);
     if (cached !== undefined) return cached;
     const place = places.get(id)!;
-    const base = id === 'root' ? '' : folders.get(`${id}\0layers`) ?? `${place.folder}${claim(place.folder, place.name)}/`;
-    folders.set(`${id}\0layers`, base);
+    const base = id === 'root' ? '' : `${place.folder}${place.name}/`;
     const result = kind === 'layers' ? base : `${base}${claim(base, `@${kind}`)}/`;
     folders.set(`${id}\0${kind}`, result);
     return result;
@@ -55,10 +55,10 @@ export async function renderExportBoards(diagram: Diagram, render: (target: stri
   const result: ExportBoard[] = [];
   for (const board of boards.values()) {
     const parent = board.parent ? folder(board.parent, board.kind) : '';
-    const name = board.parent ? segment(board.name) : 'root';
+    const name = board.parent ? claim(parent, segment(board.name), ['.svg', '']) : claim(parent, 'root', ['.svg']);
     places.set(board.id, { folder: parent, name });
     result.push({ id: board.id, name: board.name, hash: board.hash, parent: board.parent,
-      path: `${parent}${claim(parent, name, '.svg')}.svg`, empty: board.diagram.shapes.length === 0, svg: '',
+      path: `${parent}${name}.svg`, empty: board.diagram.shapes.length === 0, svg: '',
       parentContext: parentContext(board, boards),
       missingLinks: diagnostics.filter((item) => item.rule === 'dangling-link' && item.board === board.id && item.shape && item.target) });
   }

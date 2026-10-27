@@ -180,7 +180,9 @@ describe.concurrent('zoomflow CLI', () => {
     success(byLink);
     expect(JSON.parse(byReal.stdout).diagnostics).toEqual([]);
     // The real path still decides: a symlinked folder cannot bring an outside input in.
-    const outside = await run(['lint', join(linked, 'sub', 'a.d2'), '--root', join(temp, 'reachable')]);
+    // Tests run concurrently, so use a folder this test owns.
+    await mkdir(join(temp, 'other-root'), { recursive: true });
+    const outside = await run(['lint', join(linked, 'sub', 'a.d2'), '--root', join(temp, 'other-root')]);
     expect(outside.stderr).toBe('zoomflow: Input must be inside --root.\n');
   });
 
@@ -308,6 +310,24 @@ describe.concurrent('zoomflow CLI', () => {
     });
   });
 
+  it('bundles local images whose paths have spaces, beside an entry file in a spaced folder', async () => {
+    const project = join(temp, 'spaced icons');
+    await mkdir(join(project, 'my dir'), { recursive: true });
+    const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4"><rect width="4" height="4"/></svg>';
+    await Promise.all([writeFile(join(project, 'my dir', 'my icon.svg'), svg), writeFile(join(project, 'other icon.svg'), svg),
+      writeFile(join(project, 'my dir', 'a.d2'), 'a: { icon: ./my icon.svg }\nb: { icon: "../other icon.svg" }')]);
+    const output = join(project, 'a.svg');
+    const result = await run(['export', join(project, 'my dir', 'a.d2'), '--root', project, '-o', output]);
+    success(result);
+    expect((await readFile(output, 'utf8')).match(/data:image\/svg\+xml/g)).toHaveLength(2);
+  });
+
+  it('treats Windows drive paths as local images, not URLs', async () => {
+    const diagram = { name: '', shapes: [{ link: '', icon: { Scheme: 'c', Opaque: '\\img.png', Host: '', Path: '' } }],
+      connections: [], root: { link: '' } } as unknown as Diagram;
+    await expect(stageIcons(diagram, join(temp, 'drive.d2'), temp, join(temp, 'drive-stage'))).rejects.toThrow(/img\.png/);
+  });
+
   it('reads only the input and its imports, explaining imports it could not load', async () => {
     const root = join(temp, 'reachable');
     await mkdir(join(root, 'dist', 'nested'), { recursive: true });
@@ -415,7 +435,9 @@ describe.concurrent('zoomflow CLI', () => {
     const cases = [[['lint'], 'lint takes exactly one .d2 file.'], [['lint', 'a.d2', 'b.d2'], 'lint takes exactly one .d2 file.'],
       [[], 'Missing command.'], [['build', 'a.d2'], 'Unknown command: build'], [['--bogus'], "Unknown option '--bogus'"],
       [['lint', 'a.d2', '--all'], 'Export options cannot be used with lint.'], [['export', 'a.d2', '--json'], 'Lint options cannot be used with export.'],
-      [['export', 'a.d2', '--format', 'pdf'], 'Unsupported format: pdf'], [['lint', 'a.txt'], 'Input must be a .d2 file.']] as const;
+      [['export', 'a.d2', '--format', 'pdf'], 'Unsupported format: pdf'], [['export', 'a.d2', '--format='], 'Unsupported format: ""'],
+      [['lint', 'a.d2', '-o', ''], 'Export options cannot be used with lint.'], [['export', 'a.d2', '-o', ''], 'Output path is empty.'],
+      [['lint', 'a.txt'], 'Input must be a .d2 file.']] as const;
     const results = await Promise.all(cases.map(([args]) => run([...args])));
     results.forEach((result, i) => {
       expect(result.code).toBe(2);
@@ -435,13 +457,19 @@ describe.concurrent('zoomflow CLI', () => {
       run(['export', 'fixtures/order.d2', '-o', output], { env: { ...process.env, PATH: temp } }),
       run(['export', 'fixtures/order.d2', '-o', 'fixtures/order.d2']), run(['export', 'fixtures/order.d2', '--all', '-o', output]),
       run(['export', 'fixtures/order.d2', '--format', 'html', '-o', join(temp, 'order.htm')]),
+      run(['export', 'fixtures/order.d2', '--all', '--format', 'svg', '-o', output]),
+      run(['export', 'fixtures/order.d2', '--all', '-o', join(temp, 'order.png')]), run(['export', 'fixtures/order.d2', '-o', join(temp, 'order')]),
     ]);
     for (const result of results) expect(result.code).toBe(2);
-    const [, , absent, , invalid, missing, , zip, htm] = results;
+    const [, , absent, , invalid, missing, , zip, htm, formatted, png, bare] = results;
     expect(absent.stderr).toBe('zoomflow: Cannot read fixtures/missing.d2: no such file\n');
     expect(invalid.stderr).toBe(`${input}:2:1: connection missing destination\n${input}:1:4: maps must be terminated with }\n`);
     expect(missing.stderr).toContain('D2 executable not found');
-    expect(zip.stderr).toBe(`zoomflow: Output must end in .zip for --all --format svg: ${output}\n`);
+    // --format is named only when it was passed.
+    expect(zip.stderr).toBe(`zoomflow: Output must end in .zip, since --all writes every board: ${output}\n`);
+    expect(formatted.stderr).toBe(`zoomflow: Output must end in .zip for --all --format svg: ${output}\n`);
+    expect(png.stderr).toBe(`zoomflow: Output must end in .zip, since --all writes every board: ${join(temp, 'order.png')}. For PNG images, use -o out.zip --format png.\n`);
+    expect(bare.stderr).toBe(`zoomflow: Output must end in .svg, .png or .html, or pass --format: ${join(temp, 'order')}\n`);
     expect(htm.stderr).toContain('Output must end in .html');
     expect(await readFile(output, 'utf8')).toBe('previous export');
   });
@@ -460,7 +488,7 @@ describe.concurrent('zoomflow CLI', () => {
     success(await run(['export', 'fixtures/cli/boards.d2', '--format', 'html', '-o', output]));
     const boards = embedded(await readFile(output, 'utf8'));
     expect(boards.map((b: { path: string }) => b.path)).toEqual([
-      'root.svg', '@root.svg', 'root/empty.svg', '@scenarios/alternate.svg', '@steps/first.svg',
+      'root.svg', '@root.svg', '@root/empty.svg', '@scenarios/alternate.svg', '@steps/first.svg',
     ]);
     expect(boards.find((b: { id: string }) => b.id === 'root.layers.root.layers.empty')).toMatchObject({ empty: true, svg: '' });
     const page = await browser.newPage({ offline: true });

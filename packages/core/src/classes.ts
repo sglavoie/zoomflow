@@ -91,8 +91,9 @@ export function definedClasses(files: Record<string, string>, path: string, seen
       const closed = text[end] === char;
       append(text.slice(i, closed ? end + 1 : end));
       i = closed ? end : end - 1;
-    } else if (char === '|' && current.colon) {
+    } else if (char === '|' && current.colon && !current.value.trim()) {
       // Block strings close with the same run of pipes that opened them, on the same line too.
+      // A pipe later in a value, as in `x: in | out`, is label text.
       const pipes = /^\|+/.exec(text.slice(i))![0];
       const end = text.indexOf(pipes, i + pipes.length);
       if (end < 0) return;

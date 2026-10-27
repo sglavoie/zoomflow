@@ -225,6 +225,9 @@ export function lint(compiled: LintInput, options: LintOptions = {}): LintResult
     const plain = (id: string) => id.replace(/["\\]/g, '');
     const meant = hint ? undefined : [...boards.values()].find((item) => /["\\]/.test(item.name) && plain(item.id) === plain(target));
     if (meant) hint = ` Did you mean "${label(meant.id)}"? Board names with backslashes or quotes cannot be link targets, so rename it.`;
+    // Unquoted, `layers.x.y` means board `y` inside `x`, not a board named `x.y`.
+    const dotted = hint ? undefined : [...boards.values()].find((item) => item.name.includes('.') && plain(item.id) === target);
+    if (dotted) hint = ` A board named "${dotted.name}" exists; quote names with dots to link to it, as in ${dotted.kind}."${dotted.name}".`;
     diagnostics.push({ rule: 'dangling-link', severity: 'error', board: board.id, shape, connection, range, target,
       message: `Link targets missing board "${label(target)}".${hint}` });
   }
@@ -405,7 +408,8 @@ export function lint(compiled: LintInput, options: LintOptions = {}): LintResult
       for (const { shape, required, evaluation } of requirements) {
         evaluation.expected += required[direction].size;
         for (const neighbour of required[direction]) {
-          const matches = ports[direction].filter((port) => port.id === neighbour);
+          // D2 IDs are case-insensitive within a board, so `API` and `api` name the same port.
+          const matches = ports[direction].filter((port) => port.id.toLowerCase() === neighbour.toLowerCase());
           if (matches.length) evaluation.evaluated++;
           else diagnostics.push({ rule: `boundary-${direction}`, severity: 'error', board: board.id, shape,
             range: shapeRange(board.id, shape),
@@ -413,7 +417,7 @@ export function lint(compiled: LintInput, options: LintOptions = {}): LintResult
         }
       }
       for (const port of ports[direction]) {
-        if (!requirements.some(({ required }) => required[direction].has(port.id))) diagnostics.push({
+        if (!requirements.some(({ required }) => [...required[direction]].some((id) => id.toLowerCase() === port.id.toLowerCase()))) diagnostics.push({
           rule: `boundary-${direction}`, severity: 'error', board: child.id, shape: port.id, range: shapeRange(child.id, port.id),
           message: `zf-${direction} port "${port.id}" has no matching ${direction === 'in' ? 'incoming' : 'outgoing'} neighbour of ${names} in "${label(board.id)}".`,
         });
