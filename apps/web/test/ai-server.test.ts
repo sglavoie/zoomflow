@@ -272,7 +272,8 @@ it('answers non-JSON requests with 415 and other methods with 405', async () => 
 });
 
 it('refuses environment variables that change which programs or code the CLI loads', async () => {
-  for (const name of ['PATH', 'NODE_OPTIONS', 'NODE_PATH', 'LD_PRELOAD', 'DYLD_INSERT_LIBRARIES', 'ELECTRON_RUN_AS_NODE', 'BASH_ENV', 'ENV', 'node_options']) {
+  for (const name of ['PATH', 'NODE_OPTIONS', 'NODE_PATH', 'LD_PRELOAD', 'DYLD_INSERT_LIBRARIES', 'ELECTRON_RUN_AS_NODE', 'BASH_ENV', 'ENV', 'node_options',
+    'GIT_DIR', 'GIT_ASKPASS', 'git_external_diff', 'SSH_ASKPASS', 'PERLLIB', 'JAVA_TOOL_OPTIONS']) {
     await expect(runAi({ ...request, provider: 'codex', environment: `SAFE=1\n${name}=/tmp/evil` }))
       .rejects.toThrow(`Environment line 2: ${name} cannot be set here`);
   }

@@ -31,6 +31,8 @@ export class FileHandles extends Map<string, FileSystemFileHandle> {
   private restoring?: Promise<boolean>;
   /** Writes apply in order, so a removal cannot be overtaken by the save before it. */
   private writes: Promise<unknown> = Promise.resolve();
+  /** Keys set or removed since the page loaded; a restore that read them earlier must not bring them back. */
+  private changed = new Set<string>();
 
   private db() {
     this.database ??= (async () => { try { return await openDatabase(); } catch { return undefined; } })();
@@ -47,11 +49,13 @@ export class FileHandles extends Map<string, FileSystemFileHandle> {
   }
   override set(key: string, handle: FileSystemFileHandle) {
     super.set(key, handle);
+    this.changed?.add(key); // Unset while the Map constructor adds initial entries.
     this.write((store) => store.put({ handle, modified: diskVersion(handle) } satisfies Stored, key));
     return this;
   }
   override delete(key: string) {
     const existed = super.delete(key);
+    this.changed.add(key);
     this.write((store) => store.delete(key));
     return existed;
   }
@@ -76,7 +80,7 @@ export class FileHandles extends Map<string, FileSystemFileHandle> {
       let restored = false;
       keys.forEach((key, index) => {
         const value = values[index] as Partial<Stored> | undefined;
-        if (typeof key !== 'string' || this.has(key)) return;
+        if (typeof key !== 'string' || this.changed.has(key)) return;
         if (!keep(key)) { this.write((store) => store.delete(key)); return; }
         if (value?.handle?.kind !== 'file') return;
         super.set(key, value.handle);

@@ -208,6 +208,30 @@ test('the save shortcut applies a name still being typed before saving', async (
   await expect(page.locator('#draft-status')).toHaveText('Saved to file');
 });
 
+test('a blank or unedited name keeps an opened file linked to it', async ({ page }) => {
+  await page.addInitScript(() => {
+    const target = window as typeof window & { written?: string[]; showOpenFilePicker?: () => Promise<unknown[]>; showSaveFilePicker?: () => Promise<unknown> };
+    target.written = [];
+    const handle = { name: 'Work.D2', getFile: async () => new File(['a -> b'], 'Work.D2', { lastModified: 1 }),
+      createWritable: async () => ({ write: async (text: string) => { target.written!.push(text); }, close: async () => {}, abort: async () => {} }) };
+    target.showOpenFilePicker = async () => [handle];
+    target.showSaveFilePicker = async () => { throw new Error('Save should write back to Work.D2'); };
+  });
+  await page.goto('/'); await previewReady(page);
+  await page.locator('#file').click();
+  await expect(page.locator('#filename')).toHaveText('Work.D2'); await previewReady(page);
+  await openDownloads(page);
+  await expect(page.locator('#export-name')).toHaveValue('Work');
+  await page.locator('#export-name').fill('  ');
+  await page.locator('#export-name').press('Enter');
+  await expect(page.locator('#export-name')).toHaveValue('Work');
+  // Saving from the unedited field must not rename `Work.D2` to `Work.d2` and unlink it.
+  await page.locator('#export-name').press('ControlOrMeta+s');
+  await expect(page.locator('#draft-status')).toHaveText('Saved to file');
+  await expect(page.locator('#filename')).toHaveText('Work.D2');
+  expect(await page.evaluate(() => (window as typeof window & { written?: string[] }).written)).toEqual(['a -> b']);
+});
+
 test('a slow save preserves later edits and does not rename a document opened in the meantime', async ({ page }) => {
   await page.addInitScript(() => {
     (window as any).showSaveFilePicker = async () => ({ name: 'saved-copy.d2', createWritable: async () => ({

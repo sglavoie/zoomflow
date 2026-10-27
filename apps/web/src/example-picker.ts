@@ -397,8 +397,10 @@ export function setupExamplePicker({ readSource, open, onState, forget, checkpoi
     rename(pane: PaneId, name: string) {
       let draft = draftOf(pane);
       if (!draft || draft.projectId) return;
-      name = flowFilename(name, draft.name);
-      if (name === draft.name) return;
+      // A blank name keeps the current one, and so does a field left as shown: `Diagram.D2` shows as `Diagram`.
+      const current = draft.name.replace(/\.d2$/i, '');
+      name = flowFilename(name, current);
+      if (name === flowFilename(draft.name, current)) return;
       draft.source = readSource(pane);
       if (exampleSource(draft.key) !== undefined) {
         // The copy is not on disk yet, so all of its source counts as unsaved.

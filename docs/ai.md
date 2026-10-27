@@ -46,8 +46,8 @@ ignored). Values may contain `=`. A non-blank Claude config field takes preceden
 selected CLI process and are kept in the current page, not saved by Zoomflow.
 Variables that change which programs or code the CLI loads are refused with an
 error naming the line: `PATH`, `NODE_OPTIONS`, `NODE_PATH`, `ELECTRON_RUN_AS_NODE`,
-`BASH_ENV`, `ENV`, `HOME`, `LD_*`, `DYLD_*` and similar shell, interpreter and Git
-loader settings. Set those in the shell that starts the local server instead.
+`BASH_ENV`, `ENV`, `HOME`, `LD_*`, `DYLD_*`, every `GIT_*` variable, and similar shell
+and interpreter loader settings. Set those in the shell that starts the local server instead.
 Zoomflow starts Claude Code with `--setting-sources ''` and Codex with
 `--ignore-user-config`, so your own CLI settings, hooks, plugins, CLAUDE.md
 instructions and Codex `config.toml` don't affect AI requests; your existing

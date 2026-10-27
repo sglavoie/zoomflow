@@ -8,6 +8,10 @@ const pickerWindow = window as PickerWindow;
 
 const moved = 'The file was moved or deleted; choose where to save.';
 
+/** The file each draft was refused writing to, shared by every pane; Save asks where to save instead of asking
+ * again, until the visitor grants it elsewhere or opens the draft from another file. */
+const refused = new Map<string, FileSystemFileHandle>();
+
 /** Whether this browser can ask where to save a new file. */
 export const canChooseSaveFile = () => Boolean(pickerWindow.showSaveFilePicker);
 
@@ -28,9 +32,6 @@ export type SaveFileTarget = {
 export function setupSaveFile(button: HTMLButtonElement, target: SaveFileTarget) {
   /** Notices that a file needs a new destination, cleared once a save succeeds. */
   const notices = new Set([moved]);
-  /** The file each draft was refused writing to; Save asks where to save instead of asking again, until the
-   * visitor grants it elsewhere or opens the draft from another file. */
-  const refused = new Map<string, FileSystemFileHandle>();
   button.addEventListener('click', async () => {
     if (!target.key()) return;
     button.disabled = true;

@@ -75,14 +75,15 @@ function isRequest(value: unknown): value is AiRequest {
     && (item.fullAccess === undefined || typeof item.fullAccess === 'boolean') && optionalText(item.workingDirectory, 4_000);
 }
 
-/** Variables that load code or change which programs run would let a page run arbitrary commands. */
+/** Variables that load code or change which programs run would let a page run arbitrary commands. Every `GIT_*`
+ * variable is refused, since several (`GIT_DIR`, `GIT_ASKPASS`, `GIT_EXTERNAL_DIFF`) can point Git at a command. */
 const BLOCKED_ENVIRONMENT = new Set(['PATH', 'NODE_OPTIONS', 'NODE_PATH', 'NODE_REPL_EXTERNAL_MODULE', 'ELECTRON_RUN_AS_NODE',
   'BASH_ENV', 'ENV', 'SHELL', 'SHELLOPTS', 'BASHOPTS', 'PS4', 'PROMPT_COMMAND', 'IFS', 'CDPATH', 'HOME', 'ZDOTDIR',
-  'PYTHONPATH', 'PYTHONSTARTUP', 'PYTHONHOME', 'PERL5LIB', 'PERL5OPT', 'RUBYLIB', 'RUBYOPT', 'GIT_EXEC_PATH', 'GIT_SSH',
-  'GIT_SSH_COMMAND', 'GIT_CONFIG_GLOBAL', 'GIT_CONFIG_SYSTEM', 'EDITOR', 'VISUAL', 'PAGER', 'BROWSER', 'COMSPEC', 'PATHEXT']);
+  'PYTHONPATH', 'PYTHONSTARTUP', 'PYTHONHOME', 'PERL5LIB', 'PERLLIB', 'PERL5OPT', 'RUBYLIB', 'RUBYOPT', 'JAVA_TOOL_OPTIONS',
+  'SSH_ASKPASS', 'EDITOR', 'VISUAL', 'PAGER', 'BROWSER', 'COMSPEC', 'PATHEXT']);
 export const blockedEnvironmentName = (name: string) => {
   const upper = name.toUpperCase();
-  return BLOCKED_ENVIRONMENT.has(upper) || /^(LD_|DYLD_|BASH_FUNC_|GIT_CONFIG_)/.test(upper) || upper.startsWith('NPM_CONFIG_');
+  return BLOCKED_ENVIRONMENT.has(upper) || /^(LD_|DYLD_|BASH_FUNC_|GIT_)/.test(upper) || upper.startsWith('NPM_CONFIG_');
 };
 
 function parseEnvironment(text: string): Record<string, string> {

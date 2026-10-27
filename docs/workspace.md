@@ -172,7 +172,7 @@ Browsers with file-system access can write back to a file you opened or a destin
 you choose, also after a reload: Zoomflow keeps each draft's file handle in browser
 storage, and the browser may ask again for permission to edit the file when you
 save. If permission is refused, Save asks where to save instead, without asking for that
-permission again until the page reloads. Other browsers download the source and label the button **Download .d2**.
+permission again until you grant it in the browser's site settings, reopen the file, or reload the page. Other browsers download the source and label the button **Download .d2**.
 **Export → Download .d2 source** always starts a separate download.
 The status beside the save controls reports file state; its tooltip describes browser
 recovery. Successful background backups stay quiet, while unavailable recovery is

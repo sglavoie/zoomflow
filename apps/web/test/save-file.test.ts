@@ -30,12 +30,12 @@ function fakeHandle(name: string, permission: Permission) {
 let downloads = 0;
 beforeEach(() => {
   downloads = 0;
-  document.body.innerHTML = '<button id="save-file"></button><button id="save-source"></button>';
+  document.body.innerHTML = '<button id="save-file"></button><button id="save-file-b"></button><button id="save-source"></button>';
   document.querySelector<HTMLButtonElement>('#save-source')!.onclick = () => { downloads++; };
 });
 
-function setup(handles: Map<string, FileSystemFileHandle>) {
-  const button = document.querySelector<HTMLButtonElement>('#save-file')!;
+function setup(handles: Map<string, FileSystemFileHandle>, id = 'save-file') {
+  const button = document.querySelector<HTMLButtonElement>(`#${id}`)!;
   const state = { key: 'file:doc' as string | undefined, activity: '' };
   const fileHandles = Object.assign(handles, { ready: async () => {} }) as unknown as FileHandles;
   setupSaveFile(button, {
@@ -88,6 +88,16 @@ it('stops asking after a refusal until permission is granted or another file is 
   handles.set('file:doc', other.handle);
   await save();
   expect([other.disk.prompts, other.disk.written]).toEqual([1, ['a: Mine']]);
+});
+
+it('remembers a refusal in every pane that shows the draft', async () => {
+  const { handle, disk } = fakeHandle('doc.d2', { query: 'prompt', request: 'denied' });
+  const handles = new Map([['file:doc', handle]]);
+  await setup(handles).save();
+  const other = setup(handles, 'save-file-b');
+  await other.save();
+  expect(other.state.activity).toBe('Zoomflow may not write doc.d2; choose where to save.');
+  expect([disk.prompts, downloads]).toEqual([1, 2]);
 });
 
 it('reports a write error over a failed abort', async () => {
