@@ -85,6 +85,70 @@ test('browser Back and Forward move across files in the first pane', async ({ pa
   await expect(crumbs(page)).toHaveText(['index', 'Root', 'Sleep']);
 });
 
+test('review F1 picker trail reset survives reload and history', async ({ page }) => {
+  /** At a file's root board, Escape and Backspace have no file to return to. */
+  async function rootStays(path: string) {
+    for (const key of ['Escape', 'Backspace']) {
+      await page.locator('#viewer .zf-stage').focus();
+      await page.keyboard.press(key);
+      await page.waitForTimeout(300);
+      await showing(page, path);
+      await expect(crumbs(page)).toHaveText(['Root']);
+    }
+  }
+  const savedFiles = () => page.evaluate(() => history.state?.zoomflowFiles);
+
+  await page.goto('/');
+  await openFolder(page, atlas);
+  await showing(page, 'index.d2');
+  await page.locator('#viewer .zf-stage a[data-file="./health.d2"]').click();
+  await showing(page, 'health.d2');
+  await expect(crumbs(page)).toHaveText(['index', 'Root']);
+
+  // Choosing another file from the menu starts a new way through files, in history as on screen.
+  await page.locator('#example-picker > summary').click();
+  await page.locator('.example-option[title="atlas/work/index.d2"]').click();
+  await showing(page, 'work/index.d2');
+  await expect(crumbs(page)).toHaveText(['Root']);
+  expect(await savedFiles()).toEqual([]);
+
+  await page.reload();
+  await showing(page, 'work/index.d2');
+  await expect(crumbs(page)).toHaveText(['Root']);
+  await rootStays('work/index.d2');
+
+  await page.locator('#viewer .zf-stage a[data-file="../projects/zoomflow.d2#/Viewer"]').click();
+  await showing(page, 'projects/zoomflow.d2', 'root.layers.Viewer');
+  await expect(crumbs(page)).toHaveText(['work/index', 'Root', 'Viewer']);
+  await page.goBack();
+  await showing(page, 'work/index.d2');
+  await expect(crumbs(page)).toHaveText(['Root']);
+  await page.goBack();
+  await showing(page, 'index.d2');
+  await expect(crumbs(page)).toHaveText(['Root']);
+  await page.goForward();
+  await showing(page, 'work/index.d2');
+  await expect(crumbs(page)).toHaveText(['Root']);
+  expect(await savedFiles()).toEqual([]);
+  await page.reload();
+  await showing(page, 'work/index.d2');
+  await expect(crumbs(page)).toHaveText(['Root']);
+  await rootStays('work/index.d2');
+
+  await page.goForward();
+  await showing(page, 'projects/zoomflow.d2', 'root.layers.Viewer');
+  await expect(crumbs(page)).toHaveText(['work/index', 'Root', 'Viewer']);
+  // The way through files from here leads back to work/index, not to the file chosen away from.
+  await page.locator('#viewer .zf-stage').focus();
+  await page.keyboard.press('Escape');
+  await showing(page, 'projects/zoomflow.d2');
+  await page.locator('#viewer .zf-stage').focus();
+  await page.keyboard.press('Escape');
+  await showing(page, 'work/index.d2');
+  await expect(crumbs(page)).toHaveText(['Root']);
+  await rootStays('work/index.d2');
+});
+
 test('a link to a missing file says so, and lint reports broken file links', async ({ page }) => {
   await page.goto('/');
   await openFolder(page, atlas);

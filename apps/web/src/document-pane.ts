@@ -455,6 +455,8 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
     ai?.documentSwitched();
     sourceError = false;
     viewer.setRoute(reset ? undefined : route ?? shared.documentRoutes.get(key));
+    // The first pane's history entry now shows this document, so a reload or Back here restores its own files on the way.
+    if (id === 'a') history.replaceState({ ...history.state, zoomflowFile: key, zoomflowFiles: stack }, '');
     viewport.setDocument(key, reset);
     documentName = name;
     currentDocumentKey = key;
