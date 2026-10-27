@@ -4,7 +4,7 @@ import { source } from './helpers';
 test('shortcuts dialog contains keyboard focus and leaves the current board unchanged', async ({ page }) => {
   await page.goto('/');
   await expect(page.locator('#viewer')).toHaveAttribute('aria-busy', 'false');
-  await page.locator('.zf-stage a[href="root.layers.checkout"]').click();
+  await page.locator('.zf-stage a[data-board="root.layers.checkout"]').click();
   const stage = page.locator('.zf-stage');
   await expect(stage).toHaveAttribute('data-board', 'root.layers.checkout');
   const source = await page.locator('.cm-content').innerText();

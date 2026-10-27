@@ -26,7 +26,7 @@ async function findSource(page: Page, text: string) {
 test('live edits retain the last good render on syntax errors and recover with diagnostics cleared', async ({ page }) => {
   await page.goto('/');
   await ready(page);
-  await page.locator('.zf-stage a[href="root.layers.checkout"]').click();
+  await page.locator('.zf-stage a[data-board="root.layers.checkout"]').click();
   await ready(page, 'root.layers.checkout');
   const before = await page.locator('.zf-stage').innerHTML();
   await source(page).focus();
@@ -83,7 +83,7 @@ test('explicit reveal opens the selected source board, linked shapes still drill
   await ready(page, 'root.layers.checkout.layers.charge');
   await page.getByRole('button', { name: 'Root', exact: true }).click();
   await ready(page);
-  const checkout = page.locator('.zf-stage a[href="root.layers.checkout"]');
+  const checkout = page.locator('.zf-stage a[data-board="root.layers.checkout"]');
   await checkout.click({ modifiers: ['Alt'] });
   await expect.poll(() => page.evaluate(() => window.getSelection()?.toString())).toBe('Checkout');
   await ready(page);
@@ -153,11 +153,11 @@ test('formats nested boards with D2 rules, refreshes navigation, and supports un
   // during that debounce, so wait for the new diagnostics before navigating.
   await expect(page.locator('#lint-summary')).not.toHaveText('Lint pending…');
   await ready(page);
-  await page.locator('.zf-stage a[href="root.layers.checkout"]').click();
+  await page.locator('.zf-stage a[data-board="root.layers.checkout"]').click();
   await ready(page, 'root.layers.checkout');
-  await page.locator('.zf-stage a[href="root.layers.checkout.layers.charge"]').click();
+  await page.locator('.zf-stage a[data-board="root.layers.checkout.layers.charge"]').click();
   await ready(page, 'root.layers.checkout.layers.charge');
-  await page.locator('.zf-stage a[href="root.layers.checkout.layers.charge.layers.capture"]').click();
+  await page.locator('.zf-stage a[data-board="root.layers.checkout.layers.charge.layers.capture"]').click();
   await ready(page, 'root.layers.checkout.layers.charge.layers.capture');
   await expect(page.locator('.zf-stage')).toContainText('New again');
   await source(page).focus();

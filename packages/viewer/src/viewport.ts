@@ -44,8 +44,9 @@ export function createViewport(stage: HTMLElement, host: HTMLElement, clamp: typ
   out.textContent = '−';
   out.title = 'Zoom out';
   out.setAttribute('aria-label', 'Zoom out');
+  // A status names the zoom level and announces its changes.
   const amount = document.createElement('span');
-  amount.setAttribute('aria-live', 'off');
+  amount.setAttribute('role', 'status');
   const fit = document.createElement('button');
   fit.type = 'button';
   fit.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5"/><rect x="7" y="7" width="10" height="10" rx="1"/></svg>';
@@ -91,6 +92,8 @@ export function createViewport(stage: HTMLElement, host: HTMLElement, clamp: typ
   let panGesture = false;
   let spaceHeld = false;
   let hovered = false;
+  /** When a pointer last pressed or released; focus right after it came from that press. */
+  let pointerAt = -Infinity;
 
   stage.addEventListener('pointerenter', () => { hovered = true; }, { signal });
   stage.addEventListener('pointerleave', () => { hovered = false; }, { signal });
@@ -106,8 +109,10 @@ export function createViewport(stage: HTMLElement, host: HTMLElement, clamp: typ
   }
   function releaseSpace() { spaceHeld = false; stage.classList.remove('zf-pan-ready'); }
   function onKeyDown(event: KeyboardEvent) {
-    if (event.code !== 'Space' || event.repeat || event.target instanceof Element &&
+    if (event.code !== 'Space' || event.target instanceof Element &&
       event.target.closest('button, [role="button"], input, textarea, select, [contenteditable="true"]')) return;
+    // Auto-repeat would scroll the page mid-pan.
+    if (event.repeat) { if (spaceHeld) event.preventDefault(); return; }
     // A hidden stage may never receive pointerleave; it must not claim Space page-wide.
     if (!stage.getClientRects().length) { hovered = false; return; }
     if (Math.abs(scale() - 1) <= zoomEpsilon || !hovered && !stage.contains(document.activeElement)) return;
@@ -133,9 +138,12 @@ export function createViewport(stage: HTMLElement, host: HTMLElement, clamp: typ
     hint.textContent = guidance && (preferGuidance || currentScale <= 1 + zoomEpsilon) ? guidance : panHint;
     hint.title = hint.textContent;
     hint.hidden = !svg || !guidance && !touch && currentScale <= 1 + zoomEpsilon;
+    const focused = [out, fit, inside].find((button) => button === document.activeElement);
     out.disabled = !svg || currentScale <= minZoom + zoomEpsilon;
     inside.disabled = !svg || currentScale >= maxZoom - zoomEpsilon;
     fit.disabled = !svg || !zoomed;
+    // A button disabled by its own press would drop keyboard focus to the page.
+    if (focused?.disabled) ([focused === out ? inside : out, fit, inside].find((button) => !button.disabled) ?? stage).focus({ preventScroll: true });
     // Reserve gestures from the first contact: changing touch-action mid-pinch is too late.
     if (svg) svg.style.touchAction = 'none';
     stage.classList.toggle('zf-pan-ready', spaceHeld && zoomed);
@@ -217,8 +225,10 @@ export function createViewport(stage: HTMLElement, host: HTMLElement, clamp: typ
     const target = targets.find((node) => node === event.target || node.contains(event.target as Node));
     stage.tabIndex = target ? -1 : 0;
     for (const node of targets) node.setAttribute('tabindex', node === target ? '0' : '-1');
-    if (target) reveal([target]);
+    // A click already shows what it pressed; only keyboard focus moves the view.
+    if (target && performance.now() - pointerAt > 500) reveal([target]);
   }, { signal });
+  for (const type of ['pointerdown', 'pointerup']) stage.addEventListener(type, () => { pointerAt = performance.now(); }, { capture: true, signal });
   const panStep = 64;
   stage.addEventListener('keydown', (event) => {
     // Leave modified keys to the browser (page zoom, history) and the host app.

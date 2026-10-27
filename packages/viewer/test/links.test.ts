@@ -42,6 +42,21 @@ describe('prepareLinks', () => {
     expect(root.querySelector('#invalid')).toBeNull();
     expect(root.querySelector('#kept')!.parentElement).toBe(root);
   });
+
+  it('points board links at their routes, so a new tab or a copied address opens the board', () => {
+    const root = svg('<a id="board" xlink:href="root.layers.checkout"/><a id="missing" href="root.layers.gone"/><a id="external" href="https://example.com"/>');
+    isolated(prepareLinks)(root, (href) => resolveLink(href, exists, classifyHref), (id) => id === 'root.layers.checkout' ? '#/checkout' : undefined);
+    const board = root.querySelector('#board')!;
+    expect([board.getAttribute('href'), board.hasAttribute('xlink:href'), board.getAttribute('data-board')]).toEqual(['#/checkout', false, 'root.layers.checkout']);
+    const missing = root.querySelector('#missing')!;
+    expect([missing.getAttribute('href'), missing.getAttribute('data-board')]).toEqual(['root.layers.gone', 'root.layers.gone']);
+    expect(root.querySelector('#external')!.hasAttribute('data-board')).toBe(false);
+    // Following and finding the link still use its board.
+    const click = new MouseEvent('click', { bubbles: true, cancelable: true });
+    Object.defineProperty(click, 'target', { value: board });
+    expect(isolated(followLink)(click, (href) => resolveLink(href, exists, classifyHref))).toEqual({ kind: 'board', target: 'root.layers.checkout' });
+    expect(isolated(linkTo)(root, 'root.layers.checkout')).toBe(board);
+  });
 });
 
 describe('followLink', () => {

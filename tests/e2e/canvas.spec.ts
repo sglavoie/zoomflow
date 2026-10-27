@@ -22,7 +22,7 @@ test('preview zooms and pans, then fits again', async ({ page }) => {
   await page.mouse.up();
   const panned = await box();
   expect(panned.slice(0, 2)).not.toEqual(zoomed.slice(0, 2));
-  const linked = page.locator('.zf-stage a[href="root.layers.checkout"]');
+  const linked = page.locator('.zf-stage a[data-board="root.layers.checkout"]');
   const target = (await linked.boundingBox())!;
   const beforeLinkedPan = await box();
   await page.mouse.move(target.x + target.width / 2, target.y + target.height / 2);
@@ -79,7 +79,7 @@ test('live edits keep the current view, while opening another diagram fits it', 
 
 test('keyboard board navigation retains focus and announces the new board', async ({ page }) => {
   await page.goto('/');
-  const link = page.locator('.zf-stage a[href="root.layers.checkout"]');
+  const link = page.locator('.zf-stage a[data-board="root.layers.checkout"]');
   await link.focus();
   await link.press('Enter');
   await expect(page.locator('.zf-stage')).toHaveAttribute('data-board', 'root.layers.checkout');
@@ -376,7 +376,7 @@ for (const offline of [false, true]) test(`compact breadcrumbs retain every ance
   let id = 'root';
   for (const name of ['checkout', 'charge', 'capture']) {
     id += `.layers.${name}`;
-    await page.locator(`.zf-stage a[href="${id}"]`).click();
+    await page.locator(`.zf-stage a[data-board="${id}"]`).click();
     await expect(page.locator('.zf-stage')).toHaveAttribute('data-board', id);
   }
   expect((await crumbs.boundingBox())!.height).toBe(initialHeight);
@@ -421,7 +421,7 @@ test('hovering a linked shape draws a single outline', async ({ page }) => {
   const browse = page.locator('.zf-stage [data-shape-id="Browse"]');
   await browse.hover();
   await expect(browse).toHaveCSS('outline-style', 'solid');
-  const link = page.locator('.zf-stage a[href="root.layers.checkout"]');
+  const link = page.locator('.zf-stage a[data-board="root.layers.checkout"]');
   await link.locator('[data-shape-id="Checkout"]').hover();
   await expect(link).toHaveCSS('outline-style', 'solid');
   await expect(link.locator('[data-shape-id="Checkout"]')).toHaveCSS('outline-style', 'none');

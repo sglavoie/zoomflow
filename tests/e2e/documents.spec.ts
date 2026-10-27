@@ -350,7 +350,7 @@ test('removed file undo restores its save handle, board view and editor history'
   await page.locator('#file').click();
   await expect(page.locator('#filename')).toHaveText('work.d2'); await previewReady(page);
   await source(page).fill(`${text}\n# Edited`); await previewReady(page);
-  await page.locator('.zf-stage a[href="root.layers.checkout"]').click();
+  await page.locator('.zf-stage a[data-board="root.layers.checkout"]').click();
   await expect(page.locator('.zf-stage')).toHaveAttribute('data-board', 'root.layers.checkout');
   await page.getByRole('button', { name: 'Zoom in', exact: true }).click();
   const box = await page.locator('.zf-stage > svg').getAttribute('viewBox');

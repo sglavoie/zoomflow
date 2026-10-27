@@ -146,7 +146,7 @@ test('offline reference searches examples, copies exact source, and links to ful
 
 test('reference controls preserve board navigation and focus follows the current task', async ({ page }) => {
   await ready(page);
-  const checkout = page.locator('.zf-stage a[href="root.layers.checkout"]');
+  const checkout = page.locator('.zf-stage a[data-board="root.layers.checkout"]');
   await checkout.focus();
   await page.keyboard.press('Meta+Shift+/');
   await page.keyboard.press('Escape');
@@ -169,7 +169,7 @@ test('reference controls preserve board navigation and focus follows the current
   await page.keyboard.press('Meta+Shift+/');
   await expect(source(page)).toBeFocused();
   await toggle(page).click();
-  await page.locator('.zf-stage a[href="root.layers.checkout.layers.charge"]').click();
+  await page.locator('.zf-stage a[data-board="root.layers.checkout.layers.charge"]').click();
   await expect(page.locator('.zf-stage')).toHaveAttribute('data-board', 'root.layers.checkout.layers.charge');
   await expect(panel(page)).toBeVisible();
 });

@@ -37,7 +37,7 @@ export function setupLinkPreview(scope: PaneScope, viewer: Viewer) {
     link = undefined;
   }
   async function show(anchor: Element) {
-    const target = classifyHref(anchor.getAttribute('href') ?? anchor.getAttribute('xlink:href') ?? '');
+    const target = classifyHref(anchor.getAttribute('data-board') ?? anchor.getAttribute('href') ?? anchor.getAttribute('xlink:href') ?? '');
     const board = target.kind === 'board' ? compiledDocument?.boards.get(target.target) : undefined;
     if (!board || !compiledDocument) return;
     link = anchor;

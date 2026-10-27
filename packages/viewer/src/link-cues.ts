@@ -34,7 +34,7 @@ export function decorateLinks(svg: Element, boards: Map<string, { name: string; 
     return false;
   }
   for (const link of svg.querySelectorAll<SVGAElement>('a')) {
-    const href = link.getAttribute('href') ?? link.getAttribute('xlink:href') ?? '';
+    const href = link.getAttribute('data-board') ?? link.getAttribute('href') ?? link.getAttribute('xlink:href') ?? '';
     const external = /^(https?:|mailto:)/i.test(href);
     const target = boards.get(href);
     if (!external && !target && !link.hasAttribute('data-missing')) continue;

@@ -12,8 +12,10 @@ export function resolveLink(href: string, exists: (id: string) => boolean, class
   return { kind: exists(action.target) ? 'board' : 'missing', target: action.target };
 }
 
-/** Make links keyboard reachable, open external links safely and mark missing boards. */
-export function prepareLinks(svg: Element, resolve: (href: string) => ResolvedLink) {
+/** Make links keyboard reachable, open external links safely and mark missing boards.
+ * A board link keeps its board in `data-board` and points `href` at the board's route, given by `hashOf`,
+ * so opening it in a new tab or copying its address leads somewhere. */
+export function prepareLinks(svg: Element, resolve: (href: string) => ResolvedLink, hashOf: (id: string) => string | undefined = () => undefined) {
   for (const link of [...svg.querySelectorAll('a')]) {
     const action = resolve(link.getAttribute('href') ?? link.getAttribute('xlink:href') ?? '');
     // An unusable link is not a control: keep its shape, drop the anchor.
@@ -23,7 +25,12 @@ export function prepareLinks(svg: Element, resolve: (href: string) => ResolvedLi
     if (action.kind === 'external') {
       link.setAttribute('target', '_blank');
       link.setAttribute('rel', 'noopener noreferrer');
-    } else if (action.kind === 'missing') link.setAttribute('data-missing', '');
+      continue;
+    }
+    if (action.kind === 'missing') link.setAttribute('data-missing', '');
+    link.setAttribute('data-board', action.target);
+    const hash = action.kind === 'board' ? hashOf(action.target) : undefined;
+    if (hash) { link.setAttribute('href', hash); link.removeAttribute('xlink:href'); }
   }
 }
 
@@ -32,7 +39,7 @@ export function prepareLinks(svg: Element, resolve: (href: string) => ResolvedLi
 export function followLink(event: Event, resolve: (href: string) => ResolvedLink): ResolvedLink | undefined {
   const link = event.target instanceof Element ? event.target.closest('a') : null;
   if (!link) return undefined;
-  const action = resolve(link.getAttribute('href') ?? link.getAttribute('xlink:href') ?? '');
+  const action = resolve(link.getAttribute('data-board') ?? link.getAttribute('href') ?? link.getAttribute('xlink:href') ?? '');
   if (action.kind !== 'external') event.preventDefault();
   return action;
 }
@@ -40,5 +47,5 @@ export function followLink(event: Event, resolve: (href: string) => ResolvedLink
 /** The first link in `root` that targets `target`. */
 export function linkTo(root: ParentNode, target: string): SVGAElement | undefined {
   return [...root.querySelectorAll<SVGAElement>('a')]
-    .find((link) => (link.getAttribute('href') ?? link.getAttribute('xlink:href')) === target);
+    .find((link) => (link.getAttribute('data-board') ?? link.getAttribute('href') ?? link.getAttribute('xlink:href')) === target);
 }

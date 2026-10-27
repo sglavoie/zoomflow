@@ -12,7 +12,7 @@ test('the production build compiles, navigates, edits and exports offline HTML',
   page.on('console', (message) => { if (message.type() === 'error') errors.push(message.text()); });
   await page.goto('/');
   await previewReady(page);
-  await page.locator('.zf-stage a[href="root.layers.checkout"]').click();
+  await page.locator('.zf-stage a[data-board="root.layers.checkout"]').click();
   await expect(page.locator('.zf-stage')).toHaveAttribute('data-board', 'root.layers.checkout');
 
   await source(page).click();
@@ -31,7 +31,7 @@ test('the production build compiles, navigates, edits and exports offline HTML',
   const offline = await context.newPage();
   await offline.goto(pathToFileURL(path).href);
   await expect(offline.locator('.zf-stage')).toContainText('Production check');
-  await offline.locator('.zf-stage a[href="root.layers.checkout"]').click();
+  await offline.locator('.zf-stage a[data-board="root.layers.checkout"]').click();
   await expect(offline.locator('.zf-stage')).toHaveAttribute('data-board', 'root.layers.checkout');
   expect(errors).toEqual([]);
 });

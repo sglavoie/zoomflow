@@ -30,7 +30,7 @@ for (const theme of ['light', 'dark'] as const) test(`polished controls in ${the
   let id = 'root';
   for (const name of ['checkout', 'charge', 'capture']) {
     id += `.layers.${name}`;
-    await page.locator(`.zf-stage a[href="${id}"]`).click();
+    await page.locator(`.zf-stage a[data-board="${id}"]`).click();
     await expect(page.locator('.zf-stage')).toHaveAttribute('data-board', id);
   }
   await page.getByRole('button', { name: 'Earlier boards', exact: true }).click();

@@ -131,7 +131,7 @@ test('exports cyclic links and collapses breadcrumb loops offline', async ({ pag
   await page.locator('#file').setInputFiles('fixtures/cycle.d2');
   await expect(page.locator('#filename')).toHaveText('cycle.d2');
   await expect(page.locator('#viewer')).toHaveAttribute('aria-busy', 'false');
-  await expect(page.locator('.zf-stage a[href="root.layers.A"]')).toBeVisible();
+  await expect(page.locator('.zf-stage a[data-board="root.layers.A"]')).toBeVisible();
   const path = await download(page, 'html', info);
   await context.setOffline(true);
   await page.goto(pathToFileURL(path).href);
@@ -246,12 +246,18 @@ test('exported HTML retains keyboard focus during drill-down', async ({ page, co
   await offline.getByRole('button', { name: 'Zoom out' }).click();
   await expect(offline.locator('.zf-zoom-controls span')).toHaveText('67%');
   await offline.getByRole('button', { name: 'Fit diagram' }).click();
-  const link = offline.locator('.zf-stage a[href="root.layers.checkout"]');
+  const link = offline.locator('.zf-stage a[data-board="root.layers.checkout"]');
+  // A board link's address is the board's route, so a new tab or a copied link opens that board.
+  const href = (await link.getAttribute('href'))!;
+  expect(href).toMatch(/^#\//);
   await link.focus();
   await link.press('Enter');
   await expect(offline.locator('.zf-stage')).toHaveAttribute('data-board', 'root.layers.checkout');
   await expect(offline.locator('.zf-stage')).toBeFocused();
   await expect(offline.locator('.zf-visually-hidden')).toHaveText('checkout board');
+  const copied = await context.newPage();
+  await copied.goto(pathToFileURL(path).href + href);
+  await expect(copied.locator('.zf-stage')).toHaveAttribute('data-board', 'root.layers.checkout');
 });
 
 test('edits invalidate exports immediately without flashing progress, errors lead to their source', async ({ page }) => {
@@ -364,11 +370,11 @@ test('exported HTML returns keyboard focus to the link it came from when going u
   await offline.goto(pathToFileURL(path).href);
   await board(offline, 'root');
   const stage = offline.locator('.zf-stage');
-  const checkout = offline.locator('.zf-stage a[href="root.layers.checkout"]');
+  const checkout = offline.locator('.zf-stage a[data-board="root.layers.checkout"]');
   await checkout.focus();
   await checkout.press('Enter');
   await board(offline, 'root.layers.checkout');
-  const charge = offline.locator('.zf-stage a[href="root.layers.checkout.layers.charge"]');
+  const charge = offline.locator('.zf-stage a[data-board="root.layers.checkout.layers.charge"]');
   await charge.focus();
   await charge.press('Enter');
   await board(offline, 'root.layers.checkout.layers.charge');

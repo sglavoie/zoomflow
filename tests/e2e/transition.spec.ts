@@ -21,7 +21,7 @@ for (const viewport of [{ width: 1280, height: 800 }, { width: 720, height: 600 
     await expect(stage).toHaveAttribute('data-board', 'root');
     await expect(page.locator('html')).not.toHaveAttribute('data-fades');
 
-    await stage.locator('a[href="root.layers.checkout"]').click();
+    await stage.locator('a[data-board="root.layers.checkout"]').click();
     await expect(stage).toHaveAttribute('data-board', 'root.layers.checkout');
     await page.getByRole('navigation', { name: 'Breadcrumb' }).getByRole('button', { name: 'Root' }).click();
     await expect(stage).toHaveAttribute('data-board', 'root');
@@ -52,7 +52,7 @@ test('reduced motion skips the fade without losing navigation', async ({ page })
   await page.goto('/');
   const stage = page.locator('.zf-stage');
   await expect(stage).toHaveAttribute('data-board', 'root');
-  await stage.locator('a[href="root.layers.checkout"]').click();
+  await stage.locator('a[data-board="root.layers.checkout"]').click();
   await expect(stage).toHaveAttribute('data-board', 'root.layers.checkout');
   await expect(page.locator('html')).not.toHaveAttribute('data-faded');
 });

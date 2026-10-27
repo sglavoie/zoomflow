@@ -47,9 +47,12 @@ export async function prepareExportSvg(svg: string, dark?: boolean): Promise<{ s
       warnings.push('Removed an external stylesheet import.');
       return '';
     });
-    const matches = [...text.matchAll(/url\(\s*(['"]?)(.*?)\1\s*\)/g)];
-    for (const match of matches) text = text.replace(match[0], `url("${await embed(match[2].trim())}")`);
-    return text;
+    const pattern = /url\(\s*(['"]?)(.*?)\1\s*\)/g;
+    const urls: string[] = [];
+    for (const match of text.matchAll(pattern)) urls.push(await embed(match[2].trim()));
+    // Replace in one pass, so a URL is never matched twice or read as a `$` pattern; escape it for its new quotes.
+    let index = 0;
+    return text.replace(pattern, () => `url("${urls[index++].replace(/["\\]/g, '\\$&')}")`);
   }
   for (const node of [root, ...root.querySelectorAll('*')]) {
     for (const attribute of [...node.attributes]) {
@@ -169,7 +172,7 @@ function offlineViewer(lib: typeof runtime) {
         const svg = document.importNode(doc.documentElement, true);
         svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
         lib.restoreMissingLinks(svg, board.missingLinks ?? [], lib.shapeClass);
-        lib.prepareLinks(svg, resolve);
+        lib.prepareLinks(svg, resolve, (id) => byId.get(id)?.hash);
         stage.replaceChildren(svg);
         lib.decorateLinks(svg, byId, board.id, lib.splitHitArea, describe);
       }
@@ -205,6 +208,7 @@ function offlineViewer(lib: typeof runtime) {
     else if (action?.kind === 'missing') setMessage(`Missing board: ${describe(action.target)}`, true);
   }
   stage.addEventListener('click', follow);
+  stage.addEventListener('auxclick', (event) => lib.followLink(event, resolve));
   stage.addEventListener('keydown', (event) => { if (event.key === 'Enter') follow(event); });
   window.addEventListener('keydown', (event) => {
     if (!event.defaultPrevented && !event.repeat && !event.altKey && !event.ctrlKey && !event.metaKey &&

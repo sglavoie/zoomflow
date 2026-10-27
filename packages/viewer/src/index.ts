@@ -70,6 +70,8 @@ export class Viewer {
     host.replaceChildren(this.crumbs, this.context, this.message, this.announcement, this.stage);
     const options = { signal: this.events.signal };
     this.stage.addEventListener('click', (event) => this.follow(event), options);
+    // A board link's href is a board id, not a URL: a middle click must not open it in a new tab.
+    this.stage.addEventListener('auxclick', (event) => followLink(event, this.resolve), options);
     this.stage.addEventListener('keydown', (event) => {
       if (event.key === 'Enter') this.follow(event);
     }, options);
@@ -191,7 +193,7 @@ export class Viewer {
     const element = document.importNode(doc.documentElement, true) as unknown as SVGElement;
     element.setAttribute('preserveAspectRatio', 'xMidYMid meet');
     restoreMissingLinks(element, this.diagnostics.filter((item) => item.board === board.id));
-    prepareLinks(element, this.resolve);
+    prepareLinks(element, this.resolve, (id) => this.boards.get(id)?.hash);
     // The first group in document order carrying each class, and this board's source shapes.
     const groups = new Map<string, SVGGElement>();
     for (const node of element.querySelectorAll('g')) for (const name of node.classList) if (!groups.has(name)) groups.set(name, node);

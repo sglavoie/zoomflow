@@ -65,7 +65,7 @@ test('fullscreen survives board navigation and Escape exits without navigating u
   const stage = page.locator('.zf-stage');
   await expect(stage).toHaveAttribute('data-board', 'root');
   await page.getByRole('button', { name: 'Fullscreen', exact: true }).click();
-  await stage.locator('a[href="root.layers.checkout"]').click();
+  await stage.locator('a[data-board="root.layers.checkout"]').click();
   await expect(stage).toHaveAttribute('data-board', 'root.layers.checkout');
   await expect(page.locator('#viewer')).toHaveAttribute('aria-busy', 'false');
   await expect(page.getByRole('button', { name: 'Exit fullscreen', exact: true })).toBeVisible();
@@ -105,10 +105,10 @@ test('nested board content stays centered with its own background', async ({ pag
     expect(geometry.stageFill).toBe(geometry.boardFill);
   };
 
-  await stage.locator('a[href="root.layers.checkout"]').click();
+  await stage.locator('a[data-board="root.layers.checkout"]').click();
   await expect(stage).toHaveAttribute('data-board', 'root.layers.checkout');
   await assertBoard();
-  await stage.locator('a[href="root.layers.checkout.layers.charge"]').click();
+  await stage.locator('a[data-board="root.layers.checkout.layers.charge"]').click();
   await expect(stage).toHaveAttribute('data-board', 'root.layers.checkout.layers.charge');
   await assertBoard();
   await page.getByRole('button', { name: 'Exit fullscreen', exact: true }).click();

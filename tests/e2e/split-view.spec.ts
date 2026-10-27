@@ -41,7 +41,7 @@ test('split tabs edit two documents independently and keep board navigation per 
   await expect(page.locator('#pane-document .draft-unsaved')).toBeHidden();
 
   // The first pane owns the page URL; the second navigates in memory.
-  await page.locator('#viewer .zf-stage a[href="root.layers.checkout"]').click();
+  await page.locator('#viewer .zf-stage a[data-board="root.layers.checkout"]').click();
   await expect(page.locator('#viewer .zf-stage')).toHaveAttribute('data-board', 'root.layers.checkout');
   expect(await page.evaluate(() => location.hash)).toBe('#/checkout');
   await expect(page.locator('#viewer-b .zf-stage')).toHaveAttribute('data-board', 'root');

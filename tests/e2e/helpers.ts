@@ -47,7 +47,7 @@ export async function board(page: Page, id: string) {
 
 /** Follow the stage link to board `id`. */
 export async function drill(page: Page, id: string) {
-  await page.locator(`.zf-stage a[href="${id}"]`).click();
+  await page.locator(`.zf-stage a[data-board="${id}"]`).click();
   await board(page, id);
 }
 

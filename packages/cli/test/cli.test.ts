@@ -207,7 +207,7 @@ describe.concurrent('zoomflow CLI', () => {
       expect(controls.y).toBeGreaterThanOrEqual(stage.y + stage.height);
       expect(await page.evaluate(() => document.body.scrollHeight)).toBeLessThanOrEqual(page.viewportSize()!.height);
       for (const target of ['A', 'B', 'A']) {
-        await page.locator(`.zf-stage a[href="root.layers.${target}"]`).click();
+        await page.locator(`.zf-stage a[data-board="root.layers.${target}"]`).click();
         expect(await page.locator('.zf-stage').getAttribute('data-board')).toBe(`root.layers.${target}`);
       }
       await page.reload();
@@ -227,8 +227,8 @@ describe.concurrent('zoomflow CLI', () => {
     try {
       await page.goto(pathToFileURL(output).href);
       for (const [target, board, label] of [['root.layers.missing', 'root', 'Root > missing'], ['root.layers.child.layers.absent', 'root.layers.child', 'Root > child > absent']]) {
-        if (board !== 'root') await page.locator(`.zf-stage a[href="${board}"]`).click();
-        const link = page.locator(`.zf-stage a[href="${target}"]`);
+        if (board !== 'root') await page.locator(`.zf-stage a[data-board="${board}"]`).click();
+        const link = page.locator(`.zf-stage a[data-board="${target}"]`);
         expect(await link.evaluate((node) => getComputedStyle(node).outlineStyle)).toBe('dashed');
         await link.click();
         expect(await page.locator('.zf-message').textContent()).toBe(`Missing board: ${label}`);
@@ -494,12 +494,12 @@ describe.concurrent('zoomflow CLI', () => {
     const page = await browser.newPage({ offline: true });
     try {
       await page.goto(pathToFileURL(output).href);
-      await page.locator('.zf-stage a[href="root.layers.root"]').click();
-      await page.locator('.zf-stage a[href="root.layers.root.layers.empty"]').click();
+      await page.locator('.zf-stage a[data-board="root.layers.root"]').click();
+      await page.locator('.zf-stage a[data-board="root.layers.root.layers.empty"]').click();
       expect(await page.locator('.zf-stage').textContent()).toBe('This board is empty.');
       await page.keyboard.press('Escape');
       await page.keyboard.press('Escape');
-      await page.locator('.zf-stage a[href="root.scenarios.alternate"]').click();
+      await page.locator('.zf-stage a[data-board="root.scenarios.alternate"]').click();
       expect(await page.locator('.zf-stage').getAttribute('data-board')).toBe('root.scenarios.alternate');
     } finally { await page.close(); }
   });

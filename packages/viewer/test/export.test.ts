@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, expect, it } from 'vitest';
-import { rasterSize } from '../src/export';
+import { prepareExportSvg, rasterSize } from '../src/export';
 
 const root = (attributes: string) =>
   new DOMParser().parseFromString(`<svg xmlns="http://www.w3.org/2000/svg" ${attributes}/>`, 'image/svg+xml').documentElement;
@@ -27,5 +27,14 @@ describe('rasterSize', () => {
     for (const attributes of ['', 'viewBox="0 0 0 10"', 'viewBox="0 0 abc 10"', 'viewBox="0 0"', 'width="100%" height="auto"']) {
       expect(() => rasterSize(root(attributes))).toThrow('Diagram has no valid size: its SVG viewBox is missing or invalid.');
     }
+  });
+});
+
+describe('prepareExportSvg', () => {
+  it('rewrites each CSS url once, keeping `$` patterns and escaping quotes', async () => {
+    const inner = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg"/%3E';
+    const { svg } = await prepareExportSvg(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><style>.a{fill:url('${inner}')} .b{fill:url(data:image/png;base64,QUJD$&amp;)} .c{fill:url(#g)} .d{fill:url(#g)}</style></svg>`);
+    const style = new DOMParser().parseFromString(svg, 'image/svg+xml').querySelector('style')!.textContent;
+    expect(style).toBe(`.a{fill:url("${inner.replaceAll('"', '\\"')}")} .b{fill:url("data:image/png;base64,QUJD$&")} .c{fill:url("#g")} .d{fill:url("#g")}`);
   });
 });

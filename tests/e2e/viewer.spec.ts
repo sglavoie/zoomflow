@@ -37,7 +37,7 @@ for (const offline of [false, true]) {
       ['root.layers.checkout.layers.charge', 'Charge · From Cart · To Confirm'],
       ['root.layers.checkout.layers.charge.layers.capture', 'Capture · From Authorize · To Receipt'],
     ]) {
-      await page.locator(`.zf-stage a[href="${id}"]`).click();
+      await page.locator(`.zf-stage a[data-board="${id}"]`).click();
       await expect(page.locator('.zf-stage')).toHaveAttribute('data-board', id);
       await expect(parentContext).toHaveText(expected);
     }
@@ -77,7 +77,7 @@ for (const offline of [false, true]) {
     }
     const crumbs = page.getByRole('navigation', { name: 'Breadcrumb' });
     async function visit(id: string, names: string[]) {
-      await page.locator(`.zf-stage a[href="${id}"]`).click();
+      await page.locator(`.zf-stage a[data-board="${id}"]`).click();
       await expect(page.locator('.zf-stage')).toHaveAttribute('data-board', id);
       await expect(crumbs.getByRole('button')).toHaveText(names);
       await expect(crumbs.locator('[aria-current="page"]')).toHaveText(names.at(-1)!);
@@ -151,10 +151,10 @@ test('missing board link has a dashed outline and names its target in the viewer
   }
   async function checkLinks() {
     await missing('root.layers.missing', 'root', 'Root > missing');
-    await page.locator('.zf-stage a[href="root.layers.child"]').click();
+    await page.locator('.zf-stage a[data-board="root.layers.child"]').click();
     await expect(page.locator('.zf-stage')).toHaveAttribute('data-board', 'root.layers.child');
     await missing('root.layers.child.layers.absent', 'root.layers.child', 'Root > child > absent');
-    await page.locator('.zf-stage a[href="root"]').click();
+    await page.locator('.zf-stage a[data-board="root"]').click();
     await expect(page.locator('.zf-stage')).toHaveAttribute('data-board', 'root');
   }
   await checkLinks();
@@ -284,7 +284,7 @@ for (const offline of [false, true]) {
     await openViewer(page, context, info, offline);
     const stage = page.locator('.zf-stage').first();
     const crumbs = page.getByRole('navigation', { name: 'Breadcrumb' });
-    await page.locator('.zf-stage a[href="root.layers.checkout"]').click();
+    await page.locator('.zf-stage a[data-board="root.layers.checkout"]').click();
     await expect(stage).toHaveAttribute('data-board', 'root.layers.checkout');
     const length = await page.evaluate(() => history.length);
     await crumbs.getByRole('button', { name: 'checkout', exact: true }).click();
@@ -330,7 +330,7 @@ for (const offline of [false, true]) {
     await expect(message.locator('[role="status"]')).toHaveText('Board "nope/deeper" not found; showing Root');
     await expect(message.locator('[role="alert"]')).toBeEmpty();
     expect(await page.evaluate(() => location.hash)).toBe('#/');
-    await page.locator('.zf-stage a[href="root.layers.checkout"]').click();
+    await page.locator('.zf-stage a[data-board="root.layers.checkout"]').click();
     await expect(stage).toHaveAttribute('data-board', 'root.layers.checkout');
     await expect(message).toBeEmpty();
   });
@@ -370,7 +370,7 @@ test('destroying a viewer releases its viewport listeners and controls', async (
 test('going up returns keyboard focus to the link that leads back down', async ({ page }) => {
   await page.goto('/');
   await board(page, 'root');
-  const checkout = page.locator('.zf-stage a[href="root.layers.checkout"]');
+  const checkout = page.locator('.zf-stage a[data-board="root.layers.checkout"]');
   await checkout.focus();
   await checkout.press('Enter');
   await board(page, 'root.layers.checkout');
@@ -389,7 +389,7 @@ test('going up returns keyboard focus to the link that leads back down', async (
   // The D2 `_` backlink goes up too.
   await checkout.press('Enter');
   await board(page, 'root.layers.checkout');
-  const back = page.locator('.zf-stage a[href="root"]');
+  const back = page.locator('.zf-stage a[data-board="root"]');
   await back.focus();
   await back.press('Enter');
   await board(page, 'root');
@@ -397,7 +397,7 @@ test('going up returns keyboard focus to the link that leads back down', async (
   // A breadcrumb to an ancestor does the same, even across two levels.
   await checkout.press('Enter');
   await board(page, 'root.layers.checkout');
-  const charge = page.locator('.zf-stage a[href="root.layers.checkout.layers.charge"]');
+  const charge = page.locator('.zf-stage a[data-board="root.layers.checkout.layers.charge"]');
   await charge.focus();
   await charge.press('Enter');
   await board(page, 'root.layers.checkout.layers.charge');
