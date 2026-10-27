@@ -1,7 +1,7 @@
 import { D2 } from '@d2lang/d2';
 import { readFileSync } from 'node:fs';
 import { afterAll, expect, it } from 'vitest';
-import { boardLabel, indexBoards, lint } from '../src';
+import { boardLabel, indexBoards, lint, type LintDiagnostic } from '../src';
 
 const d2 = new D2();
 afterAll(() => d2.dispose());
@@ -307,6 +307,7 @@ it('warns about links the viewer ignores, such as a parent of root or a relative
   const result = lint(await compile(`a.link: _
 b.link: ./x
 c -> d: {link: ./y}
+file.link: ./other.d2
 open.link: layers.L
 layers.L: {up.link: _; over.link: _._; there.link: _.layers.L; e.link: mailto:a@b.c; m.link: layers.M; layers.M: {f.link: _._._}}`));
   expect(result.diagnostics.map(({ rule, severity, board, shape, connection, message }) => ({ rule, severity, board, item: shape ?? connection, message }))).toEqual([
@@ -317,6 +318,42 @@ layers.L: {up.link: _; over.link: _._; there.link: _.layers.L; e.link: mailto:a@
     { rule: 'ignored-link', severity: 'warning', board: 'root.layers.L.layers.M', item: 'f', message: 'Link "root._" goes above the root board, so the viewer ignores it.' },
   ]);
   expect(result.diagnostics.every((item) => item.range?.startsWith('index,'))).toBe(true);
+});
+
+it('checks file links against the project when given its files', async () => {
+  const result = await compile(`ok.link: ./health.d2
+deep.link: "./health.d2#/Sleep/Night"
+spaced.link: "./health.d2#/My Board"
+gone.link: "./health.d2#/Gone"
+missing.link: ./missing.d2
+c -> d: {link: ../index.d2}
+up.link: ../../outside.d2
+bare.link: health.d2
+folder.link: "work/plan.d2#/A"
+layers.L: {back.link: "../index.d2#/"; x.link: ./nope.d2}`);
+  const files = { inputPath: 'life/index.d2', exists: (path: string) => ['life/health.d2', 'index.d2'].includes(path),
+    boards: (path: string) => path === 'life/health.d2' ? new Set(['#/', '#/Sleep', '#/Sleep/Night', '#/My%20Board']) : undefined };
+  const summary = (diagnostics: LintDiagnostic[]) => diagnostics.filter((item) => item.rule.includes('file'))
+    .map(({ rule, severity, board, shape, connection, message }) => ({ rule, severity, board, item: shape ?? connection, message }));
+  expect(summary(lint(result, { files }).diagnostics)).toEqual([
+    { rule: 'missing-file-board', severity: 'warning', board: 'root', item: 'gone',
+      message: 'Link targets missing board "Gone" in "life/health.d2", so the viewer opens its nearest existing board.' },
+    { rule: 'dangling-file-link', severity: 'error', board: 'root', item: 'missing', message: 'Link targets missing file "life/missing.d2".' },
+    { rule: 'dangling-file-link', severity: 'error', board: 'root', item: 'up',
+      message: 'Link "../../outside.d2" points outside the project folder or at a file that cannot be a diagram.' },
+    { rule: 'dangling-file-link', severity: 'error', board: 'root.layers.L', item: 'x', message: 'Link targets missing file "life/nope.d2".' },
+    { rule: 'bare-file-link', severity: 'warning', board: 'root', item: 'bare',
+      message: 'Link "health.d2" is read as a board path, so D2 drops it. To open the file, write link: "./health.d2".' },
+    { rule: 'bare-file-link', severity: 'warning', board: 'root', item: 'folder',
+      message: 'Link "work/plan.d2#/A" is read as a board path, so D2 drops it. To open the file, write link: "./work/plan.d2#/A".' },
+  ]);
+  expect(lint(result, { files }).diagnostics.filter((item) => item.rule.includes('file')).every((item) => item.range?.startsWith('index,'))).toBe(true);
+  // Without board sets, fragments are not checked.
+  expect(summary(lint(result, { files: { ...files, boards: undefined } }).diagnostics).map((item) => item.rule))
+    .toEqual(['dangling-file-link', 'dangling-file-link', 'dangling-file-link', 'bare-file-link', 'bare-file-link']);
+  // A single file cannot know its neighbours, so only the bare links D2 drops are reported.
+  expect(summary(lint(result).diagnostics).map((item) => item.rule)).toEqual(['bare-file-link', 'bare-file-link']);
+  expect(lint(result).diagnostics.some((item) => item.rule === 'ignored-link')).toBe(false);
 });
 
 it('warns about classes nothing defines, on the root and in layers that inherit its classes', async () => {

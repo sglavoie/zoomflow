@@ -25,6 +25,9 @@ describe('resolveLink', () => {
       expect(resolve('mailto:a@b.c', exists, classifyHref)).toEqual({ kind: 'external' });
       expect(resolve('javascript:alert(1)', exists, classifyHref)).toEqual({ kind: 'invalid' });
       expect(resolve('checkout', exists, classifyHref)).toEqual({ kind: 'invalid' });
+      // Links to other diagram files are not followed yet; the serialized classifier must agree.
+      expect(resolve('./health.d2#/Sleep', exists, classifyHref)).toEqual({ kind: 'invalid' });
+      expect(resolve('../other.d2', exists, isolated(classifyHref))).toEqual({ kind: 'invalid' });
     }
   });
 });

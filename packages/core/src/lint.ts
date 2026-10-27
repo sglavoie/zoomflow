@@ -1,11 +1,11 @@
 import type { CompileResponse } from '@d2lang/d2';
-import { boardKey, classifyHref, indexBoards, type Board } from './index';
+import { boardKey, classifyHref, indexBoards, resolveFilePath, type Board } from './index';
 import { definedClasses } from './classes';
 import { boundaryNeighbours } from './context';
 import { shapeRanges } from './source';
 
 export type LintRule = 'boundary-in' | 'boundary-out' | 'orphan-board' | 'dangling-link' | 'ignored-link' | 'missing-backlink'
-  | 'undefined-class' | 'unsupported-label';
+  | 'undefined-class' | 'unsupported-label' | 'dangling-file-link' | 'missing-file-board' | 'bare-file-link';
 export interface LintDiagnostic {
   rule: LintRule;
   severity: 'error' | 'warning';
@@ -23,6 +23,16 @@ export interface LintOptions {
   missingBacklink?: boolean;
   /** Validate zf-in/zf-out contracts where a child layer declares ports. */
   boundaryPorts?: boolean;
+  /** The project around the linted file, so links to other `.d2` files can be checked.
+   * Without it, file links are not reported: a single file cannot know its neighbours. */
+  files?: {
+    /** Project path of the linted file, which file links resolve against. */
+    inputPath: string;
+    /** Whether a project path names a `.d2` file in the project. */
+    exists(path: string): boolean;
+    /** Board hashes (as `indexBoards` gives them) of a project file, when known. */
+    boards?(path: string): ReadonlySet<string> | undefined;
+  };
 }
 export interface BoundaryEvaluation {
   board: string;
@@ -183,14 +193,52 @@ export function lint(compiled: LintInput, options: LintOptions = {}): LintResult
   let ranges: Map<string, string> | undefined;
   const shapeRange = (board: string, shape: string) =>
     (ranges ??= shapeRanges(compiled.diagram, compiled.graph)).get(JSON.stringify([board, shape]));
+  function checkFileLink(href: string, path: string, hash: string, board: Board, shape?: string, range?: string, connection?: string) {
+    const { files } = options;
+    if (!files) return;
+    const key = JSON.stringify([board.id, shape ?? connection, href]);
+    if (linkKeys.has(key)) return;
+    const resolved = resolveFilePath(files.inputPath, path);
+    let diagnostic: Pick<LintDiagnostic, 'rule' | 'severity' | 'message'> | undefined;
+    if (!resolved) diagnostic = { rule: 'dangling-file-link', severity: 'error',
+      message: `Link "${href}" points outside the project folder or at a file that cannot be a diagram.` };
+    else if (!files.exists(resolved)) diagnostic = { rule: 'dangling-file-link', severity: 'error',
+      message: `Link targets missing file "${resolved}".` };
+    else if (hash && hash !== '#/') {
+      // Compare routes segment by segment, so `#/My Board` and `#/My%20Board` agree.
+      const route = (value: string) => value.split('/').map((segment) => {
+        try { return encodeURIComponent(decodeURIComponent(segment)); } catch { return segment; }
+      }).join('/');
+      const known = files.boards?.(resolved);
+      if (known && ![...known].some((item) => route(item) === route(hash))) {
+        let name = hash.slice(2);
+        try { name = decodeURIComponent(name); } catch { /* Keep the authored route. */ }
+        diagnostic = { rule: 'missing-file-board', severity: 'warning',
+          message: `Link targets missing board "${name}" in "${resolved}", so the viewer opens its nearest existing board.` };
+      }
+    }
+    if (!diagnostic) return;
+    linkKeys.add(key);
+    if (!range || range.startsWith(',')) range = shape ? shapeRange(board.id, shape) : undefined;
+    diagnostics.push({ ...diagnostic, board: board.id, shape, connection, range });
+  }
   function checkLink(href: string, board: Board, shape?: string, range?: string, connection?: string) {
+    const classified = classifyHref(href);
+    if (classified.kind === 'file') return checkFileLink(href, classified.path, classified.hash, board, shape, range, connection);
     const target = boardTarget(href, board, boards);
     if (!target) {
       // The viewer drops anchors that are neither boards nor web links.
       const key = JSON.stringify([board.id, shape ?? connection, href]);
-      if (!href || classifyHref(href).kind !== 'invalid' || linkKeys.has(key)) return;
+      if (!href || classified.kind !== 'invalid' || linkKeys.has(key)) return;
       linkKeys.add(key);
       if (!range || range.startsWith(',')) range = shape ? shapeRange(board.id, shape) : undefined;
+      // D2 drops `x.d2` and `folder/x.d2`, reading them as board paths; only `./` paths link to files.
+      const [file, fragment] = /^([^#]*\.d2)(#.*)?$/s.exec(href)?.slice(1) ?? [];
+      if (file && !/^\.\.?\//.test(file)) {
+        diagnostics.push({ rule: 'bare-file-link', severity: 'warning', board: board.id, shape, connection, range,
+          message: `Link "${href}" is read as a board path, so D2 drops it. To open the file, write link: "./${file.replace(/^\/+/, '')}${fragment ?? ''}".` });
+        return;
+      }
       let depth = 0;
       for (let item = board; item.parent; item = boards.get(item.parent)!) depth++;
       // D2 may keep an unresolvable `_` after resolving the rest, as in `root._`.

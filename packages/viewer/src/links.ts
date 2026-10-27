@@ -9,6 +9,8 @@ export type ResolvedLink = { kind: 'external' } | { kind: 'invalid' } | { kind: 
 export function resolveLink(href: string, exists: (id: string) => boolean, classify: typeof classifyHref): ResolvedLink {
   const action = classify(href);
   if (action.kind === 'external' || action.kind === 'invalid') return { kind: action.kind };
+  // Links to other diagram files are not followed yet.
+  if (action.kind === 'file') return { kind: 'invalid' };
   return { kind: exists(action.target) ? 'board' : 'missing', target: action.target };
 }
 

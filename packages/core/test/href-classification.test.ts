@@ -15,6 +15,20 @@ describe('href classification', () => {
   it.each(['javascript:alert(1)', 'data:text/html,hello', '//example.com', 'layers.checkout', '#anchor', '', 'rooted.layers.x'])('rejects %s', (href) => {
     expect(classifyHref(href)).toEqual({ kind: 'invalid', href });
   });
+  it.each([
+    ['./a.d2', './a.d2', ''], ['./a.d2#/x', './a.d2', '#/x'], ['../a.d2', '../a.d2', ''],
+    ['./health.d2#/Sleep/@scenarios/Night', './health.d2', '#/Sleep/@scenarios/Night'], ['./My Life.d2', './My Life.d2', ''],
+    ['./work/plan.d2#/', './work/plan.d2', '#/'], ['../../a/b.d2', '../../a/b.d2', ''],
+  ])('%s links to a file', (href, path, hash) => {
+    expect(classifyHref(href)).toEqual({ kind: 'file', path, hash });
+  });
+  it.each(['./a.txt', './a.d2?x', './a.d2#x', 'a.d2', 'work/plan.d2', '/a.d2', '.a.d2', './a.d2x', 'https://x.test/a.d2'])('%s is not a file link', (href) => {
+    expect(classifyHref(href).kind).not.toBe('file');
+  });
+  it('keeps web addresses ending in .d2 external', () => {
+    expect(classifyHref('https://x.test/a.d2')).toEqual({ kind: 'external', url: 'https://x.test/a.d2' });
+    expect(classifyHref('./a.txt')).toEqual({ kind: 'invalid', href: './a.txt' });
+  });
 });
 
 describe('classifier integration with the pinned compiler', () => {

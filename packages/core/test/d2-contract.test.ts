@@ -177,6 +177,22 @@ describe('D2 0.1.34-zoomflow.1 compiler and SVG contract', () => {
     expect(svg).toContain('<g class="Yg==">');
   });
 
+  it('keeps ./ and ../ file links verbatim and drops bare file paths', async () => {
+    const result = await d2.compile(`a: {link: ./health.d2}
+b: {link: "./health.d2#/Sleep/Night"}
+c: {link: "./My Life.d2"}
+d: {link: health.d2}
+e: {link: "health.d2"}
+f: {link: "work/plan.d2"}
+layers: {inner: {g: {link: "../other.d2"}}}`, { layout: 'elk' });
+    expect(result.diagram.shapes.map((shape) => [shape.id, shape.link])).toEqual([
+      ['a', './health.d2'], ['b', './health.d2#/Sleep/Night'], ['c', './My Life.d2'], ['d', ''], ['e', ''], ['f', ''],
+    ]);
+    expect(result.diagram.layers![0]!.shapes.map((shape) => shape.link)).toEqual(['../other.d2']);
+    const svg = await d2.render(result.diagram, result.renderOptions);
+    expect(anchorLinks(svg, 'href')).toEqual(['./health.d2', './health.d2#/Sleep/Night', './My Life.d2']);
+  });
+
   it('returns formatted source with comments and literal braces preserved', async () => {
     const source = `# Keep this comment
 box: {
