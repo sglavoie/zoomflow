@@ -1,6 +1,9 @@
 import { expect, test, type Page } from '@playwright/test';
+import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { editorText, openFolder, previewReady } from './helpers';
+import { editorText, openFolder, previewReady, withEditorView } from './helpers';
 
 const atlas = fileURLToPath(new URL('../../fixtures/atlas', import.meta.url));
 const openFolderMessage = 'Open the folder that contains this file to follow links to other diagrams.';
@@ -367,4 +370,80 @@ test('the atlas map draws every project file and file link, groups unlinked file
   // The map is not kept: a reload shows the project file the pane showed before it, here the one Back came from.
   await page.reload();
   await showing(page, 'health.d2');
+});
+
+/** A folder `name` whose index.d2 links to target.d2, which draws and boards only what it imports from parts.d2. */
+function importingProject(name: string, parts: string) {
+  const folder = join(mkdtempSync(join(tmpdir(), 'zoomflow-imports-')), name);
+  mkdirSync(folder);
+  writeFileSync(join(folder, 'index.d2'), 'Go: { link: ./target.d2 }\nInbox\n');
+  writeFileSync(join(folder, 'target.d2'), '...@parts\n');
+  writeFileSync(join(folder, 'parts.d2'), parts);
+  return folder;
+}
+
+/** The linked target's hover card and the boards Link to diagram offers for it, from the first pane's index.d2. */
+async function expectLinkedTarget(page: Page, shapes: string, boards: string[]) {
+  const link = page.locator('#viewer .zf-stage a[data-file="./target.d2"]');
+  await link.hover();
+  const card = page.locator('.link-preview');
+  await expect(card).toContainText('target');
+  await expect(card).toContainText(shapes);
+  await expect(card.locator('img')).toBeVisible();
+  await page.locator('#viewer .zf-stage').hover({ position: { x: 5, y: 5 } });
+  await expect(card).toBeHidden();
+
+  await (await shapeMenu(page, 'Inbox', 'Inbox')).getByRole('menuitem', { name: 'Link to diagram…' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Link to a diagram' });
+  await dialog.getByLabel('Diagram file').selectOption('target.d2');
+  await expect(dialog.getByLabel('Opens at').locator('option')).toHaveText(['Its home board', ...boards]);
+  await dialog.getByRole('button', { name: 'Cancel' }).click();
+  await expect(dialog).toBeHidden();
+}
+
+async function showingProjectFile(page: Page, project: string, path: string) {
+  await expect(page.locator('#filename')).toHaveAttribute('title', `${project}/${path}`);
+  await previewReady(page);
+}
+
+test('review F2 linked preview refreshes after an imported source changes', async ({ page }) => {
+  const folder = importingProject('imports', 'Alpha\nlayers: { Near: { n } }\n');
+  await page.goto('/');
+  await openFolder(page, folder);
+  await showingProjectFile(page, 'imports', 'index.d2');
+  await expectLinkedTarget(page, '1 shape', ['Near']);
+
+  // Edit only the imported file; the linked file's own text stays the same.
+  await page.locator('#example-picker summary').click();
+  await page.locator('#draft-options .example-option[title="imports/parts.d2"]').click();
+  await showingProjectFile(page, 'imports', 'parts.d2');
+  await withEditorView(page, (view) => view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: 'Alpha\nBeta\nlayers: { Far: { f } }\n' } }));
+  await previewReady(page);
+  await page.locator('#example-picker summary').click();
+  await page.locator('#draft-options .example-option[title="imports/index.d2"]').click();
+  await showingProjectFile(page, 'imports', 'index.d2');
+  await expectLinkedTarget(page, '2 shapes', ['Far']);
+});
+
+test('review F2 linked preview belongs to the selected project', async ({ page }) => {
+  // Both projects have the same index.d2 and target.d2; only what target.d2 imports differs.
+  const first = importingProject('first', 'Alpha\nlayers: { Near: { n } }\n');
+  const second = importingProject('second', 'Alpha\nBeta\nlayers: { Far: { f } }\n');
+  await page.goto('/');
+  await openFolder(page, first);
+  await showingProjectFile(page, 'first', 'index.d2');
+  await expectLinkedTarget(page, '1 shape', ['Near']);
+
+  await openFolder(page, second);
+  await showingProjectFile(page, 'second', 'index.d2');
+  await expectLinkedTarget(page, '2 shapes', ['Far']);
+
+  await page.locator('#example-picker summary').click();
+  // The menu folds the project this pane is not showing.
+  const project = page.locator('#draft-options .project-toggle', { hasText: 'first' });
+  await expect(project).toHaveAttribute('aria-expanded', 'false');
+  await project.click();
+  await page.locator('#draft-options .example-option[title="first/index.d2"]').click();
+  await showingProjectFile(page, 'first', 'index.d2');
+  await expectLinkedTarget(page, '1 shape', ['Near']);
 });

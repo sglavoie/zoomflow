@@ -311,14 +311,16 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
     missing: (path) => !projectSources() ? openFolderMessage : fileLinks.exists(path) ? undefined : `Missing file: ${fileLabel(path)}`,
     compile: (path) => compileLinkedFile(linkedPath(path)!),
   });
-  /** One compile per linked file and source, for previews of the boards links open. */
-  const linkedCompiles = new Map<string, { source: string; result: Promise<{ boards: ReturnType<typeof indexBoards>; render: RenderBoard }> }>();
+  /** One compile per linked file of a project and that project's sources, for previews of the boards links open.
+   * Every source counts, since the file may import any of them, directly or through other imports. */
+  const linkedCompiles = new Map<string, { sources: string; result: Promise<{ boards: ReturnType<typeof indexBoards>; render: RenderBoard }> }>();
   function compileLinkedFile(path: string) {
     const context = projectSources()!;
     const source = context.fs[path]!;
-    const cached = linkedCompiles.get(path);
-    if (cached?.source === source) return cached.result;
     const key = siblingKey(currentDocumentKey!, path);
+    const sources = JSON.stringify(Object.entries(context.fs).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0));
+    const cached = linkedCompiles.get(key);
+    if (cached?.sources === sources) return cached.result;
     const result = (async () => {
       const { d2 } = await shared.compiler.get();
       const compiled = await compileSource(source, { inputPath: path, fs: context.fs });
@@ -327,8 +329,8 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
       const render: RenderBoard = (target) => d2.render(compiled.diagram, { ...compiled.renderOptions, target, noXMLTag: true });
       return { boards, render };
     })();
-    linkedCompiles.set(path, { source, result });
-    void result.catch(() => { if (linkedCompiles.get(path)?.result === result) linkedCompiles.delete(path); });
+    linkedCompiles.set(key, { sources, result });
+    void result.catch(() => { if (linkedCompiles.get(key)?.result === result) linkedCompiles.delete(key); });
     return result;
   }
 
