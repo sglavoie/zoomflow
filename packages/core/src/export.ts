@@ -103,8 +103,10 @@ function relativePath(from: string, to: string): string {
 }
 
 /** Zip every board of every atlas file. The entry file keeps its usual layout; other files go in
- * `@files/<project path>/` folders, and file links point at the relative path of their target's root SVG. */
-export function exportAtlasZip(documents: readonly AtlasDocument[]): Uint8Array<ArrayBuffer> {
+ * `@files/<project path>/` folders, and file links point at the relative path of their target's root SVG.
+ * `contents` receives each placed board, with its `file` set, for formats other than SVG. */
+export function exportAtlasZip(documents: readonly AtlasDocument[],
+  contents: (board: ExportBoard) => string | Uint8Array = (board) => board.svg): Uint8Array<ArrayBuffer> {
   const taken = documents[0].boards.map((board) => board.path.normalize('NFC').toLowerCase());
   let folder = '@files';
   while (taken.some((path) => path === `${folder}.svg` || path.startsWith(`${folder}/`))) folder = `@${folder}`;
@@ -118,7 +120,7 @@ export function exportAtlasZip(documents: readonly AtlasDocument[]): Uint8Array<
     if (root === undefined) return match;
     const relative = encodeURI(relativePath(board.path, root)).replace(/[#?]/g, encodeURIComponent);
     return `${prefix}${relative.replace(/&/g, '&amp;')}"`;
-  }) })));
+  }) })), contents);
 }
 
 /** Keep the relative D2 tree intact when a browser project has no writable folder handle. */

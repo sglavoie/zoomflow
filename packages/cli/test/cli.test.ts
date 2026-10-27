@@ -419,7 +419,7 @@ describe.concurrent('zoomflow CLI', () => {
   it('documents every option in the help text', async () => {
     const result = await run(['--help']);
     success(result);
-    for (const option of ['-o, --output', '--json', '--missing-backlink', '--boundary-ports', '--root']) expect(result.stdout).toContain(option);
+    for (const option of ['-o, --output', '--json', '--missing-backlink', '--boundary-ports', '--root', '--follow']) expect(result.stdout).toContain(option);
     expect(result.stdout).toMatch(/failure\.\n$/);
   });
 
@@ -541,5 +541,109 @@ describe.concurrent('zoomflow CLI', () => {
     success(strict);
     expect(strict.stdout).toContain('0 boundary pairs evaluated');
     success(mismatched);
+  });
+
+  it('lints file links in the input and, with --follow, every file they reach within --root', async () => {
+    const [own, rooted, followed, json] = await Promise.all([run(['lint', 'fixtures/atlas/broken/links.d2']),
+      run(['lint', 'fixtures/atlas/broken/links.d2', '--root', 'fixtures/atlas']),
+      run(['lint', 'fixtures/atlas/broken/links.d2', '--root', 'fixtures/atlas', '--follow']),
+      run(['lint', 'fixtures/atlas/index.d2', '--follow', '--json'])]);
+    // Without --root, the parent folder is outside the project.
+    expect(own.code).toBe(1);
+    expect(own.stdout).toBe([
+      'fixtures/atlas/broken/links.d2:2:1: error dangling-file-link [Root / Nowhere] Link targets missing file "missing.d2".',
+      'fixtures/atlas/broken/links.d2:3:1: error dangling-file-link [Root / Home] Link "../index.d2#/Gone" points outside the project folder or at a file that cannot be a diagram.',
+      '2 errors, 0 warnings.', ''].join('\n'));
+    expect(rooted.code).toBe(1);
+    expect(rooted.stdout).toBe([
+      'fixtures/atlas/broken/links.d2:2:1: error dangling-file-link [Root / Nowhere] Link targets missing file "broken/missing.d2".',
+      'fixtures/atlas/broken/links.d2:3:1: warning missing-file-board [Root / Home] Link targets missing board "Gone" in "index.d2", so the viewer opens its nearest existing board.',
+      '1 error, 1 warning.', ''].join('\n'));
+    expect(followed.code).toBe(1);
+    expect(followed.stdout).toContain('1 error, 1 warning in 5 files.');
+    success(json);
+    expect(JSON.parse(json.stdout)).toMatchObject({ files: ['index.d2', 'health.d2', 'work/index.d2', 'projects/zoomflow.d2'], diagnostics: [] });
+  });
+
+  it('follows file links once each through cycles and never outside --root or through symlinks', async () => {
+    const root = join(temp, 'atlas-cycle');
+    await mkdir(join(root, 'inner'), { recursive: true });
+    await writeFile(join(root, 'outside.d2'), 'o');
+    await writeFile(join(root, 'inner', 'a.d2'), 'B: {link: ./b.d2}\nUp: {link: ../outside.d2}\nLinked: {link: ./linked.d2}');
+    await writeFile(join(root, 'inner', 'b.d2'), 'A: {link: ./a.d2}\nx: {link: "./a.d2#/Gone"}');
+    await symlink(join(root, 'outside.d2'), join(root, 'inner', 'linked.d2'));
+    const a = join(root, 'inner', 'a.d2');
+    const [inner, wide] = await Promise.all([run(['lint', a, '--follow', '--json']), run(['lint', a, '--follow', '--root', root, '--json'])]);
+    expect(inner.code).toBe(1);
+    const result = JSON.parse(inner.stdout);
+    expect(result.files).toEqual(['a.d2', 'b.d2']);
+    expect(result.diagnostics.map((item: { file: string; rule: string; shape: string }) => [item.file, item.rule, item.shape])).toEqual([
+      ['a.d2', 'dangling-file-link', 'Up'], ['a.d2', 'dangling-file-link', 'Linked'], ['b.d2', 'missing-file-board', 'x']]);
+    // A wider --root reaches the parent file, but a symlinked file is still not followed.
+    expect(wide.code).toBe(1);
+    expect(JSON.parse(wide.stdout).files).toEqual(['inner/a.d2', 'inner/b.d2', 'outside.d2']);
+    expect(JSON.parse(wide.stdout).diagnostics.map((item: { shape: string }) => item.shape)).toEqual(['Linked', 'x']);
+    const [html, zip] = [join(temp, 'atlas-cycle.html'), join(temp, 'atlas-cycle.zip')];
+    const exports = await Promise.all([run(['export', a, '--format', 'html', '-o', html]), run(['export', a, '--all', '-o', zip])]);
+    for (const item of exports) {
+      success(item);
+      expect(item.stderr).toBe('zoomflow: 2 dangling links (run zoomflow lint)\n');
+    }
+    expect(embedded(await readFile(html, 'utf8')).map((board: { file: string; hash: string }) => [board.file, board.hash]))
+      .toEqual([['a.d2', '#/'], ['b.d2', '#/@file/b.d2']]);
+    const files = unzipSync(await readFile(zip));
+    const hrefs = (path: string) => [...strFromU8(files[path]).matchAll(/ href="([^"]*)"/g)].map((match) => match[1]);
+    expect(Object.keys(files)).toEqual(['root.svg', '@files/b.d2/root.svg']);
+    // Links outside the export lose their href; links within it open the target's root SVG.
+    expect(hrefs('root.svg')).toEqual(['@files/b.d2/root.svg']);
+    expect(hrefs('@files/b.d2/root.svg')).toEqual(['../../root.svg', '../../root.svg']);
+  }, 180_000);
+
+  it('exports linked files into ZIPs under folders named after them, file links pointing at their root SVG', async () => {
+    const [svg, png] = [join(temp, 'atlas-svg.zip'), join(temp, 'atlas-png.zip')];
+    const results = await Promise.all([run(['export', 'fixtures/atlas/index.d2', '--all', '-o', svg]),
+      run(['export', 'fixtures/atlas/index.d2', '--all', '--format', 'png', '-o', png])]);
+    results.forEach(success);
+    const files = unzipSync(await readFile(svg));
+    const hrefs = (path: string) => [...strFromU8(files[path]).matchAll(/ href="([^"]*)"/g)].map((match) => match[1]);
+    expect(Object.keys(files)).toEqual(['root.svg', '@files/health.d2/root.svg', '@files/health.d2/Sleep.svg',
+      '@files/work/index.d2/root.svg', '@files/projects/zoomflow.d2/root.svg', '@files/projects/zoomflow.d2/Viewer.svg']);
+    expect(hrefs('root.svg')).toEqual(['@files/health.d2/root.svg', '@files/work/index.d2/root.svg']);
+    expect(hrefs('@files/health.d2/root.svg')).toEqual(['Sleep.svg']);
+    expect(hrefs('@files/work/index.d2/root.svg')).toEqual(['../../projects/zoomflow.d2/root.svg']);
+    const images = unzipSync(await readFile(png));
+    expect(Object.keys(images)).toEqual(Object.keys(files).map((path) => path.replace(/\.svg$/, '.png')));
+    for (const data of Object.values(images)) expect([...data.slice(1, 4)]).toEqual([0x50, 0x4e, 0x47]);
+  }, 180_000);
+
+  it('exports every linked file into one HTML atlas that navigates offline from file://', async () => {
+    const output = join(temp, 'atlas.html');
+    success(await run(['export', 'fixtures/atlas/index.d2', '--format', 'html', '-o', output]));
+    const html = await readFile(output, 'utf8');
+    expect([...new Set(embedded(html).map((board: { file: string }) => board.file))]).toEqual(['index.d2', 'health.d2', 'work/index.d2', 'projects/zoomflow.d2']);
+    const context = await browser.newContext({ offline: true });
+    try {
+      const page = await context.newPage();
+      const errors: string[] = [];
+      page.on('pageerror', (error) => errors.push(error.message));
+      await page.goto(pathToFileURL(output).href);
+      const stage = page.locator('.zf-stage');
+      const at = async () => [await stage.getAttribute('data-file'), await stage.getAttribute('data-board')];
+      expect(await at()).toEqual(['index.d2', 'root']);
+      await page.locator('.zf-stage a[data-file="./health.d2"]').click();
+      expect(await at()).toEqual(['health.d2', 'root']);
+      await page.locator('.zf-stage a[data-board="root.layers.Sleep"]').click();
+      expect(await at()).toEqual(['health.d2', 'root.layers.Sleep']);
+      await page.keyboard.press('Escape');
+      await page.keyboard.press('Escape');
+      expect(await at()).toEqual(['index.d2', 'root']);
+      await page.locator('.zf-stage a[data-file="./work/index.d2"]').click();
+      await page.locator('.zf-stage a[data-file="../projects/zoomflow.d2#/Viewer"]').click();
+      expect(await at()).toEqual(['projects/zoomflow.d2', 'root.layers.Viewer']);
+      expect(await page.locator('.zf-breadcrumbs').textContent()).toContain('work/index');
+      await page.goBack();
+      expect(await at()).toEqual(['work/index.d2', 'root']);
+      expect(errors).toEqual([]);
+    } finally { await context.close(); }
   });
 });
