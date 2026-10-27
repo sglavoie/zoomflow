@@ -13,7 +13,7 @@ import { cloneSecondPane, nameParts, paneScope } from './pane-scope';
 import { findEngineNotice } from './engine-notice';
 import { setupExportMenu } from './export-menu';
 import { setupFileOpen } from './file-open';
-import { FileHandles } from './file-handles';
+import { DirectoryHandles, FileHandles } from './file-handles';
 
 const canvasStyle = document.createElement('style');
 canvasStyle.textContent = viewerStyle;
@@ -82,7 +82,8 @@ engine.retry.addEventListener('click', () => {
 });
 const documentRoutes = new Map<string, ViewerRoute>();
 const fileHandles = new FileHandles();
-const files = setupFileOpen({ picker: () => examplePicker, activePane, fileHandles, paneRoots, setActive });
+const directoryHandles = new DirectoryHandles();
+const files = setupFileOpen({ picker: () => examplePicker, activePane, fileHandles, directoryHandles, paneRoots, setActive });
 
 /** Builders create a separate draft from the active pane's point of view. */
 const builderArgs = [(source: string, name: string) => {
@@ -96,7 +97,7 @@ const mindMapBuilder = setupMindMapBuilder(...builderArgs);
 
 function context(id: PaneId): PaneContext {
   return {
-    compiler, picker: () => examplePicker, flowBuilder, mindMapBuilder, engine, fileHandles, documentRoutes,
+    compiler, picker: () => examplePicker, flowBuilder, mindMapBuilder, engine, fileHandles, directoryHandles, documentRoutes,
     isActive: () => active === id,
     tabbed: () => narrow.matches || workspace.dataset.layout === 'tabs',
     exportChanged: () => { if (active === id && panes[id]) exportMenu.updateExportLabel(); },
@@ -299,3 +300,5 @@ panes.a.open(examplePicker.initial);
 applyLayout();
 // Save writes back to the files drafts came from, after a reload too.
 void fileHandles.restore(examplePicker.hasDraft).then((restored) => { if (restored) examplePicker.refresh(); });
+// New linked files go into the folders projects came from, after a reload too.
+void directoryHandles.restore(examplePicker.hasProject);

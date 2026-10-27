@@ -1,7 +1,7 @@
 import { D2 } from '@d2lang/d2';
 import { afterAll, beforeAll, expect, it } from 'vitest';
 import { boardBlocks, indexBoards } from '@zoomflow/core';
-import { blockText, boardSites, joinBoard, reattach, splitBoard } from '../src/board-model';
+import { blockText, boardSites, builderKind, joinBoard, reattach, splitBoard } from '../src/board-model';
 import { editOnCanvas } from '../src/canvas-model';
 import { flowSource, flowTemplate, readFlow } from '../src/flow-model';
 import { mindMapSource, parseOutline, readMindMap, type MindMap } from '../src/mind-map-model';
@@ -113,7 +113,7 @@ it('adds boards to shapes whose identifiers D2 single-quotes, in a form board in
   expect(boards.get('root')!.diagram.shapes.map(shape => shape.link)).toEqual(['root.layers.Empty', 'root.layers.Quoted', 'root.layers.Apostrophe']);
   // The attached boards are still read as such, so builders keep them.
   expect(added.builder('root')).toBeUndefined();
-  expect(splitBoard(next).attachments.map(item => item.name)).toEqual(['Empty', 'Quoted', 'Apostrophe']);
+  expect(splitBoard(next).attachments.map(item => 'name' in item && item.name)).toEqual(['Empty', 'Quoted', 'Apostrophe']);
 });
 
 it('keeps an attached board on its own topic when another topic has the same labels', () => {
@@ -158,4 +158,60 @@ it('keeps attached boards on renamed topics', () => {
   expect(reattach(before, mindMapSource(map('Plan\n  People\n    Hiring\n  Money\n    Contractors')), attachments)).toEqual(attachments);
   expect(reattach(before, mindMapSource(map('Plan\n  People\n    Hiring\n  Money\n    Contractors\n  Risks')), attachments))
     .toMatch(/^The topic “Hiring” opens the board/);
+});
+
+it('keeps file links in the attachment section, beside attached boards, and reads only file links there', () => {
+  const parts = { own: flow, attachments: [{ shape: 'step_1', file: './health.d2' }, { shape: 'step_3', name: 'Ideas', body: 'a -> b' },
+    { shape: 'step_4', file: '../My Life.d2#/Sleep/Night' }] };
+  const text = joinBoard(parts);
+  expect(text).toContain('# Boards that open from shapes on this board.\nstep_1.link: "./health.d2"\n\nstep_3.link: layers."Ideas"\nlayers."Ideas": {\n  a -> b\n}\n\nstep_4.link: "../My Life.d2#/Sleep/Night"\n');
+  expect(splitBoard(text).attachments).toEqual(parts.attachments);
+  expect(builderKind(splitBoard(text).own)).toBe('flow');
+  // Links D2 drops or that open no file stay part of the own text.
+  for (const link of ['"health.d2"', '"https://example.com"', './health.d2']) {
+    const changed = text.replace('"./health.d2"', link);
+    expect(splitBoard(changed)).toEqual({ own: changed, attachments: [] });
+  }
+});
+
+it('links shapes to other files, changes and removes those links, and keeps the flow editable', async () => {
+  const { sites: site } = await sites(flow);
+  expect(site.shapeAction('root', 'step_3')).toEqual({ action: 'add' });
+  let source = site.linkFile('root', 'step_3', './work/plan.d2#/Q1');
+  expect(source).toContain('\n\n# Boards that open from shapes on this board.\nstep_3.link: "./work/plan.d2#/Q1"\n');
+  let { sites: linked, boards } = await sites(source);
+  expect(boards.get('root')!.diagram.shapes.find(shape => shape.id === 'step_3')!.link).toBe('./work/plan.d2#/Q1');
+  expect(linked.shapeAction('root', 'step_3')).toEqual({ action: 'file', link: './work/plan.d2#/Q1', attached: true });
+  expect(linked.builder('root')).toEqual({ kind: 'flow', own: expect.stringContaining('step_4') });
+  // Changing the link replaces it in place.
+  source = linked.linkFile('root', 'step_3', '../other.d2');
+  expect(splitBoard(source).attachments).toEqual([{ shape: 'step_3', file: '../other.d2' }]);
+  ({ sites: linked } = await sites(source));
+  // Editing the flow keeps the link on its step.
+  const edited = linked.update('root', flowSource({ ...readFlow(linked.builder('root')!.own)!, direction: 'right' }));
+  if (!('source' in edited)) throw new Error(edited.error);
+  expect(splitBoard(edited.source).attachments).toEqual([{ shape: 'step_3', file: '../other.d2' }]);
+  // Removing the last link removes the section too.
+  expect(linked.unlinkFile('root', 'step_3')).toBe(`${flow.trimEnd()}\n`);
+});
+
+it('links shapes on hand-written boards, and opens links written elsewhere without changing them', async () => {
+  const source = 'a: {link: ./b.d2}\nc\nlayers: {\n  inner: {\n    d\n  }\n}\n';
+  const { sites: site } = await sites(source);
+  expect(site.shapeAction('root', 'a')).toEqual({ action: 'file', link: './b.d2', attached: false });
+  const next = site.linkFile('root.layers.inner', 'd', '../up.d2');
+  expect(next).toContain('  inner: {\n    d\n\n    # Boards that open from shapes on this board.\n    d.link: "../up.d2"\n  }');
+  const { sites: linked } = await sites(next);
+  expect(linked.shapeAction('root.layers.inner', 'd')).toEqual({ action: 'file', link: '../up.d2', attached: true });
+});
+
+it('drops a file link with its removed step or topic, and moves it with a moved topic', () => {
+  const steps = flowTemplate('approval');
+  const links = [{ shape: 'step_4', file: './changes.d2' }];
+  expect(reattach(flowSource(steps), flowSource({ ...steps, steps: steps.steps.slice(0, 3), connections: [] }), links)).toEqual([]);
+  const before = mindMapSource(map('Plan\n  People\n    Hiring\n  Money'));
+  const topics = [{ shape: 'n_1_1', file: './hiring.d2' }];
+  expect(reattach(before, mindMapSource(map('Plan\n  Money\n  People\n    Hiring')), topics)).toEqual([{ ...topics[0], shape: 'n_2_1' }]);
+  expect(reattach(before, mindMapSource(map('Plan\n  Money')), topics)).toEqual([]);
+  expect(reattach(before, mindMapSource(map('Plan\n  People\n    Hiring\n      Roles', 2)), topics)).toMatch(/would open a detail board and the file/);
 });

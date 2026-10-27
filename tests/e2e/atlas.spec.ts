@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import { fileURLToPath } from 'node:url';
-import { openFolder, previewReady } from './helpers';
+import { editorText, openFolder, previewReady } from './helpers';
 
 const atlas = fileURLToPath(new URL('../../fixtures/atlas', import.meta.url));
 const openFolderMessage = 'Open the folder that contains this file to follow links to other diagrams.';
@@ -161,4 +161,106 @@ test('the second pane follows file links on its own', async ({ page }) => {
   await showing(page, 'work/index.d2', 'root', 'b');
   await expect(crumbs(page, '#viewer-b')).toHaveText(['Root']);
   await expect(page.locator('#viewer .zf-stage')).toHaveAttribute('data-board', 'root');
+});
+
+const shapeMenu = async (page: Page, id: string, name: string) => {
+  await page.locator(`#viewer .zf-stage [data-shape-id="${id}"]`).click({ button: 'right' });
+  return page.getByRole('menu', { name: `Actions for ${name}` });
+};
+
+test('links a shape to another file and board, changes and removes the link, and undoes it', async ({ page }) => {
+  await page.goto('/');
+  await openFolder(page, atlas);
+  await showing(page, 'index.d2');
+  await page.locator('#viewer .zf-stage a[data-file="./work/index.d2"]').click();
+  await showing(page, 'work/index.d2');
+  // A link written in the shape itself only opens from here.
+  let menu = await shapeMenu(page, 'Zoomflow', 'Zoomflow');
+  await expect(menu.getByRole('menuitem')).toHaveText(['Open diagram', 'Select in source']);
+  await page.keyboard.press('Escape');
+
+  menu = await shapeMenu(page, 'Inbox', 'Inbox');
+  await expect(menu.getByRole('menuitem')).toHaveText(['Add flow board…', 'Add mind map board…', 'Link to diagram…', 'New linked diagram…', 'Select in source']);
+  await menu.getByRole('menuitem', { name: 'Link to diagram…' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Link to a diagram' });
+  await expect(dialog.getByLabel('Diagram file').locator('option')).toHaveText(['broken/links', 'health', 'index', 'projects/zoomflow']);
+  await dialog.getByLabel('Diagram file').selectOption('health.d2');
+  await expect(dialog.getByLabel('Opens at').locator('option')).toHaveText(['Its home board', 'Sleep']);
+  await dialog.getByLabel('Opens at').selectOption({ label: 'Sleep' });
+  await dialog.getByRole('button', { name: 'Link', exact: true }).click();
+  await previewReady(page);
+  expect(await editorText(page)).toContain('\n\n# Boards that open from shapes on this board.\nInbox.link: "../health.d2#/Sleep"\n');
+  await expect(page.locator('#viewer .zf-stage a[data-file="../health.d2#/Sleep"]')).toHaveCount(1);
+
+  // A linked shape opens, changes or removes its link.
+  menu = await shapeMenu(page, 'Inbox', 'Inbox');
+  await expect(menu.getByRole('menuitem')).toHaveText(['Open diagram', 'Change linked diagram…', 'Remove link', 'Select in source']);
+  await menu.getByRole('menuitem', { name: 'Change linked diagram…' }).click();
+  const change = page.getByRole('dialog', { name: 'Change linked diagram' });
+  await expect(change.getByLabel('Diagram file')).toHaveValue('health.d2');
+  await expect(change.getByLabel('Opens at')).toHaveValue('#/Sleep');
+  await change.getByLabel('Diagram file').selectOption('projects/zoomflow.d2');
+  await change.getByRole('button', { name: 'Change link', exact: true }).click();
+  await previewReady(page);
+  expect(await editorText(page)).toContain('Inbox.link: "../projects/zoomflow.d2"');
+  await (await shapeMenu(page, 'Inbox', 'Inbox')).getByRole('menuitem', { name: 'Remove link' }).click();
+  await previewReady(page);
+  expect(await editorText(page)).not.toContain('Inbox.link');
+
+  // Undo brings each link back.
+  await page.locator('#viewer .zf-stage').focus();
+  await page.keyboard.press('ControlOrMeta+z');
+  await previewReady(page);
+  expect(await editorText(page)).toContain('Inbox.link: "../projects/zoomflow.d2"');
+  await page.keyboard.press('ControlOrMeta+z');
+  await previewReady(page);
+  expect(await editorText(page)).toContain('Inbox.link: "../health.d2#/Sleep"');
+
+  await (await shapeMenu(page, 'Inbox', 'Inbox')).getByRole('menuitem', { name: 'Open diagram' }).click();
+  await showing(page, 'health.d2', 'root.layers.Sleep');
+  await expect(crumbs(page)).toHaveText(['index', '…', 'work/index', 'Root', 'Sleep']);
+});
+
+test('creates a new linked flow that opens, stays editable, and links on from its steps', async ({ page }) => {
+  await page.goto('/');
+  await openFolder(page, atlas);
+  await showing(page, 'index.d2');
+  await page.locator('#viewer .zf-stage a[data-file="./health.d2"]').click();
+  await showing(page, 'health.d2');
+  await (await shapeMenu(page, 'Exercise', 'Exercise')).getByRole('menuitem', { name: 'New linked diagram…' }).click();
+  const dialog = page.getByRole('dialog', { name: 'New linked diagram' });
+  await expect(dialog.getByLabel('File name')).toHaveValue('Exercise');
+  await dialog.getByLabel('Flow').check();
+  await dialog.getByRole('button', { name: 'Create and open', exact: true }).click();
+  // Without the folder's handle, the new file is a project draft that Save asks where to put.
+  await showing(page, 'Exercise.d2');
+  await expect(crumbs(page)).toHaveText(['index', 'health', 'Root']);
+  await expect(page.locator('#draft-status')).toHaveText('File has unsaved changes');
+  await page.locator('#example-picker summary').click();
+  await expect(page.locator('#draft-options .example-option[title="atlas/Exercise.d2"]')).toBeVisible();
+  await page.locator('#example-picker summary').click();
+
+  // The flow's steps link to other files too, and the flow builder keeps those links.
+  await page.locator('#viewer .zf-stage [data-shape-id="step_3"]').click();
+  const boards = page.getByRole('group', { name: 'Selected: Done' }).getByRole('button', { name: 'Add board…', exact: true });
+  await boards.click();
+  await page.getByRole('menu', { name: 'Actions for Done' }).getByRole('menuitem', { name: 'Link to diagram…' }).click();
+  const link = page.getByRole('dialog', { name: 'Link to a diagram' });
+  await link.getByLabel('Diagram file').selectOption('index.d2');
+  await link.getByRole('button', { name: 'Link', exact: true }).click();
+  await previewReady(page);
+  expect(await editorText(page)).toContain('step_3.link: "./index.d2"');
+  await page.getByRole('button', { name: 'Edit flow', exact: true }).click();
+  const flow = page.getByRole('dialog', { name: 'Edit flow' });
+  await flow.getByLabel('Step 3 name').fill('Finished');
+  await flow.getByRole('button', { name: 'Apply changes', exact: true }).click();
+  await previewReady(page);
+  await expect(page.locator('#viewer .zf-stage')).toContainText('Finished');
+  expect(await editorText(page)).toContain('step_3.link: "./index.d2"');
+
+  // The file it came from links to the new file.
+  await crumbs(page).filter({ hasText: 'health' }).click();
+  await showing(page, 'health.d2');
+  expect(await editorText(page)).toContain('\n# Boards that open from shapes on this board.\nExercise.link: "./Exercise.d2"\n');
+  await expect(page.locator('#viewer .zf-stage a[data-file="./Exercise.d2"]')).not.toHaveAttribute('data-missing', '');
 });

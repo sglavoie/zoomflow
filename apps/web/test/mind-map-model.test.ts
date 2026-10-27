@@ -4,6 +4,8 @@ import { indexBoards } from '@zoomflow/core';
 import { countTopics, detailBoardName, mindMapExample, mindMapSource, outlineText, parseOutline, readMindMap, type MindMap } from '../src/mind-map-model';
 import { plainLook } from '../src/flow-model';
 import { projectFileSystem } from '../src/project-files';
+import { joinBoard, splitBoard } from '../src/board-model';
+import { newFileSource } from '../src/file-link-dialog';
 
 let d2: D2;
 beforeAll(() => { d2 = new D2(); });
@@ -115,4 +117,23 @@ it('reopens maps written when every board imported the library', () => {
   const legacy = mindMapSource(map, true);
   expect(legacy.match(/\.\.\.@zoomflow/g)!.length).toBeGreaterThan(1);
   expect(readMindMap(legacy)).toEqual(map);
+});
+
+it('stays editable with topics that open other files, and round-trips their links', async () => {
+  const map = example(2);
+  const attachments = [{ shape: 'n_1', file: './audience.d2' }, { shape: 'n_4', file: './risks.d2#/Open' }];
+  const source = joinBoard({ own: mindMapSource(map), attachments });
+  const parts = splitBoard(source);
+  expect(readMindMap(parts.own)).toEqual(map);
+  expect(parts.attachments).toEqual(attachments);
+  expect(joinBoard(parts)).toBe(source);
+  const compiled = await compile(source);
+  expect(compiled.diagram.shapes.filter(shape => shape.link?.endsWith('.d2') || shape.link?.includes('.d2#'))
+    .map(shape => [shape.id, shape.link])).toEqual([['n_1', './audience.d2'], ['n_4', './risks.d2#/Open']]);
+});
+
+it('starts a new linked mind map file centred on its name', () => {
+  const map = readMindMap(newFileSource('mind map', 'Health.d2'));
+  expect(map?.root.label).toBe('Health');
+  expect(map?.root.children.map(topic => topic.label)).toEqual(['First idea', 'Second idea']);
 });

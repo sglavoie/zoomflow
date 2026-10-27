@@ -1,13 +1,24 @@
-import { boardKey, type Board } from '@zoomflow/core';
+import { boardKey, classifyHref, resolveFilePath, type Board } from '@zoomflow/core';
 import type { Viewer } from '@zoomflow/viewer';
 import type { BuilderTarget } from './builder-dialog';
 import { boardSites, type BoardSites, type BuilderKind, type ShapeAction } from './board-model';
 import { canvasShapes, editOnCanvas, type CanvasEdit, type CanvasShape } from './canvas-model';
 import { pageListeners } from './canvas-guidance';
 import { setupBoardOutline } from './board-outline';
+import { fileLinkDialog, newFileSource, type FileBoard } from './file-link-dialog';
+import { fileLink } from './project-files';
 import type { PaneScope } from './pane-scope';
 import { setText } from './text';
 
+/** What a folder project offers for linking its files: this document's project path, the other files, a file's
+ * boards, and opening or creating a file. `create` resolves the new file's project path, or undefined when it failed. */
+export type FileLinkHost = {
+  path: string;
+  files: string[];
+  boards: (path: string) => Promise<FileBoard[]>;
+  open: (link: string) => void;
+  create: (name: string, source: string) => Promise<string | undefined>;
+};
 type Builder = { open: (target: BuilderTarget, returnFocus: HTMLElement, fallback?: HTMLElement) => void };
 type BoardToolsOptions = {
   builders: Record<BuilderKind, Builder>;
@@ -21,6 +32,8 @@ type BoardToolsOptions = {
   status: (message: string, kind?: 'info' | 'error') => void;
   undo: () => void;
   redo: () => void;
+  /** Links to other files, only in folder projects. */
+  files?: () => FileLinkHost | undefined;
 };
 type Item = (label: string, run: (returnFocus: HTMLElement) => void, options?: { relinks?: boolean; keys?: string }) => HTMLButtonElement;
 
@@ -131,6 +144,37 @@ export function setupBoardTools(scope: PaneScope, viewer: Viewer, options: Board
     if (!ready()) return { action: 'none', reason: 'Wait for the preview to update.' };
     return sites!.shapeAction(boardId(), shape);
   }
+  /** Write or, without `link`, remove the shape's file link, as long as the shape can still take one. */
+  function applyLink(board: string, shape: string, link?: string) {
+    if (!ready()) { options.status('Wait for the preview to update, then try again.', 'error'); return false; }
+    const action = sites!.shapeAction(board, shape);
+    if (!(action.action === 'file' && action.attached || link && action.action === 'add')) { options.status(stale, 'error'); return false; }
+    const source = link ? sites!.linkFile(board, shape, link) : sites!.unlinkFile(board, shape);
+    pending = { source, shape };
+    options.update(source);
+    options.status(`${link ? `“${shapeLabel(board, shape)}” opens ${link}` : 'Link removed'}. ${undoHint}`);
+    return true;
+  }
+  const refocus = (element: HTMLElement) => { if (element.isConnected) element.focus({ preventScroll: true }); };
+  async function linkTo(board: string, shape: string, host: FileLinkHost, returnFocus: HTMLElement, current?: string) {
+    const href = current ? classifyHref(current) : undefined;
+    const path = href?.kind === 'file' ? resolveFilePath(host.path, href.path) : undefined;
+    const choice = await fileLinkDialog().link({ files: host.files, boards: host.boards, shape: shapeLabel(board, shape),
+      ...path && href?.kind === 'file' ? { current: { path, hash: href.hash } } : {} });
+    refocus(returnFocus);
+    if (choice) applyLink(board, shape, fileLink(host.path, choice.path) + choice.hash);
+  }
+  async function newLinked(board: string, shape: string, host: FileLinkHost, returnFocus: HTMLElement) {
+    const choice = await fileLinkDialog().create(shapeLabel(board, shape));
+    refocus(returnFocus);
+    if (!choice) return;
+    if (!ready() || sites!.shapeAction(board, shape).action !== 'add') { options.status(stale, 'error'); return; }
+    const path = await host.create(choice.name, newFileSource(choice.kind, choice.name));
+    if (!path) return;
+    const link = fileLink(host.path, path);
+    if (applyLink(board, shape, link)) host.open(link);
+  }
+
   /** The shape as a step or topic of the builder board that writes the board on view. */
   function canvasTarget(shape: string): CanvasShape | undefined {
     const canvas = ready() ? sites!.canvas(boardId()) : undefined;
@@ -245,9 +289,21 @@ export function setupBoardTools(scope: PaneScope, viewer: Viewer, options: Board
     }
     const action = shapeAction(shape);
     const board = boardId();
+    const files = options.files?.();
     if (action.action === 'add') {
       items.push(...(['flow', 'mind map'] as const).map(kind => item(`Add ${kind} board…`, focus => add(kind, board, shape, focus), { relinks: true })));
+      if (files) {
+        items.push(item('Link to diagram…', focus => void linkTo(board, shape, files, focus), { relinks: true }),
+          item('New linked diagram…', focus => void newLinked(board, shape, files, focus), { relinks: true }));
+      }
     } else if (action.action === 'edit') items.push(item(`Edit ${action.kind} board…`, focus => edit(action.board, focus)));
+    else if (action.action === 'file' && files) {
+      items.push(item('Open diagram', () => files.open(action.link)));
+      if (action.attached) {
+        items.push(item('Change linked diagram…', focus => void linkTo(board, shape, files, focus, action.link), { relinks: true }),
+          item('Remove link', () => applyLink(board, shape), { relinks: true }));
+      }
+    }
     return items;
   }
 
@@ -292,7 +348,7 @@ export function setupBoardTools(scope: PaneScope, viewer: Viewer, options: Board
         const box = boardsButton.getBoundingClientRect();
         openMenu(shape, boardsButton, box.left, box.bottom + 4, true);
       });
-      buttons = [...buttons.filter(item => !/^Add (flow|mind map) board$/.test(item.textContent!)), boardsButton];
+      buttons = [...buttons.filter(item => !/^(Add (flow|mind map) board|Link to diagram…|New linked diagram…)$/.test(item.textContent!)), boardsButton];
     }
     shapeGroup.hidden = !buttons.length;
     if (shape && buttons.length) {

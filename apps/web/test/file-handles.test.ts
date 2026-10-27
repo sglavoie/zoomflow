@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { afterEach, expect, it, vi } from 'vitest';
-import { FileHandles } from '../src/file-handles';
+import { createProjectFile, DirectoryHandles, FileHandles } from '../src/file-handles';
 
 /** A minimal IndexedDB whose single store reads a snapshot and answers on a later task, like the real one. */
 function fakeIndexedDb(rows: Map<string, unknown>) {
@@ -40,4 +40,55 @@ it('does not restore a handle removed or replaced while the restore was reading'
   expect(handles.has('file:gone')).toBe(false);
   expect(handles.get('file:new')).toBe(replacement);
   expect(handles.get('file:kept')?.name).toBe('kept.d2');
+});
+
+it('keeps each project\'s folder, and drops folders of removed projects when restoring', async () => {
+  const folder = (name: string) => ({ kind: 'directory', name }) as FileSystemDirectoryHandle;
+  const rows = new Map<string, unknown>([['kept', folder('atlas')], ['gone', folder('old')], ['replaced', folder('before')]]);
+  vi.stubGlobal('indexedDB', fakeIndexedDb(rows));
+  const folders = new DirectoryHandles();
+  const restoring = folders.restore(project => project !== 'gone');
+  const replacement = folder('after');
+  folders.set('replaced', replacement);
+  await restoring;
+  expect(folders.get('kept')?.name).toBe('atlas');
+  expect(folders.has('gone')).toBe(false);
+  expect(folders.get('replaced')).toBe(replacement);
+  await vi.waitFor(() => expect(rows.has('gone')).toBe(false));
+  expect(rows.get('replaced')).toBe(replacement);
+});
+
+/** A folder in memory with the parts of the File System Access API that creating a file uses. */
+function memoryFolder(files: Map<string, string>, permission: PermissionState = 'granted', prefix = ''): FileSystemDirectoryHandle {
+  const notFound = () => Promise.reject(new DOMException('Not found', 'NotFoundError'));
+  return {
+    kind: 'directory',
+    queryPermission: async () => permission === 'granted' ? 'granted' : 'prompt',
+    requestPermission: async () => permission,
+    getDirectoryHandle: async (name: string) => memoryFolder(files, permission, `${prefix}${name}/`),
+    getFileHandle: async (name: string, options?: { create?: boolean }) => {
+      const path = `${prefix}${name}`;
+      if (!files.has(path) && !options?.create) return notFound();
+      if (!files.has(path)) files.set(path, '');
+      return {
+        kind: 'file', name,
+        getFile: async () => ({ lastModified: 1, text: async () => files.get(path) }),
+        createWritable: async () => {
+          let text = '';
+          return { write: async (chunk: string) => { text += chunk; }, close: async () => { files.set(path, text); }, abort: async () => {} };
+        },
+      };
+    },
+  } as unknown as FileSystemDirectoryHandle;
+}
+
+it('creates new project files in their folder, without overwriting or writing without permission', async () => {
+  const files = new Map([['index.d2', 'a']]);
+  const created = await createProjectFile(memoryFolder(files), 'work/Plan.d2', '# Plan\n');
+  expect(typeof created === 'object' && created.name).toBe('Plan.d2');
+  expect(files.get('work/Plan.d2')).toBe('# Plan\n');
+  await expect(createProjectFile(memoryFolder(files), 'index.d2', 'b')).resolves.toBe('exists');
+  expect(files.get('index.d2')).toBe('a');
+  await expect(createProjectFile(memoryFolder(files, 'denied'), 'New.d2', 'c')).resolves.toBe('refused');
+  expect(files.has('New.d2')).toBe(false);
 });

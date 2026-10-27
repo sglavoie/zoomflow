@@ -1,5 +1,6 @@
 import standardLibrary from '../../../stdlib/zoomflow.d2?raw';
 import { rememberDiskVersion } from './disk-version';
+import { flowFilename } from './flow-model';
 
 export type ProjectSource = { path: string; source: string };
 
@@ -66,5 +67,26 @@ export async function readDirectoryHandle(root: FileSystemDirectoryHandle) {
   await visit(root, '');
   if (!files.length) throw new Error('The selected folder has no .d2 files.');
   files.sort((a, b) => a.path.localeCompare(b.path));
-  return { name: root.name, files, handles };
+  return { name: root.name, files, handles, directory: root };
+}
+
+/** The file link from the project file at `fromPath` to the one at `toPath`, in the `./` or `../` form D2 keeps. */
+export function fileLink(fromPath: string, toPath: string): string {
+  const from = fromPath.split('/').slice(0, -1);
+  const to = toPath.split('/');
+  let common = 0;
+  while (common < from.length && common < to.length - 1 && from[common] === to[common]) common++;
+  const up = from.length - common;
+  return `${up ? '../'.repeat(up) : './'}${to.slice(common).join('/')}`;
+}
+
+/** A new project path beside `fromPath`, named after `label`, that no path in `taken` has in any case.
+ * Names leave out what links and file systems read specially, such as `#`, `?` and `%`. */
+export function newProjectPath(fromPath: string, label: string, taken: Iterable<string>): string {
+  const folder = fromPath.split('/').slice(0, -1).map(part => `${part}/`).join('');
+  const used = new Set([...taken].map(path => path.toLowerCase()));
+  const base = flowFilename(label.replace(/[#%]/g, '-').replace(/\s+/g, ' '), '').slice(0, -3).replace(/^[. ]+/, '') || 'Diagram';
+  let path = `${folder}${base}.d2`;
+  for (let n = 2; used.has(path.toLowerCase()); n++) path = `${folder}${base} ${n}.d2`;
+  return path;
 }

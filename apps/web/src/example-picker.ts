@@ -321,6 +321,7 @@ export function setupExamplePicker({ readSource, open, onState, forget, checkpoi
   return {
     initial: { source: draftOf('a')!.source, name: draftOf('a')!.name, key: current.a! },
     hasDraft: (key: string) => drafts.has(key),
+    hasProject: (projectId: string) => [...drafts.values()].some((item) => item.projectId === projectId),
     /** Show the second pane: it reopens the draft it showed before a reload, or starts empty. */
     setSplit(value: boolean) {
       if (value === split) return;
@@ -470,7 +471,20 @@ export function setupExamplePicker({ readSource, open, onState, forget, checkpoi
       activate(keys[first.path]);
       picker.open = false;
       persist();
-      return { key: keys[first.path], name: first.path.split('/').at(-1)!, source: first.source, keys };
+      return { key: keys[first.path], name: first.path.split('/').at(-1)!, source: first.source, keys, projectId };
+    },
+    /** Add a new file to the pane's project; `saved` when it is on disk already, otherwise Save asks where to put it. */
+    addProjectFile(pane: PaneId, path: string, source: string, saved: boolean) {
+      const draft = draftOf(pane);
+      if (!draft?.projectId) return;
+      const key = `project:${draft.projectId}:${path}`;
+      if (drafts.has(key)) return;
+      const item: Draft = { key, name: path.split('/').at(-1)!, title: `${draft.title.split('/')[0]}/${path}`, description: 'Project file',
+        source, baseline: saved ? source : '', projectId: draft.projectId, path, updatedAt: Date.now() };
+      drafts.set(key, item);
+      addOption(item);
+      persist();
+      return key;
     },
     flush() {
       syncSources();

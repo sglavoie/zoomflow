@@ -1,4 +1,4 @@
-import { boardBlocks, indexBoards, indexShapeSources, parseSourceRange, lint, resolveFilePath, type CompileResponse, type ShapeSource, type SourceRange, type Diagram, type LintDiagnostic, type LintResult } from '@zoomflow/core';
+import { boardBlocks, classifyHref, indexBoards, indexShapeSources, parseSourceRange, lint, resolveFilePath, type CompileResponse, type ShapeSource, type SourceRange, type Diagram, type LintDiagnostic, type LintResult } from '@zoomflow/core';
 import { Viewer, openFolderMessage, setupViewport, type RenderBoard, type ViewerRoute } from '@zoomflow/viewer';
 import { SourceEditor } from './editor';
 import { compilerDiagnostics, lintDiagnostics, type SourceDiagnostic } from './diagnostics';
@@ -8,12 +8,12 @@ import { createPreviewQueue } from './preview-queue';
 import { setupFullscreen } from './fullscreen';
 import { setupAiAssistant } from './ai-assistant';
 import { setupMobileView } from './mobile-view';
-import { projectFileSystem } from './project-files';
+import { newProjectPath, projectFileSystem } from './project-files';
 import { setupCanvasGuidance } from './canvas-guidance';
 import { setupBoardTools } from './board-tools';
 import { boardRoute, setupLinkPreview } from './link-preview';
 import { boardSites } from './board-model';
-import type { FileHandles } from './file-handles';
+import { createProjectFile, type DirectoryHandles, type FileHandles } from './file-handles';
 import type { setupFlowBuilder } from './flow-builder';
 import type { setupMindMapBuilder } from './mind-map-builder';
 import type { DraftState, setupExamplePicker } from './example-picker';
@@ -36,6 +36,8 @@ export type PaneContext = {
   mindMapBuilder: ReturnType<typeof setupMindMapBuilder>;
   engine: EngineNotice;
   fileHandles: FileHandles;
+  /** The folder each project was opened from, for creating new linked files in it. */
+  directoryHandles: DirectoryHandles;
   documentRoutes: Map<string, ViewerRoute>;
   isActive: () => boolean;
   /** Whether this pane shows one view at a time (narrow screens and split tabs). */
@@ -252,7 +254,53 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
     status: (message, kind) => setActivity(message, kind),
     undo: () => { immediate = true; editor.undo(); immediate = false; },
     redo: () => { immediate = true; editor.redo(); immediate = false; },
+    files: () => {
+      const context = projectSources();
+      if (!context) return;
+      return {
+        path: context.inputPath,
+        files: Object.keys(context.fs).filter((path) => path !== context.inputPath).sort((a, b) => a.localeCompare(b)),
+        boards: linkedBoards,
+        open: (link) => {
+          const href = classifyHref(link);
+          if (href.kind === 'file') openFileLink(href.path, href.hash);
+        },
+        create: createLinkedFile,
+      };
+    },
   });
+  /** The boards below a project file's root, named from the root down, for choosing where a link opens. */
+  async function linkedBoards(path: string) {
+    const { boards } = await compileLinkedFile(path);
+    const names = (id: string): string[] => {
+      const board = boards.get(id)!;
+      return board.parent ? [...names(board.parent), board.kind === 'layers' ? board.name : `${board.name} (${board.kind === 'scenarios' ? 'scenario' : 'step'})`] : [];
+    };
+    return [...boards.values()].filter((board) => board.parent).map((board) => ({ hash: board.hash, label: names(board.id).join(' › ') }));
+  }
+  /** Create a project file beside this one, in the project's folder when the browser can write it, otherwise as a
+   * draft that Save asks where to put. Resolves its project path. */
+  async function createLinkedFile(name: string, source: string) {
+    const context = projectSources();
+    const projectId = currentDocumentKey?.split(':')[1];
+    if (!context || !projectId) return;
+    const taken = new Set(Object.keys(context.fs));
+    const folder = shared.directoryHandles.get(projectId);
+    try {
+      for (;;) {
+        const path = newProjectPath(context.inputPath, name, taken);
+        const created = folder ? await createProjectFile(folder, path, source) : 'refused';
+        if (created === 'exists') { taken.add(path); continue; }
+        const key = picker().addProjectFile(id, path, source, created !== 'refused');
+        if (!key) return;
+        if (created !== 'refused') shared.fileHandles.set(key, created);
+        else if (folder) setActivity(`Created ${path} as a draft. Save it to keep it.`);
+        return path;
+      }
+    } catch (error) {
+      setActivity(`Could not create a linked diagram: ${describeError(error)}`, 'error');
+    }
+  }
   const linkPreview = setupLinkPreview(scope, viewer, {
     label: fileLabel,
     missing: (path) => !projectSources() ? openFolderMessage : fileLinks.exists(path) ? undefined : `Missing file: ${fileLabel(path)}`,

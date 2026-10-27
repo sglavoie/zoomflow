@@ -2,6 +2,8 @@ import { D2 } from '@d2lang/d2';
 import { afterAll, beforeAll, expect, it } from 'vitest';
 import { flowFilename, flowSource, flowTemplate, readFlow } from '../src/flow-model';
 import { projectFileSystem } from '../src/project-files';
+import { joinBoard, splitBoard } from '../src/board-model';
+import { newFileSource } from '../src/file-link-dialog';
 
 let d2: D2;
 beforeAll(() => { d2 = new D2(); });
@@ -109,4 +111,21 @@ it('colours lines labelled Yes and No with the library branch classes', async ()
   // The class follows the label, so a class the label does not imply is custom source.
   expect(readFlow(source.replace('"Try again"', '"Try again" {class: zf-yes}'))).toBeUndefined();
   expect(readFlow(source.replace(' {class: zf-yes}', ''))).toBeUndefined();
+});
+
+it('stays editable with steps that open other files, and round-trips their links', async () => {
+  const flow = flowTemplate('approval');
+  const attachments = [{ shape: 'step_2', file: './decide.d2' }, { shape: 'step_4', file: '../review/changes.d2#/Notes' }];
+  const source = joinBoard({ own: flowSource(flow), attachments });
+  const parts = splitBoard(source);
+  expect(readFlow(parts.own)).toEqual(flow);
+  expect(parts.attachments).toEqual(attachments);
+  expect(joinBoard(parts)).toBe(source);
+  const compiled = await compile(source);
+  expect(compiled.diagram.shapes.filter(shape => shape.link).map(shape => [shape.id, shape.link]))
+    .toEqual([['step_2', './decide.d2'], ['step_4', '../review/changes.d2#/Notes']]);
+});
+
+it('starts a new linked flow file that the builder reopens', () => {
+  expect(readFlow(newFileSource('flow', 'Plan'))).toEqual(flowTemplate('simple'));
 });

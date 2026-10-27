@@ -2,7 +2,7 @@ import type { DocumentPane, PaneId } from './document-pane';
 import type { setupExamplePicker } from './example-picker';
 import { readDirectoryHandle, readFolderInput } from './project-files';
 import { rememberDiskVersion } from './disk-version';
-import type { FileHandles } from './file-handles';
+import type { DirectoryHandles, FileHandles } from './file-handles';
 import { describeError } from './text';
 
 type PickerWindow = Window & {
@@ -14,6 +14,7 @@ export type FileOpenHost = {
   picker: () => ReturnType<typeof setupExamplePicker>;
   activePane: () => DocumentPane;
   fileHandles: FileHandles;
+  directoryHandles: DirectoryHandles;
   paneRoots: Record<PaneId, HTMLElement>;
   setActive: (pane: PaneId) => void;
 };
@@ -30,7 +31,7 @@ export async function sameEntries(fileHandles: Map<string, FileSystemFileHandle>
 }
 
 /** Open .d2, Open folder and dropped files, which open in the active pane. */
-export function setupFileOpen({ picker, activePane, fileHandles, paneRoots, setActive }: FileOpenHost) {
+export function setupFileOpen({ picker, activePane, fileHandles, directoryHandles, paneRoots, setActive }: FileOpenHost) {
   const pickerWindow = window as PickerWindow;
   const fileStatus = document.querySelector<HTMLElement>('#file-status')!;
   function setFileError(message: string) {
@@ -71,12 +72,14 @@ export function setupFileOpen({ picker, activePane, fileHandles, paneRoots, setA
     if (file) void openFile(file);
   });
   async function openFolder(folder: { name: string; files: { path: string; source: string }[];
-    handles?: Record<string, FileSystemFileHandle> }) {
+    handles?: Record<string, FileSystemFileHandle>; directory?: FileSystemDirectoryHandle }) {
     setFileError('');
     await fileHandles.ready();
     const selection = picker().rememberFolder(folder.name, folder.files,
       await sameEntries(fileHandles, (key) => key.startsWith('project:') ? folder.handles?.[key.split(':').slice(2).join(':')] : undefined));
     for (const [path, handle] of Object.entries(folder.handles ?? {})) fileHandles.set(selection.keys[path], handle);
+    // New linked files are created in the folder; a folder chosen without a handle keeps new files as drafts.
+    if (folder.directory) directoryHandles.set(selection.projectId, folder.directory);
     picker().refresh();
     await activePane().replaceDocument(selection.source, selection.name, selection.key);
   }

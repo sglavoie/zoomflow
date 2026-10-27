@@ -369,7 +369,7 @@ header > strong {
 .board-menu [role="menuitem"]:is(:hover, :focus-visible) {
   background: var(--hover-subtle);
 }
-:is(#flow-builder, #mind-map-builder) {
+:is(#flow-builder, #mind-map-builder, #file-link-dialog) {
   width: min(760px, calc(100vw - 24px));
   max-height: calc(100dvh - 24px);
   padding: var(--space-5);
@@ -380,8 +380,14 @@ header > strong {
   background: var(--surface);
   box-shadow: var(--shadow-dialog);
 }
-:is(#flow-builder, #mind-map-builder)::backdrop {
+:is(#flow-builder, #mind-map-builder, #file-link-dialog)::backdrop {
   background: var(--backdrop);
+}
+#file-link-dialog {
+  width: min(560px, calc(100vw - 24px));
+}
+#file-link-dialog [data-mode="new"] > label {
+  margin-top: var(--space-3);
 }
 .flow-heading {
   display: flex;
@@ -395,6 +401,7 @@ header > strong {
 }
 #flow-builder-description,
 #mind-map-builder-description,
+#file-link-description,
 .flow-help {
   color: var(--muted);
   line-height: 1.5;
@@ -403,18 +410,18 @@ header > strong {
   font-size: var(--font-size-md);
   margin: 6px 0 var(--space-3);
 }
-:is(#flow-builder, #mind-map-builder) h3 {
+:is(#flow-builder, #mind-map-builder, #file-link-dialog) h3 {
   margin: var(--space-5) 0 0;
   font-size: var(--font-size-lg);
 }
-:is(#flow-builder, #mind-map-builder) label {
+:is(#flow-builder, #mind-map-builder, #file-link-dialog) label {
   display: grid;
   gap: 5px;
   min-width: 0;
   font-size: var(--font-size-sm);
 }
-:is(#flow-builder, #mind-map-builder) input,
-:is(#flow-builder, #mind-map-builder) select,
+:is(#flow-builder, #mind-map-builder, #file-link-dialog) input,
+:is(#flow-builder, #mind-map-builder, #file-link-dialog) select,
 #mind-map-outline {
   min-width: 0;
   width: 100%;
@@ -427,7 +434,7 @@ header > strong {
   background: var(--surface);
   color: inherit;
 }
-:is(#flow-builder, #mind-map-builder) input:focus-visible,
+:is(#flow-builder, #mind-map-builder, #file-link-dialog) input:focus-visible,
 #mind-map-outline:focus-visible {
   outline: 2px solid var(--focus);
   outline-offset: 2px;
@@ -478,13 +485,13 @@ header > strong {
   color: var(--muted);
   font-size: var(--font-size-sm);
 }
-:is(#flow-builder, #mind-map-builder) .builder-look label {
+:is(#flow-builder, #mind-map-builder, #file-link-dialog) .builder-look label {
   display: flex;
   align-items: center;
   gap: var(--space-2);
   font-size: var(--font-size-md);
 }
-:is(#flow-builder, #mind-map-builder) .builder-look input {
+:is(#flow-builder, #mind-map-builder, #file-link-dialog) .builder-look input {
   width: auto;
   min-height: 0;
 }
@@ -541,7 +548,7 @@ header > strong {
   font-size: var(--font-size-sm);
 }
 @media (max-width: 600px) {
-  :is(#flow-builder, #mind-map-builder) {
+  :is(#flow-builder, #mind-map-builder, #file-link-dialog) {
     padding: var(--space-4);
   }
   .flow-footer {
