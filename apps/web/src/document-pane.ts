@@ -1,5 +1,5 @@
-import { boardBlocks, indexBoards, indexShapeSources, parseSourceRange, lint, type CompileResponse, type ShapeSource, type SourceRange, type Diagram, type LintDiagnostic, type LintResult } from '@zoomflow/core';
-import { Viewer, setupViewport, type RenderBoard, type ViewerRoute } from '@zoomflow/viewer';
+import { boardBlocks, indexBoards, indexShapeSources, parseSourceRange, lint, resolveFilePath, type CompileResponse, type ShapeSource, type SourceRange, type Diagram, type LintDiagnostic, type LintResult } from '@zoomflow/core';
+import { Viewer, openFolderMessage, setupViewport, type RenderBoard, type ViewerRoute } from '@zoomflow/viewer';
 import { SourceEditor } from './editor';
 import { compilerDiagnostics, lintDiagnostics, type SourceDiagnostic } from './diagnostics';
 import { CompilerStartupError, isEngineUnavailable, type createCompiler } from './compiler';
@@ -11,7 +11,7 @@ import { setupMobileView } from './mobile-view';
 import { projectFileSystem } from './project-files';
 import { setupCanvasGuidance } from './canvas-guidance';
 import { setupBoardTools } from './board-tools';
-import { setupLinkPreview } from './link-preview';
+import { boardRoute, setupLinkPreview } from './link-preview';
 import { boardSites } from './board-model';
 import type { FileHandles } from './file-handles';
 import type { setupFlowBuilder } from './flow-builder';
@@ -71,15 +71,46 @@ function statusLine(element: HTMLElement) {
   };
 }
 
+/** A file a pane came through on the way to the one it shows, and the board it was left on. */
+type FileVisit = { key: string; path: string; route: ViewerRoute };
+/** Board hashes of each project file's last compile, by draft key, for checking links into that file. */
+const compiledBoards = new Map<string, ReadonlySet<string>>();
+/** The draft key of another file in the project of `key`, a `project:<id>:<path>` key. */
+const siblingKey = (key: string, path: string) => `project:${key.split(':')[1]}:${path}`;
+const projectLabel = (path: string) => path.replace(/\.d2$/i, '');
 /** One document's editor, preview, diagnostics and status. The workspace shows one or two panes. */
 export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneContext) {
   const scope = paneScope(id, root);
   const { part } = scope;
   const picker = () => shared.picker();
+  /** The project files of this pane's document, by project path; undefined outside a folder project. */
+  function projectSources() {
+    return picker().projectName(id) === undefined ? undefined : picker().compilation(id);
+  }
+  /** The project path a file link of this document opens, when it stays inside the project. */
+  const linkedPath = (path: string) => projectSources() && resolveFilePath(picker().inputPath(id), path);
+  const fileLabel = (path: string) => projectLabel(linkedPath(path) ?? path.replace(/^.*\//, ''));
+  const fileLinks = {
+    exists: (path: string) => {
+      const target = linkedPath(path);
+      return target !== undefined && Object.hasOwn(projectSources()!.fs, target);
+    },
+    open: (path: string, hash: string) => openFileLink(path, hash),
+    label: fileLabel,
+  };
   const viewer = new Viewer(part('viewer'), { history: id === 'a', active: shared.isActive,
     // Steps and topics open their board from the arrow badge, so a click on the shape selects it to edit.
     follows: (link, event) => (link as SVGElement).dataset.follow !== 'badge' || event instanceof KeyboardEvent ||
-      Boolean(event.target instanceof Element && event.target.closest('.appendix-icon')) });
+      Boolean(event.target instanceof Element && event.target.closest('.appendix-icon')),
+    // Only folder projects can follow links to their other files; single files and drafts ask for the folder.
+    get files() { return projectSources() && fileLinks; },
+    onTopLevelBack: () => {
+      if (!fileStack.length) return false;
+      void returnToFile(fileStack.length - 1);
+      return true;
+    },
+    document: { key: () => currentDocumentKey, restore: restoreFromHistory },
+  });
   const viewport = setupViewport(viewer.stage, setupFullscreen(viewer.stage, root));
   const compileError = setupCompileError(scope, viewer.stage, () => {
     if (activeDiagnostics[0]) void openDiagnostic(activeDiagnostics[0]);
@@ -120,6 +151,8 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
   let documentExport: DocumentExport | undefined;
   /** The latest compile of this document failed with source errors. */
   let sourceError = false;
+  /** The files this pane followed links through to reach its document, oldest first. */
+  let fileStack: FileVisit[] = [];
 
   function setPreviewState(state: 'loading' | 'updating' | 'ready' | 'error' | 'unavailable') {
     if (state === 'updating') {
@@ -220,7 +253,81 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
     undo: () => { immediate = true; editor.undo(); immediate = false; },
     redo: () => { immediate = true; editor.redo(); immediate = false; },
   });
-  const linkPreview = setupLinkPreview(scope, viewer);
+  const linkPreview = setupLinkPreview(scope, viewer, {
+    label: fileLabel,
+    missing: (path) => !projectSources() ? openFolderMessage : fileLinks.exists(path) ? undefined : `Missing file: ${fileLabel(path)}`,
+    compile: (path) => compileLinkedFile(linkedPath(path)!),
+  });
+  /** One compile per linked file and source, for previews of the boards links open. */
+  const linkedCompiles = new Map<string, { source: string; result: Promise<{ boards: ReturnType<typeof indexBoards>; render: RenderBoard }> }>();
+  function compileLinkedFile(path: string) {
+    const context = projectSources()!;
+    const source = context.fs[path]!;
+    const cached = linkedCompiles.get(path);
+    if (cached?.source === source) return cached.result;
+    const key = siblingKey(currentDocumentKey!, path);
+    const result = (async () => {
+      const { d2 } = await shared.compiler.get();
+      const compiled = await compileSource(source, { inputPath: path, fs: context.fs });
+      const boards = indexBoards(compiled.diagram);
+      compiledBoards.set(key, new Set([...boards.values()].map((board) => board.hash)));
+      const render: RenderBoard = (target) => d2.render(compiled.diagram, { ...compiled.renderOptions, target, noXMLTag: true });
+      return { boards, render };
+    })();
+    linkedCompiles.set(path, { source, result });
+    void result.catch(() => { if (linkedCompiles.get(path)?.result === result) linkedCompiles.delete(path); });
+    return result;
+  }
+
+  function setFileStack(stack: FileVisit[]) {
+    fileStack = stack;
+    viewer.setTrailPrefix(stack.map((visit, index) => ({ name: projectLabel(visit.path), activate: () => void returnToFile(index) })));
+  }
+  /** Open another file of the project in this pane at `route`, coming from the files in `stack`.
+   * The first pane records it as a history entry, so Back returns to the file before. */
+  async function visitFile(target: { source: string; name: string; key: string }, route: ViewerRoute, stack: FileVisit[]) {
+    if (id === 'a') history.pushState({ zoomflowFile: target.key, zoomflowFiles: stack, zoomflowTrail: route.trail }, '',
+      `${location.pathname}${location.search}${route.hash}`);
+    await replaceDocument(target.source, target.name, target.key, false, route, stack);
+  }
+  function openFileLink(path: string, hash: string) {
+    const resolved = linkedPath(path);
+    // Before the picker switches this pane to the target.
+    const here: FileVisit = { key: currentDocumentKey!, path: picker().inputPath(id), route: viewer.route };
+    const target = resolved && picker().selectProjectPath(id, resolved);
+    if (!target) { viewer.setMessage(`Missing file: ${fileLabel(path)}`, true); return; }
+    if (target.pane !== id) { viewer.setMessage(`${target.name} is open in the other pane.`, true); return; }
+    // Coming back to a file on the way here shortens the way instead of repeating it.
+    const earlier = fileStack.findIndex((visit) => visit.key === target.key);
+    const stack = target.key === currentDocumentKey ? fileStack : earlier >= 0 ? fileStack.slice(0, earlier) : [...fileStack, here];
+    void visitFile(target, { hash: boardRoute(hash) }, stack);
+  }
+  /** Reopen a file on the way here at the board it was left on. */
+  async function returnToFile(index: number) {
+    const visit = fileStack[index];
+    const target = visit && picker().selectProjectPath(id, visit.path);
+    if (!target || target.pane !== id) {
+      viewer.setMessage(target ? `${target.name} is open in the other pane.` : `Missing file: ${projectLabel(visit.path)}`, true);
+      return;
+    }
+    await visitFile(target, visit.route, fileStack.slice(0, index));
+  }
+  /** Files on the way here as a history entry recorded them, keeping those the project still has. */
+  function savedStack(value: unknown): FileVisit[] {
+    if (!Array.isArray(value)) return [];
+    return value.filter((visit): visit is FileVisit => typeof visit?.key === 'string' && typeof visit.path === 'string' &&
+      typeof visit.route?.hash === 'string' && picker().hasDraft(visit.key));
+  }
+  /** Back or Forward reached an entry of another file: open it when it belongs to this pane's project. */
+  function restoreFromHistory(state: { zoomflowFile: string } & Record<string, unknown>) {
+    const key = state.zoomflowFile;
+    if (!key.startsWith('project:') || !currentDocumentKey?.startsWith('project:') ||
+      siblingKey(currentDocumentKey, '') !== siblingKey(key, '')) return false;
+    const target = picker().selectProjectPath(id, key.split(':').slice(2).join(':'));
+    if (!target || target.pane !== id) return false;
+    void replaceDocument(target.source, target.name, target.key, false, viewer.route, savedStack(state.zoomflowFiles));
+    return true;
+  }
   /** Dim the source outside the board on view; `opened` scrolls to it unless someone is typing there. */
   function showBoardSource(opened: boolean) {
     if (mappedSource !== editor.source) return;
@@ -248,13 +355,15 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
     setActivity, activity: () => activityStatus.textContent,
   });
 
-  async function replaceDocument(source: string, name: string, key: string, reset = false) {
+  /** Show a document; `route` overrides its remembered board. Without `stack`, it starts a new way through files. */
+  async function replaceDocument(source: string, name: string, key: string, reset = false, route?: ViewerRoute, stack: FileVisit[] = []) {
     ai?.documentSwitched();
     sourceError = false;
-    viewer.setRoute(reset ? undefined : shared.documentRoutes.get(key));
+    viewer.setRoute(reset ? undefined : route ?? shared.documentRoutes.get(key));
     viewport.setDocument(key, reset);
     documentName = name;
     currentDocumentKey = key;
+    setFileStack(stack);
     delete root.dataset.empty;
     picker().refresh();
     editor.open(key, source, reset);
@@ -264,8 +373,7 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
     await load(source, name);
   }
 
-  async function compileSource(source: string) {
-    const context = picker().compilation(id);
+  async function compileSource(source: string, context: { inputPath: string; fs: Record<string, string> } = picker().compilation(id)) {
     const { d2, fonts } = await shared.compiler.get();
     const input = projectFileSystem(context.inputPath, context.fs, source);
     const padValue = new URLSearchParams(location.search).get('pad');
@@ -317,10 +425,17 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
     dismissHighlights: () => editor.clearAiHighlights(),
   });
 
+  /** The project around a compiled file, so lint checks its links to other files. */
+  function lintFiles(inputPath: string) {
+    const context = projectSources();
+    const key = currentDocumentKey;
+    if (!context || !key) return undefined;
+    return { inputPath, exists: (path: string) => Object.hasOwn(context.fs, path), boards: (path: string) => compiledBoards.get(siblingKey(key, path)) };
+  }
   function updateLint() {
     if (!lintDocument || mappedSource !== editor.source) return;
     const result = !missingBacklink.checked && !boundaryPorts.checked && defaultLint ? defaultLint
-      : lint(lintDocument, { missingBacklink: missingBacklink.checked, boundaryPorts: boundaryPorts.checked });
+      : lint(lintDocument, { missingBacklink: missingBacklink.checked, boundaryPorts: boundaryPorts.checked, files: lintFiles(lintDocument.inputPath) });
     setEditorDiagnostics(lintDiagnostics(result.diagnostics, editor.source, sourceMap, lintDocument.inputPath));
     const errors = result.diagnostics.filter((item) => item.severity === 'error').length;
     const warnings = result.diagnostics.length - errors;
@@ -464,7 +579,7 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
       const render: RenderBoard = (target) => d2.render(compiled.diagram, {
         ...compiled.renderOptions, target, noXMLTag: true,
       });
-      const linted = lint(compiled);
+      const linted = lint(compiled, { files: lintFiles(compiled.inputPath) });
       const { diagnostics } = linted;
       const compiledSources = indexShapeSources(compiled.diagram, compiled.graph, source, compiled.inputPath);
       viewer.setSourceShapes(compiledSources);
@@ -477,6 +592,7 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
         updateLint();
         compileError.hide(true);
         const boards = indexBoards(compiled.diagram);
+        if (currentDocumentKey?.startsWith('project:')) compiledBoards.set(currentDocumentKey, new Set([...boards.values()].map((board) => board.hash)));
         blocks = boardBlocks(compiled.graph, source, compiled.inputPath);
         const sites = boardSites(source, blocks, boards);
         boardTools.compiled(source, sites, boards);
@@ -565,6 +681,8 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
       sourceError = false;
       documentName = document.name;
       currentDocumentKey = document.key;
+      // A reload keeps the files the first pane came through, which its history entry recorded.
+      setFileStack(id === 'a' && history.state?.zoomflowFile === document.key ? savedStack(history.state.zoomflowFiles) : []);
       delete root.dataset.empty;
       viewport.setDocument(document.key);
       editor.open(document.key, document.source);
@@ -588,6 +706,7 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
       viewer.cancelPendingRender();
       viewer.setBusy(false);
       currentDocumentKey = undefined;
+      setFileStack([]);
       documentName = '';
       documentExport = undefined;
       root.dataset.empty = 'true';

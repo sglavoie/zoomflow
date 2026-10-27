@@ -20,11 +20,16 @@ export type ViewerOptions = {
   files?: { exists(path: string): boolean; open(path: string, hash: string): void; label?(path: string): string };
   /** Escape/Backspace on the root board: return true when it went somewhere, such as back to the file that opened this one. */
   onTopLevelBack?: () => boolean;
+  /** With `history`, the open document: its key goes into every history entry as `zoomflowFile`. When Back or
+   * Forward reaches another document's entry, `restore` gets that entry's state and returns true when it opens
+   * the document; otherwise the entry's board opens in this one. */
+  document?: { key(): string | undefined; restore(state: { zoomflowFile: string } & Record<string, unknown>): boolean };
 };
 export type TrailPrefixEntry = { name: string; activate(): void };
 export const openFolderMessage = 'Open the folder that contains this file to follow links to other diagrams.';
 export { prepareExportSvg, rasterizeSvg, offlineViewerScript } from './export';
 export { setupViewport } from './viewport';
+export { resolveRouteHash } from './navigation';
 export { offlineViewerStyle } from './export-style';
 export { viewerStyle } from './viewer-style';
 
@@ -83,7 +88,12 @@ export class Viewer {
     this.stage.addEventListener('keydown', (event) => {
       if (event.key === 'Enter') this.follow(event);
     }, options);
-    if (this.history) watchHistory(window, () => void this.fromLocation(), options);
+    if (this.history) watchHistory(window, () => {
+      const file: unknown = history.state?.zoomflowFile;
+      const owner = this.settings.document;
+      if (owner && typeof file === 'string' && file !== owner.key() && owner.restore(history.state)) return;
+      void this.fromLocation();
+    }, options);
     this.resume();
   }
 
@@ -300,7 +310,8 @@ export class Viewer {
       this.stage.dispatchEvent(new Event('zf-boardchange'));
       if (!this.history) this.memoryRoute = { hash: board.hash, trail: this.trail };
       else {
-        const state = { ...history.state, zoomflowTrail: this.trail };
+        const key = this.settings.document?.key();
+        const state = { ...history.state, zoomflowTrail: this.trail, ...key !== undefined && { zoomflowFile: key } };
         if (mode === 'replace' || location.hash === board.hash) history.replaceState(state, '', board.hash);
         else history.pushState(state, '', board.hash);
       }

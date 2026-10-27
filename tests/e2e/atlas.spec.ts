@@ -1,0 +1,164 @@
+import { expect, test, type Page } from '@playwright/test';
+import { fileURLToPath } from 'node:url';
+import { openFolder, previewReady } from './helpers';
+
+const atlas = fileURLToPath(new URL('../../fixtures/atlas', import.meta.url));
+const openFolderMessage = 'Open the folder that contains this file to follow links to other diagrams.';
+
+/** Pane A shows the atlas file at `path`, on `board`, with its preview ready. */
+async function showing(page: Page, path: string, board = 'root', pane: 'a' | 'b' = 'a') {
+  const suffix = pane === 'b' ? '-b' : '';
+  await expect(page.locator(`#viewer${suffix} .zf-stage`)).toHaveAttribute('data-board', board);
+  await previewReady(page, pane);
+  if (pane === 'a') await expect(page.locator('#filename')).toHaveAttribute('title', `atlas/${path}`);
+  else await expect(page.locator('#pane-document-b')).toContainText(path.split('/').at(-1)!);
+}
+
+const crumbs = (page: Page, viewer = '#viewer') => page.locator(`${viewer} .zf-breadcrumbs button`);
+
+test.beforeEach(async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+});
+
+test('file links open other files at their boards, with breadcrumbs across files', async ({ page }) => {
+  await page.goto('/');
+  await openFolder(page, atlas);
+  // A folder opens at its home board, index.d2.
+  await showing(page, 'index.d2');
+  await expect(crumbs(page)).toHaveText(['Root']);
+
+  await page.locator('#viewer .zf-stage a[data-file="./health.d2"]').click();
+  await showing(page, 'health.d2');
+  await expect(crumbs(page)).toHaveText(['index', 'Root']);
+  await page.locator('#viewer .zf-stage').focus();
+  await page.keyboard.press('Escape');
+  await showing(page, 'index.d2');
+  await expect(crumbs(page)).toHaveText(['Root']);
+
+  await page.locator('#viewer .zf-stage a[data-file="./work/index.d2"]').focus();
+  await page.keyboard.press('Enter');
+  await showing(page, 'work/index.d2');
+  await expect(crumbs(page)).toHaveText(['index', 'Root']);
+
+  // The fragment opens the linked file's board.
+  await page.locator('#viewer .zf-stage a[data-file="../projects/zoomflow.d2#/Viewer"]').click();
+  await showing(page, 'projects/zoomflow.d2', 'root.layers.Viewer');
+  expect(await page.evaluate(() => location.hash)).toBe('#/Viewer');
+  await expect(crumbs(page)).toHaveText(['index', '…', 'work/index', 'Root', 'Viewer']);
+
+  // Escape climbs this file's boards, then returns to the file that opened it.
+  await page.locator('#viewer .zf-stage').focus();
+  await page.keyboard.press('Escape');
+  await showing(page, 'projects/zoomflow.d2');
+  // Going up focuses the link back down, whose preview card the next Escape would only dismiss.
+  await page.locator('#viewer .zf-stage').focus();
+  await page.keyboard.press('Escape');
+  await showing(page, 'work/index.d2');
+  await expect(crumbs(page)).toHaveText(['index', 'Root']);
+
+  // An earlier file's crumb reopens it.
+  await crumbs(page).filter({ hasText: 'index' }).click();
+  await showing(page, 'index.d2');
+  await expect(crumbs(page)).toHaveText(['Root']);
+});
+
+test('browser Back and Forward move across files in the first pane', async ({ page }) => {
+  await page.goto('/');
+  await openFolder(page, atlas);
+  await showing(page, 'index.d2');
+  await page.locator('#viewer .zf-stage a[data-file="./health.d2"]').click();
+  await showing(page, 'health.d2');
+  await page.locator('#viewer .zf-stage a[data-board="root.layers.Sleep"]').click();
+  await showing(page, 'health.d2', 'root.layers.Sleep');
+  await expect(crumbs(page)).toHaveText(['index', 'Root', 'Sleep']);
+
+  await page.goBack();
+  await showing(page, 'health.d2');
+  await page.goBack();
+  await showing(page, 'index.d2');
+  await expect(crumbs(page)).toHaveText(['Root']);
+  await page.goForward();
+  await showing(page, 'health.d2');
+  await expect(crumbs(page)).toHaveText(['index', 'Root']);
+  await page.goForward();
+  await showing(page, 'health.d2', 'root.layers.Sleep');
+  await expect(crumbs(page)).toHaveText(['index', 'Root', 'Sleep']);
+});
+
+test('a link to a missing file says so, and lint reports broken file links', async ({ page }) => {
+  await page.goto('/');
+  await openFolder(page, atlas);
+  await showing(page, 'index.d2');
+  await page.locator('#example-picker summary').click();
+  await page.locator('#draft-options .example-option[title="atlas/broken/links.d2"]').click();
+  await showing(page, 'broken/links.d2');
+  await expect(page.locator('#lint-summary')).toHaveText('1 lint error, 1 warning');
+
+  const missing = page.locator('#viewer .zf-stage a[data-file="./missing.d2"]');
+  await expect(missing).toHaveAttribute('data-missing', '');
+  await missing.hover();
+  await expect(page.locator('.link-preview')).toContainText('Missing file: broken/missing');
+  await missing.click();
+  await expect(page.locator('#viewer .zf-message')).toContainText('Missing file: broken/missing');
+
+  // A missing board opens the file's nearest existing board.
+  await page.locator('#viewer .zf-stage a[data-file="../index.d2#/Gone"]').click();
+  await showing(page, 'index.d2');
+  await expect(page.locator('#viewer .zf-message')).toContainText('Board "Gone" not found; showing Root');
+});
+
+test('hovering a file link previews the board it opens', async ({ page }) => {
+  await page.goto('/');
+  await openFolder(page, atlas);
+  await showing(page, 'index.d2');
+  await page.locator('#viewer .zf-stage a[data-file="./work/index.d2"]').click();
+  await showing(page, 'work/index.d2');
+  await page.locator('#viewer .zf-stage a[data-file="../projects/zoomflow.d2#/Viewer"]').hover();
+  const card = page.locator('.link-preview');
+  await expect(card).toContainText('projects/zoomflow · Viewer');
+  await expect(card).toContainText('2 shapes');
+  await expect(card.locator('img')).toBeVisible();
+});
+
+test('a file link in a single opened file asks for its folder', async ({ page }) => {
+  await page.goto('/');
+  await previewReady(page);
+  await page.locator('#file').setInputFiles(`${atlas}/index.d2`);
+  await expect(page.locator('#filename')).toHaveText('index.d2');
+  await previewReady(page);
+  await page.locator('#viewer .zf-stage a[data-file="./health.d2"]').click();
+  await expect(page.locator('#viewer .zf-message')).toContainText(openFolderMessage);
+  await expect(page.locator('#filename')).toHaveText('index.d2');
+});
+
+test('the second pane follows file links on its own', async ({ page }) => {
+  await page.setViewportSize({ width: 1600, height: 900 });
+  await page.goto('/');
+  await openFolder(page, atlas);
+  await showing(page, 'index.d2');
+  await page.selectOption('#layout', 'tabs');
+  await page.locator('#pane-choose-b').click();
+  const project = page.locator('#draft-options .project-toggle');
+  // The menu folds projects the target pane is not showing once it opens.
+  await expect(project).toHaveAttribute('aria-expanded', 'false');
+  await project.click();
+  await page.locator('#draft-options .example-option[title="atlas/work/index.d2"]').click();
+  await showing(page, 'work/index.d2', 'root', 'b');
+
+  await page.locator('#viewer-b .zf-stage a[data-file="../projects/zoomflow.d2#/Viewer"]').click();
+  await showing(page, 'projects/zoomflow.d2', 'root.layers.Viewer', 'b');
+  await expect(crumbs(page, '#viewer-b')).toHaveText(['work/index', 'Root', 'Viewer']);
+  // The second pane keeps its way through files in memory; the first pane and the page URL stay put.
+  await expect(page.locator('#viewer .zf-stage')).toHaveAttribute('data-board', 'root');
+  expect(await page.evaluate(() => location.hash)).toBe('#/');
+  await expect(crumbs(page)).toHaveText(['Root']);
+
+  await page.locator('#viewer-b .zf-stage').click({ position: { x: 5, y: 5 } });
+  await page.keyboard.press('Escape');
+  await showing(page, 'projects/zoomflow.d2', 'root', 'b');
+  await page.locator('#viewer-b .zf-stage').focus();
+  await page.keyboard.press('Escape');
+  await showing(page, 'work/index.d2', 'root', 'b');
+  await expect(crumbs(page, '#viewer-b')).toHaveText(['Root']);
+  await expect(page.locator('#viewer .zf-stage')).toHaveAttribute('data-board', 'root');
+});

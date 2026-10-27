@@ -1,13 +1,30 @@
 import { classifyHref, type Board } from '@zoomflow/core';
-import type { RenderBoard, Viewer } from '@zoomflow/viewer';
+import { resolveRouteHash, type RenderBoard, type Viewer } from '@zoomflow/viewer';
 import type { BoardSites } from './board-model';
 import { pageListeners } from './canvas-guidance';
 import type { PaneScope } from './pane-scope';
 import { plural } from './text';
 
-/** A card beside a link to another board, with a picture of that board and what it holds, so people can
- * look before they drill in. It follows pointer hover and keyboard focus. */
-export function setupLinkPreview(scope: PaneScope, viewer: Viewer) {
+/** An authored `#/…` fragment in the board hash form, so `#/My Board` names `#/My%20Board`. */
+export function boardRoute(hash: string) {
+  return hash.split('/').map((segment, index) => {
+    if (index === 0 || segment.startsWith('@')) return segment;
+    try { return encodeURIComponent(decodeURIComponent(segment)); } catch { return segment; }
+  }).join('/') || '#/';
+}
+
+/** Other diagram files that links open, by path relative to the document as authored. */
+export type LinkedFiles = {
+  label(path: string): string;
+  /** Why a link to this file cannot open it, or undefined when it can. */
+  missing(path: string): string | undefined;
+  /** The file's compiled boards, compiled on first use. */
+  compile(path: string): Promise<{ boards: Map<string, Board>; render: RenderBoard }>;
+};
+
+/** A card beside a link to another board or file, with a picture of that board and what it holds, so people
+ * can look before they drill in. It follows pointer hover and keyboard focus. */
+export function setupLinkPreview(scope: PaneScope, viewer: Viewer, files: LinkedFiles) {
   const card = document.createElement('div');
   card.className = 'link-preview';
   card.id = scope.id('link-preview');
@@ -19,6 +36,8 @@ export function setupLinkPreview(scope: PaneScope, viewer: Viewer) {
   let compiledDocument: { boards: Map<string, Board>; sites: BoardSites; render: RenderBoard } | undefined;
   /** One picture per board for each compiled document. */
   let pictures = new Map<string, Promise<string>>();
+  /** One picture per board of each linked file's compile. */
+  const filePictures = new WeakMap<object, Map<string, Promise<string>>>();
   let timer: ReturnType<typeof setTimeout> | undefined;
   let link: Element | undefined;
 
@@ -36,27 +55,53 @@ export function setupLinkPreview(scope: PaneScope, viewer: Viewer) {
     link?.removeAttribute('aria-describedby');
     link = undefined;
   }
-  async function show(anchor: Element) {
-    const target = classifyHref(anchor.getAttribute('data-board') ?? anchor.getAttribute('href') ?? anchor.getAttribute('xlink:href') ?? '');
-    const board = target.kind === 'board' ? compiledDocument?.boards.get(target.target) : undefined;
-    if (!board || !compiledDocument) return;
+  function open(anchor: Element, name: string, description: string) {
     link = anchor;
-    title.textContent = board.name;
-    summary.textContent = describe(board);
+    title.textContent = name;
+    summary.textContent = description;
     picture.hidden = true;
     anchor.setAttribute('aria-describedby', card.id);
     card.hidden = false;
     place(anchor);
-    if (!pictures.has(board.id)) pictures.set(board.id, compiledDocument.render(board.target));
-    const current = pictures;
+  }
+  async function showPicture(anchor: Element, current: Map<string, Promise<string>>, key: string, render: () => Promise<string>) {
+    if (!current.has(key)) current.set(key, render());
+    const document = pictures;
     try {
-      const svg = await current.get(board.id)!;
+      const svg = await current.get(key)!;
       // An image keeps the picture's styles and IDs apart from the diagram's.
-      if (link !== anchor || current !== pictures) return;
+      if (link !== anchor || document !== pictures) return;
       picture.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
       picture.hidden = false;
       place(anchor);
-    } catch { current.delete(board.id); }
+    } catch { current.delete(key); }
+  }
+  async function show(anchor: Element) {
+    const target = classifyHref(anchor.getAttribute('data-board') ?? anchor.getAttribute('data-file') ?? anchor.getAttribute('href') ?? anchor.getAttribute('xlink:href') ?? '');
+    if (target.kind === 'file') { await showFile(anchor, target.path, target.hash); return; }
+    const board = target.kind === 'board' ? compiledDocument?.boards.get(target.target) : undefined;
+    if (!board || !compiledDocument) return;
+    open(anchor, board.name, describe(board));
+    await showPicture(anchor, pictures, board.id, () => compiledDocument!.render(board.target));
+  }
+  /** The linked file's board: its root, or the fragment's board or nearest existing ancestor. */
+  async function showFile(anchor: Element, path: string, hash: string) {
+    const label = files.label(path);
+    const missing = files.missing(path);
+    open(anchor, label, missing ?? 'Diagram file');
+    if (missing) return;
+    const current = pictures;
+    let file: Awaited<ReturnType<LinkedFiles['compile']>>;
+    try { file = await files.compile(path); } catch { return; }
+    if (link !== anchor || current !== pictures) return;
+    const byHash = new Map([...file.boards.values()].map((board) => [board.hash, board]));
+    const board = byHash.get(resolveRouteHash(boardRoute(hash), (item) => byHash.has(item))) ?? file.boards.get('root');
+    if (!board) return;
+    title.textContent = board.id === 'root' ? label : `${label} · ${board.name}`;
+    summary.textContent = plural(board.diagram.shapes.length, 'shape');
+    place(anchor);
+    if (!filePictures.has(file)) filePictures.set(file, new Map());
+    await showPicture(anchor, filePictures.get(file)!, board.id, () => file.render(board.target));
   }
   /** Below the link, or above it when there is no room below. */
   function place(anchor: Element) {

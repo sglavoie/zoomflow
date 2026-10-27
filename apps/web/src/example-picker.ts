@@ -464,7 +464,8 @@ export function setupExamplePicker({ readSource, open, onState, forget, checkpoi
         drafts.set(key, item);
         addOption(item);
       }
-      const first = files.find((file) => /^(index|main)\.d2$/i.test(file.path)) ??
+      // An atlas starts at its home board, index.d2.
+      const first = files.find((file) => /^index\.d2$/i.test(file.path)) ?? files.find((file) => /^main\.d2$/i.test(file.path)) ??
         files.find((file) => !file.path.includes('/')) ?? files[0];
       activate(keys[first.path]);
       picker.open = false;

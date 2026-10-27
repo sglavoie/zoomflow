@@ -195,4 +195,22 @@ describe('Viewer file links and the root board', () => {
     await vi.waitFor(() => expect(viewer!.currentBoard?.id).toBe('root'));
     expect(onTopLevelBack).toHaveBeenCalledTimes(2);
   });
+
+  it('records the document in history entries and hands entries of another document to it', async () => {
+    let key = 'one';
+    const restore = vi.fn((state: { zoomflowFile: string }) => state.zoomflowFile === 'two');
+    await mount({ history: true, document: { key: () => key, restore } });
+    await viewer!.navigate('root.layers.L');
+    expect([history.state.zoomflowFile, location.hash]).toEqual(['one', '#/L']);
+    history.replaceState({ ...history.state, zoomflowFile: 'two' }, '', '#/');
+    window.dispatchEvent(new PopStateEvent('popstate'));
+    expect(restore).toHaveBeenCalledWith(expect.objectContaining({ zoomflowFile: 'two' }));
+    expect(viewer!.currentBoard?.id).toBe('root.layers.L');
+    // An entry of this document, or one the owner declines, opens its board here.
+    key = 'two';
+    window.dispatchEvent(new PopStateEvent('popstate'));
+    expect(restore).toHaveBeenCalledTimes(1);
+    await vi.waitFor(() => expect(viewer!.currentBoard?.id).toBe('root'));
+    expect(history.state.zoomflowFile).toBe('two');
+  });
 });
