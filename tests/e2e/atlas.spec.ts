@@ -447,3 +447,49 @@ test('review F2 linked preview belongs to the selected project', async ({ page }
   await showingProjectFile(page, 'first', 'index.d2');
   await expectLinkedTarget(page, '1 shape', ['Near']);
 });
+
+test('review F5 atlas map rejects AI source changes', async ({ page }) => {
+  await page.route('**/api/ai/status', (route) => route.fulfill({ status: 200,
+    contentType: 'application/json', body: JSON.stringify({ available: true }) }));
+  const requests: string[] = [];
+  await page.route('**/api/ai', async (route) => {
+    const request = route.request().postDataJSON();
+    requests.push(request.source);
+    // A valid replacement that would redraw the map as a single, unrelated shape.
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ reply: 'Replaced it.', source: 'file_1: Altered' }) });
+  });
+  await page.goto('/');
+  await openFolder(page, atlas);
+  await showing(page, 'index.d2');
+  await page.locator('#example-picker > summary').click();
+  await page.getByRole('button', { name: 'Atlas map of the atlas project' }).click();
+  await expect(page.locator('#filename')).toHaveText('Atlas map');
+  await previewReady(page);
+  const stage = page.locator('#viewer .zf-stage');
+  await expect(stage.locator('a[data-file]')).toHaveCount(5);
+  const map = await editorText(page);
+
+  await page.locator('#ai-assistant > summary').click();
+  const prompt = page.getByRole('textbox', { name: 'Ask AI about this diagram' });
+  await prompt.fill('Rename the home file');
+  await page.getByRole('button', { name: 'Send' }).click();
+  await expect(page.locator('#ai-status')).toHaveText(
+    'Replaced it. The proposed source change was not applied. The atlas map is drawn from the project files and is read-only. Open a file to edit it.');
+  expect(requests).toEqual([map]);
+  expect(await editorText(page)).toBe(map);
+  await expect(page.locator('#ai-undo')).toBeHidden();
+  await expect(stage.locator('a[data-file]')).toHaveCount(5);
+  for (const path of ['index', 'health', 'work/index', 'projects/zoomflow', 'broken/links']) {
+    await expect(stage.locator(`a[data-file="./${path}.d2"]`)).toHaveCount(1);
+  }
+  await expect(stage).not.toContainText('Altered');
+
+  // A project file opened from the map still takes the AI's change.
+  await stage.locator('a[data-file="./health.d2"]').click();
+  await showing(page, 'health.d2');
+  await prompt.fill('Replace it');
+  await page.getByRole('button', { name: 'Send' }).click();
+  await expect(page.locator('#ai-status')).toContainText('Diagram updated. Replaced it.');
+  expect(await editorText(page)).toBe('file_1: Altered');
+  await expect(stage).toContainText('Altered');
+});

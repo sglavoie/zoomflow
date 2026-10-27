@@ -41,13 +41,15 @@ export type AiAssistantHost = {
   validate: (source: string) => Promise<void>;
   /** Apply proposed source and return a summary of the change. */
   apply: (source: string) => string;
+  /** A notice while the document must not change: replies still show, proposed source is not applied. */
+  readOnly?: () => string | undefined;
   onStatus?: (message: string, kind: 'info' | 'error') => void;
   undo?: () => boolean;
   revealChange?: () => void;
   dismissHighlights?: () => void;
 };
 
-export function setupAiAssistant({ root, part }: PaneScope, { read, validate, apply, onStatus = () => {}, undo = () => false,
+export function setupAiAssistant({ root, part }: PaneScope, { read, validate, apply, readOnly = () => undefined, onStatus = () => {}, undo = () => false,
   revealChange = () => {}, dismissHighlights = () => {} }: AiAssistantHost) {
   const form = part<HTMLFormElement>('ai-form');
   const provider = part<HTMLSelectElement>('ai-provider');
@@ -210,6 +212,14 @@ export function setupAiAssistant({ root, part }: PaneScope, { read, validate, ap
       controller.signal.throwIfAborted();
       if (typeof data.reply !== 'string' || (data.source !== null && typeof data.source !== 'string')) {
         throw new AiError('The AI server returned an incomplete response. Try again; your source is unchanged.', 'Expected reply text and source text or null.');
+      }
+      const locked = data.source !== null && data.source !== snapshot.source ? readOnly() : undefined;
+      if (locked) {
+        status.dataset.kind = 'info';
+        status.textContent = `${data.reply ? `${data.reply} ` : ''}The proposed source change was not applied. ${locked}`;
+        onStatus('AI suggested a change the read-only document cannot take.', 'info');
+        prompt.value = '';
+        return;
       }
       if (data.source !== null) {
         controller.signal.throwIfAborted();

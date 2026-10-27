@@ -284,7 +284,8 @@ Home: {link: ../index.d2}
   no other file links to, apart from the home file, sit in a **Not linked from
   anywhere** group, so orphans stand out. Click a file to open it. The map is generated
   from the files' current sources each time you open it; it cannot be edited or saved
-  over a project file, and a reload shows the file you were on before it. A file that
+  over a project file (Ask AI still answers there, but does not apply source changes), and
+  a reload shows the file you were on before it. A file that
   does not compile is drawn without its links.
 - **Exports:** **Interactive atlas (HTML)**, offered for folder projects, bundles the
   current file and every file it reaches through file links into one offline HTML file

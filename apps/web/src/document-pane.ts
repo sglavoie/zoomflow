@@ -520,6 +520,7 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
       }
     },
     apply: (source) => editor.applyAi(source),
+    readOnly: () => showsAtlas() ? atlasReadOnly : undefined,
     onStatus: (message, kind) => setActivity(message, kind),
     undo: () => editor.undo(),
     revealChange: () => { showView('source'); editor.revealAiChange(); },
