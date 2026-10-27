@@ -87,4 +87,17 @@ describe('restoreMissingLinks', () => {
     expect(root.querySelectorAll('a')).toHaveLength(1);
     expect(anchorOf(root, 'Checkout').getAttribute('href')).toBe('root.layers.second');
   });
+
+  it('restores links to missing files like links to missing boards', () => {
+    const root = svg(shape('Health') + '<a href="./gone.d2">' + shape('Gone') + '</a>');
+    restoreMissingLinks(root, [
+      dangling('Health', './health.d2', { rule: 'dangling-file-link' }),
+      dangling('Gone', './gone.d2', { rule: 'dangling-file-link' }),
+      dangling('Nothing', undefined as unknown as string, { rule: 'dangling-file-link' }),
+    ]);
+    const health = anchorOf(root, 'Health');
+    expect([health.localName, health.getAttribute('href'), health.hasAttribute('data-missing')]).toEqual(['a', './health.d2', true]);
+    const gone = anchorOf(root, 'Gone');
+    expect([gone.getAttribute('href'), gone.hasAttribute('data-missing'), root.querySelectorAll('a').length]).toEqual(['./gone.d2', true, 2]);
+  });
 });

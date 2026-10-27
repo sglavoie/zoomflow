@@ -21,7 +21,9 @@ export function splitHitArea(own: Rect, expanded: Rect, obstacles: readonly { bo
 export function decorateLinks(svg: Element, boards: Map<string, { name: string; parent?: string }>, current: string,
   split: typeof splitHitArea,
   /** Name a missing board target; defaults to its raw ID. */
-  describe: (target: string) => string = (target) => target) {
+  describe: (target: string) => string = (target) => target,
+  /** Name a linked diagram file from its authored path; defaults to its file name without `.d2`. */
+  describeFile: (path: string) => string = (path) => path.replace(/^.*\//, '').replace(/\.d2$/i, '')) {
   const ns = 'http://www.w3.org/2000/svg';
   // Badges draw in a 32-unit box with a 24-unit circle; this scales that circle to 32 screen pixels.
   const badgeScale = 4 / 3;
@@ -34,6 +36,17 @@ export function decorateLinks(svg: Element, boards: Map<string, { name: string; 
     return false;
   }
   for (const link of svg.querySelectorAll<SVGAElement>('a')) {
+    const file = link.getAttribute('data-file');
+    if (file !== null) {
+      // Same shape as classifyHref's file links: a relative `.d2` path with an optional `#/…` board route.
+      const [, path = file, hash = ''] = /^([^#]*)(#.*)?$/s.exec(file) ?? [];
+      let board = hash.replace(/^#\/?/, '').split('/').pop() ?? '';
+      try { board = decodeURIComponent(board); } catch { /* Keep the authored segment. */ }
+      const name = describeFile(path);
+      link.dataset.linkKind = 'file';
+      link.setAttribute('aria-label', link.hasAttribute('data-missing') ? `Missing file: ${name}` : board ? `Opens ${name} at ${board}` : `Opens ${name}`);
+      continue;
+    }
     const href = link.getAttribute('data-board') ?? link.getAttribute('href') ?? link.getAttribute('xlink:href') ?? '';
     const external = /^(https?:|mailto:)/i.test(href);
     const target = boards.get(href);
@@ -78,7 +91,9 @@ export function decorateLinks(svg: Element, boards: Map<string, { name: string; 
       circle.setAttribute('stroke', `var(--zf-badge-ink, ${ink})`);
       circle.setAttribute('stroke-opacity', '0.5');
       const arrow = document.createElementNS(ns, 'path');
-      arrow.setAttribute('d', external ? 'M10 22 L22 10 M12 10 H22 V20'
+      // A file link shows a page with a folded corner and an arrow into it.
+      arrow.setAttribute('d', link.dataset.linkKind === 'file' ? 'M11 8 H18 L23 13 V24 H11 Z M18 8 V13 H23 M14 18 H20 M17 15 L20 18 L17 21'
+        : external ? 'M10 22 L22 10 M12 10 H22 V20'
         : direction === 'parent' ? 'M23 22 H16 V10 M10 16 L16 10 L22 16'
         : direction === 'peer' ? 'M8 16 H24 M18 10 L24 16 L18 22'
         : 'M9 10 H16 V22 M10 16 L16 22 L22 16');

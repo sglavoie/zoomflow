@@ -1,5 +1,6 @@
+// @vitest-environment happy-dom
 import { describe, expect, it } from 'vitest';
-import { splitHitArea, type Rect } from '../src/link-cues';
+import { decorateLinks, splitHitArea, type Rect } from '../src/link-cues';
 
 const rect = (left: number, top: number, right: number, bottom: number): Rect => ({ left, top, right, bottom });
 const own = rect(100, 100, 120, 110);
@@ -37,5 +38,31 @@ describe('splitHitArea', () => {
     const copy = { ...expanded };
     splitHitArea(own, expanded, [{ bounds: rect(124, 100, 150, 110), area: rect(124, 100, 150, 110) }]);
     expect(expanded).toEqual(copy);
+  });
+});
+
+describe('decorateLinks', () => {
+  function mount(markup: string) {
+    const svg = new DOMParser().parseFromString(`<svg xmlns="http://www.w3.org/2000/svg">${markup}</svg>`, 'image/svg+xml').documentElement;
+    // Labels need no layout: report the SVG as hidden, so no badge is measured.
+    svg.getClientRects = () => [] as unknown as DOMRectList;
+    return svg;
+  }
+  const boards = new Map([['root', { name: 'Root' }], ['root.layers.a', { name: 'A', parent: 'root' }]]);
+
+  it('names file links as opening their file, at a board when the link names one', () => {
+    const svg = mount('<a id="home" data-file="./life/Health.d2" href="#/@file/x"/><a id="deep" data-file="../Health.d2#/Sleep/@scenarios/My%20Night"/>' +
+      '<a id="gone" data-file="./gone.d2" data-missing=""/><a id="board" data-board="root.layers.a" href="#/A"/>');
+    decorateLinks(svg, boards, 'root', splitHitArea);
+    const label = (id: string) => svg.querySelector(`#${id}`)!.getAttribute('aria-label');
+    expect([label('home'), label('deep'), label('gone'), label('board')]).toEqual(['Opens Health', 'Opens Health at My Night', 'Missing file: gone', 'Open A board']);
+    expect(['home', 'gone', 'board'].map((id) => svg.querySelector<SVGAElement>(`#${id}`)!.dataset.linkKind)).toEqual(['file', 'file', 'board']);
+    expect(svg.querySelector<SVGAElement>('#home')!.dataset.linkDirection).toBeUndefined();
+  });
+
+  it('names files with the given labeler', () => {
+    const svg = mount('<a id="a" data-file="./health.d2#/"/>');
+    decorateLinks(svg, boards, 'root', splitHitArea, undefined, (path) => `File ${path}`);
+    expect(svg.querySelector('#a')!.getAttribute('aria-label')).toBe('Opens File ./health.d2');
   });
 });

@@ -1,6 +1,8 @@
 // @vitest-environment happy-dom
-import { afterEach, describe, expect, it } from 'vitest';
+import { shapeClass, type Diagram } from '@zoomflow/core';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { setupBreadcrumbs } from '../src/breadcrumbs';
+import { Viewer } from '../src/index';
 
 let cleanup: (() => void) | undefined;
 afterEach(() => { cleanup?.(); cleanup = undefined; document.body.replaceChildren(); });
@@ -115,5 +117,32 @@ describe('setupBreadcrumbs', () => {
     expect(container.querySelector('.zf-ancestor-toggle')).toBeNull();
     expect(container.querySelector('.zf-ancestor-menu')!.childElementCount).toBe(0);
     expect(container.querySelector('button')!.getAttribute('aria-current')).toBe('page');
+  });
+});
+
+describe('Viewer trail prefix', () => {
+  it('renders the files this one was opened from before its own boards', async () => {
+    const shape = (id: string, link = '') => ({ id, link }) as unknown as Diagram['shapes'][number];
+    const diagram = { name: '', shapes: [shape('a')], connections: [], layers: [{ name: 'Sleep', shapes: [shape('b')], connections: [] }] } as unknown as Diagram;
+    const host = document.createElement('div');
+    document.body.append(host);
+    const viewer = new Viewer(host, { history: false });
+    cleanup = () => viewer.destroy();
+    await viewer.setDocument(diagram, async (target) =>
+      `<svg xmlns="http://www.w3.org/2000/svg"><g class="${shapeClass(target ? 'b' : 'a')}"><rect/></g></svg>`);
+    const names = () => [...host.querySelectorAll('.zf-breadcrumbs > button')].map((node) => node.textContent);
+    const life = vi.fn();
+    viewer.setTrailPrefix([{ name: 'Life', activate: life }]);
+    expect(names()).toEqual(['Life', 'Root']);
+    await viewer.navigate('root.layers.Sleep');
+    expect(names()).toEqual(['Life', 'Root', 'Sleep']);
+    expect(host.querySelector('button[aria-current]')!.textContent).toBe('Sleep');
+    host.querySelector<HTMLButtonElement>('.zf-breadcrumbs > button')!.click();
+    expect(life).toHaveBeenCalledOnce();
+    // A long cross-file trail collapses its middle like a long board trail.
+    viewer.setTrailPrefix([{ name: 'Life', activate: life }, { name: 'Health', activate: life }]);
+    expect(names()).toEqual(['Life', '…', 'Root', 'Sleep']);
+    viewer.setTrailPrefix([]);
+    expect(names()).toEqual(['Root', 'Sleep']);
   });
 });

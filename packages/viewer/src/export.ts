@@ -206,6 +206,7 @@ function offlineViewer(lib: typeof runtime) {
     const action = lib.followLink(event, resolve);
     if (action?.kind === 'board') show(byId.get(action.target)!, [...trail, action.target]);
     else if (action?.kind === 'missing') setMessage(`Missing board: ${describe(action.target)}`, true);
+    else if (action?.kind === 'missing-file') setMessage(`Missing file: ${action.path}`, true);
   }
   stage.addEventListener('click', follow);
   stage.addEventListener('auxclick', (event) => lib.followLink(event, resolve));

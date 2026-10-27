@@ -25,9 +25,20 @@ describe('resolveLink', () => {
       expect(resolve('mailto:a@b.c', exists, classifyHref)).toEqual({ kind: 'external' });
       expect(resolve('javascript:alert(1)', exists, classifyHref)).toEqual({ kind: 'invalid' });
       expect(resolve('checkout', exists, classifyHref)).toEqual({ kind: 'invalid' });
-      // Links to other diagram files are not followed yet; the serialized classifier must agree.
-      expect(resolve('./health.d2#/Sleep', exists, classifyHref)).toEqual({ kind: 'invalid' });
-      expect(resolve('../other.d2', exists, isolated(classifyHref))).toEqual({ kind: 'invalid' });
+    }
+  });
+
+  it('resolves file links against the files that exist, and treats every one as missing without them', () => {
+    const files = (path: string) => path === './health.d2';
+    for (const resolve of [resolveLink, isolated(resolveLink)]) {
+      // The serialized classifier must agree with the module one.
+      for (const classify of [classifyHref, isolated(classifyHref)]) {
+        expect(resolve('./health.d2#/Sleep', exists, classify, files)).toEqual({ kind: 'file', path: './health.d2', hash: '#/Sleep' });
+        expect(resolve('./health.d2', exists, classify, files)).toEqual({ kind: 'file', path: './health.d2', hash: '' });
+        expect(resolve('../other.d2', exists, classify, files)).toEqual({ kind: 'missing-file', path: '../other.d2' });
+        expect(resolve('./health.d2', exists, classify)).toEqual({ kind: 'missing-file', path: './health.d2' });
+        expect(resolve('health.d2', exists, classify, files)).toEqual({ kind: 'invalid' });
+      }
     }
   });
 });
@@ -59,6 +70,34 @@ describe('prepareLinks', () => {
     Object.defineProperty(click, 'target', { value: board });
     expect(isolated(followLink)(click, (href) => resolveLink(href, exists, classifyHref))).toEqual({ kind: 'board', target: 'root.layers.checkout' });
     expect(isolated(linkTo)(root, 'root.layers.checkout')).toBe(board);
+  });
+});
+
+describe('prepareLinks with file links', () => {
+  const resolve = (href: string) => resolveLink(href, exists, classifyHref, (path) => path === './health.d2');
+
+  it('marks file links, flags missing files and points href at a copyable address', () => {
+    const root = svg('<a id="file" xlink:href="./health.d2#/Sleep"/><a id="missing" href="./gone.d2"/><a id="bare" href="./health.d2"/>');
+    isolated(prepareLinks)(root, resolve, () => undefined, (path, hash) => path === './health.d2' && hash ? `#/@file/health.d2${hash.slice(1)}` : undefined);
+    const file = root.querySelector('#file')!;
+    expect([file.getAttribute('data-file'), file.getAttribute('href'), file.hasAttribute('xlink:href'), file.hasAttribute('data-missing'), file.getAttribute('role')])
+      .toEqual(['./health.d2#/Sleep', '#/@file/health.d2/Sleep', false, false, 'link']);
+    const missing = root.querySelector('#missing')!;
+    expect([missing.getAttribute('data-file'), missing.getAttribute('href'), missing.hasAttribute('data-missing')]).toEqual(['./gone.d2', './gone.d2', true]);
+    // Without an address for it, a file link keeps its authored href.
+    expect(root.querySelector('#bare')!.getAttribute('href')).toBe('./health.d2');
+    expect(root.querySelector('#bare')!.hasAttribute('data-board')).toBe(false);
+  });
+
+  it('follows a file link from its authored href and prevents the default', () => {
+    const root = svg('<a href="./health.d2#/Sleep"><rect id="a"/></a><a href="./gone.d2"><rect id="b"/></a>');
+    isolated(prepareLinks)(root, resolve, () => undefined, () => '#/elsewhere');
+    for (const [id, expected] of [['a', { kind: 'file', path: './health.d2', hash: '#/Sleep' }], ['b', { kind: 'missing-file', path: './gone.d2' }]] as const) {
+      const event = new MouseEvent('click', { bubbles: true, cancelable: true });
+      Object.defineProperty(event, 'target', { value: root.querySelector(`#${id}`) });
+      expect(isolated(followLink)(event, resolve)).toEqual(expected);
+      expect(event.defaultPrevented).toBe(true);
+    }
   });
 });
 

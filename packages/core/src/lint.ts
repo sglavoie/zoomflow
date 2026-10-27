@@ -14,7 +14,7 @@ export interface LintDiagnostic {
   shape?: string;
   /** Compiled connection ID, such as `(a -> b)[0]`, for dangling connection links. */
   connection?: string;
-  /** Resolved missing board ID for dangling-link diagnostics. */
+  /** Resolved missing board ID for dangling-link diagnostics; the authored href for dangling-file-link ones. */
   target?: string;
   /** Original D2 range, possibly in an imported file. Never assume it is index. */
   range?: string;
@@ -220,7 +220,8 @@ export function lint(compiled: LintInput, options: LintOptions = {}): LintResult
     if (!diagnostic) return;
     linkKeys.add(key);
     if (!range || range.startsWith(',')) range = shape ? shapeRange(board.id, shape) : undefined;
-    diagnostics.push({ ...diagnostic, board: board.id, shape, connection, range });
+    diagnostics.push({ ...diagnostic, board: board.id, shape, connection, range,
+      ...(diagnostic.rule === 'dangling-file-link' ? { target: href } : {}) });
   }
   function checkLink(href: string, board: Board, shape?: string, range?: string, connection?: string) {
     const classified = classifyHref(href);

@@ -1,4 +1,7 @@
-import { describe, expect, it, vi } from 'vitest';
+// @vitest-environment happy-dom
+import { shapeClass, type Diagram } from '@zoomflow/core';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { openFolderMessage, Viewer, type ViewerOptions } from '../src/index';
 import { childToward, resolveRouteHash, restoreTrail, routeFallbackNotice, simplifyTrail, watchHistory } from '../src/navigation';
 
 const hashes = new Set(['#/', '#/checkout', '#/checkout/charge']);
@@ -128,5 +131,68 @@ describe('childToward', () => {
   it('terminates on a cyclic parent map', () => {
     const cyclic = new Map([['a', 'b'], ['b', 'a']]);
     expect(childToward('a', 'root', (id) => cyclic.get(id))).toBeUndefined();
+  });
+});
+
+describe('Viewer file links and the root board', () => {
+  // happy-dom does no SVG layout: measure every link as empty, so no badge is attached.
+  (globalThis.SVGElement.prototype as unknown as { getBBox?: () => DOMRect }).getBBox ??= () => new DOMRect();
+  const shape = (id: string, link = '') => ({ id, link }) as unknown as Diagram['shapes'][number];
+  const diagram = { name: '', shapes: [shape('home', './health.d2#/Sleep'), shape('gone', './gone.d2'), shape('down', 'root.layers.L')], connections: [],
+    layers: [{ name: 'L', shapes: [shape('x')], connections: [] }] } as unknown as Diagram;
+  const anchor = (id: string, href: string) => `<a href="${href}"><g class="${shapeClass(id)}"><rect/></g></a>`;
+  const svgs: Record<string, string> = {
+    '': `<svg xmlns="http://www.w3.org/2000/svg">${anchor('home', './health.d2#/Sleep')}${anchor('gone', './gone.d2')}${anchor('down', 'root.layers.L')}</svg>`,
+    'layers.L': `<svg xmlns="http://www.w3.org/2000/svg"><g class="${shapeClass('x')}"><rect/></g></svg>`,
+  };
+  let viewer: Viewer | undefined;
+  afterEach(() => { viewer?.destroy(); viewer = undefined; document.body.replaceChildren(); });
+
+  async function mount(options: ViewerOptions) {
+    const host = document.createElement('div');
+    document.body.append(host);
+    viewer = new Viewer(host, { history: false, ...options });
+    await viewer.setDocument(diagram, async (target) => svgs[target]);
+    const link = (id: string) => viewer!.stage.querySelector(`.${CSS.escape(shapeClass(id))}`)!.closest('a')!;
+    const alert = () => host.querySelector('[role="alert"]')!.textContent;
+    return { host, link, alert };
+  }
+  const press = (key: string) => {
+    const event = new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true });
+    window.dispatchEvent(event);
+    return event;
+  };
+
+  it('opens existing files, reports missing ones and labels both', async () => {
+    const open = vi.fn();
+    const { link, alert } = await mount({ files: { exists: (path) => path === './health.d2', open, label: (path) => path.slice(2, -3).toUpperCase() } });
+    expect([link('home').getAttribute('data-file'), link('home').getAttribute('aria-label'), link('home').dataset.linkKind]).toEqual(['./health.d2#/Sleep', 'Opens HEALTH at Sleep', 'file']);
+    expect([link('gone').hasAttribute('data-missing'), link('gone').getAttribute('aria-label')]).toEqual([true, 'Missing file: GONE']);
+    link('home').querySelector('rect')!.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+    expect(open).toHaveBeenCalledWith('./health.d2', '#/Sleep');
+    link('gone').querySelector('rect')!.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+    expect(open).toHaveBeenCalledTimes(1);
+    expect(alert()).toBe('Missing file: GONE');
+  });
+
+  it('asks for the folder when it cannot open other files', async () => {
+    const { link, alert } = await mount({});
+    expect(link('home').hasAttribute('data-missing')).toBe(true);
+    link('home').dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+    expect(alert()).toBe(openFolderMessage);
+  });
+
+  it('hands Escape and Backspace on the root board to onTopLevelBack, and goes up from other boards', async () => {
+    let handled = true;
+    const onTopLevelBack = vi.fn(() => handled);
+    await mount({ onTopLevelBack });
+    expect(press('Escape').defaultPrevented).toBe(true);
+    handled = false;
+    expect(press('Backspace').defaultPrevented).toBe(false);
+    expect(onTopLevelBack).toHaveBeenCalledTimes(2);
+    await viewer!.navigate('root.layers.L');
+    expect(press('Escape').defaultPrevented).toBe(true);
+    await vi.waitFor(() => expect(viewer!.currentBoard?.id).toBe('root'));
+    expect(onTopLevelBack).toHaveBeenCalledTimes(2);
   });
 });

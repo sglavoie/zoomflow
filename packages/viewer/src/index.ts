@@ -15,7 +15,14 @@ export type ViewerOptions = {
   active?: () => boolean;
   /** Whether a click or Enter on a link opens it; by default every one does. */
   follows?: (link: Element, event: MouseEvent | KeyboardEvent) => boolean;
+  /** Other diagram files that links can open, by path relative to this document as authored.
+   * Without it, file links show as missing and explain that the folder must be opened. */
+  files?: { exists(path: string): boolean; open(path: string, hash: string): void; label?(path: string): string };
+  /** Escape/Backspace on the root board: return true when it went somewhere, such as back to the file that opened this one. */
+  onTopLevelBack?: () => boolean;
 };
+export type TrailPrefixEntry = { name: string; activate(): void };
+export const openFolderMessage = 'Open the folder that contains this file to follow links to other diagrams.';
 export { prepareExportSvg, rasterizeSvg, offlineViewerScript } from './export';
 export { setupViewport } from './viewport';
 export { offlineViewerStyle } from './export-style';
@@ -39,6 +46,7 @@ export class Viewer {
   private sourceShapes: readonly ShapeSource[] = [];
   private current = 'root';
   private trail: string[] = [];
+  private trailPrefix: readonly TrailPrefixEntry[] = [];
   private revision = 0;
   private dark = false;
   private styles = new WeakMap<Element, string>();
@@ -85,6 +93,7 @@ export class Viewer {
     if (event.key === 'Escape' || event.key === 'Backspace') {
       const parent = this.boards.get(this.current)?.parent;
       if (parent) { event.preventDefault(); void this.navigate(parent); }
+      else if (this.boards.has(this.current) && this.settings.onTopLevelBack?.()) event.preventDefault();
     }
   };
 
@@ -183,7 +192,19 @@ export class Viewer {
     await this.navigate(board.id, 'replace', trail, preserveViewport, routeFallbackNotice(route.hash, board.hash, board.name));
   }
 
-  private readonly resolve = (href: string) => resolveLink(href, (id) => this.boards.has(id), classifyHref);
+  private readonly resolve = (href: string) => resolveLink(href, (id) => this.boards.has(id), classifyHref,
+    this.settings.files && ((path) => this.settings.files!.exists(path)));
+
+  private fileLabel(path: string) {
+    return this.settings.files?.label?.(path) ?? path.replace(/^.*\//, '').replace(/\.d2$/i, '');
+  }
+
+  /** Crumbs for the files this one was opened from, shown before its own boards. */
+  setTrailPrefix(entries: readonly TrailPrefixEntry[]) {
+    this.trailPrefix = [...entries];
+    // Until a new document's first board renders, its trail can name boards it no longer has.
+    if (this.trail.length && this.trail.every((id) => this.boards.has(id))) this.updateCrumbs();
+  }
 
   private svgElement(svg: string, board: Board): SVGElement {
     const doc = new DOMParser().parseFromString(svg, 'image/svg+xml');
@@ -219,6 +240,8 @@ export class Viewer {
     const action = followLink(event, this.resolve);
     if (action?.kind === 'missing') this.setMessage(`Missing board: ${boardLabel(action.target, this.boards)}`, true);
     else if (action?.kind === 'board') void this.navigate(action.target);
+    else if (action?.kind === 'file') this.settings.files?.open(action.path, action.hash);
+    else if (action?.kind === 'missing-file') this.setMessage(this.settings.files ? `Missing file: ${this.fileLabel(action.path)}` : openFolderMessage, true);
   }
 
   private cancelTransition() {
@@ -265,7 +288,7 @@ export class Viewer {
       const sameBoard = id === this.current;
       const previous = this.current;
       this.stage.replaceChildren(content);
-      decorateLinks(content, this.boards, board.id, splitHitArea, (target) => boardLabel(target, this.boards));
+      decorateLinks(content, this.boards, board.id, splitHitArea, (target) => boardLabel(target, this.boards), (path) => this.fileLabel(path));
       this.syncBackground(this.stage);
       if (fade) void this.fadeIn(content);
       this.current = id;
@@ -304,8 +327,8 @@ export class Viewer {
 
   private updateCrumbs() {
     const trail = this.trail;
-    this.breadcrumbs.render(trail.map((id, index) => ({ name: this.boards.get(id)!.name,
-      activate: () => { void this.navigate(id, 'push', trail.slice(0, index + 1)); } })));
+    this.breadcrumbs.render([...this.trailPrefix, ...trail.map((id, index) => ({ name: this.boards.get(id)!.name,
+      activate: () => { void this.navigate(id, 'push', trail.slice(0, index + 1)); } }))]);
   }
 
   /** Also tears down a viewport attached to this stage with setupViewport(). */
