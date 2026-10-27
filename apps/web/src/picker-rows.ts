@@ -35,7 +35,8 @@ export function projectGroup(item: Draft, remove: () => void, atlas: () => void)
   atlasRow.className = 'example-row project-atlas';
   const atlasButton = document.createElement('button');
   atlasButton.type = 'button';
-  atlasButton.className = 'example-option';
+  // Not an `example-option`: those are the drafts themselves.
+  atlasButton.className = 'atlas-option';
   atlasButton.innerHTML = '<span class="example-title">Atlas map</span><span class="example-description">Every file and the links between them · read-only</span>';
   atlasButton.setAttribute('aria-label', `Atlas map of the ${name} project`);
   atlasButton.addEventListener('click', atlas);

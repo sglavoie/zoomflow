@@ -930,7 +930,8 @@ select:focus-visible {
   border-color: var(--focus);
 }
 #example-picker summary:focus-visible,
-.example-option:focus-visible {
+.example-option:focus-visible,
+.atlas-option:focus-visible {
   outline: 2px solid var(--focus);
   outline-offset: 2px;
 }
@@ -1097,7 +1098,8 @@ select:focus-visible {
   display: flex;
   align-items: stretch;
 }
-.example-option {
+.example-option,
+.atlas-option {
   display: block;
   flex: 1;
   min-width: 0;
@@ -1129,6 +1131,7 @@ select:focus-visible {
   margin-top: 10px;
 }
 .example-option:hover,
+.atlas-option:hover,
 .example-option[aria-current="true"] {
   background: var(--hover);
 }
