@@ -12,9 +12,10 @@ const library = '...@zoomflow';
 const roles: Record<FlowStep['shape'], string> = { rectangle: 'zf-step', diamond: 'zf-decision', oval: 'zf-terminal' };
 const shapes = Object.fromEntries(Object.entries(roles).map(([shape, role]) => [role, shape])) as Record<string, FlowStep['shape']>;
 
-// D2 also interpolates dollar signs inside double-quoted strings.
-const quote = (text: string) => JSON.stringify(text).replaceAll('$', '\\$');
-const unquote = (text: string): string => JSON.parse(text.replaceAll('\\$', '$'));
+/** A D2 double-quoted string. D2 also interpolates dollar signs inside them, and does not decode the `\u` escapes
+ * JSON writes for control characters, so those are dropped; tabs and line breaks keep their escapes. */
+export const quote = (text: string) => JSON.stringify(text.replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g, '')).replaceAll('$', '\\$');
+export const unquote = (text: string): string => JSON.parse(text.replaceAll('\\$', '$'));
 
 /** A shape's classes: its role first, then the looks that override it. */
 export function lookClasses(classes: string[], look: Look): string {

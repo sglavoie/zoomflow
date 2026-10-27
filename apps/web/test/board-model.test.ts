@@ -100,6 +100,28 @@ it('adds boards to hand-written boards declared once in the file', async () => {
   expect(indexBoards(compiled.diagram).has('root.layers.detail.layers.C')).toBe(true);
 });
 
+it('adds boards to shapes whose identifiers D2 single-quotes, in a form board indexing reads', async () => {
+  const source = '"null"\n"has \\"quote\\""\n"it\'s"\n';
+  const { sites: site } = await sites(source);
+  let next = site.add('root', "'null'", flow, 'Empty').source;
+  next = (await sites(next)).sites.add('root', '\'has "quote"\'', flow, 'Quoted').source;
+  next = (await sites(next)).sites.add('root', '"it\'s"', flow, 'Apostrophe').source;
+  expect(next).toContain('"null".link: layers."Empty"');
+  expect(next).toContain('"has \\"quote\\"".link: layers."Quoted"');
+  expect(next).toContain('"it\'s".link: layers."Apostrophe"');
+  const { boards, sites: added } = await sites(next);
+  expect(boards.get('root')!.diagram.shapes.map(shape => shape.link)).toEqual(['root.layers.Empty', 'root.layers.Quoted', 'root.layers.Apostrophe']);
+  // The attached boards are still read as such, so builders keep them.
+  expect(added.builder('root')).toBeUndefined();
+  expect(splitBoard(next).attachments.map(item => item.name)).toEqual(['Empty', 'Quoted', 'Apostrophe']);
+});
+
+it('keeps an attached board on its own topic when another topic has the same labels', () => {
+  const before = mindMapSource(map('Plan\n  Ideas\n  Ideas'));
+  const attachments = [{ shape: 'n_2', name: 'Second ideas', body: flow }];
+  expect(reattach(before, mindMapSource({ ...map('Plan\n  Ideas\n  Ideas'), direction: 'down' }), attachments)).toEqual(attachments);
+});
+
 it('moves attached boards with their topics and explains what it cannot keep', () => {
   const before = mindMapSource(map('Plan\n  People\n    Hiring\n  Money'));
   const attachments = [{ shape: 'n_1_1', name: 'Hiring', body: flow }];

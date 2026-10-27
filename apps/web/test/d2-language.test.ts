@@ -12,6 +12,7 @@ const examples = [
   `a: Root\nscenarios: {\n  alternate: {\n    b: Alternate\n  }\n}\nsteps: {\n  first: {\n    c: First step\n  }\n}`,
   `note: ||md\n  A pipe | in text, and {braces}\n||\na: After`,
   `a -> b: Yes | No\nlayers: {\n  detail: {\n    c: x | y\n  }\n}`,
+  'code: |`ts\n  const x = a || b; if (x) { y\n`|\nlayers: {\n  detail: {\n    c\n  }\n}',
 ];
 
 it.each(examples)('folds real D2 structures without interpreting label text: %s', async (source) => {
@@ -36,6 +37,15 @@ it('indents nested maps and dedents closing braces without counting braces in la
   ensureSyntaxTree(editor, source.length, 1000);
   expect(getIndentation(editor, editor.doc.line(2).from)).toBe(2);
   expect(getIndentation(editor, editor.doc.line(4).from)).toBe(4);
+  expect(getIndentation(editor, editor.doc.line(5).from)).toBe(2);
+  expect(getIndentation(editor, editor.doc.line(6).from)).toBe(0);
+});
+
+it('ends a backtick multiline string only at its own delimiter, so pipes and braces inside it are text', () => {
+  const source = 'code: |`ts\n  const x = a || b; if (x) { y\n`|\nlayers: {\n  c\n}';
+  const editor = EditorState.create({ doc: source, extensions: d2Language });
+  ensureSyntaxTree(editor, source.length, 1000);
+  expect(getIndentation(editor, editor.doc.line(4).from)).toBe(0);
   expect(getIndentation(editor, editor.doc.line(5).from)).toBe(2);
   expect(getIndentation(editor, editor.doc.line(6).from)).toBe(0);
 });

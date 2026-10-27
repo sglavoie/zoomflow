@@ -43,7 +43,8 @@ export function guardBuilderDialog(dialog: HTMLDialogElement, discard: () => boo
     event.stopImmediatePropagation();
     if (shortcut(event)) event.preventDefault();
     else if (event.key === 'Escape') { event.preventDefault(); void requestClose(); }
-    else if ((event.metaKey || event.ctrlKey) && ['s', '/', '?'].includes(event.key.toLowerCase())) event.preventDefault();
+    // `code` covers layouts whose S key types another letter, as the page's own save shortcut does.
+    else if ((event.metaKey || event.ctrlKey) && (['s', '/', '?'].includes(event.key.toLowerCase()) || event.code === 'KeyS')) event.preventDefault();
     else if (event.key === 'Backspace' && !(event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement)) event.preventDefault();
   }, { capture: true });
   return { ask };

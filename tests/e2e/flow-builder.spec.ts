@@ -174,3 +174,25 @@ test('Enter moves through the steps instead of submitting, and examples ask befo
   await expect(replace).toBeHidden();
   await expect(dialog.getByLabel('Step 4 name')).toHaveCount(0);
 });
+
+test('a step added after removing the last one gets a new identifier, so boards never move to it', async ({ page }) => {
+  await page.goto('/'); await ready(page);
+  await page.getByRole('button', { name: 'New flow', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: 'Create a flow' });
+  await dialog.getByRole('button', { name: 'Remove step 3', exact: true }).click();
+  await dialog.getByRole('button', { name: 'Add step', exact: true }).click();
+  await expect(dialog.getByLabel('Connection 2 to', { exact: true })).toHaveValue('step_4');
+});
+
+test('the save shortcut in the builder never reaches the browser, whatever the keyboard layout', async ({ page }) => {
+  await page.goto('/'); await ready(page);
+  await page.getByRole('button', { name: 'New flow', exact: true }).click();
+  await expect(page.getByRole('dialog', { name: 'Create a flow' })).toBeVisible();
+  // A Russian layout types ы on the S key.
+  const prevented = await page.evaluate(() => {
+    const event = new KeyboardEvent('keydown', { key: 'ы', code: 'KeyS', ctrlKey: true, metaKey: true, bubbles: true, cancelable: true });
+    document.activeElement!.dispatchEvent(event);
+    return event.defaultPrevented;
+  });
+  expect(prevented).toBe(true);
+});

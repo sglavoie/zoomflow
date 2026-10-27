@@ -79,6 +79,19 @@ test('renames, adds and removes flow steps on the diagram, and undoes there', as
   await expect(page.locator('.zf-pan-hint')).toContainText('F2 renames · ⌘/Ctrl+Enter adds next step · Delete removes');
 });
 
+test('a rename left unchanged by a press on another step does not take over the next edit', async ({ page }) => {
+  await mixed(page);
+  await shape(page, 'step_1').click();
+  await page.keyboard.press('F2');
+  await expect(page.getByRole('textbox', { name: 'Rename New idea' })).toBeFocused();
+  // The press on another step ends the rename without a change.
+  await shape(page, 'step_5').click();
+  await expect(shape(page, 'step_5')).toBeFocused();
+  await page.keyboard.press('ControlOrMeta+Enter');
+  await ready(page);
+  await expect(page.getByRole('textbox', { name: 'Rename New step' })).toBeFocused();
+});
+
 test('Backspace removes a step, and a press elsewhere during a rename selects what it lands on', async ({ page }) => {
   await mixed(page);
   // Backspace is the Mac delete key; it removes the step rather than going up a board.

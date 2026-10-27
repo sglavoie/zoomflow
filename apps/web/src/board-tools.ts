@@ -143,6 +143,9 @@ export function setupBoardTools(scope: PaneScope, viewer: Viewer, options: Board
 
   /** Apply edits made on the diagram in one change, so one undo reverts them together. */
   function applyCanvas(shape: string, edits: CanvasEdit[]) {
+    // Where a press that finished a rename landed matters only to this edit, even one that changes nothing.
+    const landed = pressed;
+    pressed = undefined;
     const canvas = ready() ? sites!.canvas(boardId()) : undefined;
     if (!canvas) return;
     const label = canvasTarget(shape)?.label ?? shape;
@@ -167,8 +170,7 @@ export function setupBoardTools(scope: PaneScope, viewer: Viewer, options: Board
     // A rename that renames the board replaces it in history, since the old board is gone.
     const moves = board !== boardId() ? { board, replace: !added && !edits.some(change => change.type === 'remove') } : {};
     // A press elsewhere on the diagram that finished a rename selects what it landed on instead.
-    const shown = pressed !== undefined ? pressed ?? undefined : result.select;
-    pressed = undefined;
+    const shown = landed !== undefined ? landed ?? undefined : result.select;
     pending = { source: updated.source, ...moves, ...shown ? { shape: shown, rename: added && shown === result.select && shown !== shape } : {} };
     options.update(updated.source);
     if (edits.some(change => change.type === 'remove')) options.status(`Removed “${label}”. ${undoHint}`);
@@ -210,6 +212,7 @@ export function setupBoardTools(scope: PaneScope, viewer: Viewer, options: Board
     if (then) edits.push(then);
     if (element.isConnected) (element.closest<SVGElement>('a') ?? element).focus({ preventScroll: true });
     if (edits.length) applyCanvas(shape, edits);
+    else pressed = undefined;
   }
   rename.addEventListener('keydown', event => {
     if (event.isComposing) return;

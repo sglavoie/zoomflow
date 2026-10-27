@@ -1,4 +1,4 @@
-import { lookClasses, readLook, type Look } from './flow-model';
+import { lookClasses, quote, readLook, unquote, type Look } from './flow-model';
 
 export type MindTopic = { label: string; children: MindTopic[] };
 /** `split` is the level whose topics open their subtopics on a detail board; 0 keeps one board. */
@@ -10,15 +10,12 @@ const splitNote = (split: number) => split
 /** Detail boards inherit the root board's classes, so the library is imported once. */
 const library = '...@zoomflow';
 const accents = 6;
-// D2 also interpolates dollar signs inside double-quoted strings.
-const quote = (text: string) => JSON.stringify(text).replaceAll('$', '\\$');
-const unquote = (text: string): string => JSON.parse(text.replaceAll('\\$', '$'));
 const quoted = '"(?:[^"\\\\]|\\\\.)*"';
 /** D2 ignores links to boards named like a keyword in any case but lowercase. */
 const keywords = new Set(('label shape icon width height constraint tooltip link near direction top left grid-rows ' +
   'grid-columns grid-gap vertical-gap horizontal-gap class classes vars layers scenarios steps style source-arrowhead ' +
   'target-arrowhead opacity stroke fill fill-pattern stroke-width stroke-dash border-radius shadow 3d multiple ' +
-  'double-border font font-size font-color animated bold italic underline filled text-transform null').split(' '));
+  'double-border font font-size font-color animated bold italic underline filled text-transform').split(' '));
 
 export const mindMapExample = `Product launch
   Audience
@@ -41,8 +38,8 @@ export function detailBoardName(label: string): string {
     ({ '"': "'", '\\': '/', '{': '(', '[': '(', '}': ')', ']': ')', ';': ',' })[character] ?? ' ')
     .replace(/\s+/g, ' ').trim();
   if (!name || name === '_') return 'Topic';
-  // Boards named after the board containers cannot be linked to in any case.
-  if (/^(?:layers|scenarios|steps)$/i.test(name)) return `${name} topic`;
+  // Boards named after the board containers cannot be linked to in any case, nor can `null`, which D2 quotes in links.
+  if (/^(?:layers|scenarios|steps|null)$/i.test(name)) return `${name} topic`;
   return keywords.has(name.toLowerCase()) ? name.toLowerCase() : name;
 }
 

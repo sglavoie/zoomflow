@@ -49,6 +49,10 @@ export function setupFlowBuilder(create: (source: string, name: string) => void,
   const addConnection = dialog.querySelector<HTMLButtonElement>('#flow-add-connection')!;
   const submit = dialog.querySelector<HTMLButtonElement>('[type="submit"]')!;
   let flow: Flow = flowTemplate('simple');
+  /** The highest step number since the builder opened. New steps never reuse a removed step's identifier,
+   * so a board that opened from the removed step does not move to the new one. */
+  let highest = 0;
+  const highestStep = () => Math.max(highest, ...flow.steps.map(step => Number(step.id.slice(5))));
   let editing = false;
   /** The form when the builder opened; closing asks before discarding later changes. */
   let snapshot = '';
@@ -158,6 +162,8 @@ export function setupFlowBuilder(create: (source: string, name: string) => void,
     target = next;
     editing = next.mode === 'edit';
     flow = existing ?? flowTemplate('simple');
+    highest = 0;
+    highest = highestStep();
     returnFocus = edit ?? launch;
     fallbackFocus = fallback;
     name.value = next.name;
@@ -209,13 +215,15 @@ export function setupFlowBuilder(create: (source: string, name: string) => void,
     if (stepsState() !== loaded && !await guard.ask(() => confirmDiscard('Replace your steps?',
       'The example replaces the steps and connections you entered. Your flow name and look are kept.', 'Replace steps',
       () => button.focus({ preventScroll: true })))) return;
+    highest = highestStep();
     flow = { ...flowTemplate(button.dataset.template!), look: flow.look };
     render();
     loaded = stepsState();
   }));
   addStep.addEventListener('click', () => {
     const last = flow.steps.at(-1)!;
-    const id = `step_${Math.max(...flow.steps.map(step => Number(step.id.slice(5)))) + 1}`;
+    highest = highestStep() + 1;
+    const id = `step_${highest}`;
     flow.steps.push({ id, label: '', shape: 'rectangle' });
     flow.connections.push({ from: last.id, to: id, label: '' });
     render();

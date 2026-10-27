@@ -69,14 +69,14 @@ it('keeps labels literal and board names linkable', async () => {
   expect(detailBoardName('  ')).toBe('Topic');
 });
 
-it('links detail boards for topics named like board containers or holding dollar signs', async () => {
-  const names = ['Steps', 'layers', 'SCENARIOS', 'steps topic', '$x', 'US$ 5'];
+it('links detail boards for topics named like board containers, null, or holding dollar signs', async () => {
+  const names = ['Steps', 'layers', 'SCENARIOS', 'steps topic', '$x', 'US$ 5', 'Null', 'null'];
   const map: MindMap = { direction: 'right', split: 1, look: plain, root: { label: 'Root', children:
     names.map(label => ({ label, children: [{ label: 'child', children: [] }] })) } };
   const source = mindMapSource(map);
   const compiled = await compile(source);
   const boards = [...indexBoards(compiled.diagram).values()].slice(1).map(board => board.name);
-  expect(boards).toEqual(['Steps topic', 'layers topic', 'SCENARIOS topic', 'steps topic 2', 'x', 'US 5']);
+  expect(boards).toEqual(['Steps topic', 'layers topic', 'SCENARIOS topic', 'steps topic 2', 'x', 'US 5', 'Null topic', 'null topic 2']);
   expect(compiled.diagram.shapes.slice(1).map(shape => shape.link)).toEqual(boards.map(name => `root.layers.${name}`));
   expect(readMindMap(source)).toEqual(map);
 });

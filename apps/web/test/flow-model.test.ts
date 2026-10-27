@@ -34,6 +34,15 @@ it('keeps ordinary text and D2 punctuation literal, including duplicate names', 
   expect(readFlow(source)).toEqual(flow);
 });
 
+it('drops control characters D2 cannot decode, and keeps tabs and line breaks', async () => {
+  const flow = flowTemplate('simple');
+  flow.steps[0].label = 'pasted\u0001\u001f text';
+  flow.steps[1].label = 'one\ttwo\nthree';
+  const compiled = await compile(flowSource(flow));
+  expect(compiled.diagram.shapes[0]).toHaveProperty('label', 'pasted text');
+  expect(compiled.diagram.shapes[1]).toHaveProperty('label', 'one\ttwo\nthree');
+});
+
 it('does not offer form editing when it would discard custom source', () => {
   const source = flowSource(flowTemplate('simple'));
   expect(readFlow(source + 'step_1.style.fill: red\n')).toBeUndefined();

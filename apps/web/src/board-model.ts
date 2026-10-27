@@ -1,5 +1,5 @@
 import type { Board, SourceRange } from '@zoomflow/core';
-import { readFlow } from './flow-model';
+import { quote, readFlow, unquote } from './flow-model';
 import { boardTopics, readMindMap, uniqueBoardName, type BoardTopic } from './mind-map-model';
 
 export type BuilderKind = 'flow' | 'mind map';
@@ -9,9 +9,6 @@ export type Attachment = { shape: string; name: string; body: string };
 export type BoardParts = { own: string; attachments: Attachment[] };
 
 const heading = '# Boards that open from shapes on this board.';
-// D2 also interpolates dollar signs inside double-quoted strings.
-const quote = (text: string) => JSON.stringify(text).replaceAll('$', '\\$');
-const unquote = (text: string): string => JSON.parse(text.replaceAll('\\$', '$'));
 const quoted = '"(?:[^"\\\\]|\\\\.)*"';
 const linkLine = new RegExp(`^(.+)\\.link: layers\\.(${quoted})$`);
 
@@ -39,9 +36,15 @@ export function splitBoard(text: string): BoardParts {
   return { own: normalized.slice(0, at), attachments };
 }
 
+/** A shape's identifier as D2 reports it, with single-quoted parts like `'null'` double-quoted: D2's own parser
+ * accepts both, but board indexing reads only double-quoted keys. */
+function shapeKey(id: string): string {
+  return id.replace(/"(?:[^"\\]|\\.)*"|'((?:[^']|'')*)'/g, (part, text?: string) => text === undefined ? part : quote(text.replaceAll("''", "'")));
+}
+
 export function joinBoard({ own, attachments }: BoardParts): string {
   if (!attachments.length) return own;
-  const section = attachments.map(({ shape, name, body }) => [`${shape}.link: layers.${quote(name)}`, `layers.${quote(name)}: {`,
+  const section = attachments.map(({ shape, name, body }) => [`${shapeKey(shape)}.link: layers.${quote(name)}`, `layers.${quote(name)}: {`,
     ...body.trim().split('\n').map(line => line && `  ${line}`), '}'].join('\n'));
   return `${own.trimEnd()}\n\n${heading}\n${section.join('\n\n')}\n`;
 }
@@ -106,8 +109,10 @@ export function reattach(before: string, after: string, attachments: Attachment[
     const sameLabel = next.filter(topic => topic.path.at(-1) === label);
     const elsewhere = sameLabel.length === 1 && !old.some(topic => topic.id === sameLabel[0].id && path(topic) === path(sameLabel[0]));
     const inPlace = next.find(topic => topic.id === from.id);
+    // Topics with the same labels from the centre down are told apart by their place.
+    const samePath = next.filter(topic => path(topic) === path(from));
     const to = moved ? next.find(topic => topic.id === moved.get(from.id))
-      : next.find(topic => path(topic) === path(from)) ?? (elsewhere ? sameLabel[0]
+      : (inPlace && path(inPlace) === path(from) ? inPlace : samePath.length === 1 ? samePath[0] : undefined) ?? (elsewhere ? sameLabel[0]
         // A renamed ancestor keeps the topic in place; so does a renamed topic when no topic was added or removed.
         : inPlace && (inPlace.path.at(-1) === label || sameShape) ? inPlace : undefined);
     if (!to) return `The topic “${label}” opens the board “${item.name}”. Keep the topic, or delete its board in the source first.`;

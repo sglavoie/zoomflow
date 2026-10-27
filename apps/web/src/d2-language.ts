@@ -25,8 +25,9 @@ export const d2Parser: StreamParser<State> = {
     if (value && stream.match(/#[0-9a-fA-F]{3,8}\b/)) return 'number';
     if (stream.match('#')) { stream.skipToEnd(); return 'comment'; }
     // Only a value can open a multiline string; a pipe later in an unquoted label is text.
-    const block = value && stream.match(/(\|+)[a-zA-Z0-9_-]*/);
-    if (Array.isArray(block)) { state.block = block[1]; state.blockIndent = stream.indentation(); return 'string'; }
+    // Backticks after the opening pipes, as in |`ts, close only with the same backticks before the pipes.
+    const block = value && stream.match(/(\|+)(`*)[a-zA-Z0-9_-]*/);
+    if (Array.isArray(block)) { state.block = block[2] + block[1]; state.blockIndent = stream.indentation(); return 'string'; }
     if (stream.match(/\.\.\.@[^\s;{}]+/)) return 'keyword';
     if (stream.match(/\$\{[^}]*\}/)) return 'variable';
     if (stream.match(/(?:https?:\/\/|mailto:)[^\s;,}]+/)) return 'url';
