@@ -104,6 +104,8 @@ export class Viewer {
       const parent = this.boards.get(this.current)?.parent;
       if (parent) { event.preventDefault(); void this.navigate(parent); }
       else if (this.boards.has(this.current) && this.settings.onTopLevelBack?.()) event.preventDefault();
+      // Backspace goes up here, so with nowhere to go it does nothing, rather than WebKit's history Back.
+      else if (event.key === 'Backspace') event.preventDefault();
     }
   };
 

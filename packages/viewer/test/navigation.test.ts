@@ -188,12 +188,14 @@ describe('Viewer file links and the root board', () => {
     await mount({ onTopLevelBack });
     expect(press('Escape').defaultPrevented).toBe(true);
     handled = false;
-    expect(press('Backspace').defaultPrevented).toBe(false);
-    expect(onTopLevelBack).toHaveBeenCalledTimes(2);
+    expect(press('Escape').defaultPrevented).toBe(false);
+    // Backspace goes up, so with nowhere to go it is still consumed, rather than becoming WebKit's history Back.
+    expect(press('Backspace').defaultPrevented).toBe(true);
+    expect(onTopLevelBack).toHaveBeenCalledTimes(3);
     await viewer!.navigate('root.layers.L');
     expect(press('Escape').defaultPrevented).toBe(true);
     await vi.waitFor(() => expect(viewer!.currentBoard?.id).toBe('root'));
-    expect(onTopLevelBack).toHaveBeenCalledTimes(2);
+    expect(onTopLevelBack).toHaveBeenCalledTimes(3);
   });
 
   it('records the document in history entries and hands entries of another document to it', async () => {

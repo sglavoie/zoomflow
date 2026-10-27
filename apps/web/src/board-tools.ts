@@ -491,6 +491,12 @@ export function setupBoardTools(scope: PaneScope, viewer: Viewer, options: Board
     options.selectSource(shape.id, false);
     if (openMenu(shape.id, shape.focus, event.clientX, event.clientY)) event.preventDefault();
   });
+  // A press focuses its shape, which shows the selection bar, and on a fitted diagram the bar can cover the shape.
+  // Firefox then sends the press's contextmenu to the bar, so the bar opens its shape's menu too.
+  shapeGroup.addEventListener('contextmenu', event => {
+    const element = selected && ready() ? shapeElement(selected) : undefined;
+    if (element && openMenu(selected!, element.closest('a') ?? element, event.clientX, event.clientY)) event.preventDefault();
+  });
   // Double-click edits: renames a step or topic, or opens any other shape's source.
   viewer.stage.addEventListener('dblclick', event => {
     const shape = shapeAt(event.target);
