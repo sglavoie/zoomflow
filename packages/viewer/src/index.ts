@@ -17,7 +17,8 @@ export type ViewerOptions = {
   follows?: (link: Element, event: MouseEvent | KeyboardEvent) => boolean;
   /** Other diagram files that links can open, by path relative to this document as authored.
    * Without it, file links show as missing and explain that the folder must be opened. */
-  files?: { exists(path: string): boolean; open(path: string, hash: string): void; label?(path: string): string };
+  /** `name`: the open file's name, which its root board's crumb shows in place of Root. */
+  files?: { exists(path: string): boolean; open(path: string, hash: string): void; label?(path: string): string; name?(): string | undefined };
   /** Escape/Backspace on the root board: return true when it went somewhere, such as back to the file that opened this one. */
   onTopLevelBack?: () => boolean;
   /** With `history`, the open document: its key goes into every history entry as `zoomflowFile`. When Back or
@@ -340,7 +341,8 @@ export class Viewer {
 
   private updateCrumbs() {
     const trail = this.trail;
-    this.breadcrumbs.render([...this.trailPrefix, ...trail.map((id, index) => ({ name: this.boards.get(id)!.name,
+    const file = this.settings.files?.name?.();
+    this.breadcrumbs.render([...this.trailPrefix, ...trail.map((id, index) => ({ name: id === 'root' && file || this.boards.get(id)!.name,
       activate: () => { void this.navigate(id, 'push', trail.slice(0, index + 1)); } }))]);
   }
 

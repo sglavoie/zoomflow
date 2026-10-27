@@ -28,26 +28,26 @@ test('file links open other files at their boards, with breadcrumbs across files
   await openFolder(page, atlas);
   // A folder opens at its home board, index.d2.
   await showing(page, 'index.d2');
-  await expect(crumbs(page)).toHaveText(['Root']);
+  await expect(crumbs(page)).toHaveText(['index']);
 
   await page.locator('#viewer .zf-stage a[data-file="./health.d2"]').click();
   await showing(page, 'health.d2');
-  await expect(crumbs(page)).toHaveText(['index', 'Root']);
+  await expect(crumbs(page)).toHaveText(['index', 'health']);
   await page.locator('#viewer .zf-stage').focus();
   await page.keyboard.press('Escape');
   await showing(page, 'index.d2');
-  await expect(crumbs(page)).toHaveText(['Root']);
+  await expect(crumbs(page)).toHaveText(['index']);
 
   await page.locator('#viewer .zf-stage a[data-file="./work/index.d2"]').focus();
   await page.keyboard.press('Enter');
   await showing(page, 'work/index.d2');
-  await expect(crumbs(page)).toHaveText(['index', 'Root']);
+  await expect(crumbs(page)).toHaveText(['index', 'work/index']);
 
   // The fragment opens the linked file's board.
   await page.locator('#viewer .zf-stage a[data-file="../projects/zoomflow.d2#/Viewer"]').click();
   await showing(page, 'projects/zoomflow.d2', 'root.layers.Viewer');
   expect(await page.evaluate(() => location.hash)).toBe('#/Viewer');
-  await expect(crumbs(page)).toHaveText(['index', '…', 'work/index', 'Root', 'Viewer']);
+  await expect(crumbs(page)).toHaveText(['index', '…', 'work/index', 'projects/zoomflow', 'Viewer']);
 
   // Escape climbs this file's boards, then returns to the file that opened it.
   await page.locator('#viewer .zf-stage').focus();
@@ -57,12 +57,12 @@ test('file links open other files at their boards, with breadcrumbs across files
   await page.locator('#viewer .zf-stage').focus();
   await page.keyboard.press('Escape');
   await showing(page, 'work/index.d2');
-  await expect(crumbs(page)).toHaveText(['index', 'Root']);
+  await expect(crumbs(page)).toHaveText(['index', 'work/index']);
 
   // An earlier file's crumb reopens it.
-  await crumbs(page).filter({ hasText: 'index' }).click();
+  await crumbs(page).filter({ hasText: /^index$/ }).click();
   await showing(page, 'index.d2');
-  await expect(crumbs(page)).toHaveText(['Root']);
+  await expect(crumbs(page)).toHaveText(['index']);
 });
 
 test('browser Back and Forward move across files in the first pane', async ({ page }) => {
@@ -73,19 +73,19 @@ test('browser Back and Forward move across files in the first pane', async ({ pa
   await showing(page, 'health.d2');
   await page.locator('#viewer .zf-stage a[data-board="root.layers.Sleep"]').click();
   await showing(page, 'health.d2', 'root.layers.Sleep');
-  await expect(crumbs(page)).toHaveText(['index', 'Root', 'Sleep']);
+  await expect(crumbs(page)).toHaveText(['index', 'health', 'Sleep']);
 
   await page.goBack();
   await showing(page, 'health.d2');
   await page.goBack();
   await showing(page, 'index.d2');
-  await expect(crumbs(page)).toHaveText(['Root']);
+  await expect(crumbs(page)).toHaveText(['index']);
   await page.goForward();
   await showing(page, 'health.d2');
-  await expect(crumbs(page)).toHaveText(['index', 'Root']);
+  await expect(crumbs(page)).toHaveText(['index', 'health']);
   await page.goForward();
   await showing(page, 'health.d2', 'root.layers.Sleep');
-  await expect(crumbs(page)).toHaveText(['index', 'Root', 'Sleep']);
+  await expect(crumbs(page)).toHaveText(['index', 'health', 'Sleep']);
 });
 
 test('review F1 picker trail reset survives reload and history', async ({ page }) => {
@@ -96,7 +96,7 @@ test('review F1 picker trail reset survives reload and history', async ({ page }
       await page.keyboard.press(key);
       await page.waitForTimeout(300);
       await showing(page, path);
-      await expect(crumbs(page)).toHaveText(['Root']);
+      await expect(crumbs(page)).toHaveText([path.replace(/\.d2$/, '')]);
     }
   }
   const savedFiles = () => page.evaluate(() => history.state?.zoomflowFiles);
@@ -106,41 +106,41 @@ test('review F1 picker trail reset survives reload and history', async ({ page }
   await showing(page, 'index.d2');
   await page.locator('#viewer .zf-stage a[data-file="./health.d2"]').click();
   await showing(page, 'health.d2');
-  await expect(crumbs(page)).toHaveText(['index', 'Root']);
+  await expect(crumbs(page)).toHaveText(['index', 'health']);
 
   // Choosing another file from the menu starts a new way through files, in history as on screen.
   await page.locator('#example-picker > summary').click();
   await page.locator('.example-option[title="atlas/work/index.d2"]').click();
   await showing(page, 'work/index.d2');
-  await expect(crumbs(page)).toHaveText(['Root']);
+  await expect(crumbs(page)).toHaveText(['work/index']);
   expect(await savedFiles()).toEqual([]);
 
   await page.reload();
   await showing(page, 'work/index.d2');
-  await expect(crumbs(page)).toHaveText(['Root']);
+  await expect(crumbs(page)).toHaveText(['work/index']);
   await rootStays('work/index.d2');
 
   await page.locator('#viewer .zf-stage a[data-file="../projects/zoomflow.d2#/Viewer"]').click();
   await showing(page, 'projects/zoomflow.d2', 'root.layers.Viewer');
-  await expect(crumbs(page)).toHaveText(['work/index', 'Root', 'Viewer']);
+  await expect(crumbs(page)).toHaveText(['work/index', 'projects/zoomflow', 'Viewer']);
   await page.goBack();
   await showing(page, 'work/index.d2');
-  await expect(crumbs(page)).toHaveText(['Root']);
+  await expect(crumbs(page)).toHaveText(['work/index']);
   await page.goBack();
   await showing(page, 'index.d2');
-  await expect(crumbs(page)).toHaveText(['Root']);
+  await expect(crumbs(page)).toHaveText(['index']);
   await page.goForward();
   await showing(page, 'work/index.d2');
-  await expect(crumbs(page)).toHaveText(['Root']);
+  await expect(crumbs(page)).toHaveText(['work/index']);
   expect(await savedFiles()).toEqual([]);
   await page.reload();
   await showing(page, 'work/index.d2');
-  await expect(crumbs(page)).toHaveText(['Root']);
+  await expect(crumbs(page)).toHaveText(['work/index']);
   await rootStays('work/index.d2');
 
   await page.goForward();
   await showing(page, 'projects/zoomflow.d2', 'root.layers.Viewer');
-  await expect(crumbs(page)).toHaveText(['work/index', 'Root', 'Viewer']);
+  await expect(crumbs(page)).toHaveText(['work/index', 'projects/zoomflow', 'Viewer']);
   // The way through files from here leads back to work/index, not to the file chosen away from.
   await page.locator('#viewer .zf-stage').focus();
   await page.keyboard.press('Escape');
@@ -148,7 +148,7 @@ test('review F1 picker trail reset survives reload and history', async ({ page }
   await page.locator('#viewer .zf-stage').focus();
   await page.keyboard.press('Escape');
   await showing(page, 'work/index.d2');
-  await expect(crumbs(page)).toHaveText(['Root']);
+  await expect(crumbs(page)).toHaveText(['work/index']);
   await rootStays('work/index.d2');
 });
 
@@ -214,11 +214,11 @@ test('the second pane follows file links on its own', async ({ page }) => {
 
   await page.locator('#viewer-b .zf-stage a[data-file="../projects/zoomflow.d2#/Viewer"]').click();
   await showing(page, 'projects/zoomflow.d2', 'root.layers.Viewer', 'b');
-  await expect(crumbs(page, '#viewer-b')).toHaveText(['work/index', 'Root', 'Viewer']);
+  await expect(crumbs(page, '#viewer-b')).toHaveText(['work/index', 'projects/zoomflow', 'Viewer']);
   // The second pane keeps its way through files in memory; the first pane and the page URL stay put.
   await expect(page.locator('#viewer .zf-stage')).toHaveAttribute('data-board', 'root');
   expect(await page.evaluate(() => location.hash)).toBe('#/');
-  await expect(crumbs(page)).toHaveText(['Root']);
+  await expect(crumbs(page)).toHaveText(['index']);
 
   await page.locator('#viewer-b .zf-stage').click({ position: { x: 5, y: 5 } });
   await page.keyboard.press('Escape');
@@ -226,7 +226,7 @@ test('the second pane follows file links on its own', async ({ page }) => {
   await page.locator('#viewer-b .zf-stage').focus();
   await page.keyboard.press('Escape');
   await showing(page, 'work/index.d2', 'root', 'b');
-  await expect(crumbs(page, '#viewer-b')).toHaveText(['Root']);
+  await expect(crumbs(page, '#viewer-b')).toHaveText(['work/index']);
   await expect(page.locator('#viewer .zf-stage')).toHaveAttribute('data-board', 'root');
 });
 
@@ -285,7 +285,7 @@ test('links a shape to another file and board, changes and removes the link, and
 
   await (await shapeMenu(page, 'Inbox', 'Inbox')).getByRole('menuitem', { name: 'Open diagram' }).click();
   await showing(page, 'health.d2', 'root.layers.Sleep');
-  await expect(crumbs(page)).toHaveText(['index', '…', 'work/index', 'Root', 'Sleep']);
+  await expect(crumbs(page)).toHaveText(['index', '…', 'work/index', 'health', 'Sleep']);
 });
 
 test('creates a new linked flow that opens, stays editable, and links on from its steps', async ({ page }) => {
@@ -301,7 +301,7 @@ test('creates a new linked flow that opens, stays editable, and links on from it
   await dialog.getByRole('button', { name: 'Create and open', exact: true }).click();
   // Without the folder's handle, the new file is a project draft that Save asks where to put.
   await showing(page, 'Exercise.d2');
-  await expect(crumbs(page)).toHaveText(['index', 'health', 'Root']);
+  await expect(crumbs(page)).toHaveText(['index', 'health', 'Exercise']);
   await expect(page.locator('#draft-status')).toHaveText('File has unsaved changes');
   await page.locator('#example-picker summary').click();
   await expect(page.locator('#draft-options .example-option[title="atlas/Exercise.d2"]')).toBeVisible();
@@ -359,7 +359,7 @@ test('the atlas map draws every project file and file link, groups unlinked file
 
   await stage.locator('a[data-file="./health.d2"]').click();
   await showing(page, 'health.d2');
-  await expect(crumbs(page)).toHaveText(['Root']);
+  await expect(crumbs(page)).toHaveText(['health']);
   await expect(page.locator('#save-file')).toBeVisible();
   // Back returns to the map, as it would to a file.
   await page.goBack();

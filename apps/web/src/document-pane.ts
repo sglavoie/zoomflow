@@ -103,6 +103,8 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
     },
     open: (path: string, hash: string) => openFileLink(path, hash),
     label: fileLabel,
+    // A project file's root board is named after the file; the atlas map keeps Root.
+    name: () => showsAtlas() ? undefined : projectLabel(picker().inputPath(id)),
   };
   const viewer = new Viewer(part('viewer'), { history: id === 'a', active: shared.isActive,
     // Steps and topics open their board from the arrow badge, so a click on the shape selects it to edit.
