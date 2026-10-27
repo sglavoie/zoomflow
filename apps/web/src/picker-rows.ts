@@ -3,8 +3,8 @@ import { exampleSource } from './draft-library';
 
 export type ProjectGroup = { section: HTMLElement; files: HTMLElement; toggle: HTMLButtonElement };
 
-/** A collapsible project heading with the project's unsaved count and a Remove action. */
-export function projectGroup(item: Draft, remove: () => void): ProjectGroup {
+/** A collapsible project heading with the project's unsaved count, its Atlas map and a Remove action. */
+export function projectGroup(item: Draft, remove: () => void, atlas: () => void): ProjectGroup {
   const id = item.projectId!;
   const section = document.createElement('section');
   section.className = 'project-group';
@@ -30,6 +30,17 @@ export function projectGroup(item: Draft, remove: () => void): ProjectGroup {
   heading.append(title, unsaved, removeButton);
   const files = document.createElement('div');
   files.id = `project-files-${id}`;
+  // The map leads the project's files; file rows are appended after it.
+  const atlasRow = document.createElement('div');
+  atlasRow.className = 'example-row project-atlas';
+  const atlasButton = document.createElement('button');
+  atlasButton.type = 'button';
+  atlasButton.className = 'example-option';
+  atlasButton.innerHTML = '<span class="example-title">Atlas map</span><span class="example-description">Every file and the links between them · read-only</span>';
+  atlasButton.setAttribute('aria-label', `Atlas map of the ${name} project`);
+  atlasButton.addEventListener('click', atlas);
+  atlasRow.append(atlasButton);
+  files.append(atlasRow);
   title.setAttribute('aria-controls', files.id);
   title.addEventListener('click', () => {
     files.hidden = !files.hidden;

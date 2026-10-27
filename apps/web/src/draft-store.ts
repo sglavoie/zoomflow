@@ -1,5 +1,8 @@
 export type Draft = { key: string; name: string; title: string; description: string; source: string; baseline: string;
-  updatedAt?: number; projectId?: string; path?: string; recoveredFrom?: string; number?: number; template?: string };
+  updatedAt?: number; projectId?: string; path?: string; recoveredFrom?: string; number?: number; template?: string;
+  /** A generated, read-only atlas map of this project; it is never stored, and `opener` is the project file a reload
+   * shows instead. */
+  atlasOf?: string; opener?: string };
 type Clock = Record<string, number>;
 type Version = { id: string; key: string; clock: Clock; savedAt: number; draft: Draft | null };
 type StoredVersion = Version & { slot: string };

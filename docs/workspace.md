@@ -234,6 +234,70 @@ browsers offer a Save dialog or source download. **Export → Download project .
 keeps all project sources and their relative paths together. Local image assets are
 not yet loaded with folder projects.
 
+## Link diagrams into an atlas
+
+A shape or connection in one project file can open another file, so a folder becomes
+one navigable atlas: an `index.d2` home board such as Life opens Health and Work, Work
+opens a project, and that project opens its architecture. A folder opens at
+`index.d2` (or `main.d2`) when it has one.
+
+```d2
+Health: {link: ./health.d2}
+Work: {link: ./work/index.d2}
+Zoomflow: {link: "./projects/zoomflow.d2#/Viewer"}
+Home: {link: ../index.d2}
+```
+
+- **Syntax:** a file link is a path that starts with `./` or `../` and ends in `.d2`.
+  It resolves from the linking file's folder, like an import, and must stay inside the
+  project folder. The `./` matters: D2 reads `link: health.d2` or `link: work/plan.d2`
+  as a board path and silently drops it; lint reports those as `bare-file-link` with
+  the link to write instead. Paths with spaces work, for example `"./My Life.d2"`.
+- **Fragments:** add `#/` and a board path to open another board of that file, written
+  the way the address bar shows it there: `#/Sleep/Night`, or `#/Sleep/@scenarios/Night`
+  for a scenario. Quote a link with a fragment, because an unquoted `#` starts a D2
+  comment. Without a fragment the link opens the file's root board; a board that no
+  longer exists opens its nearest existing ancestor with a notice, and lint warns
+  (`missing-file-board`). A link to a file the project does not have is shown as
+  missing and is a lint error (`dangling-file-link`).
+- **Navigation:** clicking a file link (or Enter on it) opens that file in the same
+  pane. Breadcrumbs start with the files you came through, so a crumb or Escape and
+  Backspace on a file's root board return to the file that opened it, on the board you
+  left. In the first pane, browser Back and Forward move across files too; the second
+  pane follows links on its own and keeps its way through files in memory. Hovering a
+  file link previews the board it opens. File links work only in folder projects: in a
+  single opened file or an unsaved draft they are shown as missing with **Open the
+  folder that contains this file to follow links to other diagrams.**
+- **Authoring without syntax:** select or right-click a shape and choose **Link to
+  diagram…** to pick another project file and, optionally, one of its boards, or **New
+  linked diagram…** to name a new flow, mind map or empty diagram beside the current
+  file. The new file is written to the project folder when the browser can write there
+  (otherwise it is a project draft that **Save .d2** asks where to put), and it opens with
+  breadcrumbs back to the shape that links it. A linked shape offers **Open diagram**,
+  **Change linked diagram…** and **Remove link**. These links are written as
+  `<shape>.link: "./x.d2"` lines in the board's attachment section, so **Edit flow** and
+  **Edit mind map** keep working. Undo reverts each link change; a file that was
+  created stays in the project.
+- **Atlas map:** in the filename menu, **Atlas map**, first under a project's name, draws a
+  read-only map of that project: every file as a shape and every file link as a
+  connection, labelled with the board it opens when the link has a fragment. Files that
+  no other file links to, apart from the home file, sit in a **Not linked from
+  anywhere** group, so orphans stand out. Click a file to open it. The map is generated
+  from the files' current sources each time you open it; it cannot be edited or saved
+  over a project file, and a reload shows the file you were on before it. A file that
+  does not compile is drawn without its links.
+- **Exports:** **Interactive atlas (HTML)**, offered for folder projects, bundles the
+  current file and every file it reaches through file links into one offline HTML file
+  with the same cross-file breadcrumbs, Escape and Back; other files use addresses like
+  `#/@file/health.d2/Sleep`. **All boards as SVG (ZIP)** of a project file also includes
+  the files it links to, each under `@files/<path>/`, with links rewritten to their root
+  SVG. The command line lints with `--follow` and exports atlases the same way; see
+  [Command line and CI](cli.md).
+- **Limitations:** links to local files other than `.d2` and to files outside the
+  project folder are not followed. A link's board check uses the linked file's last
+  compile in this browser session. Opening a file that the other pane shows only says
+  so. Images in folder projects are not loaded yet.
+
 ## Explore a diagram
 
 Click a linked shape to drill into a board. Breadcrumbs record the visited path,
@@ -385,9 +449,10 @@ switches between them. The Layout control is hidden on screens 600px wide or nar
 ## Lint checks
 
 Successful compilations also run Zoomflow lint. **Diagnostics** opens the
-editor's diagnostic list. Missing board links are errors; unlinked layers are
-warnings, as are links the viewer ignores (relative file paths such as `./x`, or
-`_` above the root board), and classes that nothing defines, usually a misspelling or a
+editor's diagnostic list. Missing board links and links to missing project files are
+errors (see [Link diagrams into an atlas](#link-diagrams-into-an-atlas)); unlinked layers are
+warnings, as are links the viewer ignores (relative paths such as `./x` that are not
+`.d2` files, or `_` above the root board), and classes that nothing defines, usually a misspelling or a
 missing `...@zoomflow`. Classes on the root board are checked only when lint can follow
 its imports; detail boards are always checked. `zf-in` and `zf-out` mark ports even
 without the library, so they are never reported. **Check boundary ports** opts into explicit `zf-in`/`zf-out` validation;

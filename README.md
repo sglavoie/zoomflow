@@ -4,7 +4,8 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 Build flows with a form or edit D2 source, explore drill-down diagrams, and export a navigable HTML file that
-works offline. Diagrams compile locally in your browser.
+works offline. Link a folder of diagrams into one atlas, from a home board down to one process.
+Diagrams compile locally in your browser.
 
 **[Try it in your browser](https://sglavoie.github.io/zoomflow/)**: no install needed.
 Ask AI needs a local server, so it is available only when you [run locally](#run-locally).
@@ -39,14 +40,20 @@ use **Retry preview** to try again without losing your source.
    diagram with F2, ⌘/Ctrl+Enter, Enter and Delete. Or change the D2 source on the right and watch
    the preview update. Use the
    filename menu for built-in examples, **Open .d2** for a file, or **Open folder** for
-   a project with relative imports. **D2 reference** contains searchable examples.
+   a project with relative imports. In a folder, **Link to diagram…** and **New linked
+   diagram…** on a shape's menu make it open another file of the project
+   ([atlas guide](docs/workspace.md#link-diagrams-into-an-atlas)). **D2 reference**
+   contains searchable examples.
 2. **Explore:** click **Checkout** in the default diagram, then **Charge** to drill
    deeper. Use breadcrumbs or **Boards** to move around, hover a link to preview its
-   board, or zoom and drag to inspect the diagram.
+   board, or zoom and drag to inspect the diagram. In a folder, links to other files
+   open them with breadcrumbs that lead back, and **Atlas map** under the project in the
+   filename menu draws every file and the links between them.
    Click an ordinary shape to select its source. On narrow screens, switch between
    **Preview** and **Source**.
 3. **Keep and share:** use **Save .d2** (⌘S / Ctrl+S) for source. In **Export**, choose
    **Interactive diagram (HTML)** for one file with offline drill-down navigation,
+   **Interactive atlas (HTML)** for a project file and every file it links to,
    **Current board image** as SVG or PNG, or **All boards as SVG (ZIP)**.
 
 Edits have browser recovery backups, but save a disk copy to keep them. Browsers
@@ -55,9 +62,9 @@ good preview; **Go to error** and **Diagnostics** lead back to the relevant sour
 
 ## Guides
 
-- [Workspace guide](docs/workspace.md): projects, saving and recovery, navigation,
-  source editing, diagnostics, keyboard controls, reference, side-by-side diagrams,
-  and exports.
+- [Workspace guide](docs/workspace.md): projects, atlases of linked files, saving and
+  recovery, navigation, source editing, diagnostics, keyboard controls, reference,
+  side-by-side diagrams, and exports.
 - [Standard library](stdlib/README.md): classes for flows, mind maps and common roles,
   and a project style sheet that restyles every diagram that uses them.
 - [Ask AI](docs/ai.md): local Claude Code / Codex setup, configuration, cancellation,

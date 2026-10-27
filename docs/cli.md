@@ -10,6 +10,8 @@ pnpm zoomflow lint fixtures/lint/imported.d2 --boundary-ports
 pnpm zoomflow export fixtures/order.d2 --all --format svg -o artifacts/order-svg.zip
 pnpm zoomflow export fixtures/order.d2 --all --format png -o artifacts/order-png.zip
 pnpm zoomflow export fixtures/order.d2 --all --format html -o artifacts/order.html
+pnpm zoomflow lint fixtures/atlas/index.d2 --follow
+pnpm zoomflow export fixtures/atlas/index.d2 --format html -o artifacts/atlas.html
 ```
 
 The workspace installs the `zoomflow` executable (`pnpm exec zoomflow`);
@@ -42,6 +44,29 @@ extension are case-insensitive. Existing exports at that destination are replace
 directory there is rejected before rendering (`Output is a directory`).
 Exports succeed with dangling board links but print a one-line summary such as
 `zoomflow: 1 dangling link (run zoomflow lint)` on stderr.
+
+### File links and atlases
+
+File links (`link: ./health.d2`, `link: "../index.d2#/Board"`; see the
+[atlas guide](workspace.md#link-diagrams-into-an-atlas)) are checked by every lint
+run: a link must open a regular `.d2` file inside `--root`, by the same rules as imports
+(a symlinked target counts as missing), and a fragment must name a board that file has.
+`lint --follow` also lints every file reachable through file links, breadth first and
+each once, so cycles end. Each diagnostic names its file, the summary ends `in N files`,
+and `--json` adds `files` plus `file` on every diagnostic and boundary; without
+`--follow` the JSON shape is unchanged. A reached file that does not compile fails the
+run with exit **2**. `--follow` applies to lint only; using it with export is a usage error.
+
+SVG and PNG exports without `--all` read only the input. HTML and `--all` bundle every
+file reachable through file links: HTML becomes one offline atlas whose other files
+use addresses like `#/@file/health.d2/Sleep`, with cross-file breadcrumbs, Escape and
+Back, and ZIPs keep the input's boards at their usual paths and put each other file's
+boards under `@files/<path>/`, with file links rewritten to the target file's root
+image. When nothing else is reached, the output is the same as before. A linked file
+that does not compile is left out with a warning such as
+`zoomflow: left out work/plan.d2, which links open: …`; links to it, or to files outside
+`--root`, then show as missing in HTML and lose their target in ZIPs. The dangling-link
+summary counts missing boards and files across every bundled file.
 
 Lint uses the pinned bundled WASM compiler and needs no native D2 installation.
 Exit status is **0** for success (including warnings), **1** for lint errors,

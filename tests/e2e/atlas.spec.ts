@@ -264,3 +264,43 @@ test('creates a new linked flow that opens, stays editable, and links on from it
   expect(await editorText(page)).toContain('\n# Boards that open from shapes on this board.\nExercise.link: "./Exercise.d2"\n');
   await expect(page.locator('#viewer .zf-stage a[data-file="./Exercise.d2"]')).not.toHaveAttribute('data-missing', '');
 });
+
+test('the atlas map draws every project file and file link, groups unlinked files, and opens a file on click', async ({ page }) => {
+  await page.goto('/');
+  await openFolder(page, atlas);
+  await showing(page, 'index.d2');
+  await page.locator('#example-picker > summary').click();
+  await page.getByRole('button', { name: 'Atlas map of the atlas project' }).click();
+  await expect(page.locator('#filename')).toHaveText('Atlas map');
+  await expect(page.locator('#filename')).toHaveAttribute('title', 'atlas/Atlas map');
+  await previewReady(page);
+
+  const stage = page.locator('#viewer .zf-stage');
+  const files = stage.locator('a[data-file]');
+  await expect(files).toHaveCount(5);
+  for (const path of ['index', 'health', 'work/index', 'projects/zoomflow', 'broken/links']) {
+    await expect(stage.locator(`a[data-file="./${path}.d2"]`)).toHaveCount(1);
+  }
+  await expect(stage.locator('a[data-missing]')).toHaveCount(0);
+  await expect(stage).toContainText('Not linked from anywhere');
+  await expect(stage).toContainText('Viewer');
+  // The map is generated: its source cannot be typed over or saved over a project file.
+  await expect(page.locator('#editor .cm-content')).toHaveAttribute('aria-readonly', 'true');
+  await expect(page.locator('#save-file')).toBeHidden();
+  await expect(page.locator('#draft-status')).toHaveText('Atlas map · read-only, drawn from the project files');
+  expect(await editorText(page)).toContain('Not linked from anywhere');
+
+  await stage.locator('a[data-file="./health.d2"]').click();
+  await showing(page, 'health.d2');
+  await expect(crumbs(page)).toHaveText(['Root']);
+  await expect(page.locator('#save-file')).toBeVisible();
+  // Back returns to the map, as it would to a file.
+  await page.goBack();
+  await expect(page.locator('#filename')).toHaveText('Atlas map');
+  await previewReady(page);
+  await expect(files).toHaveCount(5);
+
+  // The map is not kept: a reload shows the project file the pane showed before it, here the one Back came from.
+  await page.reload();
+  await showing(page, 'health.d2');
+});

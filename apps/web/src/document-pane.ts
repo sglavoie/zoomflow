@@ -14,6 +14,7 @@ import { setupBoardTools } from './board-tools';
 import { boardRoute, setupLinkPreview } from './link-preview';
 import { boardSites } from './board-model';
 import { createProjectFile, type DirectoryHandles, type FileHandles } from './file-handles';
+import { atlasMapSource, fileLinks as linksOfFile, type AtlasFile } from './atlas-map';
 import type { setupFlowBuilder } from './flow-builder';
 import type { setupMindMapBuilder } from './mind-map-builder';
 import type { DraftState, setupExamplePicker } from './example-picker';
@@ -87,8 +88,11 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
   const picker = () => shared.picker();
   /** The project files of this pane's document, by project path; undefined outside a folder project. */
   function projectSources() {
-    return picker().projectName(id) === undefined ? undefined : picker().compilation(id);
+    return picker().projectName(id) === undefined && picker().atlasProject(id) === undefined ? undefined : picker().compilation(id);
   }
+  /** The pane shows a project's generated atlas map, which is read-only and never saved. */
+  const showsAtlas = () => currentDocumentKey?.startsWith('atlas:') === true;
+  const atlasReadOnly = 'The atlas map is drawn from the project files and is read-only. Open a file to edit it.';
   /** The project path a file link of this document opens, when it stays inside the project. */
   const linkedPath = (path: string) => projectSources() && resolveFilePath(picker().inputPath(id), path);
   const fileLabel = (path: string) => projectLabel(linkedPath(path) ?? path.replace(/^.*\//, ''));
@@ -254,6 +258,7 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
     status: (message, kind) => setActivity(message, kind),
     undo: () => { immediate = true; editor.undo(); immediate = false; },
     redo: () => { immediate = true; editor.redo(); immediate = false; },
+    readOnly: showsAtlas,
     files: () => {
       const context = projectSources();
       if (!context) return;
@@ -355,7 +360,8 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
     if (target.pane !== id) { viewer.setMessage(`${target.name} is open in the other pane.`, true); return; }
     // Coming back to a file on the way here shortens the way instead of repeating it.
     const earlier = fileStack.findIndex((visit) => visit.key === target.key);
-    const stack = target.key === currentDocumentKey ? fileStack : earlier >= 0 ? fileStack.slice(0, earlier) : [...fileStack, here];
+    // A file opened from the atlas map starts a new way through files, as one chosen from the menu does.
+    const stack = showsAtlas() ? [] : target.key === currentDocumentKey ? fileStack : earlier >= 0 ? fileStack.slice(0, earlier) : [...fileStack, here];
     void visitFile(target, { hash: boardRoute(hash) }, stack);
   }
   /** Reopen a file on the way here at the board it was left on. */
@@ -377,12 +383,45 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
   /** Back or Forward reached an entry of another file: open it when it belongs to this pane's project. */
   function restoreFromHistory(state: { zoomflowFile: string } & Record<string, unknown>) {
     const key = state.zoomflowFile;
-    if (!key.startsWith('project:') || !currentDocumentKey?.startsWith('project:') ||
-      siblingKey(currentDocumentKey, '') !== siblingKey(key, '')) return false;
-    const target = picker().selectProjectPath(id, key.split(':').slice(2).join(':'));
+    const inProject = /^(project|atlas):/;
+    if (!inProject.test(key) || !inProject.test(currentDocumentKey ?? '') ||
+      siblingKey(currentDocumentKey!, '') !== siblingKey(key, '')) return false;
+    const target = key.startsWith('atlas:') ? picker().showAtlas(id, key.slice('atlas:'.length))
+      : picker().selectProjectPath(id, key.split(':').slice(2).join(':'));
     if (!target || target.pane !== id) return false;
     void replaceDocument(target.source, target.name, target.key, false, viewer.route, savedStack(state.zoomflowFiles));
     return true;
+  }
+  let atlasRequest = 0;
+  /** Draw a project's atlas map from its files' latest sources, compiling each file to find its links, and show it. */
+  async function openAtlasMap(projectId: string) {
+    const request = ++atlasRequest;
+    const { fs, home } = picker().projectSources(projectId);
+    const paths = Object.keys(fs).sort((a, b) => a.localeCompare(b));
+    const files: AtlasFile[] = [];
+    try {
+      for (const [index, path] of paths.entries()) {
+        setActivity(`Drawing the atlas map: ${path} (${index + 1} of ${paths.length})…`);
+        try {
+          const compiled = await compileSource(fs[path], { inputPath: path, fs });
+          files.push({ path, links: linksOfFile(compiled.diagram, path) });
+        } catch (error) {
+          if (error instanceof CompilerStartupError) throw error;
+          files.push({ path, links: [], failed: true });
+        }
+        if (request !== atlasRequest) return;
+      }
+    } catch (error) {
+      if (request === atlasRequest) setActivity(`Could not draw the atlas map: ${describeError(error)}`, 'error');
+      return;
+    }
+    const target = picker().showAtlas(id, projectId, atlasMapSource(files, home));
+    if (!target) { setActivity(''); return; }
+    if (target.pane !== id) { setActivity(`${target.name} is open in the other pane.`); return; }
+    const failed = files.filter((file) => file.failed).length;
+    setActivity(failed ? `${plural(failed, 'file')} did not compile, so ${failed === 1 ? 'its links are' : 'their links are'} left out.` : '');
+    await replaceDocument(target.source, target.name, target.key, true);
+    showView('preview');
   }
   /** Dim the source outside the board on view; `opened` scrolls to it unless someone is typing there. */
   function showBoardSource(opened: boolean) {
@@ -406,7 +445,7 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
   }
   setupSaveFile(saveFileButton, {
     fileHandles: shared.fileHandles, picker,
-    key: () => currentDocumentKey, name: () => documentName, source: () => editor.source,
+    key: () => showsAtlas() ? undefined : currentDocumentKey, name: () => documentName, source: () => editor.source,
     adopt: (saved) => { adopt(saved); setActivity(''); },
     setActivity, activity: () => activityStatus.textContent,
   });
@@ -422,7 +461,7 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
     setFileStack(stack);
     delete root.dataset.empty;
     picker().refresh();
-    editor.open(key, source, reset);
+    editor.open(key, source, reset, key.startsWith('atlas:'));
     invalidateSource();
     compileError.hide();
     clearTimeout(debounce);
@@ -443,6 +482,7 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
 
   async function formatSource() {
     if (formatButton.disabled) return;
+    if (showsAtlas()) { setFormatStatus(atlasReadOnly); return; }
     const revision = documentRevision;
     const document = editor.view.state.doc;
     const source = editor.source;
@@ -462,6 +502,7 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
   }
   formatButton.addEventListener('click', () => void formatSource());
   part('clear-source').addEventListener('click', () => {
+    if (showsAtlas()) return;
     if (editor.replaceSource('', 'delete.clear')) setActivity('Source cleared. Undo with ⌘Z / Ctrl+Z.');
     editor.view.focus();
   });
@@ -721,7 +762,8 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
     /** The preview reflects the current source, so exports and source selection are valid. */
     get current() { return mappedSource === editor.source; },
     replaceDocument,
-    save: () => saveFileButton.click(),
+    save: () => { if (showsAtlas()) setActivity(atlasReadOnly); else saveFileButton.click(); },
+    openAtlasMap,
     /** Name the document for its exports and downloads; returns the name it was given. */
     rename(name: string) {
       const renamed = picker().rename(id, name);
@@ -786,6 +828,8 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
       else editor.view.focus();
     },
     renderDraftState({ dirty, recoveryAvailable, savePending, hasDraft, downloadRequested }: DraftState) {
+      const atlas = showsAtlas();
+      for (const name of ['save-file', 'format-source', 'clear-source']) part(name).hidden = atlas;
       const handle = currentDocumentKey ? shared.fileHandles.get(currentDocumentKey) : undefined;
       const canSave = Boolean(handle) || canChooseSaveFile();
       saveFileButton.textContent = canSave ? 'Save .d2' : 'Download .d2';
@@ -793,7 +837,7 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
       const recovery = !recoveryAvailable ? 'Browser draft unavailable' : savePending ? 'Saving browser draft…' : 'Browser draft saved';
       const file = downloadRequested ? 'Source download started' : handle && !dirty ? 'Saved to file'
         : dirty ? 'File has unsaved changes' : hasDraft ? 'Save a file copy to keep' : 'Edit to update the preview';
-      const status = recoveryAvailable ? file : `${file} · Browser draft unavailable`;
+      const status = atlas ? 'Atlas map · read-only, drawn from the project files' : recoveryAvailable ? file : `${file} · Browser draft unavailable`;
       // Do not repeatedly announce unchanged file state during background backups.
       if (draftStatus.textContent !== status) draftStatus.textContent = status;
       draftStatus.dataset.kind = recoveryAvailable ? 'info' : 'error';

@@ -61,6 +61,38 @@ handles keep them for the page session only. The CLI resolves
 local D2 imports within its project root. Markdown labels render as native SVG text, but
 Markdown images are dropped and rich HTML labels (`foreignObject`) remain unsupported.
 
+## File links and atlas routes
+
+A file link is classified by `classifyHref` as `{ kind: 'file', path, hash }` when it is
+a `./` or `../` path ending in `.d2`, optionally followed by a `#/…` fragment;
+`resolveFilePath(fromPath, path)` turns it into a project path or `undefined` above the
+root. Both are self-contained because the offline runtime serializes them. A spike
+against the pinned `0.1.34-zoomflow.1` compiler, pinned in
+`packages/core/test/d2-contract.test.ts`, showed what D2 keeps:
+
+| Authored link | Compiled `shape.link` |
+| --- | --- |
+| `link: ./health.d2` | `./health.d2` |
+| `link: "./health.d2#/Sleep/Night"` | `./health.d2#/Sleep/Night` |
+| `link: "../other.d2"` (inside a layer) | `../other.d2` |
+| `link: "./My Life.d2"` | `./My Life.d2` |
+| `link: health.d2` / `link: "health.d2"` | `""` (silently dropped: read as a board path) |
+| `link: "work/plan.d2"` | `""` (silently dropped) |
+
+Rendered SVG anchors carry the compiled value verbatim. Lint recovers dropped bare
+links from the AST (`bare-file-link`), the same way it recovers missing board links.
+Recheck this table when upgrading D2.
+
+Atlas routes: the entry file keeps its usual routes (`#/`, `#/Board`); every other file
+uses `#/@file/<encodeURIComponent(path)>` followed by its own board segments, for
+example `#/@file/health.d2/Sleep`. `@` already marks `@scenarios` and `@steps`, and
+literal board names are percent-encoded, so `@file` cannot collide with a board name.
+`atlasHash(path, boardHash)` and `parseAtlasHash(hash)` in core build and read these
+routes. Atlas HTML carries a second JSON script, `#zoomflow-files` (`[{ path, name }]`),
+and its runtime follows file links only when that script exists. Atlas ZIPs put other
+files under `@files/<path>/`. The web app's atlas map (`apps/web/src/atlas-map.ts`) is
+generated D2 compiled as the project root's `index`, so its links are `./<path>`.
+
 ## Source locations and lint contracts
 
 The core API `lint(compiled, { missingBacklink: false, boundaryPorts: false })` accepts the D2 compile

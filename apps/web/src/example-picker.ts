@@ -3,6 +3,7 @@ import type { Draft } from './draft-store';
 import { setupDocumentActions } from './document-actions';
 import { createDraftLibrary, exampleSource, isOwnDraft } from './draft-library';
 import { flowFilename } from './flow-model';
+import { atlasMapName } from './atlas-map';
 import { draftRow, projectGroup, type ProjectGroup } from './picker-rows';
 import { setText } from './text';
 
@@ -36,9 +37,17 @@ export type PickerHost = {
   /** Capture per-document state before removal; the returned function restores it on undo. */
   checkpoint: (key: string) => () => void;
   focusPane: (pane: PaneId) => void;
+  /** Draw a project's atlas map in a pane. */
+  openAtlas: (pane: PaneId, projectId: string) => void;
 };
 
-export function setupExamplePicker({ readSource, open, onState, forget, checkpoint, focusPane }: PickerHost) {
+/** The file a folder project opens at: its home board, index.d2, as an atlas starts there. */
+function homePath(paths: string[]) {
+  return paths.find((path) => /^index\.d2$/i.test(path)) ?? paths.find((path) => /^main\.d2$/i.test(path)) ??
+    paths.find((path) => !path.includes('/')) ?? paths[0];
+}
+
+export function setupExamplePicker({ readSource, open, onState, forget, checkpoint, focusPane, openAtlas }: PickerHost) {
   const picker = document.querySelector<HTMLDetailsElement>('#example-picker')!;
   const summary = picker.querySelector('summary')!;
   const menu = picker.querySelector<HTMLElement>('.example-menu')!;
@@ -131,6 +140,8 @@ export function setupExamplePicker({ readSource, open, onState, forget, checkpoi
     let matches = 0;
     const visibleProjects = new Set<string>();
     for (const item of drafts.values()) {
+      // Atlas maps open from their project's heading, not from a row.
+      if (item.atlasOf) continue;
       const visible = !query || `${item.name} ${item.title} ${item.path ?? ''} ${item.description}`.toLocaleLowerCase().includes(query);
       rows.get(item.key)!.hidden = !visible;
       if (visible) matches++;
@@ -139,7 +150,7 @@ export function setupExamplePicker({ readSource, open, onState, forget, checkpoi
     for (const [id, group] of projectGroups) {
       group.section.hidden = !visibleProjects.has(id);
       if (query) group.files.hidden = false;
-      else group.files.hidden = currentDraft()?.projectId !== id;
+      else group.files.hidden = (currentDraft()?.projectId ?? currentDraft()?.atlasOf) !== id;
       group.toggle.setAttribute('aria-expanded', String(!group.files.hidden));
     }
     fileHeading.hidden = ![...fileOptions.children].some(node => !(node as HTMLElement).hidden);
@@ -153,7 +164,7 @@ export function setupExamplePicker({ readSource, open, onState, forget, checkpoi
   async function removeDrafts(item: Draft, wholeProject = Boolean(item.projectId && !item.recoveredFrom)) {
     const projectId = wholeProject ? item.projectId : undefined;
     syncSources();
-    const removed = [...drafts.values()].filter((draft) => projectId ? draft.projectId === projectId : draft.key === item.key);
+    const removed = [...drafts.values()].filter((draft) => projectId ? draft.projectId === projectId || draft.atlasOf === projectId : draft.key === item.key);
     const unsaved = removed.filter(draft => draft.source !== draft.baseline).length;
     const name = projectId ? item.title.split('/')[0] : item.name;
     if (!await actions.confirm(`Remove ${name}?`,
@@ -201,7 +212,11 @@ export function setupExamplePicker({ readSource, open, onState, forget, checkpoi
     const id = item.projectId!;
     const existing = projectGroups.get(id);
     if (existing) return existing.files;
-    const group = projectGroup(item, () => removeDrafts(item, true));
+    const group = projectGroup(item, () => removeDrafts(item, true), () => {
+      picker.open = false;
+      summary.focus();
+      openAtlas(target, id);
+    });
     fileOptions.append(group.section);
     projectGroups.set(id, group);
     return group.files;
@@ -239,6 +254,7 @@ export function setupExamplePicker({ readSource, open, onState, forget, checkpoi
   }
 
   function addOption(item: Draft) {
+    if (item.atlasOf) return;
     const { row, button, refresh } = draftRow(item, {
       choose: () => {
         picker.open = false;
@@ -347,11 +363,41 @@ export function setupExamplePicker({ readSource, open, onState, forget, checkpoi
     },
     currentKey(pane: PaneId) { return current[pane]; },
     projectName(pane: PaneId) { const draft = draftOf(pane); return draft?.projectId ? draft.title.split('/')[0] : undefined; },
+    /** The project whose atlas map the pane shows. */
+    atlasProject(pane: PaneId) { return draftOf(pane)?.atlasOf; },
+    /** A project's files by path, with their latest edits, and the file it opens at. */
+    projectSources(projectId: string) {
+      syncSources();
+      const fs: Record<string, string> = Object.create(null);
+      for (const item of drafts.values()) if (item.projectId === projectId && item.path && !item.recoveredFrom) fs[item.path] = item.source;
+      return { fs, home: homePath(Object.keys(fs).sort((a, b) => a.localeCompare(b))) };
+    },
+    /** Show a project's atlas map in the pane, drawn from `source`, or as last drawn; or report the other pane showing it.
+     * A map is never saved: a reload shows the project file the pane showed before it. */
+    showAtlas(pane: PaneId, projectId: string, source?: string) {
+      const key = `atlas:${projectId}`;
+      const existing = drafts.get(key);
+      source ??= existing?.source;
+      if (source === undefined) return;
+      syncSources();
+      const from = draftOf(pane);
+      const opener = from?.projectId === projectId && !from.recoveredFrom ? from.key : from?.atlasOf === projectId ? from.opener
+        : existing?.opener ?? [...drafts.values()].find((item) => item.projectId === projectId && !item.recoveredFrom)?.key;
+      const project = opener && drafts.get(opener);
+      if (!project) return;
+      const atlas: Draft = Object.assign(existing ?? { key, name: atlasMapName, description: 'Generated from the project files · read-only' },
+        { title: `${project.title.split('/')[0]}/${atlasMapName}`, source, baseline: source, atlasOf: projectId, opener });
+      drafts.set(key, atlas);
+      if (split && current[otherPane(pane)] === key) return { pane: otherPane(pane), source, name: atlas.name, key };
+      activate(key, pane);
+      schedulePersist();
+      return { pane, source, name: atlas.name, key };
+    },
     inputPath: library.inputPath,
     compilation: library.compilation,
     /** Open another file of the pane's project, or report the pane already showing it. */
     selectProjectPath(pane: PaneId, path: string) {
-      const projectId = draftOf(pane)?.projectId;
+      const projectId = draftOf(pane)?.projectId ?? draftOf(pane)?.atlasOf;
       const file = [...drafts.values()].find((item) => item.projectId === projectId && item.path === path && !item.recoveredFrom);
       if (!file) return;
       if (current[otherPane(pane)] === file.key) return { pane: otherPane(pane), source: file.source, name: file.name, key: file.key };
@@ -397,7 +443,7 @@ export function setupExamplePicker({ readSource, open, onState, forget, checkpoi
      * Renaming a built-in example moves its edits to a new draft with that name, as saving one does. */
     rename(pane: PaneId, name: string) {
       let draft = draftOf(pane);
-      if (!draft || draft.projectId) return;
+      if (!draft || draft.projectId || draft.atlasOf) return;
       // A blank name keeps the current one, and so does a field left as shown: `Diagram.D2` shows as `Diagram`.
       const current = draft.name.replace(/\.d2$/i, '');
       name = flowFilename(name, current);
@@ -465,9 +511,8 @@ export function setupExamplePicker({ readSource, open, onState, forget, checkpoi
         drafts.set(key, item);
         addOption(item);
       }
-      // An atlas starts at its home board, index.d2.
-      const first = files.find((file) => /^index\.d2$/i.test(file.path)) ?? files.find((file) => /^main\.d2$/i.test(file.path)) ??
-        files.find((file) => !file.path.includes('/')) ?? files[0];
+      const home = homePath(files.map((file) => file.path));
+      const first = files.find((file) => file.path === home)!;
       activate(keys[first.path]);
       picker.open = false;
       persist();

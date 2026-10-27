@@ -108,7 +108,8 @@ export class SourceEditor {
   }
   get source() { return this.view.state.doc.toString(); }
   get selection() { return this.view.state.selection.main; }
-  open(key: string, source: string, reset = false) {
+  /** `readOnly` keeps the source from being typed over, for generated documents. */
+  open(key: string, source: string, reset = false, readOnly = false) {
     this.clearAiHighlights();
     const active = document.activeElement;
     const editing = this.view.hasFocus;
@@ -116,7 +117,8 @@ export class SourceEditor {
     const saved = reset ? undefined : this.documents.get(key);
     this.currentKey = key;
     const restore = saved?.state.doc.toString() === source ? saved : undefined;
-    this.view.setState(restore?.state ?? EditorState.create({ doc: source, extensions: this.extensions }));
+    this.view.setState(restore?.state ?? EditorState.create({ doc: source,
+      extensions: readOnly ? [...this.extensions, EditorState.readOnly.of(true)] : this.extensions }));
     this.view.dispatch({ effects: [restore?.scroll ?? EditorView.scrollIntoView(0, { y: 'start' }), highlightAiLines.of([])] });
     // Keep focus with the picker, diagram, or editor that initiated the switch.
     if (editing) this.view.focus();

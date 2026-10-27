@@ -34,6 +34,8 @@ type BoardToolsOptions = {
   redo: () => void;
   /** Links to other files, only in folder projects. */
   files?: () => FileLinkHost | undefined;
+  /** The document is generated and read-only: shapes only open the files they link to. */
+  readOnly?: () => boolean;
 };
 type Item = (label: string, run: (returnFocus: HTMLElement) => void, options?: { relinks?: boolean; keys?: string }) => HTMLButtonElement;
 
@@ -280,6 +282,11 @@ export function setupBoardTools(scope: PaneScope, viewer: Viewer, options: Board
   /** The actions for a shape, as buttons for the selection bar or items in the menu. */
   function actions(shape: string, item: Item, boardsOnly = false) {
     const items: HTMLButtonElement[] = [];
+    if (options.readOnly?.()) {
+      const action = shapeAction(shape);
+      const files = options.files?.();
+      return action.action === 'file' && files ? [item('Open diagram', () => files.open(action.link))] : [];
+    }
     const canvas = boardsOnly ? undefined : canvasTarget(shape);
     if (canvas) {
       items.push(item('Rename', () => startRename(shape), { keys: 'F2' }),

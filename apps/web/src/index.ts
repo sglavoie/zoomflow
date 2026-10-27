@@ -141,6 +141,7 @@ const examplePicker = setupExamplePicker({
     };
   },
   focusPane: (pane) => focusPane(pane),
+  openAtlas: (pane, projectId) => void panes[pane]?.openAtlasMap(projectId),
 });
 
 function showDocumentState(dirty: boolean, name?: string, project = false) {

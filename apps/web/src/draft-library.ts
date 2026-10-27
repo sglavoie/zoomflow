@@ -5,8 +5,8 @@ import { setText } from './text';
 
 export const exampleSource = (key: string) => examples.find((example) => example.name === key)?.source;
 /** The draft differs from a bundled example, so only the browser or a file keeps it. */
-export const isOwnDraft = (item: Draft) => item.key.startsWith('file:') || Boolean(item.projectId) ||
-  item.source !== exampleSource(item.key) || item.baseline !== exampleSource(item.key);
+export const isOwnDraft = (item: Draft) => !item.atlasOf && (item.key.startsWith('file:') || Boolean(item.projectId) ||
+  item.source !== exampleSource(item.key) || item.baseline !== exampleSource(item.key));
 
 /** The bundled examples and the person's drafts, which pane shows each, and their browser backup.
  * `changed` runs after every save or scheduled save. */
@@ -96,7 +96,9 @@ export function createDraftLibrary(changed: () => void) {
     savePending = false;
     try {
       if (!store) store = new DraftStore(localStorage);
-      store.save([...drafts.values()].filter(isOwnDraft), current.a!, current.b);
+      // A reload shows the project file an atlas map was opened from; the map itself is generated again on request.
+      const stored = (key: string | undefined) => key && drafts.get(key)?.atlasOf ? drafts.get(key)!.opener : key;
+      store.save([...drafts.values()].filter(isOwnDraft), stored(current.a)!, stored(current.b));
       // Only another tab's writes, announced by storage events, start a conflict; a save can end one.
       if (conflictShown) checkConflicts();
       recoveryAvailable = true;
@@ -134,6 +136,13 @@ export function createDraftLibrary(changed: () => void) {
     compilation(pane: PaneId) {
       const draft = draftOf(pane);
       if (!draft) return { inputPath: 'index', fs: { index: '' } };
+      // An atlas map compiles as the project root's `index`, so its links reach every project file.
+      if (draft.atlasOf) {
+        const fs: Record<string, string> = Object.create(null);
+        for (const item of drafts.values()) if (item.projectId === draft.atlasOf && item.path && !item.recoveredFrom) fs[item.path] = item.source;
+        fs.index = draft.source;
+        return { inputPath: 'index', fs };
+      }
       if (!draft.projectId || !draft.path) return { inputPath: 'index', fs: { index: draft.source } };
       const fs: Record<string, string> = Object.create(null);
       for (const item of drafts.values()) if (item.projectId === draft.projectId && item.path && !item.recoveredFrom) fs[item.path] = item.source;
