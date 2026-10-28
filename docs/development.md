@@ -107,11 +107,13 @@ range's filename before applying it to an editor. The editor keeps foreign file 
 without a usable source location remain in the list without a misleading line-1 marker.
 
 D2 silently strips missing shape links. The linter checks retained AST assignments
-as well as compiled links to recover these. The root AST does not expand imports
-or class templates: missing links supplied only by those root-level constructs
-cannot currently be recovered. Child-board ASTs are expanded by D2. Boundary
-checks use compiled identifiers/classes and do cover imported nodes. This
-compiler limitation does not affect valid-link navigation or boundary checking.
+as well as compiled links to recover these. The root AST keeps imports, globs and
+class templates unexpanded, and child-board ASTs hold links D2 already resolved, so
+lint also reads links from the source text: imported files at each shape's reference,
+glob statements with their `&` filters (evaluated against the compiled attributes, as
+D2 does), and class definitions, resolved from the board that defines the class.
+Substituted board links, which D2 always drops, are reported as such. Boundary
+checks use compiled identifiers/classes and do cover imported nodes.
 
 
 [Browser test guidance](../tests/e2e/README.md) · [Command line and CI](cli.md)

@@ -509,7 +509,9 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
       setFormatStatus(editor.format(formatted) ? 'Source formatted.' : 'Source is already formatted.');
     } catch (error) {
       if (editor.view.state.doc !== document || documentRevision !== revision) return;
-      setFormatStatus(`Formatting failed: ${compilerDiagnostics(error, source, picker().inputPath(id)).map((item) => item.message).join('\n')}`, 'error');
+      // A restart or closed workspace says nothing about the source.
+      if (isEngineUnavailable(error)) { setFormatStatus('Formatting stopped because the diagram engine was unavailable. Try again.', 'error'); return; }
+      setFormatStatus(`Formatting failed:${compilerDiagnostics(error, source, picker().inputPath(id)).map((item) => item.message).join('\n')}`, 'error');
     } finally { formatButton.disabled = false; }
   }
   formatButton.addEventListener('click', () => void formatSource());

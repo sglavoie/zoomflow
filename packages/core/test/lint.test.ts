@@ -315,8 +315,8 @@ layers.L: {up.link: _; over.link: _._; there.link: _.layers.L; e.link: mailto:a@
     { rule: 'ignored-link', severity: 'warning', board: 'root', item: 'b', message: 'Link "./x" is not a board or web address, so the viewer ignores it.' },
     { rule: 'ignored-link', severity: 'warning', board: 'root', item: '(c -> d)[0]', message: 'Link "./y" is not a board or web address, so the viewer ignores it.' },
     { rule: 'ignored-link', severity: 'warning', board: 'root', item: 'a', message: 'Link "_" goes above the root board, so the viewer ignores it.' },
-    { rule: 'ignored-link', severity: 'warning', board: 'root.layers.L', item: 'over', message: 'Link "root._" goes above the root board, so the viewer ignores it.' },
-    { rule: 'ignored-link', severity: 'warning', board: 'root.layers.L.layers.M', item: 'f', message: 'Link "root._" goes above the root board, so the viewer ignores it.' },
+    { rule: 'ignored-link', severity: 'warning', board: 'root.layers.L', item: 'over', message: 'Link "_._" goes above the root board, so the viewer ignores it.' },
+    { rule: 'ignored-link', severity: 'warning', board: 'root.layers.L.layers.M', item: 'f', message: 'Link "_._._" goes above the root board, so the viewer ignores it.' },
   ]);
   expect(result.diagnostics.every((item) => item.range?.startsWith('index,'))).toBe(true);
 });
@@ -455,6 +455,116 @@ it('names a board that a link cannot reach because its name has a backslash or q
     'Link targets missing board "Root > bs". Did you mean "Root > b\\s"? Board names with backslashes or quotes cannot be link targets, so rename it.',
   ]);
   expect(lint(await compile('a.link: layers.qx\nlayers."q\\"y": {c}')).diagnostics[0].message).toBe('Link targets missing board "Root > qx".');
+});
+
+it('finds dropped links written in imported files, at the root and in layers, from their own text', async () => {
+  const part = 'a.link: layers.missing\nb: Label {style: {fill: red}; link: other.d2} # note\nc: {d: {link: ok}; link: "x\\".d2"}\n' +
+    'e: {link: "./kept.d2#/A"}\nf.link: ./kept.d2#/B';
+  const fs = { index: '...@part\ng: @part\nlayers.x: {...@part}\nz.link: layers.x', 'part.d2': part };
+  const result = await d2.compile({ fs, options: { layout: 'elk' } });
+  const files = { inputPath: 'index', exists: () => true };
+  // `c.d`'s own link is not `c`'s; kept links, such as `e` and `f`, were checked in their compiled form.
+  expect(lint({ ...result, fs }, { files }).diagnostics.map(({ rule, board, shape, range }) => [rule, board, shape, range])).toEqual([
+    ['dangling-link', 'root', 'a', 'part.d2,0:8:8-0:22:22'],
+    ['dangling-link', 'root', 'g.a', 'part.d2,0:8:8-0:22:22'],
+    ['bare-file-link', 'root', 'b', 'part.d2,1:36:59-1:44:67'],
+    ['bare-file-link', 'root', 'g.b', 'part.d2,1:36:59-1:44:67'],
+    ['bare-file-link', 'root', 'g.c', 'part.d2,2:25:101-2:33:109'],
+    ['bare-file-link', 'root', 'c', 'part.d2,2:25:101-2:33:109'],
+    ['ignored-link', 'root', 'c.d', 'part.d2,2:14:90-2:16:92'],
+    ['ignored-link', 'root', 'g.c.d', 'part.d2,2:14:90-2:16:92'],
+    ['dangling-link', 'root.layers.x', 'a', 'part.d2,0:8:8-0:22:22'],
+    ['bare-file-link', 'root.layers.x', 'b', 'part.d2,1:36:59-1:44:67'],
+    ['ignored-link', 'root.layers.x', 'c.d', 'part.d2,2:14:90-2:16:92'],
+    ['bare-file-link', 'root.layers.x', 'c', 'part.d2,2:25:101-2:33:109'],
+  ]);
+});
+
+it('finds dropped links that globs, substitutions and block strings set, in the entry file and imported ones', async () => {
+  const source = 'c: {d}\nab\nx\n"*": {y}\na*.link: layers.one\nc.*.link: layers.two\n"*".link: layers.three\n' +
+    'vars: {t: layers.k}\nx.link: ${t}\ny: {link: "${t}"}\nf: {link: |md layers.k|}\ng.link: |md layers.gone|\nlayers.k: {z}\nk.link: layers.k';
+  const rows = (result: Awaited<ReturnType<typeof d2.compile>>, fs: Record<string, string>) => lint({ ...result, fs }).diagnostics
+    .filter((item) => item.rule !== 'orphan-board').map(({ rule, shape, range, message }) => [rule, shape, range?.replace(/,.*/, ''), message]);
+  const expected = (file: string) => [
+    ['dangling-link', 'ab', file, 'Link targets missing board "Root > one".'],
+    ['dangling-link', 'c.d', file, 'Link targets missing board "Root > two".'],
+    ['dangling-link', '"*"', file, 'Link targets missing board "Root > three".'],
+    ['ignored-link', 'x', file, 'Link "${t}" uses a substitution, which D2 drops from board links, so the viewer ignores it. Write the board path itself.'],
+    ['ignored-link', 'y', file, 'Link "${t}" uses a substitution, which D2 drops from board links, so the viewer ignores it. Write the board path itself.'],
+    // D2 keeps a block string's link to a board that exists, as `f` has.
+    ['dangling-link', 'g', file, 'Link targets missing board "Root > gone".'],
+  ];
+  const entry = { index: source };
+  expect(rows(await d2.compile({ fs: entry, options: { layout: 'elk' } }), entry).sort()).toEqual(expected('index').sort());
+  const imported = { index: '...@part', 'part.d2': source };
+  expect(rows(await d2.compile({ fs: imported, options: { layout: 'elk' } }), imported).sort()).toEqual(expected('part.d2').sort());
+});
+
+it('applies globs only to the shapes their filters pass, as D2 does, and reads globs inside layers', async () => {
+  const base = 'a: A {shape: circle; style.fill: red; width: 90}\nb: B {icon: https://x.y/i.svg}\nc: {d}\na -> b\n';
+  const shapes = async (fs: Record<string, string>) => lint({ ...await d2.compile({ fs, options: { layout: 'elk' } }), fs }).diagnostics
+    .filter((item) => item.rule === 'dangling-link').map((item) => item.shape).sort();
+  for (const [filter, expected] of [['&shape: circle', ['a']], ['!&shape: circle', ['b', 'c', 'c.d']], ['&label: A*', ['a']], ['&label: "A*"', []],
+    ['&style.fill: red', ['a']], ['&width: 90', ['a']], ['&icon: https://x.y/i.svg', ['b']], ['&connected: false', ['c', 'c.d']],
+    ['&leaf: false', ['c']], ['&level: 1', ['c.d']], ['&id: c', []], ['&shape: circle; !&label: A', []]] as const) {
+    const glob = `**: {${filter}; link: layers.missing}`;
+    expect(await shapes({ index: base + glob }), filter).toEqual(expected);
+    expect(await shapes({ index: `${base}...@part`, 'part.d2': glob }), `${filter} imported`).toEqual(expected);
+  }
+  const layered = lint(await compile('layers.x: {*.link: layers.missing; a}\nz.link: layers.x')).diagnostics;
+  expect(layered.map(({ rule, board, shape, message }) => [rule, board, shape, message]))
+    .toEqual([['dangling-link', 'root.layers.x', 'a', 'Link targets missing board "Root > x > missing".']]);
+});
+
+it('finds dropped links that classes set, from the board that defines the class', async () => {
+  const rows = async (fs: Record<string, string>) => lint({ ...await d2.compile({ fs, options: { layout: 'elk' } }), fs }).diagnostics
+    .filter((item) => item.rule !== 'orphan-board').map(({ rule, board, shape, range, message }) => [rule, board, shape, range, message]);
+  expect(await rows({ index: 'classes: {x: {link: layers.one}}\nclasses.x.link: layers.two\na.class: x\nb: {class: x; link: layers.k}\n' +
+    'layers.k: {c.class: x; layers.two: {d}}' })).toEqual([
+    ['dangling-link', 'root', 'a', 'index,1:16:49-1:26:59', 'Link targets missing board "Root > two".'],
+    // D2 resolves the class's link from the root, which defines it, not from `k`, which has a `two`; the layer's AST
+    // places the class at its first definition, so the place comes from the root's own.
+    ['dangling-link', 'root.layers.k', 'c', 'index,1:16:49-1:26:59', 'Link targets missing board "Root > two".'],
+  ]);
+  expect(await rows({ index: '...@lib\na.class: [x; y]', 'lib.d2': 'classes: {x: {link: layers.gone}; y.link: other.d2}' })).toEqual([
+    ['bare-file-link', 'root', 'a', 'lib.d2,0:42:42-0:50:50', 'Link "other.d2" is read as a board path, so D2 drops it. To open the file, write link: "./other.d2".'],
+  ]);
+});
+
+it('checks the link of a class no shape takes where the class is written, without counting it as incoming', async () => {
+  const result = lint(await compile('classes: {x: {link: layers.gone}; y: {link: layers.k}; z: {link: "./x.d2"}}\nlayers.k: {a}'));
+  expect(result.diagnostics.map(({ rule, board, shape, range, message }) => [rule, board, shape, range, message])).toEqual([
+    ['dangling-link', 'root', undefined, 'index,0:20:20-0:31:31', 'Link targets missing board "Root > gone".'],
+    ['orphan-board', 'root.layers.k', undefined, 'index,1:7:83-1:8:84', 'Layer "Root > k" has no incoming board link.'],
+  ]);
+});
+
+it('explains that D2 applies no classes from a file imported under a key', async () => {
+  const fs = { index: 'g: @lib\ng.b.class: x\nc.class: nope', 'lib.d2': 'classes: {x: {link: layers.missing}}\na.class: x' };
+  const result = lint({ ...await d2.compile({ fs, options: { layout: 'elk' } }), fs });
+  const message = 'Class "x" is defined only in "lib", which is imported under a key, and D2 applies no classes from such a file, ' +
+    'so it changes nothing. Spread the file at the top, as in ...@lib, to use its classes.';
+  expect(result.diagnostics.map(({ rule, shape, message }) => [rule, shape, message])).toEqual([
+    // The class never applies, but its link is still broken where it is written.
+    ['dangling-link', undefined, 'Link targets missing board "Root > missing".'],
+    ['undefined-class', 'g.b', message],
+    ['undefined-class', 'c', 'Class "nope" is not defined, so it changes nothing. Check the spelling, or define it under classes.'],
+  ]);
+});
+
+it('finds dropped links on shapes whose IDs D2 quotes unlike board names', async () => {
+  for (const shape of ["'a$b'", 'a$b', 'NULL', 'Null', "c.'a$b'"]) {
+    const result = lint(await compile(`${shape}.link: layers.missing`));
+    expect(result.diagnostics.map((item) => item.rule), shape).toEqual(['dangling-link']);
+  }
+});
+
+it('names the board a connection link to a board named NULL meant', async () => {
+  const result = lint(await compile('a -> b: {link: layers.NULL}\nlayers.NULL: {x}'));
+  expect(result.diagnostics.map(({ rule, range, message }) => [rule, range, message])).toEqual([
+    ['ignored-link', 'index,0:15:15-0:26:26', 'D2 reads the link to board "Root > NULL" as one to "null", so the viewer ignores it. Rename the board to link to it.'],
+    ['orphan-board', 'index,1:7:35-1:11:39', 'Layer "Root > NULL" has no incoming board link.'],
+  ]);
 });
 
 it('resolves file links in imported files from the file that wrote them', async () => {

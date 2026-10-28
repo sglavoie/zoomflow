@@ -1,8 +1,9 @@
 import type { CompileResponse } from '@d2lang/d2';
-import { boardKey, classifyHref, indexBoards, resolveFilePath, type Board } from './index';
+import { boardKey, classifyHref, indexBoards, resolveFilePath, type Board, type Diagram } from './index';
 import { definedClasses } from './classes';
 import { boundaryNeighbours } from './context';
-import { linkSources, shapeRanges } from './source';
+import { fileLinkRules, importedLinks, importPath, linkAfterKey, linkSources, shapeAttributes, shapeRanges, type AuthoredLink, type GlobFilter,
+  type GlobSegment } from './source';
 
 export type LintRule = 'boundary-in' | 'boundary-out' | 'orphan-board' | 'dangling-link' | 'ignored-link' | 'missing-backlink'
   | 'undefined-class' | 'unsupported-label' | 'dangling-file-link' | 'missing-file-board' | 'bare-file-link';
@@ -52,13 +53,18 @@ export interface LintResult {
 }
 
 // Only the compiler AST fields needed to recover links D2 removes from shapes.
-interface AstString { range?: string; value?: string | { string?: string }[] }
+interface AstString { range?: string; value?: string | { string?: string }[]; pattern?: string[] }
 interface AstValue {
   unquoted_string?: AstString;
   double_quoted_string?: AstString;
   single_quoted_string?: AstString;
+  block_string?: { range?: string; value?: string };
+  boolean?: { value?: boolean };
+  number?: { raw?: string };
+  import?: AstImport;
   map?: AstMap;
 }
+interface AstImport { spread?: boolean; path?: AstValue[] }
 interface AstKey {
   range?: string;
   key?: { path?: AstValue[] };
@@ -67,8 +73,10 @@ interface AstKey {
   edge_key?: { path?: AstValue[] };
   primary?: AstValue;
   value?: AstValue;
+  ampersand?: boolean;
+  not_ampersand?: boolean;
 }
-interface AstMap { nodes?: { map_key?: AstKey }[] }
+interface AstMap { range?: string; nodes?: { map_key?: AstKey; import?: AstImport }[] }
 interface LintGraph {
   name?: string;
   ast?: AstMap;
@@ -84,9 +92,62 @@ function stringValue(value?: AstValue): string | undefined {
 function scalarRange(value?: AstValue): string | undefined {
   return (value?.unquoted_string ?? value?.double_quoted_string ?? value?.single_quoted_string)?.range;
 }
-/** Quote a key segment as D2 does in compiled IDs, so `"a b"` is `a b` but `"a.b"` stays quoted. */
+/** Quote a key segment as D2 does in compiled shape IDs, so `"a b"` is `a b` but `"a.b"` stays quoted. Unlike link
+ * targets, shape IDs leave `$` bare and spell `null` in any case as `'null'`. */
 function keySegment(value: AstValue): string {
-  return boardKey(stringValue(value) ?? '');
+  const name = stringValue(value) ?? '';
+  if (name.toLowerCase() === 'null') return "'null'";
+  const plain = name.replaceAll('$', '_');
+  return boardKey(plain) === plain ? name : boardKey(name);
+}
+/** D2 rewrites a connection's link to a board named `null` in any case, such as `NULL`, as `'null'`. */
+const nulled = (id: string) => id.replace(/(^|\.)(?:'null'|null)(?=\.|$)/gi, "$1'null'");
+/** The unquoted segments of a compiled shape ID, such as `c."a.b"`. */
+function idSegments(id: string): string[] {
+  return [...id.matchAll(/"((?:[^"\\]|\\.)*)"|'([^']*)'|([^.]+)/g)].map(([, double, single, plain]) => double?.replace(/\\(.)/g, '$1') ?? single ?? plain);
+}
+/** Whether a glob key path, where `*` matches within a segment and `**` any number of them, names a shape ID. */
+function globMatches(pattern: GlobSegment[], id: string[]): boolean {
+  const match = (p: number, s: number): boolean => {
+    if (p === pattern.length) return s === id.length;
+    const part = pattern[p];
+    if (part.glob && part.text === '**') {
+      for (let next = s + 1; next <= id.length; next++) if (match(p + 1, next)) return true;
+      return false;
+    }
+    if (s === id.length) return false;
+    const same = part.glob ? new RegExp(`^${part.text.split('*').map((piece) => piece.replace(/[.+?^${}()|[\]\\]/g, '\\$&')).join('.*')}$`, 'i').test(id[s])
+      : part.text.toLowerCase() === id[s].toLowerCase();
+    return same && match(p + 1, s + 1);
+  };
+  return match(0, 0);
+}
+/** Whether a shape passes a glob filter, as D2 reads them: by the shape's compiled attributes, such as `shape` or
+ * `style.fill`, with `level` from 0, and `leaf` and `connected` from the board. An attribute the shape lacks never
+ * matches, nor, in this D2, does `id`. */
+function filterMatches(filter: GlobFilter, board: Board, shape: Diagram['shapes'][number], attributes: Record<string, unknown>): boolean {
+  const segments = idSegments(shape.id);
+  const inside = (other: string) => {
+    const path = idSegments(other);
+    return path.length > segments.length && segments.every((segment, index) => segment === path[index]);
+  };
+  let actual: string | undefined;
+  if (filter.key === 'connected') actual = String(board.diagram.connections.some((item) => item.src === shape.id || item.dst === shape.id));
+  else if (filter.key === 'leaf') actual = String(!board.diagram.shapes.some((item) => inside(item.id)));
+  else if (filter.key === 'level') actual = String(segments.length - 1);
+  else if (filter.key !== 'id') {
+    let value: unknown = attributes;
+    for (const key of filter.key.split('.')) value = (value as Record<string, unknown> | undefined)?.[key];
+    const scalar = (value as { value?: unknown } | undefined)?.value;
+    if (typeof scalar === 'string') actual = scalar;
+    // D2 keeps an icon as a parsed URL.
+    const url = filter.key === 'icon' ? value as { Scheme?: string; Opaque?: string; Host?: string; Path?: string; RawQuery?: string; Fragment?: string } | undefined : undefined;
+    if (url?.Scheme !== undefined) actual = `${url.Scheme ? `${url.Scheme}:` : ''}${url.Opaque || `${url.Host ? `//${url.Host}` : ''}${url.Path ?? ''}`}` +
+      `${url.RawQuery ? `?${url.RawQuery}` : ''}${url.Fragment ? `#${url.Fragment}` : ''}`;
+  }
+  const pattern = filter.glob ? new RegExp(`^${filter.value.split('*').map((piece) => piece.replace(/[.+?^${}()|[\]\\]/g, '\\$&')).join('.*')}$`, 's') : undefined;
+  const hit = actual !== undefined && (pattern ? pattern.test(actual) : actual === filter.value);
+  return filter.negate ? !hit : hit;
 }
 /** The scalar of an edge's last `link` assignment, from `(a -> b)[0].link: x` or `a -> b: {link: x}`. */
 function edgeLink(entry: AstKey): AstValue | undefined {
@@ -193,6 +254,12 @@ export function lint(compiled: LintInput, options: LintOptions = {}): LintResult
   const owners = new Map<string, { board: Board; shape: string; child: Board }[]>();
   const label = (id: string) => boardLabel(id, boards);
   let ranges: Map<string, string> | undefined, sources: Map<string, string> | undefined;
+  let imported: ReturnType<typeof importedLinks> | undefined;
+  let attributesOf: ReturnType<typeof shapeAttributes> | undefined;
+  // Each board's class links, for the place an inherited class was written; and the classes files imported under a
+  // key define, with the import, since D2 applies none of those.
+  const classLinksOf = new Map<string, Map<string, { href: string; range?: string }>>();
+  const keyedClasses = new Map<string, string>();
   const shapeRange = (board: string, shape: string) =>
     (ranges ??= shapeRanges(compiled.diagram, compiled.graph)).get(JSON.stringify([board, shape]));
   function checkFileLink(href: string, path: string, hash: string, board: Board, shape?: string, range?: string, connection?: string) {
@@ -229,6 +296,14 @@ export function lint(compiled: LintInput, options: LintOptions = {}): LintResult
     if (!range || range.startsWith(',')) range = shape ? shapeRange(board.id, shape) : undefined;
     diagnostics.push({ ...diagnostic, board: board.id, shape, connection, range,
       ...(diagnostic.rule === 'dangling-file-link' ? { target: href } : {}) });
+  }
+  /** Report a link D2 removed for how it is written, not where it points. */
+  function dropped(board: Board, shape: string | undefined, link: AuthoredLink | { href: string; range?: string }, message: string) {
+    const key = JSON.stringify([board.id, shape, link.href]);
+    if (linkKeys.has(key)) return;
+    linkKeys.add(key);
+    const range = link.range && !link.range.startsWith(',') ? link.range : shape ? shapeRange(board.id, shape) : undefined;
+    diagnostics.push({ rule: 'ignored-link', severity: 'warning', board: board.id, shape, range, message });
   }
   /** `dropped` marks an authored link that D2 removed from the compiled shape. */
   function checkLink(href: string, board: Board, shape?: string, range?: string, connection?: string, dropped = false) {
@@ -269,6 +344,16 @@ export function lint(compiled: LintInput, options: LintOptions = {}): LintResult
       if (!range || range.startsWith(',')) range = shape ? shapeRange(board.id, shape) : undefined;
       diagnostics.push({ rule: 'ignored-link', severity: 'warning', board: board.id, shape, range,
         message: `D2 drops the link to board "${label(target)}", so the viewer ignores it. Rename the board to link to it.` });
+      return;
+    }
+    const renamed = boards.has(target) ? undefined : [...boards.keys()].find((item) => nulled(item) === nulled(target));
+    if (renamed) {
+      const key = JSON.stringify([board.id, shape ?? connection, target]);
+      if (linkKeys.has(key)) return;
+      linkKeys.add(key);
+      if (!range || range.startsWith(',')) range = shape ? shapeRange(board.id, shape) : undefined;
+      diagnostics.push({ rule: 'ignored-link', severity: 'warning', board: board.id, shape, connection, range,
+        message: `D2 reads the link to board "${label(renamed)}" as one to "null", so the viewer ignores it. Rename the board to link to it.` });
       return;
     }
     if (boards.has(target)) {
@@ -317,6 +402,61 @@ export function lint(compiled: LintInput, options: LintOptions = {}): LintResult
     const board: Board = found;
     type Authored = { href: string; range?: string };
     const authored = new Map<string, Authored>();
+    const globs: { path: GlobSegment[]; link: Authored; filters: GlobFilter[] }[] = [];
+    // The link each class sets; a later definition replaces an earlier one.
+    const classLinks = new Map<string, Authored>();
+    // Class links no shape takes: from files imported under a key, whose classes D2 never applies.
+    const inertClassLinks: Authored[] = [];
+    const entryFile = /^(.*),/.exec(graph.ast?.range ?? '')?.[1];
+    /** Child boards hold D2's resolved links. A layer's own were all written for it, but scenarios and steps inherit
+     * their parent's, relative to the board that wrote them, so there the text replaces one only to show what
+     * resolving hides: a substitution, which D2 drops, or a bare `.d2` path. */
+    const prefer = (resolved: Authored | undefined, text: Authored | undefined, inherited = id !== 'root' && board.kind !== 'layers') => {
+      if (!text || !resolved) return text ?? resolved;
+      if (!inherited || /\$\{|\.d2(?:#|$)/i.test(text.href)) return text;
+      // Borrow the text's place only when it wrote this link: a key can keep the place of an earlier definition.
+      const same = resolved.href === text.href || resolved.href.endsWith(`.${canonicalLink(text.href)}`);
+      return resolved.range?.match(/^[^,]/) || !same ? resolved : { ...resolved, range: text.range };
+    };
+    /** A link as written, read from its file where it can be: D2 substitutes `${x}` and resolves child boards' paths. */
+    function authoredLink(entry: AstKey, inherited?: boolean): Authored {
+      const block = entry.value?.block_string;
+      if (block) return { href: block.value?.trim() ?? '', range: block.range };
+      const value = stringValue(entry.value) !== undefined ? entry.value : entry.primary;
+      return prefer({ href: stringValue(value) ?? '', range: scalarRange(value) ?? entry.range },
+        linkAfterKey(scalarRange(entry.key?.path?.at(-1)), compiled.fs), inherited)!;
+    }
+    /** Globs an imported file sets, under the key it is imported into, and the classes a whole spread file defines. */
+    function importRules(imported: AstImport, scope: string[]) {
+      const path = stringValue(imported.path?.[0]);
+      const file = compiled.fs && entryFile !== undefined && path ? importPath(compiled.fs, entryFile, path) : undefined;
+      if (!file) return;
+      const rules = fileLinkRules(compiled.fs!, file);
+      const prefix = idSegments(scope.join('.')).map((text) => ({ text, glob: false }));
+      for (const glob of rules.globs) globs.push({ ...glob, path: [...prefix, ...glob.path] });
+      if (imported.spread && !scope.length) for (const [name, link] of rules.classes) classLinks.set(name, link);
+      else {
+        for (const name of definedClasses(compiled.fs!, file) ?? []) if (!keyedClasses.has(name)) keyedClasses.set(name, path!);
+        inertClassLinks.push(...rules.classes.values());
+      }
+    }
+    /** Record a class's link, from `classes.x.link: y` or `x: {link: y}` in `classes`. D2 resolves it from the board
+     * that defines the class, so a child board's inherited class keeps the compiler's value. */
+    function defineClass(path: AstValue[], entry: AstKey) {
+      const names = path.map((part) => stringValue(part) ?? '');
+      const link = names.length === 2 && names[1] === 'link' ? entry : names.length === 1
+        ? (entry.value?.map?.nodes ?? []).map((node) => node.map_key)
+          .filter((key) => key?.key?.path?.length === 1 && stringValue(key.key.path[0]) === 'link').at(-1) : undefined;
+      if (!link) return;
+      const found = authoredLink(link, id !== 'root');
+      // A child board's AST places an inherited class at its first definition; take the place from the board that
+      // wrote the link it resolves to.
+      for (let ancestor = board.parent; (!found.range || found.range.startsWith(',')) && ancestor; ancestor = boards.get(ancestor)?.parent) {
+        const written = classLinksOf.get(ancestor)?.get(names[0]);
+        if (written && boardTarget(canonicalLink(written.href), boards.get(ancestor)!, boards) === found.href) found.range = written.range;
+      }
+      classLinks.set(names[0], found);
+    }
     // Connection links per compiled edge ID without its index: declarations in source order,
     // and `(a -> b)[n]` references by index. D2 IDs are case-insensitive.
     const declared = new Map<string, (Authored | undefined)[]>();
@@ -328,10 +468,31 @@ export function lint(compiled: LintInput, options: LintOptions = {}): LintResult
         return full;
       };
       for (const node of map?.nodes ?? []) {
+        if (node.import?.spread) importRules(node.import, scope);
         const entry = node.map_key;
         if (!entry) continue;
         const path = entry.key?.path ?? [];
         const names = path.map((part) => stringValue(part) ?? '');
+        if (entry.value?.import) { importRules(entry.value.import, resolve(path)); continue; }
+        if (names[0] === 'classes' && !scope.length) {
+          if (path.length > 1) defineClass(path.slice(1), entry);
+          else for (const child of entry.value?.map?.nodes ?? []) if (child.map_key?.key?.path) defineClass(child.map_key.key.path, child.map_key);
+          continue;
+        }
+        if (!entry.edges?.length && path.some((part) => part.unquoted_string?.pattern)) {
+          // A glob sets the link of every shape it names that passes its filters, as in `*.link: x` or `**: {&shape: circle; link: x}`.
+          const pattern = [...idSegments(scope.join('.')).map((text) => ({ text, glob: false })),
+            ...path.map((part) => ({ text: stringValue(part) ?? '', glob: Boolean(part.unquoted_string?.pattern) }))];
+          const keys = (entry.value?.map?.nodes ?? []).map((child) => child.map_key);
+          const named = names.at(-1) === 'link' && !path.at(-1)!.unquoted_string?.pattern;
+          const link = named ? entry : keys.filter((key) => !key?.ampersand && !key?.not_ampersand && key?.key?.path?.length === 1
+            && stringValue(key.key.path[0]) === 'link').at(-1);
+          const filters = keys.filter((key) => key?.ampersand || key?.not_ampersand).map((key) => ({
+            key: (key!.key?.path ?? []).map((part) => stringValue(part) ?? '').join('.'),
+            value: stringValue(key!.value) ?? key!.value?.number?.raw ?? String(key!.value?.boolean?.value ?? ''), glob: Boolean(key!.value?.unquoted_string), negate: Boolean(key!.not_ampersand) }));
+          if (link) globs.push({ path: named ? pattern.slice(0, -1) : pattern, link: authoredLink(link), filters });
+          continue;
+        }
         if (['classes', 'vars', 'style', 'source-arrowhead', 'target-arrowhead'].includes(names[0])) continue;
         if (['layers', 'scenarios', 'steps'].includes(names[0])) {
           // `layers.x: ...` names its board in the key; bare `layers: {x: ...}` in each child key.
@@ -361,18 +522,54 @@ export function lint(compiled: LintInput, options: LintOptions = {}): LintResult
             else if (link && !index.glob && index.int !== undefined) referenced.set(`${key}[${index.int}]`, link);
           }
         } else if (names.at(-1) === 'link') {
-          const value = stringValue(entry.value) !== undefined ? entry.value : entry.primary;
-          authored.set(fullPath.slice(0, -1).join('.').toLowerCase(),
-            { href: stringValue(value) ?? '', range: scalarRange(value) ?? entry.range });
+          authored.set(fullPath.slice(0, -1).join('.').toLowerCase(), authoredLink(entry));
         } else visitMap(entry.value?.map, fullPath);
       }
     }
     visitMap(graph.ast);
+    classLinksOf.set(id, classLinks);
+    // Links written in imported files: the root AST lacks them and child ASTs hold D2's resolved values.
+    for (const shape of board.diagram.shapes) {
+      const link = (imported ??= importedLinks(compiled)).get(JSON.stringify([board.id, shape.id]));
+      const key = shape.id.toLowerCase();
+      const own = authored.get(key);
+      if (link && !own?.range?.match(/^[^,]/)) authored.set(key, prefer(own, link)!);
+      // A shape's own link outranks a glob's; of several globs, the last wins.
+      const attributes = (attributesOf ??= shapeAttributes(compiled.diagram, compiled.graph)).get(JSON.stringify([board.id, shape.id]));
+      const glob = authored.has(key) ? undefined : [...globs].reverse().find((item) => globMatches(item.path, idSegments(shape.id))
+        && (!item.filters.length || attributes && item.filters.every((filter) => filterMatches(filter, board, shape, attributes))));
+      if (glob) authored.set(key, glob.link);
+      // Then its classes: the last that sets a link wins.
+      const classLink = authored.has(key) ? undefined : (shape.classes ?? []).map((name) => classLinks.get(name)).filter(Boolean).at(-1);
+      if (classLink) authored.set(key, classLink);
+    }
     for (const [shape, link] of authored) {
       // Only recover links D2 dropped; a kept link was already checked in its compiled form.
       // Skip templates and removed objects; a board-level link has no shape.
       const compiled = shape ? board.diagram.shapes.find((item) => item.id.toLowerCase() === shape) : board.diagram.root;
-      if (compiled && !compiled.link && link.href) checkLink(canonicalLink(link.href), board, shape ? compiled.id : undefined, link.range, undefined, true);
+      if (!compiled || compiled.link || !link.href) continue;
+      const id = shape ? compiled.id : undefined;
+      if (link.href.includes('${')) dropped(board, id, link,
+        `Link "${link.href}" uses a substitution, which D2 drops from board links, so the viewer ignores it. Write the board path itself.`);
+      else checkLink(canonicalLink(link.href), board, id, link.range, undefined, true);
+    }
+    // A class's link is checked on the shapes that take it; one no shape takes, or that D2 never applies, is checked
+    // where it is written, once, so a class that would break every shape it styles is caught before any uses it.
+    // Its valid targets are not incoming links, as nothing opens them.
+    const used = new Set(board.diagram.shapes.flatMap((shape) => shape.classes ?? []));
+    const inherited = (name: string, link: Authored) => {
+      for (let ancestor = board.parent; ancestor; ancestor = boards.get(ancestor)?.parent) {
+        if (classLinksOf.get(ancestor)?.get(name)?.range === link.range) return true;
+      }
+      return false;
+    };
+    for (const link of [...[...classLinks].filter(([name, item]) => !used.has(name) && !inherited(name, item)).map(([, item]) => item), ...inertClassLinks]) {
+      const href = canonicalLink(link.href);
+      const target = boardTarget(href, board, boards);
+      if (!link.href || target && boards.has(target)) continue;
+      if (link.href.includes('${')) dropped(board, undefined, link,
+        `Link "${link.href}" uses a substitution, which D2 drops from board links, so the viewer would ignore it. Write the board path itself.`);
+      else checkLink(href, board, undefined, link.range);
     }
     // Pair each connection with its authored link by edge identity. A declaration is paired by
     // its order only when every compiled edge of that identity was declared here; else omit the range.
@@ -390,7 +587,7 @@ export function lint(compiled: LintInput, options: LintOptions = {}): LintResult
       const declarations = declared.get(key);
       const wanted = diagnostic.target ?? connection.link;
       diagnostic.range = [referenced.get(`${key}[${index}]`), declarations?.length === counts.get(key) ? declarations?.[ordinal] : undefined]
-        .find((link) => link?.range && !link.range.startsWith(',') && (boardTarget(link.href, board, boards) ?? link.href) === wanted)?.range;
+        .find((link) => link?.range && !link.range.startsWith(',') && nulled(boardTarget(link.href, board, boards) ?? link.href) === nulled(wanted))?.range;
     }
     for (const group of ['layers', 'scenarios', 'steps'] as const) {
       for (const child of graph[group] ?? []) visitGraph(child, `${id}.${group}.${boardKey(child.name ?? '')}`);
@@ -412,7 +609,9 @@ export function lint(compiled: LintInput, options: LintOptions = {}): LintResult
         const connection = 'route' in item;
         diagnostics.push({ rule: 'undefined-class', severity: 'warning', board: board.id,
           ...connection ? { connection: item.id } : { shape: item.id, range: shapeRange(board.id, item.id) },
-          message: `Class "${name}" is not defined, so it changes nothing.${name.startsWith('zf-')
+          message: keyedClasses.has(name) ? `Class "${name}" is defined only in "${keyedClasses.get(name)}", which is imported under a key, ` +
+            `and D2 applies no classes from such a file, so it changes nothing. Spread the file at the top, as in ...@${keyedClasses.get(name)}, to use its classes.`
+            : `Class "${name}" is not defined, so it changes nothing.${name.startsWith('zf-')
             ? ' Check the spelling, and import the Zoomflow library with ...@zoomflow.' : ' Check the spelling, or define it under classes.'}` });
       }
     }

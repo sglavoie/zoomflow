@@ -20,13 +20,14 @@ const keyText = (part: AstKeySegment) => {
   return Array.isArray(values) && values.every((value) => typeof value.string === 'string') ? values.map((value) => value.string).join('') : undefined;
 };
 
-interface SourceReference { key?: { range?: string; path?: AstKeySegment[] }; key_path_index?: number }
+interface SourceReference { key?: { range?: string; path?: AstKeySegment[] }; key_path_index?: number; map_key_edge_index?: number }
 // D2's public types omit these serialized graph fields (including parents).
 interface SourceGraph {
   name?: string;
   objects?: {
     box?: { TopLeft?: { x: number; y: number }; Width: number; Height: number };
     references?: SourceReference[];
+    attributes?: Record<string, unknown>;
   }[];
   layers?: SourceGraph[];
   scenarios?: SourceGraph[];
@@ -35,10 +36,9 @@ interface SourceGraph {
 
 /** Join serialized objects to shapes by their unique compiled box, not local
  * names (which collide in containers). These boxes are never animation geometry.
- * Yields every raw D2 reference range, which may name an imported file.
  */
-function visitShapeReferences(diagram: Diagram, graph: unknown,
-  visitor: (board: string, shape: string, range: string, reference: SourceReference) => void) {
+function visitShapeObjects(diagram: Diagram, graph: unknown,
+  visitor: (board: string, shape: string, object: NonNullable<SourceGraph['objects']>[number]) => void) {
   const boards = indexBoards(diagram);
   function visit(node: SourceGraph, id: string) {
     const board = boards.get(id);
@@ -49,18 +49,35 @@ function visitShapeReferences(diagram: Diagram, graph: unknown,
       // Graph layout keeps fractional coordinates; Diagram truncates to integers.
       const shapes = board.diagram.shapes.filter((shape) => shape.pos.x === Math.trunc(box.TopLeft!.x) &&
         shape.pos.y === Math.trunc(box.TopLeft!.y) && shape.width === Math.trunc(box.Width) && shape.height === Math.trunc(box.Height));
-      if (shapes.length !== 1) continue;
-      for (const reference of object.references ?? []) {
-        const part = reference.key?.path?.[reference.key_path_index ?? 0];
-        const raw = part ? Object.values(part).find((value) => value.range)?.range : reference.key?.range;
-        if (raw) visitor(id, shapes[0].id, raw, reference);
-      }
+      if (shapes.length === 1) visitor(id, shapes[0].id, object);
     }
     for (const group of ['layers', 'scenarios', 'steps'] as const) {
       for (const child of node[group] ?? []) visit(child, `${id}.${group}.${boardKey(child.name ?? '')}`);
     }
   }
   visit(graph as SourceGraph, 'root');
+}
+
+/** Yields every raw D2 reference range of each shape, which may name an imported file. */
+function visitShapeReferences(diagram: Diagram, graph: unknown,
+  visitor: (board: string, shape: string, range: string, reference: SourceReference) => void) {
+  visitShapeObjects(diagram, graph, (board, shape, object) => {
+    for (const reference of object.references ?? []) {
+      const part = reference.key?.path?.[reference.key_path_index ?? 0];
+      const raw = part ? Object.values(part).find((value) => value.range)?.range : reference.key?.range;
+      if (raw) visitor(board, shape, raw, reference);
+    }
+  });
+}
+
+/** Each shape's compiled attributes, such as `{shape: {value: 'circle'}}`, keyed by board ID and shape ID; glob
+ * filters such as `&shape: circle` compare against these, not the rendered diagram's fields. */
+export function shapeAttributes(diagram: Diagram, graph: unknown): Map<string, Record<string, unknown>> {
+  const result = new Map<string, Record<string, unknown>>();
+  visitShapeObjects(diagram, graph, (board, shape, object) => {
+    if (object.attributes) result.set(JSON.stringify([board, shape]), object.attributes);
+  });
+  return result;
 }
 
 /** Ambiguous or imported references are omitted rather than selecting wrong text. */
@@ -123,6 +140,229 @@ export function linkSources(compiled: { diagram: Diagram; graph: unknown; fs?: R
     }
   }
   return result;
+}
+
+/** A link as written: its text and where. */
+export interface AuthoredLink { href: string; range: string }
+type Scalar = { value: string; from: number; to: number };
+
+const spaces = /[ \t]*/y;
+const doubleQuoted = /"((?:[^"\\\n]|\\.)*)"/y;
+const singleQuoted = /'((?:[^'\n]|'')*)'/y;
+const unquoted = /(?:\$\{[^}\n]*\}|[^;{}\n#\\]|\\.)*/y;
+const pipes = /\|+`*/y;
+const sticky = (pattern: RegExp, text: string, index: number) => { pattern.lastIndex = index; return pattern.exec(text); };
+
+/** A string starting at `from`, after spaces, or undefined for anything else, such as an array or an import.
+ * Unquoted text ends at a `;`, a brace, a line break or a `#`, which starts a comment even mid-word, as D2 reads
+ * `./x.d2#/A` as `./x.d2`. Substitutions such as `${x}` are kept as written. */
+function scalarAt(text: string, from: number): Scalar | undefined {
+  const start = from + sticky(spaces, text, from)![0].length;
+  const quoted = text[start] === '"' ? sticky(doubleQuoted, text, start) : text[start] === "'" ? sticky(singleQuoted, text, start) : null;
+  if (quoted) return { value: text[start] === '"' ? quoted[1].replace(/\\(.)/g, '$1') : quoted[1].replaceAll("''", "'"), from: start, to: start + quoted[0].length };
+  if (text[start] === '|') {
+    // Block strings close with the reverse of the pipes and backticks that opened them, as `|`md` with `` `| ``.
+    const open = sticky(pipes, text, start)![0];
+    const close = text.indexOf([...open].reverse().join(''), start + open.length);
+    if (close < 0) return;
+    const value = text.slice(start + open.length, close).replace(/^\w*[ \t\n]/, '').trim();
+    return { value, from: start, to: close + open.length };
+  }
+  const plain = sticky(unquoted, text, start)![0].trimEnd();
+  if (!plain || /^[`[@'"]/.test(plain)) return;
+  return { value: plain.replace(/\\(.)/g, '$1'), from: start, to: start + plain.length };
+}
+
+/** The offset of each statement of the map body starting at `from`, up to its closing brace, or of a whole file
+ * (`file`), skipping strings, block strings, comments and nested maps; undefined when the text does not balance. */
+function statements(text: string, from: number, file = false): number[] | undefined {
+  const starts = [from];
+  let depth = 0;
+  for (let i = from; i < text.length; i++) {
+    const char = text[i];
+    if (char === '\n' || char === ';') { if (depth === 0) starts.push(i + 1); }
+    else if (char === '\\') i++;
+    else if (char === '#') {
+      i = text.indexOf('\n', i) - 1;
+      if (i < 0) break;
+    } else if (char === '{') depth++;
+    else if (char === '}' && depth-- === 0) return file ? undefined : starts;
+    // Only a token opens a string: the quote in `Don't` or the pipe in `x: in | out` is label text.
+    else if ((char === '"' || char === "'") && /[\s:;{[]/.test(text[i - 1] ?? '\n') || char === '|' && /:[ \t]*$/.test(text.slice(Math.max(from, i - 40), i))) {
+      const string = scalarAt(text, i);
+      if (string) i = string.to - 1;
+    }
+  }
+  return file && depth === 0 ? starts : undefined;
+}
+
+/** A glob filter, as `&shape: circle` or `!&label: A*`; `glob` marks an unquoted value, where `*` matches any text. */
+export type GlobFilter = { key: string; value: string; glob: boolean; negate: boolean };
+const linkKey = /\s*(?:link|"link"|'link')[ \t]*:/y;
+const filterKey = /\s*(!?)&([^:;{}\n#]+?)[ \t]*:/y;
+/** The last `link` value among the statements of the map opening after the colon at or after `from`, as in
+ * `: label {link: x}`, and the glob filters the map holds. */
+function mapLink(text: string, from: number): { link?: Scalar; filters: GlobFilter[] } | undefined {
+  const colon = /[ \t]*:/y;
+  if (!sticky(colon, text, from)) return;
+  let i = colon.lastIndex;
+  if (!/^[ \t]*\{/.test(text.slice(i, i + 80))) {
+    const label = scalarAt(text, i);
+    if (!label) return;
+    i = label.to;
+  }
+  const brace = sticky(/[ \t]*\{/y, text, i);
+  if (!brace) return;
+  let link: Scalar | undefined;
+  const filters: GlobFilter[] = [];
+  for (const start of statements(text, i + brace[0].length) ?? []) {
+    const filter = sticky(filterKey, text, start);
+    const value = filter && scalarAt(text, filterKey.lastIndex);
+    if (filter) {
+      if (!value) return { filters: [] };
+      filters.push({ key: filter[2].trim(), value: value.value, glob: !/["']/.test(text[value.from]), negate: filter[1] === '!' });
+    } else if (sticky(linkKey, text, start)) link = scalarAt(text, linkKey.lastIndex) ?? link;
+  }
+  return { link, filters };
+}
+
+/** A D2 range for `from` to `to` in `file`, as `file,line:column:offset-line:column:offset`. */
+function textRange(file: string, text: string, from: number, to: number): string {
+  const position = (offset: number) => {
+    const line = text.lastIndexOf('\n', offset - 1) + 1;
+    let lines = 0;
+    for (let i = text.indexOf('\n'); i >= 0 && i < offset; i = text.indexOf('\n', i + 1)) lines++;
+    return `${lines}:${offset - line}:${offset}`;
+  };
+  return `${file},${position(from)}-${position(to)}`;
+}
+const authored = (file: string, text: string, scalar: Scalar): AuthoredLink =>
+  ({ href: scalar.value, range: textRange(file, text, scalar.from, scalar.to) });
+
+/** The link written after the key ending at `range`'s end, in `a.link: x` form, read from the file's text; the
+ * compiler's own value can be substituted or resolved, as in child boards. */
+export function linkAfterKey(range: string | undefined, fs: Record<string, string> | undefined): AuthoredLink | undefined {
+  const match = /^(.+),\d+:\d+:\d+-\d+:\d+:(\d+)$/.exec(range ?? '');
+  const text = match ? fs?.[match[1]] : undefined;
+  if (text === undefined) return;
+  const colon = sticky(/[ \t]*:/y, text, Number(match![2]));
+  const scalar = colon && scalarAt(text, Number(match![2]) + colon[0].length);
+  return scalar ? authored(match![1], text, scalar) : undefined;
+}
+
+/** The links of shapes written in imported files, keyed by board ID and shape ID, read from each file's text at
+ * the shape's references; the last assignment wins. Lint needs them because the root AST keeps imports as
+ * references and child ASTs hold D2's resolved values, so `other.d2` reads as a board path there. */
+export function importedLinks(compiled: { diagram: Diagram; graph: unknown; fs?: Record<string, string> }): Map<string, AuthoredLink> {
+  const result = new Map<string, AuthoredLink>();
+  const entry = /^(.*),/.exec((compiled.graph as { ast?: { range?: string } }).ast?.range ?? '')?.[1];
+  visitShapeReferences(compiled.diagram, compiled.graph, (board, shape, _raw, reference) => {
+    const range = /^(.+),\d+:\d+:\d+-\d+:\d+:(\d+)$/.exec(reference.key?.range ?? '');
+    const text = range && range[1] !== entry ? compiled.fs?.[range[1]] : undefined;
+    const path = reference.key?.path ?? [];
+    const index = reference.key_path_index ?? 0;
+    if (text === undefined || (reference.map_key_edge_index ?? -1) >= 0) return;
+    // `a.link: x` names the link in its key; `a: {link: x}` in the map after it.
+    const inMap = path.length === index + 1 ? mapLink(text, Number(range![2]))?.link : undefined;
+    const link = path.length === index + 2 && keyText(path[index + 1]) === 'link' ? linkAfterKey(reference.key?.range, compiled.fs)
+      : inMap && authored(range![1], text, inMap);
+    if (link) result.set(JSON.stringify([board, shape]), link);
+  });
+  return result;
+}
+
+/** A glob key path segment: its text, and whether it is an unquoted pattern such as `*` or `a*`. */
+export type GlobSegment = { text: string; glob: boolean };
+const keyPart = /\s*(?:"((?:[^"\\\n]|\\.)*)"|'((?:[^'\n]|'')*)'|([^.:;{}\n#"'&]*[^.:;{}\n#"'\s&]))\s*(\.|(?=:))/y;
+const importLine = /\s*(?:\.\.\.@([^\s;#}]+)|((?:[^:;{}\n#]+?))\s*:\s*@([^\s;#}]+))[ \t]*(?=[;\n#}]|$)/y;
+
+/** A glob that sets links: its key path, the link, and the filters that limit it. */
+export type GlobLink = { path: GlobSegment[]; link: AuthoredLink; filters: GlobFilter[] };
+/** The links a file sets for more than one shape: each glob statement at its top, as in `*.link: x` or
+ * `a.*: {&shape: circle; link: x}`, with the glob's key path, and each class it defines, as in `classes: {x: {link: y}}`;
+ * a later class definition replaces an earlier one. Its imports are followed: globs under their keys, and classes
+ * only from whole files spread at the top, as D2 adds them. */
+export function fileLinkRules(fs: Record<string, string>, file: string, seen = new Set<string>()):
+  { globs: GlobLink[]; classes: Map<string, AuthoredLink> } {
+  const globs: GlobLink[] = [];
+  const classes = new Map<string, AuthoredLink>();
+  const text = fs[file];
+  if (text === undefined || seen.has(file)) return { globs, classes };
+  seen.add(file);
+  /** The key path at `start`, and the offset of the colon after it, or undefined without one. */
+  const keyAt = (start: number) => {
+    const path: GlobSegment[] = [];
+    let at = start;
+    for (let part = sticky(keyPart, text, at); part; part = sticky(keyPart, text, at)) {
+      path.push({ text: part[1]?.replace(/\\(.)/g, '$1') ?? part[2]?.replaceAll("''", "'") ?? part[3], glob: part[3]?.includes('*') ?? false });
+      at = keyPart.lastIndex;
+      if (part[4] !== '.') break;
+    }
+    return path.length && text[at] === ':' ? { path, at } : undefined;
+  };
+  /** The link a key path ending in `link`, or a map after it, sets. */
+  const linkOf = (path: GlobSegment[], start: number, at: number) => {
+    const last = path.at(-1)!;
+    if (!last.glob && last.text === 'link') return { link: linkAfterKey(textRange(file, text, start, at), fs), named: true, filters: [] };
+    const map = mapLink(text, at);
+    return { link: map?.link && authored(file, text, map.link), named: false, filters: map?.filters ?? [] };
+  };
+  const defineClass = (path: GlobSegment[], start: number, at: number) => {
+    if (path.length > 2 || path.length === 2 && path[1].text !== 'link') return;
+    const { link } = linkOf(path, start, at);
+    if (link) classes.set(path[0].text, link);
+  };
+  for (const start of statements(text, 0, true) ?? []) {
+    const imported = sticky(importLine, text, start);
+    if (imported) {
+      const target = importPath(fs, file, imported[1] ?? imported[3]);
+      const scope = imported[2] ? keyPath(imported[2]) : [];
+      if (!target || !scope) continue;
+      const rules = fileLinkRules(fs, target, seen);
+      for (const glob of rules.globs) globs.push({ ...glob, path: [...scope, ...glob.path] });
+      if (!imported[2]) for (const [name, link] of rules.classes) classes.set(name, link);
+      continue;
+    }
+    const key = keyAt(start);
+    if (!key) continue;
+    const { path, at } = key;
+    if (path[0].text === 'classes' && !path[0].glob) {
+      if (path.length > 1) defineClass(path.slice(1), start, at);
+      else {
+        // `classes: {x: {link: y}; z.link: w}` defines each class in its map.
+        const brace = sticky(/[ \t]*:[ \t]*\{/y, text, at);
+        for (const inner of brace ? statements(text, brace.index + brace[0].length) ?? [] : []) {
+          const entry = keyAt(inner);
+          if (entry) defineClass(entry.path, inner, entry.at);
+        }
+      }
+      continue;
+    }
+    if (!path.some((segment) => segment.glob)) continue;
+    const { link, named, filters } = linkOf(path, start, at);
+    if (link) globs.push({ path: named ? path.slice(0, -1) : path, link, filters });
+  }
+  return { globs, classes };
+}
+/** Split an unquoted or quoted key path, such as `a."b.c"`; undefined for one this does not read. */
+function keyPath(key: string): GlobSegment[] | undefined {
+  const path: GlobSegment[] = [];
+  const text = `${key}:`;
+  let at = 0;
+  for (let part = sticky(keyPart, text, at); part; part = sticky(keyPart, text, at)) {
+    path.push({ text: part[1]?.replace(/\\(.)/g, '$1') ?? part[2]?.replaceAll("''", "'") ?? part[3], glob: part[3]?.includes('*') ?? false });
+    at = keyPart.lastIndex;
+    if (part[4] !== '.') return at === key.length ? path : undefined;
+  }
+}
+/** The `fs` key of the file `@path` imports from `file`, relative to its folder. */
+export function importPath(fs: Record<string, string>, file: string, path: string): string | undefined {
+  const parts: string[] = [];
+  for (const part of [...file.split('/').slice(0, -1), ...path.split('/')]) {
+    if (part === '..') parts.pop(); else if (part !== '.' && part) parts.push(part);
+  }
+  const joined = parts.join('/');
+  return [`${joined}.d2`, joined].find((key) => key in fs);
 }
 
 /** The compiled diagram with each file link written in an imported file rewritten to open the same file from
