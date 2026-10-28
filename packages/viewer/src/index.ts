@@ -1,7 +1,7 @@
 import { boardLabel, classifyHref, indexBoards, parentContext, shapeClass, type Board, type Diagram, type LintDiagnostic, type ShapeSource } from '@zoomflow/core';
 import { restoreMissingLinks } from './missing-links';
 import { decorateLinks, splitHitArea } from './link-cues';
-import { childToward, renderParentContext, resolveRouteHash, restoreTrail, routeFallbackNotice, simplifyTrail, watchHistory } from './navigation';
+import { childToward, normalizeRouteHash, renderParentContext, resolveRouteHash, restoreTrail, routeFallbackNotice, simplifyTrail, watchHistory } from './navigation';
 import { setupBreadcrumbs } from './breadcrumbs';
 import { followLink, linkTo, prepareLinks, resolveLink } from './links';
 import { sanitizeSvg } from './sanitize';
@@ -198,7 +198,7 @@ export class Viewer {
 
   private async fromLocation(preserveViewport = false) {
     if (!this.boards.size) return;
-    const route = this.route;
+    const route = { ...this.route, hash: normalizeRouteHash(this.route.hash) };
     const byHash = new Map([...this.boards.values()].map((item) => [item.hash, item]));
     const board = byHash.get(resolveRouteHash(route.hash, (hash) => byHash.has(hash))) ?? this.boards.get('root')!;
     const trail = restoreTrail(route.trail, board.id, (id) => this.boards.has(id), () => this.ancestors(board.id));
@@ -307,7 +307,9 @@ export class Viewer {
       this.current = id;
       this.stage.setAttribute('aria-label', `${board.name} diagram`);
       this.announcement.textContent = `${board.name} board`;
-      this.trail = simplifyTrail(trail ?? [...this.trail, id]);
+      // A trail kept from before a document change, including one a breadcrumb drawn then passes, can name boards the
+      // new document no longer has.
+      this.trail = simplifyTrail((trail ?? [...this.trail, id]).filter((entry) => this.boards.has(entry)));
       this.stage.dataset.board = id;
       // Viewports keep a view per board, so re-rendering the same board keeps its viewport anyway.
       this.stage.dispatchEvent(new Event('zf-boardchange'));

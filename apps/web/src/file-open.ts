@@ -142,9 +142,11 @@ export function setupFileOpen({ picker, activePane, fileHandles, directoryHandle
     clearTimeout(dropHint);
     dropHint = setTimeout(() => document.body.classList.remove('file-drop-active'), 160);
   });
+  // Capture the drop before the editor sees it, or the editor also inserts the file's text where it lands.
   document.addEventListener('drop', (event) => {
     if (!event.dataTransfer?.files.length) return;
     event.preventDefault();
+    event.stopPropagation();
     clearTimeout(dropHint);
     document.body.classList.remove('file-drop-active');
     // Dropping onto a pane opens the file there.
@@ -155,6 +157,6 @@ export function setupFileOpen({ picker, activePane, fileHandles, directoryHandle
       // Each pane shows one document, so a drop opens only its first file.
       if (opened && others.length) activePane().setActivity(`Opened ${file.name}; drop one file at a time.`);
     });
-  });
+  }, { capture: true });
   return { setFileError };
 }

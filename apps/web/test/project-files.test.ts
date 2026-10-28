@@ -45,5 +45,6 @@ it('names new project files after a label, beside the file they open from', () =
   expect(newProjectPath('index.d2', ' #1: a/b? 100% ', [])).toBe('-1- a-b- 100-.d2');
   expect(newProjectPath('index.d2', '...', [])).toBe('Diagram.d2');
   expect(newProjectPath('index.d2', 'Notes.d2', [])).toBe('Notes.d2');
+  expect(newProjectPath('work/index.d2', 'Zoomflow', [])).toBe('work/Zoomflow 2.d2');
   expect(validProjectPath(newProjectPath('work/index.d2', '.hidden', []))).toBe(true);
 });

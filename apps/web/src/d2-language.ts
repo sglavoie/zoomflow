@@ -32,8 +32,10 @@ export const d2Parser: StreamParser<State> = {
     if (stream.match(/\.\.\.@[^\s;{}]+/)) return 'keyword';
     if (stream.match(/\$\{[^}]*\}/)) return 'variable';
     if (stream.match(/(?:https?:\/\/|mailto:)[^\s;,}]+/)) return 'url';
-    // Single-quoted strings have no backslash escapes; a doubled quote is a quote.
-    if (stream.match(/"(?:\\.|[^"\\])*"|'(?:[^']|'')*'/)) return 'string';
+    // Single-quoted strings have no backslash escapes; a doubled quote is a quote. A quote opens a string only where
+    // a key or value starts: inside an unquoted label, as in `Bob's office`, it is text.
+    const starts = /(?:^|[:;{}[\](,.@]|->|<-|--)\s*$/.test(stream.string.slice(0, stream.pos));
+    if (starts && stream.match(/"(?:\\.|[^"\\])*"|'(?:[^']|'')*'/)) return 'string';
     if (stream.match(/(?:layers|scenarios|steps|classes|vars)\s*(?=:)/)) return 'keyword';
     if (stream.match(/[\w.-]+\s*(?=:)/)) return 'property';
     if (stream.match(/(?:-->|<--|<->|->|<-|--)/)) return 'operator';

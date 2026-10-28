@@ -113,10 +113,12 @@ function create() {
     async link(request: LinkRequest): Promise<{ path: string; hash: string } | undefined> {
       file.replaceChildren(...request.files.map(path => new Option(path.replace(/\.d2$/i, ''), path, false, path === request.current?.path)));
       file.onchange = () => void loadBoards(request);
-      void loadBoards(request, request.current?.path === file.value ? request.current.hash : '');
       const changing = Boolean(request.current);
-      if (!await show('link', changing ? 'Change linked diagram' : 'Link to a diagram',
-        `Choose the project file “${request.shape}” opens, and optionally one of its boards.`, changing ? 'Change link' : 'Link')) return;
+      const shown = show('link', changing ? 'Change linked diagram' : 'Link to a diagram',
+        `Choose the project file “${request.shape}” opens, and optionally one of its boards.`, changing ? 'Change link' : 'Link');
+      // Load after showing, which clears the status this sets while the boards load.
+      void loadBoards(request, request.current?.path === file.value ? request.current.hash : '');
+      if (!await shown) return;
       return { path: file.value, hash: board.value };
     },
     /** Resolves the name and kind of a new file for the shape to open, or undefined when canceled. */

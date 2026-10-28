@@ -117,3 +117,24 @@ it('reads a pipe inside an unquoted label as text, not the start of a multiline 
   expect(tokens.some(token => token.style === 'string')).toBe(false);
   expect(state.block).toBeNull();
 });
+
+it('reads quotes inside unquoted labels as text, so braces after them still nest', async () => {
+  const source = "team: {\n  ceo: Bob's office {tooltip: Al's}\n  \"quoted\" -> 'single'\n}";
+  const compiled = await d2.compile(source, { layout: 'elk' });
+  expect(compiled.diagram.shapes.find(shape => shape.id === 'team.ceo')).toMatchObject({ label: "Bob's office", tooltip: "Al's" });
+  const editor = EditorState.create({ doc: source, extensions: d2Language });
+  ensureSyntaxTree(editor, source.length, 1000);
+  expect(getIndentation(editor, editor.doc.line(3).from)).toBe(2);
+  const fold = foldable(editor, editor.doc.line(1).from, editor.doc.line(1).to);
+  expect(fold?.to).toBe(source.length - 1);
+  const state = d2Parser.startState!(2);
+  const strings: string[] = [];
+  for (const line of source.split('\n')) {
+    const stream = new StringStream(line, 4, 2);
+    while (!stream.eol()) {
+      stream.start = stream.pos;
+      if (d2Parser.token(stream, state) === 'string') strings.push(stream.current());
+    }
+  }
+  expect(strings).toEqual(['"quoted"', "'single'"]);
+});

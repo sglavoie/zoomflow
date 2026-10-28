@@ -163,7 +163,9 @@ export function setupBoardTools(scope: PaneScope, viewer: Viewer, options: Board
   async function linkTo(board: string, shape: string, host: FileLinkHost, returnFocus: HTMLElement, current?: string) {
     const href = current ? classifyHref(current) : undefined;
     const path = href?.kind === 'file' ? resolveFilePath(host.path, href.path) : undefined;
-    const choice = await fileLinkDialog().link({ files: host.files, boards: host.boards, shape: shapeLabel(board, shape),
+    // A link reads up to its first `#`, so a file named with one, as in `notes#1.d2`, cannot be linked.
+    const files = host.files.filter((file) => classifyHref(fileLink(host.path, file)).kind === 'file');
+    const choice = await fileLinkDialog().link({ files, boards: host.boards, shape: shapeLabel(board, shape),
       ...path && href?.kind === 'file' ? { current: { path, hash: href.hash } } : {} });
     refocus(returnFocus);
     if (choice) applyLink(board, shape, fileLink(host.path, choice.path) + choice.hash);

@@ -75,6 +75,10 @@ export function definedClasses(files: Record<string, string>, path: string, seen
     if (text.startsWith('"""', i)) {
       const end = text.indexOf('"""', i + 3);
       i = end < 0 ? text.length : end + 2;
+    } else if (char === '\\') {
+      // An escaped character is text, as `\#` in `Issue \#1` is no comment.
+      append(text.slice(i, i + 2));
+      i++;
     } else if (char === '#') {
       const end = text.indexOf('\n', i);
       i = (end < 0 ? text.length : end) - 1;

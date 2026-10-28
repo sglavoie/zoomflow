@@ -180,8 +180,9 @@ export function setupReference(host: () => ReferenceHost) {
   window.addEventListener('keydown', (event) => {
     if (event.isComposing || event.altKey || !event.shiftKey || !(event.metaKey || event.ctrlKey) ||
         !(event.key === '/' || event.key === '?' || event.code === 'Slash')) return;
-    // The reference is hidden in fullscreen, which handles the shortcut itself.
-    if (document.body.classList.contains('diagram-fullscreen')) return;
+    // The reference is hidden in fullscreen, which handles the shortcut itself. An open dialog keeps its keys,
+    // including one created after the reference, whose own guard would run after this listener.
+    if (document.body.classList.contains('diagram-fullscreen') || document.querySelector('dialog[open]')) return;
     event.preventDefault();
     event.stopImmediatePropagation();
     if (!event.repeat) setOpen(Boolean(panel.hidden));

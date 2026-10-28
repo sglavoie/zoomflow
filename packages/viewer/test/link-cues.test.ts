@@ -60,6 +60,14 @@ describe('decorateLinks', () => {
     expect(svg.querySelector<SVGAElement>('#home')!.dataset.linkDirection).toBeUndefined();
   });
 
+  it('names external links by their scheme in any case, with the spaces URL parsing trims', () => {
+    const svg = mount('<a id="web" href=" https://example.com"><text>Site</text></a><a id="mail" href="MAILTO:a@example.com"><text>Mail</text></a>');
+    decorateLinks(svg, boards, 'root', splitHitArea);
+    const link = (id: string) => svg.querySelector<SVGAElement>(`#${id}`)!;
+    expect([link('web'), link('mail')].map((item) => [item.dataset.linkKind, item.getAttribute('aria-label')])).toEqual([
+      ['external', 'Open external link: Site (new tab)'], ['external', 'Open external link: Mail (email)']]);
+  });
+
   it('names files with the given labeler', () => {
     const svg = mount('<a id="a" data-file="./health.d2#/"/>');
     decorateLinks(svg, boards, 'root', splitHitArea, undefined, (path) => `File ${path}`);

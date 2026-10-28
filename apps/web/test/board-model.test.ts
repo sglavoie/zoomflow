@@ -116,6 +116,19 @@ it('adds boards to shapes whose identifiers D2 single-quotes, in a form board in
   expect(splitBoard(next).attachments.map(item => 'name' in item && item.name)).toEqual(['Empty', 'Quoted', 'Apostrophe']);
 });
 
+it('adds boards and file links to shapes keyed by a quoted keyword, which D2 reports unquoted', async () => {
+  for (const [source, shape] of [['"label": Hi\n', 'label'], ['"style": Hi\n', 'style'], ['c: {"near": Hi}\n', 'c.near'], ['"_": Hi\n', '_'], ['"Layers": Hi\n', 'layers']]) {
+    const { sites: site } = await sites(source);
+    expect(site.shapeAction('root', shape)).toEqual({ action: 'add' });
+    const added = await sites(site.add('root', shape, flow, 'Detail').source);
+    expect(added.boards.get('root')!.diagram.shapes.find(item => item.id === shape)!.link).toBe('root.layers.Detail');
+    expect(added.sites.shapeAction('root', shape).action).toBe('edit');
+    const linked = await sites(site.linkFile('root', shape, './other.d2'));
+    expect(linked.boards.get('root')!.diagram.shapes.find(item => item.id === shape)!.link).toBe('./other.d2');
+    expect(linked.sites.shapeAction('root', shape)).toEqual({ action: 'file', link: './other.d2', attached: true });
+  }
+});
+
 it('keeps an attached board on its own topic when another topic has the same labels', () => {
   const before = mindMapSource(map('Plan\n  Ideas\n  Ideas'));
   const attachments = [{ shape: 'n_2', name: 'Second ideas', body: flow }];

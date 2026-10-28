@@ -114,6 +114,15 @@ describe.concurrent('zoomflow CLI', () => {
     expect(hrefs('@scenarios/s.svg')).toEqual(new Set(['../x%20y&amp;z.svg']));
   }, 180_000);
 
+  it('drops ZIP SVG links to boards the ZIP lacks', async () => {
+    const input = join(temp, 'zip-missing.d2');
+    const output = join(temp, 'zip-missing.zip');
+    await writeFile(input, 'a -> b: {link: layers.missing}\nc.link: layers.k\nlayers.k: {d}');
+    success(await run(['export', input, '--all', '-o', output]));
+    const files = unzipSync(await readFile(output));
+    expect(new Set([...strFromU8(files['root.svg']).matchAll(/ href="([^"]*)"/g)].map((match) => match[1]))).toEqual(new Set(['k.svg']));
+  }, 180_000);
+
   it('exports only root by default and resolves imported sources for native export', async () => {
     const output = join(temp, 'root.svg');
     success(await run(['export', 'fixtures/lint/imported.d2', '-o', output]));
@@ -248,6 +257,13 @@ describe.concurrent('zoomflow CLI', () => {
     success(await run(['lint', input, '--root', root], { cwd: tmpdir() }));
     success(await run(['export', input, '--root', root], { cwd: tmpdir() }));
     expect(await readFile(join(root, 'nested', 'input.svg'), 'utf8')).toContain('data:image/svg+xml;base64,');
+  });
+
+  it('loads imports whose names hold characters Go escapes in JSON', async () => {
+    const root = join(temp, 'escaped-imports');
+    await mkdir(root, { recursive: true });
+    await Promise.all([writeFile(join(root, 'index.d2'), 'x: @"a&b"\ny: @"c<d>"'), writeFile(join(root, 'a&b.d2'), 'p'), writeFile(join(root, 'c<d>.d2'), 'q')]);
+    success(await run(['lint', join(root, 'index.d2')]));
   });
 
   it('defaults --root to the input directory and never reads unrelated unreadable folders', async () => {
@@ -604,7 +620,7 @@ describe.concurrent('zoomflow CLI', () => {
     await Promise.all(['sub', 'dist', '.hidden'].map((folder) => mkdir(join(root, folder), { recursive: true })));
     await Promise.all([
       writeFile(join(root, 'index.d2'), '...@sub/part\nd.link: ./dist/x.d2\nh.link: ./.hidden/y.d2'),
-      writeFile(join(root, 'sub', 'part.d2'), 'a.link: ./other.d2\nb.link: ../x.d2'),
+      writeFile(join(root, 'sub', 'part.d2'), 'a.link: ./other.d2\nb.link: ../x.d2\nc -> e: {link: ./other.d2}'),
       writeFile(join(root, 'sub', 'other.d2'), 'o'), writeFile(join(root, 'x.d2'), 'x'),
       writeFile(join(root, 'dist', 'x.d2'), 'dx'), writeFile(join(root, '.hidden', 'y.d2'), 'y'),
     ]);
@@ -619,7 +635,9 @@ describe.concurrent('zoomflow CLI', () => {
     const files = unzipSync(await readFile(zip));
     // Links written in the import are rewritten to resolve from the input, as the export resolves them.
     expect([...strFromU8(files['root.svg']).matchAll(/ href="([^"]*)"/g)].map((match) => match[1])).toEqual([
-      '@files/sub/other.d2/root.svg', '@files/dist/x.d2/root.svg', '@files/x.d2/root.svg', '@files/.hidden/y.d2/root.svg']);
+      '@files/sub/other.d2/root.svg', '@files/dist/x.d2/root.svg', '@files/x.d2/root.svg', '@files/.hidden/y.d2/root.svg',
+      // A connection's link sits inside its wrapper, so it is rewritten too.
+      '@files/sub/other.d2/root.svg']);
   }, 180_000);
 
   it('reads no linked file for a lone SVG or PNG, but does for HTML', async () => {

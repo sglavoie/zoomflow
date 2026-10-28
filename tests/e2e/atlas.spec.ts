@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { editorText, openFolder, previewReady, withEditorView } from './helpers';
+import { devURL } from './servers';
 
 const atlas = fileURLToPath(new URL('../../fixtures/atlas', import.meta.url));
 const openFolderMessage = 'Open the folder that contains this file to follow links to other diagrams.';
@@ -251,6 +252,10 @@ test('links a shape to another file and board, changes and removes the link, and
   await menu.getByRole('menuitem', { name: 'Link to diagram…' }).click();
   const dialog = page.getByRole('dialog', { name: 'Link to a diagram' });
   await expect(dialog.getByLabel('Diagram file').locator('option')).toHaveText(['broken/links', 'health', 'index', 'projects/zoomflow']);
+  // The D2 reference shortcut stays out of the dialog, like the other modal dialogs.
+  await page.keyboard.press('Control+Shift+/');
+  await expect(page.locator('#d2-reference')).toBeHidden();
+  await expect(dialog).toBeVisible();
   await dialog.getByLabel('Diagram file').selectOption('health.d2');
   await expect(dialog.getByLabel('Opens at').locator('option')).toHaveText(['Its home board', 'Sleep']);
   await dialog.getByLabel('Opens at').selectOption({ label: 'Sleep' });
@@ -578,4 +583,44 @@ test('a file link written in an imported file opens from the folder of the file 
   await page.locator('#viewer .zf-stage a[data-file="./sub/other.d2"]').click();
   await showingProjectFile(page, 'nested', 'sub/other.d2');
   await expect(crumbs(page)).toHaveText(['index', 'sub/other']);
+});
+
+test.describe('with a held compiler', () => {
+  // Rewrites /src/compiler.ts, which only the dev server serves as its own module.
+  test.use({ baseURL: devURL });
+
+  test('opening another file while the atlas map draws keeps that file', async ({ page }) => {
+    await page.route((url) => url.pathname === '/src/compiler.ts', async (route) => {
+      const response = await route.fetch();
+      const body = await response.text();
+      expect(body).toContain('const d2 = new D2();');
+      await route.fulfill({ response, body: body.replace('const d2 = new D2();', `
+        const d2 = new D2();
+        const compile = d2.compile.bind(d2);
+        window.atlasProbe = { hold: false };
+        d2.compile = async (input, options) => {
+          if (window.atlasProbe.hold) {
+            window.atlasProbe.hold = false;
+            await new Promise(resolve => { window.atlasProbe.release = resolve; });
+          }
+          return compile(input, options);
+        };
+      `) });
+    });
+    await page.goto('/');
+    await openFolder(page, atlas);
+    await showing(page, 'index.d2');
+    await page.evaluate(() => { (window as any).atlasProbe.hold = true; });
+    await page.locator('#example-picker > summary').click();
+    await page.getByRole('button', { name: 'Atlas map of the atlas project' }).click();
+    await expect.poll(() => page.evaluate(() => typeof (window as any).atlasProbe.release)).toBe('function');
+
+    await page.locator('#example-picker > summary').click();
+    await page.locator('.example-option[title="atlas/health.d2"]').click();
+    await showing(page, 'health.d2');
+    await page.evaluate(() => (window as any).atlasProbe.release());
+    await page.waitForTimeout(500);
+    await showing(page, 'health.d2');
+    await expect(page.locator('#filename')).not.toHaveText('Atlas map');
+  });
 });

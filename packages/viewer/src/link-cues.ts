@@ -48,12 +48,14 @@ export function decorateLinks(svg: Element, boards: Map<string, { name: string; 
       continue;
     }
     const href = link.getAttribute('data-board') ?? link.getAttribute('href') ?? link.getAttribute('xlink:href') ?? '';
-    const external = /^(https?:|mailto:)/i.test(href);
+    // Links open through URL parsing, which trims surrounding spaces, so read the scheme as it would.
+    const scheme = /^\s*(https?|mailto):/i.exec(href)?.[1].toLowerCase();
+    const external = scheme !== undefined;
     const target = boards.get(href);
     if (!external && !target && !link.hasAttribute('data-missing')) continue;
     const name = link.querySelector('text')?.textContent?.trim() || href;
     const direction = target ? ancestor(href, current) ? 'parent' : ancestor(current, href) ? 'child' : 'peer' : undefined;
-    const label = external ? `Open external link: ${name}${href.startsWith('mailto:') ? ' (email)' : ' (new tab)'}`
+    const label = external ? `Open external link: ${name}${scheme === 'mailto' ? ' (email)' : ' (new tab)'}`
       : target ? direction === 'parent' ? `Return to ${target.name}` : direction === 'child' ? `Open ${target.name} board` : `Visit ${target.name} board` : `Missing board: ${describe(href)}`;
     link.dataset.linkKind = external ? 'external' : 'board';
     if (direction) link.dataset.linkDirection = direction;

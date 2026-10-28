@@ -25,6 +25,15 @@ export function simplifyTrail(visits: readonly string[]): string[] {
   return trail;
 }
 
+/** Spell a route the way board hashes are built, as browsers leave `&` or `[` raw in an address and authors may
+ * write `#/My Board`, so `#/Q&A` finds `#/Q%26A`. */
+export function normalizeRouteHash(hash: string): string {
+  return (hash || '#/').split('/').map((segment, index) => {
+    if (index === 0 || segment.startsWith('@')) return segment;
+    try { return encodeURIComponent(decodeURIComponent(segment)); } catch { return segment; }
+  }).join('/') || '#/';
+}
+
 /** Resolve a route to the nearest existing board hash, walking up its path. */
 export function resolveRouteHash(hash: string, exists: (hash: string) => boolean): string {
   let current = hash || '#/';
@@ -54,9 +63,16 @@ export function restoreTrail(saved: unknown, board: string, exists: (id: string)
 /** Call `restore` once per history step: traversals fire popstate then, only when the hash
  * changes, hashchange; editing the hash in the address bar fires hashchange alone. */
 export function watchHistory(target: EventTarget, restore: () => void, options?: AddEventListenerOptions) {
-  // The hash a popstate just restored; its own hashchange, if any, comes next.
+  // The hash a popstate just restored; its own hashchange, if any, comes next. A step between entries with the
+  // same hash has none, so forget it soon after: an address-bar edit to that hash later must still restore.
   let restored: string | undefined;
-  target.addEventListener('popstate', () => { restored = location.hash; restore(); }, options);
+  let forget: ReturnType<typeof setTimeout> | undefined;
+  target.addEventListener('popstate', () => {
+    restored = location.hash;
+    clearTimeout(forget);
+    forget = setTimeout(() => { restored = undefined; }, 100);
+    restore();
+  }, options);
   target.addEventListener('hashchange', (event) => {
     // Compare the hash this step went to: restoring may already have replaced an unknown one.
     const { newURL } = event as HashChangeEvent;

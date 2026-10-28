@@ -241,11 +241,15 @@ export function lint(compiled: LintInput, options: LintOptions = {}): LintResult
       if (!href || classified.kind !== 'invalid' || linkKeys.has(key)) return;
       linkKeys.add(key);
       if (!range || range.startsWith(',')) range = shape ? shapeRange(board.id, shape) : undefined;
-      // D2 drops `x.d2` and `folder/x.d2`, reading them as board paths; only `./` paths link to files.
+      // D2 drops `x.d2` and `folder/x.d2`, reading them as board paths; only `./` paths link to files. It keeps
+      // some others, such as `/x.d2` or `.\x.d2`, which the viewer still ignores. Suggest forward slashes either way.
       const [file, fragment] = /^([^#]*\.d2)(#.*)?$/s.exec(href)?.slice(1) ?? [];
       if (file && !/^\.\.?\//.test(file)) {
+        const path = file.replace(/\\/g, '/');
+        const suggestion = /^\.\.?\//.test(path) ? path : `./${path.replace(/^\/+/, '')}`;
         diagnostics.push({ rule: 'bare-file-link', severity: 'warning', board: board.id, shape, connection, range,
-          message: `Link "${href}" is read as a board path, so D2 drops it. To open the file, write link: "./${file.replace(/^\/+/, '')}${fragment ?? ''}".` });
+          message: `Link "${href}" ${dropped ? 'is read as a board path, so D2 drops it' : 'is not a ./ or ../ path, so the viewer ignores it'}. ` +
+            `To open the file, write link: "${suggestion}${fragment ?? ''}".` });
         return;
       }
       let depth = 0;

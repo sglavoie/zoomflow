@@ -241,6 +241,15 @@ describe('atlas exports', () => {
     expect(strFromU8(files['root.svg'])).toContain('href="@files/@Health.d2/root.svg"');
   });
 
+  it('names file folders that Windows rejects as board names are, and keeps file links to them', async () => {
+    const [index, health] = await documents();
+    index.boards[0] = { ...index.boards[0], svg: '<svg><a href="./aux.d2"/><a href="./a:b%3F.d2"/></svg>' };
+    const files = unzipSync(exportAtlasZip([index, { ...health, path: 'aux.d2' }, { ...health, path: 'a:b?.d2' }, { ...health, path: 'notes. /x.d2' }]));
+    expect(Object.keys(files).filter((path) => path.startsWith('@files/'))).toEqual(
+      ['@files/_aux.d2/root.svg', '@files/a_b_.d2/root.svg', '@files/notes__/x.d2/root.svg']);
+    expect(strFromU8(files['root.svg'])).toContain('href="@files/_aux.d2/root.svg"');
+  });
+
   it('keeps missing file links for the offline viewer to restore', async () => {
     const compiled = await d2.compile('Gone: {link: ./gone.d2}', { layout: 'elk' });
     const diagnostic = { rule: 'dangling-file-link', severity: 'error', message: 'Missing', board: 'root', shape: 'Gone', target: './gone.d2' } as const;

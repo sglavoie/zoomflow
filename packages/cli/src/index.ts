@@ -18,16 +18,21 @@ const fontArgs = Object.entries({
 
 /** Native D2 rewrites shape links as file paths when rendering a child alone.
  * Recover the exact compiler links using D2's encoded shape wrapper identity.
+ * A connection's link is the first anchor inside its wrapper, around its label.
  * This matches renderer-generated tags, not authored D2 or arbitrary HTML.
  */
-function compilerLinks(svg: string, diagram: Diagram, link = (shape: Diagram['shapes'][number]) => shape.link): string {
+function compilerLinks(svg: string, diagram: Diagram, link = (item: { id: string; link?: string }) => item.link): string {
+  // Escape whitespace too: XML attribute normalization would turn it into spaces.
+  const withLink = (anchor: string, href: string) => anchor.replace(/((?:xlink:)?href=")[^"]*"/g, (_attribute, prefix: string) =>
+    `${prefix}${href.replace(/[&"<\t\n\r]/g, (char) => ({ '&': '&amp;', '"': '&quot;', '<': '&lt;' })[char] ?? `&#${char.charCodeAt(0)};`)}"`);
   const links = new Map(diagram.shapes.map((shape) => [shapeClass(shape.id), link(shape)]));
+  const connections = new Map(diagram.connections.map((connection) => [shapeClass(connection.id), link(connection)]));
   return svg.replace(/(<a\b[^>]*>)(\s*<g\b[^>]*\bclass="([^"]*)")/g, (match, anchor: string, group: string, classes: string) => {
     const link = classes.split(/\s+/).map((name) => links.get(name)).find(Boolean);
-    if (!link) return match;
-    // Escape whitespace too: XML attribute normalization would turn it into spaces.
-    const escaped = link.replace(/[&"<\t\n\r]/g, (char) => ({ '&': '&amp;', '"': '&quot;', '<': '&lt;' })[char] ?? `&#${char.charCodeAt(0)};`);
-    return anchor.replace(/((?:xlink:)?href=")[^"]*"/g, (_attribute, prefix: string) => `${prefix}${escaped}"`) + group;
+    return link ? withLink(anchor, link) + group : match;
+  }).replace(/(<g\b[^>]*\bclass="([^"]*)"[^>]*>)((?:(?!<\/g>|<a\b)[\s\S])*)(<a\b[^>]*>)/g, (match, group: string, classes: string, between: string, anchor: string) => {
+    const link = classes.split(/\s+/).map((name) => connections.get(name)).find(Boolean);
+    return link ? group + between + withLink(anchor, link) : match;
   });
 }
 const entities: Record<string, string> = { amp: '&', quot: '"', lt: '<', gt: '>', apos: "'" };
@@ -68,14 +73,15 @@ function inputLink(href: string, from: string | undefined, input: string): strin
   const path = posix.relative(posix.dirname(input), target);
   return `${path.startsWith('../') ? '' : './'}${path}${link.hash}`;
 }
-/** Point board links at the relative paths of their files in the ZIP, keeping other links. */
+/** Point board links at the relative paths of their files in the ZIP, keeping other links. A link to a board
+ * the ZIP lacks, which D2 keeps on connections, loses its href rather than staying a dead relative URL. */
 function zipLinks(svg: string, from: string, paths: Map<string, string>): string {
-  return svg.replace(/((?:xlink:)?href=")([^"]*)"/g, (match, prefix: string, href: string) => {
+  return svg.replace(/<a\b(?:[^>"]|"[^"]*")*>/g, (anchor) => anchor.replace(/(\s(?:xlink:)?href=")([^"]*)"/g, (attribute, prefix: string, href: string) => {
     const path = paths.get(unescapeXml(href));
-    if (path === undefined) return match;
+    if (path === undefined) return classifyHref(unescapeXml(href)).kind === 'board' ? '' : attribute;
     const link = encodeURI(posix.relative(posix.dirname(from), path)).replace(/[#?]/g, encodeURIComponent);
     return `${prefix}${link.replace(/&/g, '&amp;')}"`;
-  });
+  }));
 }
 const usage = `Usage:
   zoomflow export file.d2 [--all] [--format svg|png|html] [-o, --output file] [--root directory]
@@ -152,7 +158,9 @@ async function compileSources(d2: D2, root: string, realRoot: string, inputPath:
     try {
       return { compiled: await d2.compile({ fs: files, inputPath, options: { layout: 'elk' } }), files };
     } catch (error) {
-      const wanted = [...String((error as Error).message).matchAll(failedImport)].map((match) => match[1]).filter((key) => !tried.has(key));
+      // Go's JSON escapes `&`, `<` and `>` in the raw error text, so decode them to match names holding them.
+      const message = String((error as Error).message).replace(/\\u([\da-f]{4})/gi, (_escape, hex: string) => String.fromCharCode(parseInt(hex, 16)));
+      const wanted = [...message.matchAll(failedImport)].map((match) => match[1]).filter((key) => !tried.has(key));
       wanted.forEach((key) => tried.add(key));
       if (!(await Promise.all(wanted.map(load))).some(Boolean)) throw Object.assign(error as Error, { problems });
     }
@@ -446,7 +454,7 @@ export async function main(args = process.argv.slice(2)): Promise<number> {
               const board = byTarget.get(target)!;
               if (format === 'png') binaries.set(JSON.stringify([file.path, board.id]), data);
               // Links from imported files are rewritten to resolve from this file, as the atlas resolves them.
-              const link = (shape: Diagram['shapes'][number]) => inputLink(shape.link, sources.get(JSON.stringify([board.id, shape.id])), file.path);
+              const link = (item: { id: string; link?: string }) => item.link && inputLink(item.link, sources.get(JSON.stringify([board.id, item.id])), file.path);
               return format === 'png' ? '' : safeLinks(compilerLinks(data.toString('utf8'), board.diagram, link), true, follows);
             }, format === 'html' ? file.diagnostics : [], { concurrency: availableParallelism(), skipEmpty: format === 'html' });
             rendered.push({ path: file.path, name: file.path.replace(/\.d2$/i, ''), boards: exported });

@@ -1,6 +1,6 @@
 import { classifyHref, type Board, type SourceRange } from '@zoomflow/core';
 import { quote, readFlow, unquote } from './flow-model';
-import { boardTopics, readMindMap, uniqueBoardName, type BoardTopic } from './mind-map-model';
+import { boardTopics, keywords, readMindMap, uniqueBoardName, type BoardTopic } from './mind-map-model';
 
 export type BuilderKind = 'flow' | 'mind map';
 /** A board that opens from a shape, kept in a section at the end of the board it opens from. */
@@ -49,9 +49,12 @@ export function splitBoard(text: string): BoardParts {
 }
 
 /** A shape's identifier as D2 reports it, with single-quoted parts like `'null'` double-quoted: D2's own parser
- * accepts both, but board indexing reads only double-quoted keys. */
+ * accepts both, but board indexing reads only double-quoted keys. D2 reports a shape keyed `"label"` as `label`,
+ * so bare parts that read as keywords are quoted too, or `label.link` would set no link. */
 function shapeKey(id: string): string {
-  return id.replace(/"(?:[^"\\]|\\.)*"|'((?:[^']|'')*)'/g, (part, text?: string) => text === undefined ? part : quote(text.replaceAll("''", "'")));
+  return id.replace(/"(?:[^"\\]|\\.)*"|'((?:[^']|'')*)'|[^."']+/g, (part, text?: string) =>
+    text !== undefined ? quote(text.replaceAll("''", "'"))
+      : !part.startsWith('"') && (part === '_' || keywords.has(part.toLowerCase())) ? quote(part) : part);
 }
 
 export function joinBoard({ own, attachments }: BoardParts): string {

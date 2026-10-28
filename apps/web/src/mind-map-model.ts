@@ -12,7 +12,7 @@ const library = '...@zoomflow';
 const accents = 6;
 const quoted = '"(?:[^"\\\\]|\\\\.)*"';
 /** D2 ignores links to boards named like a keyword in any case but lowercase. */
-const keywords = new Set(('label shape icon width height constraint tooltip link near direction top left grid-rows ' +
+export const keywords = new Set(('label shape icon width height constraint tooltip link near direction top left grid-rows ' +
   'grid-columns grid-gap vertical-gap horizontal-gap class classes vars layers scenarios steps style source-arrowhead ' +
   'target-arrowhead opacity stroke fill fill-pattern stroke-width stroke-dash border-radius shadow 3d multiple ' +
   'double-border font font-size font-color animated bold italic underline filled text-transform').split(' '));

@@ -402,6 +402,9 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
   /** Draw a project's atlas map from its files' latest sources, compiling each file to find its links, and show it. */
   async function openAtlasMap(projectId: string) {
     const request = ++atlasRequest;
+    // Opening another document or closing the pane while files compile abandons the map.
+    const from = currentDocumentKey;
+    const current = () => request === atlasRequest && currentDocumentKey === from;
     const { fs, home } = picker().projectSources(projectId);
     const paths = Object.keys(fs).sort((a, b) => a.localeCompare(b));
     const files: AtlasFile[] = [];
@@ -412,13 +415,14 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
           const compiled = await compileSource(fs[path], { inputPath: path, fs });
           files.push({ path, links: linksOfFile(rebaseFileLinks(compiled, path), path) });
         } catch (error) {
-          if (error instanceof CompilerStartupError) throw error;
+          // A restart that cuts a compile short says nothing about the file's source.
+          if (isEngineUnavailable(error)) throw error;
           files.push({ path, links: [], failed: true });
         }
-        if (request !== atlasRequest) return;
+        if (!current()) return;
       }
     } catch (error) {
-      if (request === atlasRequest) setActivity(`Could not draw the atlas map: ${describeError(error)}`, 'error');
+      if (current()) setActivity(`Could not draw the atlas map: ${describeError(error)}`, 'error');
       return;
     }
     const target = picker().showAtlas(id, projectId, atlasMapSource(files, home));

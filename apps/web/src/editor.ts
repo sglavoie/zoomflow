@@ -120,6 +120,9 @@ export class SourceEditor {
     this.view.setState(restore?.state ?? EditorState.create({ doc: source,
       extensions: readOnly ? [...this.extensions, EditorState.readOnly.of(true)] : this.extensions }));
     this.view.dispatch({ effects: [restore?.scroll ?? EditorView.scrollIntoView(0, { y: 'start' }), highlightAiLines.of([])] });
+    // A restored state keeps the markers it last showed, which may be stale; the next compile lints it afresh.
+    ++this.diagnosticsRequest;
+    if (restore) this.view.dispatch(setDiagnostics(this.view.state, []));
     // Keep focus with the picker, diagram, or editor that initiated the switch.
     if (editing) this.view.focus();
     else if (active === document.body) (document.activeElement as HTMLElement | null)?.blur();

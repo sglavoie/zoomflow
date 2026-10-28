@@ -112,7 +112,9 @@ export function exportAtlasZip(documents: readonly AtlasDocument[],
   while (taken.some((path) => path === `${folder}.svg` || path.startsWith(`${folder}/`))) folder = `@${folder}`;
   // Folders compare case-insensitively (Windows, macOS), so `A.d2` and `a.d2` would merge; mark the later one as boards are.
   const used = new Set<string>();
-  const place = (path: string) => {
+  // Folders are named after project paths, made safe the way board names are, as in `aux.d2` or `a:b.d2`.
+  const place = (project: string) => {
+    const path = project.split('/').map(segment).join('/');
     const slash = path.lastIndexOf('/') + 1;
     let name = path.slice(slash);
     while (used.has(`${path.slice(0, slash)}${name}`.normalize('NFC').toLowerCase())) name = `@${name}`;

@@ -1,6 +1,6 @@
 import { atlasHash, boardLabel, classifyHref, type ExportBoard, parseAtlasHash, resolveFilePath, shapeClass } from '@zoomflow/core';
 import { restoreMissingLinks } from './missing-links';
-import { childToward, renderParentContext, resolveRouteHash, restoreTrail, routeFallbackNotice, simplifyTrail, watchHistory } from './navigation';
+import { childToward, normalizeRouteHash, renderParentContext, resolveRouteHash, restoreTrail, routeFallbackNotice, simplifyTrail, watchHistory } from './navigation';
 import { clampBox, createViewport, revealBox } from './viewport';
 import { decorateLinks, splitHitArea } from './link-cues';
 import { setupBreadcrumbs } from './breadcrumbs';
@@ -109,7 +109,7 @@ export async function rasterizeSvg(svg: string): Promise<Blob> {
 // compiled source text, so they cannot reach module imports or one another directly.
 const runtime = { classifyHref, shapeClass, boardLabel, sanitizeSvg, restoreMissingLinks, simplifyTrail, renderParentContext,
   createViewport, clampBox, revealBox, decorateLinks, splitHitArea, setupBreadcrumbs, resolveRouteHash, routeFallbackNotice,
-  restoreTrail, watchHistory, childToward, resolveLink, prepareLinks, followLink, linkTo, atlasHash, parseAtlasHash, resolveFilePath };
+  normalizeRouteHash, restoreTrail, watchHistory, childToward, resolveLink, prepareLinks, followLink, linkTo, atlasHash, parseAtlasHash, resolveFilePath };
 
 // Keep this runtime self-contained: its compiled function body is embedded in HTML.
 // It consumes the same board IDs, hashes, parent and visited-trail model as Viewer.
@@ -149,10 +149,7 @@ function offlineViewer(lib: typeof runtime) {
   function fileTarget(path: string, hash: string) {
     const target = docs.get(fileOf(path)!)!;
     // An authored fragment names boards as written, so `#/My Board` names `#/My%20Board`.
-    const requested = (hash || '#/').split('/').map((segment, index) => {
-      if (index === 0 || segment.startsWith('@')) return segment;
-      try { return encodeURIComponent(decodeURIComponent(segment)); } catch { return segment; }
-    }).join('/') || '#/';
+    const requested = lib.normalizeRouteHash(hash);
     const route = lib.resolveRouteHash(requested, (item) => target.byRoute.has(item));
     const board = target.byRoute.get(route) ?? target.boards[0];
     return { target, board, notice: lib.routeFallbackNotice(requested, route, board.name) };
@@ -265,7 +262,8 @@ function offlineViewer(lib: typeof runtime) {
   };
   function restore() {
     const requested = location.hash;
-    const { path, hash } = lib.parseAtlasHash(requested);
+    const { path, hash: raw } = lib.parseAtlasHash(requested);
+    const hash = lib.normalizeRouteHash(raw);
     const owner = path === undefined ? entry : docs.get(path);
     const target = owner ?? entry;
     const route = lib.resolveRouteHash(owner ? hash : '#/', (item) => target.byRoute.has(item));

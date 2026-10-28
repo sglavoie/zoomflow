@@ -68,6 +68,18 @@ describe('setupBreadcrumbs', () => {
     expect(document.activeElement).toBe(toggle);
   });
 
+  it('moves from the toggle to the last board with ArrowUp and the first with ArrowDown', () => {
+    const { toggle, menu } = mount(['Root', 'a', 'b', 'c', 'd', 'e']);
+    toggle!.click();
+    const items = [...menu.querySelectorAll('button')];
+    toggle!.focus();
+    key(toggle!, 'ArrowUp');
+    expect(document.activeElement).toBe(items.at(-1));
+    toggle!.focus();
+    key(toggle!, 'ArrowDown');
+    expect(document.activeElement).toBe(items[0]);
+  });
+
   it('places the menu right after its toggle in tab order', () => {
     const { container, toggle, menu } = mount(['Root', 'a', 'b', 'c', 'd']);
     expect(toggle!.nextElementSibling).toBe(menu);
@@ -144,5 +156,27 @@ describe('Viewer trail prefix', () => {
     expect(names()).toEqual(['Life', '…', 'Root', 'Sleep']);
     viewer.setTrailPrefix([]);
     expect(names()).toEqual(['Root', 'Sleep']);
+  });
+
+  it('navigates while a new document renders without naming boards it no longer has', async () => {
+    const shape = (id: string) => ({ id, link: '' }) as unknown as Diagram['shapes'][number];
+    const layer = (name: string) => ({ name, shapes: [shape('x')], connections: [] });
+    const diagram = (...layers: string[]) => ({ name: '', shapes: [shape('a')], connections: [], layers: layers.map(layer) }) as unknown as Diagram;
+    const svg = '<svg xmlns="http://www.w3.org/2000/svg"><rect/></svg>';
+    const host = document.createElement('div');
+    document.body.append(host);
+    const viewer = new Viewer(host, { history: false });
+    cleanup = () => viewer.destroy();
+    await viewer.setDocument(diagram('L', 'M'), async () => svg);
+    await viewer.navigate('root.layers.L');
+    let release!: () => void;
+    const rendering = new Promise<void>((resolve) => { release = resolve; });
+    // L is gone from the new document, but a link in the board still shown can lead on before it renders.
+    const pending = viewer.setDocument(diagram('M'), async () => { await rendering; return svg; });
+    const opened = viewer.navigate('root.layers.M');
+    release();
+    await Promise.all([pending, opened]);
+    expect(host.querySelector('[role="alert"]')!.textContent).toBe('');
+    expect([...host.querySelectorAll('.zf-breadcrumbs > button')].map((node) => node.textContent)).not.toContain('L');
   });
 });

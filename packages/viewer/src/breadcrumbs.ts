@@ -36,7 +36,8 @@ export function setupBreadcrumbs(container: HTMLElement) {
     const buttons = [...menu.querySelectorAll('button')];
     const index = buttons.indexOf(document.activeElement as HTMLButtonElement);
     const next = event.key === 'ArrowDown' ? (index + 1) % buttons.length
-      : event.key === 'ArrowUp' ? (index - 1 + buttons.length) % buttons.length
+      // From the toggle, which is not in the menu, ArrowUp wraps to the last board.
+      : event.key === 'ArrowUp' ? (index < 0 ? buttons.length - 1 : (index - 1 + buttons.length) % buttons.length)
       : event.key === 'Home' ? 0 : event.key === 'End' ? buttons.length - 1 : undefined;
     if (next !== undefined) { event.preventDefault(); buttons[next]?.focus(); }
   }, options);

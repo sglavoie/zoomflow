@@ -2,7 +2,7 @@
 import { shapeClass, type Diagram } from '@zoomflow/core';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { openFolderMessage, Viewer, type ViewerOptions } from '../src/index';
-import { childToward, resolveRouteHash, restoreTrail, routeFallbackNotice, simplifyTrail, watchHistory } from '../src/navigation';
+import { childToward, normalizeRouteHash, resolveRouteHash, restoreTrail, routeFallbackNotice, simplifyTrail, watchHistory } from '../src/navigation';
 
 const hashes = new Set(['#/', '#/checkout', '#/checkout/charge']);
 const exists = (hash: string) => hashes.has(hash);
@@ -23,6 +23,15 @@ describe('resolveRouteHash', () => {
 
   it('terminates at the root even when nothing exists', () => {
     expect(resolveRouteHash('#/a/b/c', () => false)).toBe('#/');
+  });
+});
+
+describe('normalizeRouteHash', () => {
+  it('spells segments the way board hashes are built', () => {
+    expect(normalizeRouteHash('#/Q&A/a[b]')).toBe('#/Q%26A/a%5Bb%5D');
+    expect(normalizeRouteHash('#/caf%c3%a9/My Board')).toBe('#/caf%C3%A9/My%20Board');
+    expect(normalizeRouteHash('#/@file/x%2Fy.d2/bad%E0')).toBe('#/@file/x%2Fy.d2/bad%E0');
+    expect(normalizeRouteHash('')).toBe('#/');
   });
 });
 
@@ -84,6 +93,26 @@ describe('watchHistory', () => {
     go('hashchange', '#/c');
     expect(calls).toBe(5);
     vi.unstubAllGlobals();
+  });
+
+  it('restores an address-bar edit to the hash of an earlier same-hash traversal', () => {
+    vi.useFakeTimers();
+    const target = new EventTarget();
+    const location = { hash: '#/' };
+    vi.stubGlobal('location', location);
+    let calls = 0;
+    watchHistory(target, () => { calls++; });
+    location.hash = '#/b';
+    // A traversal between entries with the same hash fires no hashchange.
+    target.dispatchEvent(new Event('popstate'));
+    vi.advanceTimersByTime(1000);
+    // The app moves on without events, then the user types the earlier hash.
+    location.hash = '#/c';
+    location.hash = '#/b';
+    target.dispatchEvent(new Event('hashchange'));
+    expect(calls).toBe(2);
+    vi.unstubAllGlobals();
+    vi.useRealTimers();
   });
 
   it('skips the hashchange of a traversal whose restore already replaced the hash', () => {
@@ -214,5 +243,28 @@ describe('Viewer file links and the root board', () => {
     expect(restore).toHaveBeenCalledTimes(1);
     await vi.waitFor(() => expect(viewer!.currentBoard?.id).toBe('root'));
     expect(history.state.zoomflowFile).toBe('two');
+  });
+
+  it('drops boards a new document lacks from a trail a breadcrumb drawn before it passes', async () => {
+    const host = document.createElement('div');
+    document.body.append(host);
+    viewer = new Viewer(host, { history: false });
+    const layer = (name: string) => ({ name, shapes: [shape('x')], connections: [] });
+    const board = (...names: string[]) => ({ name: '', shapes: [shape('x')], connections: [], layers: names.map(layer) }) as unknown as Diagram;
+    const render = async () => svgs['layers.L'];
+    await viewer.setDocument(board('A', 'C'), render);
+    await viewer.navigate('root.layers.A');
+    await viewer.navigate('root.layers.C');
+    const crumbs = () => [...host.querySelectorAll('nav button')];
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    const pending = viewer.setDocument(board('C'), async () => { await gate; return render(); });
+    // The C crumb still passes the trail through A, which the new document removes.
+    (crumbs()[2] as HTMLButtonElement).click();
+    release();
+    await pending;
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(host.querySelector('[role="alert"]')!.textContent).toBe('');
+    expect(crumbs().map((button) => button.textContent)).not.toContain('A');
   });
 });

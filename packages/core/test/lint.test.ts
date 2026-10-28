@@ -357,6 +357,16 @@ layers.L: {back.link: "../index.d2#/"; x.link: ./nope.d2}`);
   expect(lint(result).diagnostics.some((item) => item.rule === 'ignored-link')).toBe(false);
 });
 
+it('says which bare file links D2 keeps, and suggests forward slashes for backslashed ones', async () => {
+  const result = await compile('win.link: ".\\\\health.d2"\nup.link: "..\\\\index.d2#/"\nabs.link: /health.d2\nbare.link: health.d2');
+  expect(lint(result).diagnostics.filter((item) => item.rule === 'bare-file-link').map(({ shape, message }) => [shape, message])).toEqual([
+    ['win', 'Link ".\\health.d2" is not a ./ or ../ path, so the viewer ignores it. To open the file, write link: "./health.d2".'],
+    ['up', 'Link "..\\index.d2#/" is not a ./ or ../ path, so the viewer ignores it. To open the file, write link: "../index.d2#/".'],
+    ['abs', 'Link "/health.d2" is not a ./ or ../ path, so the viewer ignores it. To open the file, write link: "./health.d2".'],
+    ['bare', 'Link "health.d2" is read as a board path, so D2 drops it. To open the file, write link: "./health.d2".'],
+  ]);
+});
+
 it('warns about classes nothing defines, on the root and in layers that inherit its classes', async () => {
   const result = lint(await compile(`...@zoomflow
 classes.mine.style.bold: true
@@ -435,6 +445,7 @@ it('keeps scanning classes after apostrophes, inch marks, pipes and one-line blo
   expect(await undefinedClasses(`${classes}\nb: |md last line|`)).toEqual([]);
   expect(await undefinedClasses(`x: in | out\n${classes}\nw: yes | no\nz.class: nope`)).toEqual(['nope']);
   expect(await undefinedClasses(`x: in | out\n${classes}\nz.class: nope`)).toEqual(['nope']);
+  expect(await undefinedClasses('classes: {a: {label: Issue \\#1}; b: {style.fill: red}}\nx.class: [a; b]')).toEqual([]);
 });
 
 it('names a board that a link cannot reach because its name has a backslash or quote', async () => {
