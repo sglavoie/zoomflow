@@ -2,7 +2,7 @@ import type { CompileResponse } from '@d2lang/d2';
 import { boardKey, classifyHref, indexBoards, resolveFilePath, type Board } from './index';
 import { definedClasses } from './classes';
 import { boundaryNeighbours } from './context';
-import { filterMatches, fileLinkRules, globMatches, idSegments, importedLinks, importPath, linkAfterKey, linkSources, shapeAttributes, shapeFiles, shapeRanges,
+import { compareOrder, filterMatches, fileLinkRules, globMatches, idSegments, importedLinks, importPath, linkAfterKey, linkOrder, linkSources, shapeAttributes, shapeFiles, shapeRanges,
   type AuthoredLink, type GlobFilter, type GlobSegment } from './source';
 
 export type LintRule = 'boundary-in' | 'boundary-out' | 'orphan-board' | 'dangling-link' | 'ignored-link' | 'missing-backlink'
@@ -210,6 +210,8 @@ export function lint(compiled: LintInput, options: LintOptions = {}): LintResult
   let imported: ReturnType<typeof importedLinks> | undefined;
   let attributesOf: ReturnType<typeof shapeAttributes> | undefined;
   let filesOf: ReturnType<typeof shapeFiles> | undefined;
+  let orderOf: ReturnType<typeof linkOrder> | undefined;
+  const rootFile = /^(.*),/.exec((compiled.graph as { ast?: { range?: string } }).ast?.range ?? '')?.[1];
   // Each board's class links, for the place an inherited class was written; and the classes files imported under a
   // key define, with the import, since D2 applies none of those.
   const classLinksOf = new Map<string, Map<string, { href: string; range?: string }>>();
@@ -389,7 +391,8 @@ export function lint(compiled: LintInput, options: LintOptions = {}): LintResult
       if (!file) return;
       const rules = fileLinkRules(compiled.fs!, file);
       const prefix = idSegments(scope.join('.')).map((text) => ({ text, glob: false }));
-      for (const glob of rules.globs) globs.push({ ...glob, path: [...prefix, ...glob.path] });
+      // Globs on its own boards reach the compiler-expanded child ASTs instead.
+      for (const glob of rules.globs) if (!glob.board) globs.push({ ...glob, path: [...prefix, ...glob.path] });
       if (imported.spread && !scope.length) for (const [name, link] of rules.classes) classLinks.set(name, link);
       else {
         for (const name of definedClasses(compiled.fs!, file) ?? []) if (!keyedClasses.has(name)) keyedClasses.set(name, path!);
@@ -486,16 +489,29 @@ export function lint(compiled: LintInput, options: LintOptions = {}): LintResult
     classLinksOf.set(id, classLinks);
     // Links written in imported files: the root AST lacks them and child ASTs hold D2's resolved values.
     for (const shape of board.diagram.shapes) {
+      // Of a shape's own, imported and glob links, D2 applies the last; where a place is unknown, as in child boards'
+      // expanded ASTs, its own link outranks an imported one, and either outranks a glob's.
+      const place = (link: Authored) => (orderOf ??= linkOrder(compiled.fs && rootFile !== undefined ? fileLinkRules(compiled.fs, rootFile).regions : []))(
+        link.range, board.id, shape.id);
+      const after = (link: Authored, current: Authored) => {
+        const [a, b] = [place(link), place(current)];
+        return Boolean(a && b && compareOrder(a, b) > 0);
+      };
       const link = (imported ??= importedLinks(compiled)).get(JSON.stringify([board.id, shape.id]));
       const key = shape.id.toLowerCase();
       const own = authored.get(key);
-      if (link && !own?.range?.match(/^[^,]/)) authored.set(key, prefer(own, link)!);
-      // A shape's own link outranks a glob's; of several globs, the last wins.
+      const written = own?.range?.match(/^[^,]/);
+      if (link && (!written || after(link, own!))) authored.set(key, written ? link : prefer(own, link)!);
       const attributes = (attributesOf ??= shapeAttributes(compiled.diagram, compiled.graph)).get(JSON.stringify([board.id, shape.id]));
-      const glob = authored.has(key) ? undefined : [...globs].reverse().find((item) => globMatches(item.path, idSegments(shape.id))
+      const glob = globs.filter((item) => globMatches(item.path, idSegments(shape.id))
         && (item.file === undefined || (filesOf ??= shapeFiles(compiled)).get(JSON.stringify([board.id, shape.id]))?.has(item.file))
-        && (!item.filters.length || attributes && item.filters.every((filter) => filterMatches(filter, board, shape, attributes))));
-      if (glob) authored.set(key, glob.link);
+        && (!item.filters.length || attributes && item.filters.every((filter) => filterMatches(filter, board, shape, attributes))))
+        .reduce<typeof globs[number] | undefined>((last, item) => {
+          const [a, b] = [place(item.link), last && place(last.link)];
+          return !last || !a || !b || compareOrder(a, b) >= 0 ? item : last;
+        }, undefined);
+      const current = authored.get(key);
+      if (glob && (!current || after(glob.link, current))) authored.set(key, glob.link);
       // Then its classes: the last that sets a link wins.
       const classLink = authored.has(key) ? undefined : (shape.classes ?? []).map((name) => classLinks.get(name)).filter(Boolean).at(-1);
       if (classLink) authored.set(key, classLink);

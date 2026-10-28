@@ -167,39 +167,58 @@ export function filterMatches(filter: GlobFilter, board: Board, shape: Diagram['
 }
 /** The file each kept shape and connection link was written in, keyed by board ID and shape or connection ID.
  * D2 rewrites the image paths of imported files but keeps their links verbatim, so a file link resolves from
- * the file that wrote it: that of a `shape.link` or `shape: {link: x}` reference, else that of the last glob that
- * sets it, else that of the class that set it, else the one file that mentions the shape (both ends, for a
+ * the file that wrote it: that of the last `shape.link` or `shape: {link: x}` reference or glob that sets it, as D2
+ * applies them, else that of the class that set it, else the one file that mentions the shape (both ends, for a
  * connection), else the one such file whose text holds the link. Links left out cannot be told apart; callers
  * resolve them from the entry file.
  */
 export function linkSources(compiled: { diagram: Diagram; graph: unknown; fs?: Record<string, string> }): Map<string, string> {
-  const explicit = new Map<string, string>();
+  const entry = rangeFile((compiled.graph as { ast?: { range?: string } }).ast?.range);
+  const rules = compiled.fs && entry !== undefined ? fileLinkRules(compiled.fs, entry) : undefined;
+  const order = linkOrder(rules?.regions ?? []);
+  // The last reference that sets each shape's link, with its place when it has one.
+  const explicit = new Map<string, { file: string; order?: number[] }>();
   const files = shapeFiles(compiled, (key, file, reference) => {
     const path = reference.key?.path ?? [];
     const index = reference.key_path_index ?? 0;
-    if (path.length === index + 2 && keyText(path[index + 1]) === 'link') explicit.set(key, file);
-    else if (path.length === index + 1 && (reference.map_key_edge_index ?? -1) < 0) {
+    let sets = path.length === index + 2 && keyText(path[index + 1]) === 'link';
+    if (!sets && path.length === index + 1 && (reference.map_key_edge_index ?? -1) < 0) {
       // `a: {link: x}` names the link in the map after the key.
       const end = /,\d+:\d+:\d+-\d+:\d+:(\d+)$/.exec(reference.key?.range ?? '')?.[1];
       const text = compiled.fs?.[file];
-      if (end !== undefined && text !== undefined && mapLink(text, Number(end))?.link) explicit.set(key, file);
+      sets = end !== undefined && text !== undefined && Boolean(mapLink(text, Number(end))?.link);
     }
+    if (!sets) return;
+    const [board, shape] = JSON.parse(key) as [string, string];
+    const place = order(reference.key?.range, board, shape);
+    const previous = explicit.get(key);
+    if (!previous?.order || !place || compareOrder(place, previous.order) >= 0) explicit.set(key, { file, order: place });
   });
-  const entry = rangeFile((compiled.graph as { ast?: { range?: string } }).ast?.range);
-  const rules = compiled.fs && entry !== undefined ? fileLinkRules(compiled.fs, entry) : undefined;
   let attributes: Map<string, Record<string, unknown>> | undefined;
-  /** The file of the last glob that applies to the shape, when it set the shape's link. Globs at the top of the entry
-   * file and its imports apply to the root board and the scenarios and steps that inherit it, and an imported file's
-   * globs only to the shapes that file writes. */
-  const globFile = (board: Board, shape: Diagram['shapes'][number], key: string) => {
-    if (!rules?.globs.length || /\.layers\./.test(`${board.id}.`)) return;
-    const glob = [...rules.globs].reverse().find((item) => globMatches(item.path, idSegments(shape.id))
-      && (item.file === entry || files.get(key)?.has(item.file))
-      && (!item.filters.length || item.filters.every((filter) => {
+  /** The last glob that applies to the shape. A glob applies to its board and the scenarios and steps that inherit
+   * it, and an imported file's globs only to the shapes that file writes. */
+  const lastGlob = (board: Board, shape: Diagram['shapes'][number], key: string) => {
+    let last: { glob: GlobLink; order?: number[] } | undefined;
+    for (const glob of rules?.globs ?? []) {
+      const full = `root${glob.board}`;
+      if (board.id !== full && !(board.id.startsWith(`${full}.`) && !/\.layers\./.test(`${board.id.slice(full.length)}.`))) continue;
+      if (!globMatches(glob.path, idSegments(shape.id)) || glob.file !== entry && !files.get(key)?.has(glob.file)) continue;
+      if (glob.filters.length && !glob.filters.every((filter) => {
         const found = (attributes ??= shapeAttributes(compiled.diagram, compiled.graph)).get(key);
         return found && filterMatches(filter, board, shape, found);
-      })));
-    return glob?.link.href === shape.link ? glob.file : undefined;
+      })) continue;
+      const place = order(glob.link.range, board.id, shape.id);
+      if (!last?.order || !place || compareOrder(place, last.order) >= 0) last = { glob, order: place };
+    }
+    return last;
+  };
+  /** The file of the reference or glob D2 applies last, when it set the shape's link; a reference wins when either
+   * place is unknown. */
+  const writtenFile = (board: Board, shape: Diagram['shapes'][number], key: string) => {
+    const own = explicit.get(key);
+    const glob = lastGlob(board, shape, key);
+    if (own && !(glob?.order && own.order && compareOrder(glob.order, own.order) > 0)) return own.file;
+    return glob?.glob.link.href === shape.link ? glob?.glob.file : undefined;
   };
   // A class's link resolves from the file that defines the class, which need not mention the shape.
   const classes = rules?.classes ?? new Map<string, AuthoredLink>();
@@ -217,7 +236,7 @@ export function linkSources(compiled: { diagram: Diagram; graph: unknown; fs?: R
     const mentions = (id: string) => [...files.get(JSON.stringify([board.id, id])) ?? []];
     for (const shape of board.diagram.shapes) {
       const key = JSON.stringify([board.id, shape.id]);
-      const file = shape.link ? explicit.get(key) ?? globFile(board, shape, key) ?? classFile(shape) ?? pick(mentions(shape.id), shape.link) : undefined;
+      const file = shape.link ? writtenFile(board, shape, key) ?? classFile(shape) ?? pick(mentions(shape.id), shape.link) : undefined;
       if (file !== undefined) result.set(key, file);
     }
     for (const connection of board.diagram.connections) {
@@ -263,6 +282,10 @@ function scalarAt(text: string, from: number): Scalar | undefined {
 /** The offset of each statement of the map body starting at `from`, up to its closing brace, or of a whole file
  * (`file`), skipping strings, block strings, comments and nested maps; undefined when the text does not balance. */
 function statements(text: string, from: number, file = false): number[] | undefined {
+  return scanMap(text, from, file)?.starts;
+}
+/** As `statements`, with the offset of the closing brace, or the file's length. */
+function scanMap(text: string, from: number, file = false): { starts: number[]; end: number } | undefined {
   const starts = [from];
   let depth = 0;
   for (let i = from; i < text.length; i++) {
@@ -273,7 +296,7 @@ function statements(text: string, from: number, file = false): number[] | undefi
       i = text.indexOf('\n', i) - 1;
       if (i < 0) break;
     } else if (char === '{') depth++;
-    else if (char === '}' && depth-- === 0) return file ? undefined : starts;
+    else if (char === '}' && depth-- === 0) return file ? undefined : { starts, end: i };
     else if (text.startsWith('"""', i)) {
       // A block comment, which may hold anything.
       const end = text.indexOf('"""', i + 3);
@@ -285,7 +308,7 @@ function statements(text: string, from: number, file = false): number[] | undefi
       if (string) i = string.to - 1;
     }
   }
-  return file && depth === 0 ? starts : undefined;
+  return file && depth === 0 ? { starts, end: text.length } : undefined;
 }
 
 /** A glob filter, as `&shape: circle` or `!&label: A*`; `glob` marks an unquoted value, where `*` matches any text. */
@@ -375,74 +398,163 @@ const importText = (path: string) => path[0] === '"' ? path.slice(1, -1).replace
   : path[0] === "'" ? path.slice(1, -1).replaceAll("''", "'") : path;
 
 /** A glob that sets links: its key path, the link, and the filters that limit it. */
-export type GlobLink = { path: GlobSegment[]; link: AuthoredLink; filters: GlobFilter[]; /** The file that wrote it. */ file: string };
-/** The links a file sets for more than one shape: each glob statement at its top, as in `*.link: x` or
- * `a.*: {&shape: circle; link: x}`, with the glob's key path and file, and each class it defines, as in `classes: {x: {link: y}}`;
- * a later class definition replaces an earlier one. Its imports are followed: globs under their keys, and classes
- * only from whole files spread at the top, as D2 adds them. */
+export type GlobLink = { path: GlobSegment[]; link: AuthoredLink; filters: GlobFilter[]; /** The file that wrote it. */ file: string;
+  /** The board it is written on, after `root`, as `.layers.x`; empty for the root board. */ board: string };
+/** Where a stretch of a file's text sits in D2's evaluation: the board it writes, after `root` as in `GlobLink`, the
+ * key path it is imported under, and the offsets of the import statements that reach it, outermost first. */
+export type LinkRegion = { file: string; from: number; to: number; board: string; depth: number; scope: string[]; chain: number[] };
+const boardGroups = new Set(['layers', 'scenarios', 'steps']);
+// Keys whose maps hold attributes or definitions, not shapes.
+const attributeKeys = new Set(['classes', 'vars', 'style', 'source-arrowhead', 'target-arrowhead', 'label', 'icon', 'tooltip', 'near']);
+
+/** The links a file sets for more than one shape: each glob statement, as in `*.link: x` or
+ * `a.*: {&shape: circle; link: x}`, with its key path, file and board, including those in nested maps and board
+ * blocks, and each class it defines at its top, as in `classes: {x: {link: y}}`; a later class definition replaces
+ * an earlier one. Its imports are followed wherever they are: globs under their keys, and classes only from whole
+ * files spread at the top, as D2 adds them. `regions` places every stretch of text read, for `linkOrder`. */
 export function fileLinkRules(fs: Record<string, string>, file: string, seen = new Set<string>()):
-  { globs: GlobLink[]; classes: Map<string, AuthoredLink> } {
+  { globs: GlobLink[]; classes: Map<string, AuthoredLink>; regions: LinkRegion[] } {
   const globs: GlobLink[] = [];
   const classes = new Map<string, AuthoredLink>();
-  const text = fs[file];
-  if (text === undefined || seen.has(file)) return { globs, classes };
-  seen.add(file);
-  /** The key path at `start`, and the offset of the colon after it, or undefined without one. */
-  const keyAt = (start: number) => {
-    const path: GlobSegment[] = [];
-    let at = start;
-    for (let part = sticky(keyPart, text, at); part; part = sticky(keyPart, text, at)) {
-      path.push({ text: part[1]?.replace(/\\(.)/g, '$1') ?? part[2]?.replaceAll("''", "'") ?? part[3], glob: part[3]?.includes('*') ?? false });
-      at = keyPart.lastIndex;
-      if (part[4] !== '.') break;
-    }
-    return path.length && text[at] === ':' ? { path, at } : undefined;
-  };
-  /** The link a key path ending in `link`, or a map after it, sets. */
-  const linkOf = (path: GlobSegment[], start: number, at: number) => {
-    const last = path.at(-1)!;
-    if (!last.glob && last.text === 'link') return { link: linkAfterKey(textRange(file, text, start, at), fs), named: true, filters: [] };
-    const map = mapLink(text, at);
-    return { link: map?.link && authored(file, text, map.link), named: false, filters: map?.filters ?? [] };
-  };
-  const defineClass = (path: GlobSegment[], start: number, at: number) => {
-    if (path.length > 2 || path.length === 2 && path[1].text !== 'link') return;
-    const { link } = linkOf(path, start, at);
-    if (link) classes.set(path[0].text, link);
-  };
-  for (const start of statements(text, 0, true) ?? []) {
-    const imported = sticky(importLine, text, start);
-    if (imported) {
-      const target = importPath(fs, file, importText(imported[1] ?? imported[3]));
-      const scope = imported[2] ? keyPath(imported[2]) : [];
-      if (!target || !scope) continue;
-      const rules = fileLinkRules(fs, target, seen);
-      for (const glob of rules.globs) globs.push({ ...glob, path: [...scope, ...glob.path] });
-      if (!imported[2]) for (const [name, link] of rules.classes) classes.set(name, link);
-      continue;
-    }
-    const key = keyAt(start);
-    if (!key) continue;
-    const { path, at } = key;
-    if (path[0].text === 'classes' && !path[0].glob) {
-      if (path.length > 1) defineClass(path.slice(1), start, at);
-      else {
-        // `classes: {x: {link: y}; z.link: w}` defines each class in its map.
-        const brace = sticky(/[ \t]*:[ \t]*\{/y, text, at);
-        for (const inner of brace ? statements(text, brace.index + brace[0].length) ?? [] : []) {
-          const entry = keyAt(inner);
-          if (entry) defineClass(entry.path, inner, entry.at);
-        }
-      }
-      continue;
-    }
-    if (!path.some((segment) => segment.glob)) continue;
-    const { link, named, filters } = linkOf(path, start, at);
-    if (link) globs.push({ path: named ? path.slice(0, -1) : path, link, filters, file });
+  const regions: LinkRegion[] = [];
+  type Place = { board: string; depth: number; scope: GlobSegment[]; chain: number[] };
+  function readFile(file: string, place: Place, classy: boolean) {
+    const text = fs[file];
+    const scan = text === undefined || seen.has(file) ? undefined : scanMap(text, 0, true);
+    if (!scan) return;
+    seen.add(file);
+    readMap(file, text!, scan, place, classy);
+    // `seen` guards only the import chain, so a file imported at two places adds its rules at both.
+    seen.delete(file);
   }
-  // `seen` guards only the import chain, so a file imported at two places adds its rules at both.
-  seen.delete(file);
-  return { globs, classes };
+  function readMap(file: string, text: string, scan: { starts: number[]; end: number }, place: Place, classy: boolean) {
+    const { board, depth, scope, chain } = place;
+    regions.push({ file, from: scan.starts[0], to: scan.end, board, depth, scope: scope.map((segment) => segment.text), chain });
+    /** The key path at `start`, and the offset of the colon after it, or undefined without one. */
+    const keyAt = (start: number) => {
+      const path: GlobSegment[] = [];
+      let at = start;
+      for (let part = sticky(keyPart, text, at); part; part = sticky(keyPart, text, at)) {
+        path.push({ text: part[1]?.replace(/\\(.)/g, '$1') ?? part[2]?.replaceAll("''", "'") ?? part[3], glob: part[3]?.includes('*') ?? false });
+        at = keyPart.lastIndex;
+        if (part[4] !== '.') break;
+      }
+      return path.length && text[at] === ':' ? { path, at } : undefined;
+    };
+    /** The link a key path ending in `link`, or a map after it, sets. */
+    const linkOf = (path: GlobSegment[], start: number, at: number) => {
+      const last = path.at(-1)!;
+      if (!last.glob && last.text === 'link') return { link: linkAfterKey(textRange(file, text, start, at), fs), named: true, filters: [] };
+      const map = mapLink(text, at);
+      return { link: map?.link && authored(file, text, map.link), named: false, filters: map?.filters ?? [] };
+    };
+    const defineClass = (path: GlobSegment[], start: number, at: number) => {
+      if (path.length > 2 || path.length === 2 && path[1].text !== 'link') return;
+      const { link } = linkOf(path, start, at);
+      if (link) classes.set(path[0].text, link);
+    };
+    /** The statements of the map after the colon at `at`, as in `: {` or `: label {`. */
+    const mapAfter = (at: number) => {
+      let i = at + 1;
+      if (!/^[ \t]*\{/.test(text.slice(i, i + 80))) {
+        const label = scalarAt(text, i);
+        if (!label) return;
+        i = label.to;
+      }
+      const brace = sticky(/[ \t]*\{/y, text, i);
+      return brace ? scanMap(text, i + brace[0].length) : undefined;
+    };
+    /** A statement with key path `path` ending at the colon `at`, read on `place`. */
+    const statement = (path: GlobSegment[], start: number, at: number, end: number, place: Place, classy: boolean) => {
+      const { scope } = place;
+      // `layers.x: {…}` and `scenarios.s.a.link: y` write board `x` or `s`; `layers: {x: …}` names each board in its map.
+      if (!scope.length && !path[0].glob && boardGroups.has(path[0].text)) {
+        if (path.length === 1) {
+          const inner = mapAfter(at);
+          for (const child of inner?.starts ?? []) {
+            const key = keyAt(child);
+            if (key) statement([path[0], ...key.path], child, key.at, end, place, false);
+          }
+          return;
+        }
+        if (path[1].glob) return;
+        const child = { ...place, board: `${place.board}.${path[0].text}.${boardKey(path[1].text)}`, depth: place.depth + 1 };
+        const rest = path.slice(2);
+        if (!rest.length) {
+          const inner = mapAfter(at);
+          if (inner) readMap(file, text, inner, child, false);
+        } else {
+          // The statement writes the board from within its parent's text.
+          regions.push({ file, from: start, to: end, board: child.board, depth: child.depth, scope: [], chain: place.chain });
+          statement(rest, start, at, end, child, false);
+        }
+        return;
+      }
+      if (!path[0].glob && path[0].text === 'classes') {
+        if (!classy) return;
+        if (path.length > 1) defineClass(path.slice(1), start, at);
+        else {
+          // `classes: {x: {link: y}; z.link: w}` defines each class in its map.
+          const brace = sticky(/[ \t]*:[ \t]*\{/y, text, at);
+          for (const inner of brace ? statements(text, brace.index + brace[0].length) ?? [] : []) {
+            const entry = keyAt(inner);
+            if (entry) defineClass(entry.path, inner, entry.at);
+          }
+        }
+        return;
+      }
+      if (path.some((segment) => segment.glob)) {
+        const { link, named, filters } = linkOf(path, start, at);
+        if (link) globs.push({ path: [...scope, ...(named ? path.slice(0, -1) : path)], link, filters, file, board: place.board });
+        return;
+      }
+      // A shape's map, as `g: {…}`, holds globs and imports under its key; edges and attributes hold none.
+      if (path.some((segment) => attributeKeys.has(segment.text) || segment.text === 'link' || /<-|->|--/.test(segment.text))) return;
+      const inner = mapAfter(at);
+      if (inner) readMap(file, text, inner, { ...place, scope: [...scope, ...path] }, false);
+    };
+    for (const [index, start] of scan.starts.entries()) {
+      const end = scan.starts[index + 1] ?? scan.end;
+      const imported = sticky(importLine, text, start);
+      if (imported) {
+        const target = importPath(fs, file, importText(imported[1] ?? imported[3]));
+        const key = imported[2] ? keyPath(imported[2]) : [];
+        if (target && key) readFile(target, { board, depth, scope: [...scope, ...key], chain: [...chain, start] }, classy && !imported[2]);
+        continue;
+      }
+      const key = keyAt(start);
+      if (key) statement(key.path, start, key.at, end, place, classy);
+    }
+  }
+  readFile(file, { board: '', depth: 0, scope: [], chain: [] }, true);
+  return { globs, classes, regions };
+}
+
+/** Where a link written at `range` falls in D2's evaluation of shape `shape` on board `board`, for comparing which
+ * of two assignments D2 applies last: a later statement wins, and one written on a child board wins over those it
+ * inherits. Undefined when the text is not in `regions`, as for compiler placeholders. */
+export function linkOrder(regions: LinkRegion[]): (range: string | undefined, board: string, shape: string) => number[] | undefined {
+  return (range, board, shape) => {
+    const match = /^(.+),\d+:\d+:(\d+)-\d+:\d+:\d+$/.exec(range ?? '');
+    if (!match) return;
+    const offset = Number(match[2]);
+    const segments = idSegments(shape).map((segment) => segment.toLowerCase());
+    let found: LinkRegion | undefined;
+    for (const region of regions) {
+      const full = `root${region.board}`;
+      const applies = board === full || board.startsWith(`${full}.`) && !/\.layers\./.test(`${board.slice(full.length)}.`);
+      if (region.file !== match[1] || offset < region.from || offset >= region.to || !applies) continue;
+      if (!region.scope.every((segment, index) => segment.toLowerCase() === segments[index])) continue;
+      // The innermost board, then the last place the file is imported.
+      if (!found || region.depth > found.depth || region.depth === found.depth && compareOrder(region.chain, found.chain) >= 0) found = region;
+    }
+    return found && [found.depth, ...found.chain, offset];
+  };
+}
+/** Compare two `linkOrder` places: negative when `a` comes first. */
+export function compareOrder(a: number[], b: number[]): number {
+  for (let i = 0; i < Math.min(a.length, b.length); i++) if (a[i] !== b[i]) return a[i] - b[i];
+  return a.length - b.length;
 }
 /** Split an unquoted or quoted key path, such as `a."b.c"`; undefined for one this does not read. */
 function keyPath(key: string): GlobSegment[] | undefined {

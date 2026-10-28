@@ -616,6 +616,40 @@ it('resolves a class\'s file link from the file that defines the class', async (
   expect(rebaseFileLinks(result, 'index').shapes.map((shape) => [shape.id, shape.link])).toEqual([['a', './sub/other.d2']]);
 });
 
+it('credits a file link to whichever reference or glob D2 applies last, on the board it is written for', async () => {
+  const exists = (path: string) => ['y.d2', 'sub/x.d2'].includes(path);
+  const lib = { 'sub/lib.d2': 'a.link: ./x.d2' };
+  for (const [index, expected] of [
+    // A glob after an import overrides the imported file's own link, and an import after the entry's link overrides it.
+    ['...@sub/lib\n*.link: ./y.d2', [['root', 'a', './y.d2']]],
+    ['a.link: ./y.d2\n...@sub/lib', [['root', 'a', './sub/x.d2']]],
+    ['...@sub/lib\na.link: ./y.d2', [['root', 'a', './y.d2']]],
+    // Globs in layers, scenarios and shape maps apply after the imports beside them.
+    ['z.link: layers.x\nlayers.x: {...@sub/lib\n*.link: ./y.d2}', [['root', 'z', 'root.layers.x'], ['root.layers.x', 'a', './y.d2']]],
+    ['...@sub/lib\nscenarios.s: {*.link: ./y.d2}', [['root', 'a', './sub/x.d2'], ['root.scenarios.s', 'a', './y.d2']]],
+    ['g: {...@sub/lib\n*.link: ./y.d2}', [['root', 'g.a', './y.d2']]],
+  ] as const) {
+    const fs = { index, ...lib };
+    const result = { ...await d2.compile({ fs, inputPath: 'index', options: { layout: 'elk' } }), fs };
+    expect(lint(result, { files: { inputPath: 'index', exists } }).diagnostics.filter((item) => item.rule.includes('file')), index).toEqual([]);
+    const links = [...indexBoards(rebaseFileLinks(result, 'index')).values()].flatMap((board) =>
+      board.diagram.shapes.filter((shape) => shape.link).map((shape) => [board.id, shape.id, shape.link]));
+    expect(links, index).toEqual(expected);
+  }
+});
+
+it('finds a dropped link that overrides an earlier one, and globs from imports nested in imported maps', async () => {
+  const shapes = async (fs: Record<string, string>) => lint({ ...await d2.compile({ fs, inputPath: 'index', options: { layout: 'elk' } }), fs })
+    .diagnostics.filter((item) => item.rule === 'dangling-link').map((item) => item.shape);
+  expect(await shapes({ index: 'a.link: https://e.com\n*.link: layers.missing\nb' })).toEqual(['a', 'b']);
+  expect(await shapes({ index: 'a.link: https://e.com\n...@lib', 'lib.d2': 'a.link: layers.missing' })).toEqual(['a']);
+  expect(await shapes({ index: '...@a', 'a.d2': 'x: {...@b}', 'b.d2': '*.link: layers.missing\ns' })).toEqual(['x.s']);
+  // A link written later, or on the scenario itself, still wins.
+  expect(await shapes({ index: '*.link: layers.missing\na.link: https://e.com' })).toEqual([]);
+  expect(await shapes({ index: '...@lib\na.link: https://e.com', 'lib.d2': 'a.link: layers.missing' })).toEqual([]);
+  expect(await shapes({ index: 'a\nscenarios.s: {a.link: https://e.com}\n*.link: https://g.com' })).toEqual([]);
+});
+
 it('rewrites file links of imported files to open from the entry file, leaving the compiled diagram for lint', async () => {
   const result = await d2.compile({ fs: { 'work/index.d2': '...@sub/part\nhome.link: ./sub/other.d2',
     'work/sub/part.d2': 'a.link: ./other.d2\nb: {link: "../../x.d2#/Q"}\na -> b: {link: ./other.d2}' }, inputPath: 'work/index.d2', options: { layout: 'elk' } });
