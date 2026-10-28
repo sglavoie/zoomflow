@@ -294,7 +294,7 @@ export async function main(args = process.argv.slice(2)): Promise<number> {
   // Known before parsing, so a lint --json usage error still prints JSON.
   // Skip option values: in `--root . lint`, the command is lint, not the root.
   const valued = new Set(['--root', '--format', '--output', '-o']);
-  let json = args.find((arg, i) => !arg.startsWith('-') && !valued.has(args[i - 1])) === 'lint' && args.includes('--json');
+  let json = args.find((arg, i) => !arg.startsWith('-') && !valued.has(args[i - 1])) === 'lint' && args.some((arg) => arg === '--json' || arg.startsWith('--json='));
   try {
     const { values, positionals } = (() => {
       try {

@@ -33,8 +33,8 @@ process.stdin.on('end', () => {
   for (const [name, value] of Object.entries(${JSON.stringify(expectedEnv)})) {
     if (process.env[name] !== value) { process.stderr.write('Unexpected ' + name); process.exit(5); }
   }
-  process.stdout.write(${JSON.stringify(stdout)});
-  process.exit(${exit});
+  // Exit once the write flushes: large pipe writes are asynchronous on macOS.
+  process.stdout.write(${JSON.stringify(stdout)}, () => process.exit(${exit}));
 });
 `);
   await chmod(path, 0o755);
@@ -130,6 +130,14 @@ it('runs Claude Code and reads structured output', async () => {
   await fakeCommand('claude', { is_error: false, structured_output: { reply: 'Renamed.', source: 'new: New' } }, 0,
     { CLAUDE_CONFIG_DIR: join(homedir(), '.claude') });
   await expect(runAi({ ...request, provider: 'claude' })).resolves.toEqual({ reply: 'Renamed.', source: 'new: New' });
+});
+
+it('accepts a large source although Claude Code prints the reply twice', async () => {
+  const source = Array.from({ length: 5_000 }, (_, i) => `\t"node ${i}": "a \\"quoted\\" label"`).join('\n');
+  expect(source.length).toBeLessThan(180_000);
+  const answer = { reply: 'Done.', source };
+  await fakeCommand('claude', { is_error: false, result: JSON.stringify(answer), structured_output: answer });
+  await expect(runAi({ ...request, provider: 'claude' })).resolves.toEqual(answer);
 });
 
 it('passes custom environment and lets the Claude config field take precedence', async () => {

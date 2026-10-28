@@ -52,10 +52,11 @@ describe('decorateLinks', () => {
 
   it('names file links as opening their file, at a board when the link names one', () => {
     const svg = mount('<a id="home" data-file="./life/Health.d2" href="#/@file/x"/><a id="deep" data-file="../Health.d2#/Sleep/@scenarios/My%20Night"/>' +
-      '<a id="gone" data-file="./gone.d2" data-missing=""/><a id="board" data-board="root.layers.a" href="#/A"/>');
+      '<a id="gone" data-file="./gone.d2" data-missing=""/><a id="board" data-board="root.layers.a" href="#/A"/><a id="slash" data-file="./Health.d2#/Sleep/"/>');
     decorateLinks(svg, boards, 'root', splitHitArea);
     const label = (id: string) => svg.querySelector(`#${id}`)!.getAttribute('aria-label');
-    expect([label('home'), label('deep'), label('gone'), label('board')]).toEqual(['Opens Health', 'Opens Health at My Night', 'Missing file: gone', 'Open A board']);
+    expect([label('home'), label('deep'), label('gone'), label('board'), label('slash')])
+      .toEqual(['Opens Health', 'Opens Health at My Night', 'Missing file: gone', 'Open A board', 'Opens Health at Sleep']);
     expect(['home', 'gone', 'board'].map((id) => svg.querySelector<SVGAElement>(`#${id}`)!.dataset.linkKind)).toEqual(['file', 'file', 'board']);
     expect(svg.querySelector<SVGAElement>('#home')!.dataset.linkDirection).toBeUndefined();
   });

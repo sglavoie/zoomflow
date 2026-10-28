@@ -40,7 +40,8 @@ export function decorateLinks(svg: Element, boards: Map<string, { name: string; 
     if (file !== null) {
       // Same shape as classifyHref's file links: a relative `.d2` path with an optional `#/…` board route.
       const [, path = file, hash = ''] = /^([^#]*)(#.*)?$/s.exec(file) ?? [];
-      let board = hash.replace(/^#\/?/, '').split('/').pop() ?? '';
+      // Empty segments drop, as navigation does, so `#/A/` opens A.
+      let board = hash.replace(/^#\/?/, '').split('/').filter(Boolean).pop() ?? '';
       try { board = decodeURIComponent(board); } catch { /* Keep the authored segment. */ }
       const name = describeFile(path);
       link.dataset.linkKind = 'file';

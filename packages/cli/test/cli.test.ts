@@ -404,7 +404,7 @@ describe.concurrent('zoomflow CLI', () => {
     expect(JSON.parse(result.stdout)).toEqual({ error: `${input}:1:4: maps must be terminated with }`, diagnostics: [] });
     const usage = await Promise.all([['lint', 'a.d2', '--json', '--all'], ['lint', '--json'], ['lint', 'a.d2', 'b.d2', '--json'],
       ['lint', 'a.d2', '--json', '--bogus'], ['lint', 'a.d2', '--json', '--root'], ['--root', '.', 'lint', 'a.d2', '--json', '--bogus'],
-      ['-o', 'x', '--format', 'svg', 'lint', 'a.d2', '--json']].map((args) => run(args)));
+      ['-o', 'x', '--format', 'svg', 'lint', 'a.d2', '--json'], ['lint', 'a.d2', '--json=1']].map((args) => run(args)));
     expect(usage.map((item) => [item.code, JSON.parse(item.stdout)])).toEqual([
       [2, { error: 'Export options cannot be used with lint.', diagnostics: [] }],
       [2, { error: 'lint takes exactly one .d2 file.', diagnostics: [] }],
@@ -413,6 +413,7 @@ describe.concurrent('zoomflow CLI', () => {
       [2, { error: expect.stringContaining("Option '--root <value>' argument missing"), diagnostics: [] }],
       [2, { error: expect.stringContaining("Unknown option '--bogus'"), diagnostics: [] }],
       [2, { error: 'Export options cannot be used with lint.', diagnostics: [] }],
+      [2, { error: expect.stringContaining("Option '--json' does not take an argument"), diagnostics: [] }],
     ]);
     // Parse failures outside lint --json keep stdout empty.
     expect((await run(['lint', 'a.d2', '--bogus'])).stdout).toBe('');

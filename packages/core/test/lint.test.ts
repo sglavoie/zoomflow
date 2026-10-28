@@ -331,9 +331,11 @@ c -> d: {link: ../index.d2}
 up.link: ../../outside.d2
 bare.link: health.d2
 folder.link: "work/plan.d2#/A"
+slash.link: "./health.d2#/Sleep//Night/"
+percent.link: "./health.d2#/50%"
 layers.L: {back.link: "../index.d2#/"; x.link: ./nope.d2}`);
   const files = { inputPath: 'life/index.d2', exists: (path: string) => ['life/health.d2', 'index.d2'].includes(path),
-    boards: (path: string) => path === 'life/health.d2' ? new Set(['#/', '#/Sleep', '#/Sleep/Night', '#/My%20Board']) : undefined };
+    boards: (path: string) => path === 'life/health.d2' ? new Set(['#/', '#/Sleep', '#/Sleep/Night', '#/My%20Board', '#/50%25']) : undefined };
   const summary = (diagnostics: LintDiagnostic[]) => diagnostics.filter((item) => item.rule.includes('file'))
     .map(({ rule, severity, board, shape, connection, message }) => ({ rule, severity, board, item: shape ?? connection, message }));
   expect(summary(lint(result, { files }).diagnostics)).toEqual([
@@ -504,7 +506,7 @@ it('applies globs only to the shapes their filters pass, as D2 does, and reads g
   const base = 'a: A {shape: circle; style.fill: red; width: 90}\nb: B {icon: https://x.y/i.svg}\nc: {d}\na -> b\n';
   const shapes = async (fs: Record<string, string>) => lint({ ...await d2.compile({ fs, options: { layout: 'elk' } }), fs }).diagnostics
     .filter((item) => item.rule === 'dangling-link').map((item) => item.shape).sort();
-  for (const [filter, expected] of [['&shape: circle', ['a']], ['!&shape: circle', ['b', 'c', 'c.d']], ['&label: A*', ['a']], ['&label: "A*"', []],
+  for (const [filter, expected] of [['&shape: circle', ['a']], ['!&shape: circle', ['b', 'c', 'c.d']], ['&label: A*', ['a']], ['&label: a*', ['a']], ['&label: "A*"', []],
     ['&style.fill: red', ['a']], ['&width: 90', ['a']], ['&icon: https://x.y/i.svg', ['b']], ['&connected: false', ['c', 'c.d']],
     ['&leaf: false', ['c']], ['&level: 1', ['c.d']], ['&id: c', []], ['&shape: circle; !&label: A', []]] as const) {
     const glob = `**: {${filter}; link: layers.missing}`;
@@ -515,6 +517,14 @@ it('applies globs only to the shapes their filters pass, as D2 does, and reads g
   const layered = lint(await compile('layers.x: {*.link: layers.missing; a}\nz.link: layers.x')).diagnostics;
   expect(layered.map(({ rule, board, shape, message }) => [rule, board, shape, message]))
     .toEqual([['dangling-link', 'root.layers.x', 'a', 'Link targets missing board "Root > x > missing".']]);
+});
+
+it('reads globs after a quoted key holding a comment mark or brace', async () => {
+  for (const key of ['c."k#1"', 'c."k{1"', "c.'k#1'"]) {
+    const fs = { index: '...@lib', 'lib.d2': `${key}: {\n  d\n}\n*.link: layers.missing\nq` };
+    const diagnostics = lint({ ...await d2.compile({ fs, options: { layout: 'elk' } }), fs }).diagnostics;
+    expect(diagnostics.filter((item) => item.rule === 'dangling-link').map((item) => item.shape).sort(), key).toEqual(['c', 'q']);
+  }
 });
 
 it('applies an imported file\'s globs to its own shapes only, at every place it is imported', async () => {

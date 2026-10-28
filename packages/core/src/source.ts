@@ -139,8 +139,8 @@ export function globMatches(pattern: GlobSegment[], id: string[]): boolean {
   return match(0, 0);
 }
 /** Whether a shape passes a glob filter, as D2 reads them: by the shape's compiled attributes, such as `shape` or
- * `style.fill`, with `level` from 0, and `leaf` and `connected` from the board. An attribute the shape lacks never
- * matches, nor, in this D2, does `id`. */
+ * `style.fill`, with `level` from 0, and `leaf` and `connected` from the board. A glob value such as `a*` ignores
+ * case; a quoted one does not. An attribute the shape lacks never matches, nor, in this D2, does `id`. */
 export function filterMatches(filter: GlobFilter, board: Board, shape: Diagram['shapes'][number], attributes: Record<string, unknown>): boolean {
   const segments = idSegments(shape.id);
   const inside = (other: string) => {
@@ -161,7 +161,7 @@ export function filterMatches(filter: GlobFilter, board: Board, shape: Diagram['
     if (url?.Scheme !== undefined) actual = `${url.Scheme ? `${url.Scheme}:` : ''}${url.Opaque || `${url.Host ? `//${url.Host}` : ''}${url.Path ?? ''}`}` +
       `${url.RawQuery ? `?${url.RawQuery}` : ''}${url.Fragment ? `#${url.Fragment}` : ''}`;
   }
-  const pattern = filter.glob ? new RegExp(`^${filter.value.split('*').map((piece) => piece.replace(/[.+?^${}()|[\]\\]/g, '\\$&')).join('.*')}$`, 's') : undefined;
+  const pattern = filter.glob ? new RegExp(`^${filter.value.split('*').map((piece) => piece.replace(/[.+?^${}()|[\]\\]/g, '\\$&')).join('.*')}$`, 'si') : undefined;
   const hit = actual !== undefined && (pattern ? pattern.test(actual) : actual === filter.value);
   return filter.negate ? !hit : hit;
 }
@@ -279,8 +279,8 @@ function statements(text: string, from: number, file = false): number[] | undefi
       const end = text.indexOf('"""', i + 3);
       i = end < 0 ? text.length : end + 2;
     }
-    // Only a token opens a string: the quote in `Don't` or the pipe in `x: in | out` is label text.
-    else if ((char === '"' || char === "'") && /[\s:;{[]/.test(text[i - 1] ?? '\n') || char === '|' && /:[ \t]*$/.test(text.slice(Math.max(from, i - 40), i))) {
+    // Only a token opens a string: the quote in `Don't` or the pipe in `x: in | out` is label text; `c."k#1"` quotes a key.
+    else if ((char === '"' || char === "'") && /[\s:;.,{[@]/.test(text[i - 1] ?? '\n') || char === '|' && /:[ \t]*$/.test(text.slice(Math.max(from, i - 40), i))) {
       const string = scalarAt(text, i);
       if (string) i = string.to - 1;
     }

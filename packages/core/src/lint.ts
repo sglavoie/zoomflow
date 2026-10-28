@@ -233,9 +233,10 @@ export function lint(compiled: LintInput, options: LintOptions = {}): LintResult
     else if (!files.exists(resolved)) diagnostic = { rule: 'dangling-file-link', severity: 'error',
       message: `Link targets missing file "${resolved}".` };
     else if (hash && hash !== '#/') {
-      // Compare routes segment by segment, so `#/My Board` and `#/My%20Board` agree.
-      const route = (value: string) => value.split('/').map((segment) => {
-        try { return encodeURIComponent(decodeURIComponent(segment)); } catch { return segment; }
+      // Compare routes segment by segment, as the viewer's normalizeRouteHash does, so `#/My Board` and
+      // `#/My%20Board` agree, a lone `%` reads as `%25`, and empty segments drop, as in `#/A/`.
+      const route = (value: string) => value.split('/').filter((segment, index) => index === 0 || segment).map((segment) => {
+        try { return encodeURIComponent(decodeURIComponent(segment.replace(/%(?![\da-f]{2})/gi, '%25'))); } catch { return segment; }
       }).join('/');
       const known = files.boards?.(resolved);
       if (known && ![...known].some((item) => route(item) === route(hash))) {

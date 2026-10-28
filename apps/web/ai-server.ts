@@ -21,7 +21,9 @@ const schema = {
 // non-ASCII source can take up to three bytes per character, and JSON escaping adds more.
 const MAX_REQUEST = 1_000_000;
 const MAX_STATUS_REQUEST = 64_000;
-const MAX_OUTPUT = 500_000;
+// Claude Code prints the reply twice (`result` as a JSON string, `structured_output` as an object),
+// so a 180,000-character source can take up to about 13 characters each once escaped.
+const MAX_OUTPUT = 4_000_000;
 const TIMEOUT_MS = 180_000;
 /** Full access lets the CLI read files and run commands, which takes longer than answering from the source alone. */
 const FULL_ACCESS_TIMEOUT_MS = 600_000;
