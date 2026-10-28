@@ -14,6 +14,10 @@ it('renames, adds after and removes flow steps', () => {
   expect(renamed.select).toBe('step_2');
   expect(editOnCanvas(flow, [], 'step_2', { type: 'rename', label: ' ' })).toBeUndefined();
   expect(editOnCanvas(flow, [], 'step_2', { type: 'rename', label: 'Approved?' })).toBeUndefined();
+  // Committing the rename box untouched keeps a label's doubled spaces; typing the cleaned label still applies it.
+  const spaced = flowSource({ ...flowTemplate('approval'), steps: flowTemplate('approval').steps.map((step, index) => index ? step : { ...step, label: 'Start  here' }) });
+  expect(editOnCanvas(spaced, [], 'step_1', { type: 'rename', label: 'Start  here' })).toBeUndefined();
+  expect(readFlow(editOnCanvas(spaced, [], 'step_1', { type: 'rename', label: 'Start here' })!.own)!.steps[0].label).toBe('Start here');
   const added = editOnCanvas(flow, [], 'step_3', { type: 'add' })!;
   expect(added.select).toBe('step_5');
   expect(readFlow(added.own)!.connections.at(-1)).toEqual({ from: 'step_3', to: 'step_5', label: '' });

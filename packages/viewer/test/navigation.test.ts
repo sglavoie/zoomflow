@@ -33,6 +33,18 @@ describe('normalizeRouteHash', () => {
     expect(normalizeRouteHash('#/@file/x%2Fy.d2/bad%E0')).toBe('#/@file/x%2Fy.d2/bad%E0');
     expect(normalizeRouteHash('')).toBe('#/');
   });
+
+  it('encodes a board named with a leading @ and keeps reserved segments raw', () => {
+    expect(normalizeRouteHash('#/@home/x')).toBe('#/%40home/x');
+    expect(normalizeRouteHash('#/a/@scenarios/b/@steps/c')).toBe('#/a/@scenarios/b/@steps/c');
+  });
+
+  it('drops a trailing slash so the route resolves without a fallback notice', () => {
+    expect(normalizeRouteHash('#/A/')).toBe('#/A');
+    expect(normalizeRouteHash('#/A//')).toBe('#/A');
+    expect(normalizeRouteHash('#/')).toBe('#/');
+    expect(normalizeRouteHash('#')).toBe('#/');
+  });
 });
 
 describe('routeFallbackNotice', () => {

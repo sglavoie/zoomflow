@@ -133,7 +133,8 @@ function create() {
 
 /** The source of a new linked file: a flow or mind map its builder reopens, or an empty diagram named in a comment. */
 export function newFileSource(kind: NewFileKind, name: string): string {
-  const label = name.trim().replace(/\.d2$/i, '') || 'Diagram';
+  // Trim after dropping `.d2`, as `Plan .d2` would centre on `Plan `, which the mind map builder cannot reopen.
+  const label = name.replace(/\s+/g, ' ').trim().replace(/\.d2$/i, '').trim() || 'Diagram';
   if (kind === 'flow') return flowSource(flowTemplate('simple'));
   if (kind === 'mind map') {
     return mindMapSource({ direction: 'right', split: 0, look: plainLook(),

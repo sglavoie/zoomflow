@@ -281,6 +281,33 @@ it('accepts deeply nested board ids and names the limit a request breaks', () =>
   expect(requestProblem({ ...request, provider: 'codex', source: 'x'.repeat(180_001) })).toContain('diagram is too large');
   expect(requestProblem({ ...request, provider: 'codex', prompt: ' ' })).toBe('Invalid AI request.');
   expect(requestProblem({ ...request, provider: 'gpt' })).toBe('Invalid AI request.');
+  // Settings fields name their limits too, rather than reading as a malformed request.
+  expect(requestProblem({ ...request, provider: 'codex', name: 'x'.repeat(301) })).toContain('document name is too long');
+  expect(requestProblem({ ...request, provider: 'codex', environment: 'x'.repeat(8_001) })).toContain('Environment field is too long');
+  expect(requestProblem({ ...request, provider: 'claude', claudeConfigDir: 'x'.repeat(4_001) })).toContain('CLAUDE_CONFIG_DIR field is too long');
+  expect(requestProblem({ ...request, provider: 'codex', workingDirectory: 'x'.repeat(4_001) })).toContain('Working directory field is too long');
+  expect(requestProblem({ ...request, provider: 'codex', name: 7 })).toBe('Invalid AI request.');
+});
+
+it('names the settings field over its limit when checking a provider', async () => {
+  const server = createServer((request, response) => void handle(request, response));
+  await new Promise<void>((done) => server.listen(0, '127.0.0.1', done));
+  const { port } = server.address() as AddressInfo;
+  const check = (body: object) => new Promise<{ status: number; error: string }>((done, fail) => {
+    const outgoing = httpRequest({ host: '127.0.0.1', port, method: 'POST', path: '/api/ai/status', headers: { 'Content-Type': 'application/json' } }, (incoming) => {
+      let text = '';
+      incoming.setEncoding('utf8');
+      incoming.on('data', (chunk: string) => { text += chunk; });
+      incoming.on('end', () => done({ status: incoming.statusCode ?? 0, error: (JSON.parse(text) as { error?: string }).error ?? '' }));
+    });
+    outgoing.on('error', fail);
+    outgoing.end(JSON.stringify(body));
+  });
+  try {
+    await expect(check({ provider: 'codex', environment: 'x'.repeat(8_001) })).resolves.toMatchObject({ status: 400, error: expect.stringContaining('Environment field is too long') });
+    await expect(check({ provider: 'claude', claudeConfigDir: 'x'.repeat(4_001) })).resolves.toMatchObject({ status: 400, error: expect.stringContaining('CLAUDE_CONFIG_DIR field is too long') });
+    await expect(check({ provider: 'gpt' })).resolves.toEqual({ status: 400, error: 'Invalid provider status request.' });
+  } finally { await new Promise((done) => server.close(done)); }
 });
 
 it('refuses environment variables that change which programs or code the CLI loads', async () => {

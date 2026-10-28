@@ -4,7 +4,7 @@ import { boardLabel, classifyHref, exportAtlasHtml, exportAtlasZip, exportBoards
   type LintOptions, type LintResult } from '@zoomflow/core';
 import { offlineViewerScript, offlineViewerStyle } from '@zoomflow/viewer';
 import { execFile } from 'node:child_process';
-import { copyFile, lstat, mkdir, mkdtemp, readFile, realpath, rename, rm, stat, writeFile } from 'node:fs/promises';
+import { copyFile, lstat, mkdir, mkdtemp, readdir, readFile, realpath, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { availableParallelism, tmpdir } from 'node:os';
 import { basename, dirname, extname, isAbsolute, join, posix, relative, resolve, sep } from 'node:path';
 import { parseArgs, promisify } from 'node:util';
@@ -118,7 +118,20 @@ function within(root: string, path: string): boolean {
 async function projectFile(root: string, realRoot: string, key: string): Promise<boolean> {
   const path = resolve(root, key);
   if (!within(root, path)) return false;
-  try { return (await lstat(path)).isFile() && within(realRoot, await realpath(path)); } catch { return false; }
+  try { return (await lstat(path)).isFile() && within(realRoot, await realpath(path)) && await exactCase(root, path); } catch { return false; }
+}
+
+/** Whether each folder and file name of a path inside `root` is spelled as on disk. Case-insensitive file systems
+ * also open `Health.d2` as `health.d2`, which case-sensitive systems and the web app do not, so it counts as missing. */
+async function exactCase(root: string, path: string): Promise<boolean> {
+  let folder = root;
+  for (const part of relative(root, path).split(sep)) {
+    // A folder that cannot be listed, only entered, cannot tell; its file is then taken as spelled.
+    const names = await readdir(folder).catch(() => undefined);
+    if (names && !names.includes(part)) return false;
+    folder = join(folder, part);
+  }
+  return true;
 }
 
 // Matches both D2's raw JSON error text, with escaped quotes, and its decoded messages.
@@ -139,6 +152,8 @@ async function compileSources(d2: D2, root: string, realRoot: string, inputPath:
       const entry = await lstat(path);
       if (!entry.isFile()) throw Object.assign(new Error(), { code: entry.isSymbolicLink() ? 'ELOOP' : 'EISDIR' });
       if (!within(realRoot, await realpath(path))) { problems.set(key, `outside --root ${root} through a symlinked directory`); return false; }
+      // The input keeps the spelling it was given; imports must match the disk, as on case-sensitive systems.
+      if (key !== inputPath && !(await exactCase(root, path))) { problems.set(key, 'letter case differs from the file on disk'); return false; }
       files[key] = await readFile(path, 'utf8');
     } catch (error) {
       const code = (error as { code?: string }).code ?? '';
@@ -167,22 +182,34 @@ async function compileSources(d2: D2, root: string, realRoot: string, inputPath:
   }
 }
 
+/** The compiler serializes Go's url.URL as an object, despite its loose TS type. */
+type IconUrl = { Scheme?: string; Host?: string; Path?: string; Opaque?: string; User?: unknown; RawQuery?: string; Fragment?: string; ForceQuery?: boolean };
+/** An icon URL as written, for messages. */
+const iconText = (icon: IconUrl) => `${icon.Scheme ? `${icon.Scheme}:` : ''}${icon.Host ? `//${icon.Host}` : ''}${icon.Opaque || icon.Path || ''}` +
+  `${icon.RawQuery || icon.ForceQuery ? `?${icon.RawQuery ?? ''}` : ''}${icon.Fragment ? `#${icon.Fragment}` : ''}`;
+
 /** D2 resolves local icons against the entry file, so preserve that layout. Exported for tests. */
 export async function stageIcons(diagram: Diagram, input: string, root: string, temp: string) {
   const realRoot = await realpath(root);
   const copied = new Set<string>();
   for (const board of indexBoards(diagram).values()) {
     for (const shape of [board.diagram.root, ...board.diagram.shapes]) {
-      // The compiler serializes Go's url.URL as an object, despite its loose TS type.
-      const icon = shape.icon as string | { Scheme?: string; Host?: string; Path?: string; Opaque?: string } | undefined;
+      const icon = shape.icon as string | IconUrl | undefined;
+      if (!icon) continue;
+      // D2 fetches only web URLs and keeps data URLs; it opens anything else as a path beside the entry file,
+      // scheme, host, query and fragment included, so those could leave --root and are refused.
+      if (typeof icon === 'string' ? /^(?:https?|data):/i.test(icon) : /^(?:https?|data)$/i.test(icon.Scheme ?? '')) continue;
       // A one-letter scheme is a Windows drive (`C:\\img.png`), so the path is local.
-      const drive = !!icon && typeof icon === 'object' && /^[a-z]$/i.test(icon.Scheme ?? '') && !icon.Host;
-      if (!icon || (typeof icon === 'object' && (icon.Scheme || icon.Host) && !drive)) continue;
+      const drive = typeof icon === 'object' && /^[a-z]$/i.test(icon.Scheme ?? '') && !icon.Host;
+      if (typeof icon === 'object' && ((icon.Scheme && !drive) || icon.Host || icon.User || icon.RawQuery || icon.Fragment || icon.ForceQuery)) {
+        throw new Error(`Local image must be a file path, not a URL: ${iconText(icon)}`);
+      }
       let path = typeof icon === 'string' ? undefined : drive ? `${icon.Scheme}:${icon.Opaque || icon.Path}` : icon.Path;
       if (typeof icon === 'string') {
         try { path = decodeURIComponent(icon); } catch { throw new Error(`Local image path is not valid URL encoding: ${icon}`); }
+        if (/^(?:[a-z][\w+.-]*:|\/\/|#)/i.test(path) && !/^[a-z]:/i.test(path)) throw new Error(`Local image must be a file path, not a URL: ${icon}`);
       }
-      if (!path || (/^(?:[a-z][\w+.-]*:|\/\/|#)/i.test(path) && !/^[a-z]:/i.test(path))) continue;
+      if (!path) continue;
       const asset = resolve(dirname(input), path);
       if (copied.has(asset)) continue;
       // Compare real paths too, so a symlinked directory cannot reach outside the root.

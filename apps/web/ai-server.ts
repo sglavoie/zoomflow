@@ -65,11 +65,23 @@ function isStatusRequest(value: unknown): value is StatusRequest {
     && optionalText(item.environment, 8_000) && optionalText(item.claudeConfigDir, 4_000);
 }
 
+/** Why the AI settings that both requests send cannot be used, naming the field over its limit. */
+function settingsProblem(value: unknown): string | undefined {
+  const item = (value && typeof value === 'object' ? value : {}) as Partial<StatusRequest>;
+  if (typeof item.environment === 'string' && item.environment.length > 8_000) return 'The Environment field is too long. Keep it under 8,000 characters, then try again.';
+  if (typeof item.claudeConfigDir === 'string' && item.claudeConfigDir.length > 4_000) return 'The CLAUDE_CONFIG_DIR field is too long. Keep it under 4,000 characters, then try again.';
+  return undefined;
+}
+
 /** Why the page's request cannot run, naming what to change when it is a size limit; undefined when it can run.
  * Board ids are full paths (`root.layers.a.layers.b…`), so deep boards need far more than a name's length. */
 export function requestProblem(value: unknown): string | undefined {
+  const settings = settingsProblem(value);
+  if (settings) return settings;
   if (!isStatusRequest(value)) return 'Invalid AI request.';
   const item = value as Partial<AiRequest>;
+  if (typeof item.name === 'string' && item.name.length > 300) return 'The document name is too long for AI. Use a name under 300 characters, then try again.';
+  if (typeof item.workingDirectory === 'string' && item.workingDirectory.length > 4_000) return 'The Working directory field is too long. Keep it under 4,000 characters, then try again.';
   if (typeof item.prompt === 'string' && item.prompt.length > 8_000) return 'The prompt is too long. Keep it under 8,000 characters, then try again.';
   if (typeof item.source === 'string' && item.source.length > 180_000) return 'The diagram is too large for AI. Keep it under 180,000 characters, then try again.';
   if (typeof item.board === 'string' && item.board.length > 8_000) return 'The current board is nested too deeply for AI. Open a board nearer the top, then try again.';
@@ -316,7 +328,7 @@ export async function handle(request: IncomingMessage, response: ServerResponse)
         let payload: unknown;
         try { payload = JSON.parse(body); }
         catch { send(response, 400, { error: 'Invalid JSON request.' }); return; }
-        if (!isStatusRequest(payload)) { send(response, 400, { error: 'Invalid provider status request.' }); return; }
+        if (!isStatusRequest(payload)) { send(response, 400, { error: settingsProblem(payload) ?? 'Invalid provider status request.' }); return; }
         send(response, 200, await providerStatus(payload));
       } catch (error) { send(response, 400, { error: message(error) }); }
     }

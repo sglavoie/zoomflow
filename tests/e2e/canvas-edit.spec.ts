@@ -235,6 +235,18 @@ test('a shape\'s context menu replaces its selection bar until it closes', async
   await expect(bar).toBeVisible();
 });
 
+test('a second Backspace before the preview updates stays on the board', async ({ page }) => {
+  await mixed(page);
+  await openFromBadge(page, 'Open Plan the launch board');
+  await board(page, 'root.layers.Plan the launch');
+  await shape(page, 'n_4').click();
+  // The old topics keep focus until the edit compiles; the second press must not reach the viewer and go up.
+  await page.keyboard.press('Backspace');
+  await page.keyboard.press('Backspace');
+  await ready(page);
+  await board(page, 'root.layers.Plan the launch');
+});
+
 test('going up selects the shape that led down, with its actions', async ({ page }) => {
   await mixed(page);
   await openFromBadge(page, 'Open Build and test board');

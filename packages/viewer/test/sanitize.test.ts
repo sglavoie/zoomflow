@@ -84,6 +84,13 @@ describe('sanitizeSvg', () => {
     expect(sanitizeSvg(svg('<g/>').firstElementChild!)).toBe(false);
   });
 
+  it('removes comments and processing instructions, which an HTML parser could read as markup', () => {
+    const root = svg('<!--><img src=x onerror=alert(1)>--><g><?xml-stylesheet href="x.css"?><rect/></g>');
+    sanitizeSvg(root);
+    expect(new XMLSerializer().serializeToString(root)).not.toMatch(/img|<!--|<\?/);
+    expect(root.querySelector('g rect')).not.toBeNull();
+  });
+
   it('works without its module scope', () => {
     const root = svg('<a href=" javascript:alert(1)"/><set/>');
     isolated(sanitizeSvg)(root);

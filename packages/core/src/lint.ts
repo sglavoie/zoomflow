@@ -2,7 +2,7 @@ import type { CompileResponse } from '@d2lang/d2';
 import { boardKey, classifyHref, indexBoards, resolveFilePath, type Board, type Diagram } from './index';
 import { definedClasses } from './classes';
 import { boundaryNeighbours } from './context';
-import { fileLinkRules, importedLinks, importPath, linkAfterKey, linkSources, shapeAttributes, shapeRanges, type AuthoredLink, type GlobFilter,
+import { fileLinkRules, importedLinks, importPath, linkAfterKey, linkSources, shapeAttributes, shapeFiles, shapeRanges, type AuthoredLink, type GlobFilter,
   type GlobSegment } from './source';
 
 export type LintRule = 'boundary-in' | 'boundary-out' | 'orphan-board' | 'dangling-link' | 'ignored-link' | 'missing-backlink'
@@ -256,6 +256,7 @@ export function lint(compiled: LintInput, options: LintOptions = {}): LintResult
   let ranges: Map<string, string> | undefined, sources: Map<string, string> | undefined;
   let imported: ReturnType<typeof importedLinks> | undefined;
   let attributesOf: ReturnType<typeof shapeAttributes> | undefined;
+  let filesOf: ReturnType<typeof shapeFiles> | undefined;
   // Each board's class links, for the place an inherited class was written; and the classes files imported under a
   // key define, with the import, since D2 applies none of those.
   const classLinksOf = new Map<string, Map<string, { href: string; range?: string }>>();
@@ -402,7 +403,8 @@ export function lint(compiled: LintInput, options: LintOptions = {}): LintResult
     const board: Board = found;
     type Authored = { href: string; range?: string };
     const authored = new Map<string, Authored>();
-    const globs: { path: GlobSegment[]; link: Authored; filters: GlobFilter[] }[] = [];
+    // An imported file's globs carry it: D2 applies them only to the shapes that file writes.
+    const globs: { path: GlobSegment[]; link: Authored; filters: GlobFilter[]; file?: string }[] = [];
     // The link each class sets; a later definition replaces an earlier one.
     const classLinks = new Map<string, Authored>();
     // Class links no shape takes: from files imported under a key, whose classes D2 never applies.
@@ -537,6 +539,7 @@ export function lint(compiled: LintInput, options: LintOptions = {}): LintResult
       // A shape's own link outranks a glob's; of several globs, the last wins.
       const attributes = (attributesOf ??= shapeAttributes(compiled.diagram, compiled.graph)).get(JSON.stringify([board.id, shape.id]));
       const glob = authored.has(key) ? undefined : [...globs].reverse().find((item) => globMatches(item.path, idSegments(shape.id))
+        && (item.file === undefined || (filesOf ??= shapeFiles(compiled)).get(JSON.stringify([board.id, shape.id]))?.has(item.file))
         && (!item.filters.length || attributes && item.filters.every((filter) => filterMatches(filter, board, shape, attributes))));
       if (glob) authored.set(key, glob.link);
       // Then its classes: the last that sets a link wins.

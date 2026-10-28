@@ -100,26 +100,44 @@ export function shapeRanges(diagram: Diagram, graph: unknown): Map<string, strin
   return result;
 }
 
-/** The file each kept shape and connection link was written in, keyed by board ID and shape or connection ID.
- * D2 rewrites the image paths of imported files but keeps their links verbatim, so a file link resolves from
- * the file that wrote it: that of a `shape.link` reference, else the one file that mentions the shape (both
- * ends, for a connection), else the one such file whose text holds the link. Links left out cannot be told
- * apart; callers resolve them from the entry file.
- */
-export function linkSources(compiled: { diagram: Diagram; graph: unknown; fs?: Record<string, string> }): Map<string, string> {
+const rangeFile = (range: string | undefined) => /^(.+),\d+:\d+:\d+-\d+:\d+:\d+$/.exec(range ?? '')?.[1];
+
+/** The files that mention each shape, keyed by board ID and shape ID; `visitor` sees each mention. */
+export function shapeFiles(compiled: { diagram: Diagram; graph: unknown },
+  visitor?: (key: string, file: string, reference: SourceReference) => void): Map<string, Set<string>> {
   const files = new Map<string, Set<string>>();
-  const explicit = new Map<string, string>();
   visitShapeReferences(compiled.diagram, compiled.graph, (board, shape, raw, reference) => {
     // Compiler-expanded ASTs carry placeholder ranges without a file.
-    const file = /^(.+),\d+:\d+:\d+-\d+:\d+:\d+$/.exec(raw)?.[1];
+    const file = rangeFile(raw);
     if (file === undefined) return;
     const key = JSON.stringify([board, shape]);
     if (!files.has(key)) files.set(key, new Set());
     files.get(key)!.add(file);
+    visitor?.(key, file, reference);
+  });
+  return files;
+}
+
+/** The file each kept shape and connection link was written in, keyed by board ID and shape or connection ID.
+ * D2 rewrites the image paths of imported files but keeps their links verbatim, so a file link resolves from
+ * the file that wrote it: that of a `shape.link` reference, else that of the class that set it, else the one file
+ * that mentions the shape (both ends, for a connection), else the one such file whose text holds the link. Links
+ * left out cannot be told apart; callers resolve them from the entry file.
+ */
+export function linkSources(compiled: { diagram: Diagram; graph: unknown; fs?: Record<string, string> }): Map<string, string> {
+  const explicit = new Map<string, string>();
+  const files = shapeFiles(compiled, (key, file, reference) => {
     const path = reference.key?.path ?? [];
     const index = reference.key_path_index ?? 0;
     if (path.length === index + 2 && keyText(path[index + 1]) === 'link') explicit.set(key, file);
   });
+  // A class's link resolves from the file that defines the class, which need not mention the shape.
+  const entry = rangeFile((compiled.graph as { ast?: { range?: string } }).ast?.range);
+  const classes = compiled.fs && entry !== undefined ? fileLinkRules(compiled.fs, entry).classes : new Map<string, AuthoredLink>();
+  const classFile = (shape: Diagram['shapes'][number]) => {
+    const link = (shape.classes ?? []).map((name) => classes.get(name)).filter(Boolean).at(-1);
+    return link?.href === shape.link ? rangeFile(link.range) : undefined;
+  };
   const pick = (candidates: string[], link: string) => {
     if (candidates.length < 2) return candidates[0];
     const holding = candidates.filter((file) => compiled.fs?.[file]?.includes(link));
@@ -130,7 +148,7 @@ export function linkSources(compiled: { diagram: Diagram; graph: unknown; fs?: R
     const mentions = (id: string) => [...files.get(JSON.stringify([board.id, id])) ?? []];
     for (const shape of board.diagram.shapes) {
       const key = JSON.stringify([board.id, shape.id]);
-      const file = shape.link ? explicit.get(key) ?? pick(mentions(shape.id), shape.link) : undefined;
+      const file = shape.link ? explicit.get(key) ?? classFile(shape) ?? pick(mentions(shape.id), shape.link) : undefined;
       if (file !== undefined) result.set(key, file);
     }
     for (const connection of board.diagram.connections) {
@@ -187,6 +205,11 @@ function statements(text: string, from: number, file = false): number[] | undefi
       if (i < 0) break;
     } else if (char === '{') depth++;
     else if (char === '}' && depth-- === 0) return file ? undefined : starts;
+    else if (text.startsWith('"""', i)) {
+      // A block comment, which may hold anything.
+      const end = text.indexOf('"""', i + 3);
+      i = end < 0 ? text.length : end + 2;
+    }
     // Only a token opens a string: the quote in `Don't` or the pipe in `x: in | out` is label text.
     else if ((char === '"' || char === "'") && /[\s:;{[]/.test(text[i - 1] ?? '\n') || char === '|' && /:[ \t]*$/.test(text.slice(Math.max(from, i - 40), i))) {
       const string = scalarAt(text, i);
@@ -236,8 +259,9 @@ function textRange(file: string, text: string, from: number, to: number): string
   };
   return `${file},${position(from)}-${position(to)}`;
 }
+/** An unquoted `null`, in any case, removes the link, so it reads as none. */
 const authored = (file: string, text: string, scalar: Scalar): AuthoredLink =>
-  ({ href: scalar.value, range: textRange(file, text, scalar.from, scalar.to) });
+  ({ href: /^null$/i.test(scalar.value) && !/["'|]/.test(text[scalar.from]) ? '' : scalar.value, range: textRange(file, text, scalar.from, scalar.to) });
 
 /** The link written after the key ending at `range`'s end, in `a.link: x` form, read from the file's text; the
  * compiler's own value can be substituted or resolved, as in child boards. */
@@ -277,9 +301,9 @@ const keyPart = /\s*(?:"((?:[^"\\\n]|\\.)*)"|'((?:[^'\n]|'')*)'|([^.:;{}\n#"'&]*
 const importLine = /\s*(?:\.\.\.@([^\s;#}]+)|((?:[^:;{}\n#]+?))\s*:\s*@([^\s;#}]+))[ \t]*(?=[;\n#}]|$)/y;
 
 /** A glob that sets links: its key path, the link, and the filters that limit it. */
-export type GlobLink = { path: GlobSegment[]; link: AuthoredLink; filters: GlobFilter[] };
+export type GlobLink = { path: GlobSegment[]; link: AuthoredLink; filters: GlobFilter[]; /** The file that wrote it. */ file: string };
 /** The links a file sets for more than one shape: each glob statement at its top, as in `*.link: x` or
- * `a.*: {&shape: circle; link: x}`, with the glob's key path, and each class it defines, as in `classes: {x: {link: y}}`;
+ * `a.*: {&shape: circle; link: x}`, with the glob's key path and file, and each class it defines, as in `classes: {x: {link: y}}`;
  * a later class definition replaces an earlier one. Its imports are followed: globs under their keys, and classes
  * only from whole files spread at the top, as D2 adds them. */
 export function fileLinkRules(fs: Record<string, string>, file: string, seen = new Set<string>()):
@@ -340,8 +364,10 @@ export function fileLinkRules(fs: Record<string, string>, file: string, seen = n
     }
     if (!path.some((segment) => segment.glob)) continue;
     const { link, named, filters } = linkOf(path, start, at);
-    if (link) globs.push({ path: named ? path.slice(0, -1) : path, link, filters });
+    if (link) globs.push({ path: named ? path.slice(0, -1) : path, link, filters, file });
   }
+  // `seen` guards only the import chain, so a file imported at two places adds its rules at both.
+  seen.delete(file);
   return { globs, classes };
 }
 /** Split an unquoted or quoted key path, such as `a."b.c"`; undefined for one this does not read. */

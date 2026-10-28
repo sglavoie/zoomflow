@@ -509,11 +509,32 @@ it('applies globs only to the shapes their filters pass, as D2 does, and reads g
     ['&leaf: false', ['c']], ['&level: 1', ['c.d']], ['&id: c', []], ['&shape: circle; !&label: A', []]] as const) {
     const glob = `**: {${filter}; link: layers.missing}`;
     expect(await shapes({ index: base + glob }), filter).toEqual(expected);
-    expect(await shapes({ index: `${base}...@part`, 'part.d2': glob }), `${filter} imported`).toEqual(expected);
+    // An imported glob reaches only the shapes its own file writes, never `z`.
+    expect(await shapes({ index: '...@part\nz', 'part.d2': base + glob }), `${filter} imported`).toEqual(expected);
   }
   const layered = lint(await compile('layers.x: {*.link: layers.missing; a}\nz.link: layers.x')).diagnostics;
   expect(layered.map(({ rule, board, shape, message }) => [rule, board, shape, message]))
     .toEqual([['dangling-link', 'root.layers.x', 'a', 'Link targets missing board "Root > x > missing".']]);
+});
+
+it('applies an imported file\'s globs to its own shapes only, at every place it is imported', async () => {
+  const rows = async (fs: Record<string, string>) => lint({ ...await d2.compile({ fs, options: { layout: 'elk' } }), fs }).diagnostics
+    .map(({ rule, shape, message }) => [rule, shape, message]);
+  // D2 links `s` but leaves the importer's `a` alone.
+  expect(await rows({ index: 'a\n...@lib\nlayers.k: {z}', 'lib.d2': 's\n*.link: layers.k' })).toEqual([]);
+  expect(await rows({ index: '...@a', 'a.d2': 'x: @b\ny: @b', 'b.d2': '*.link: layers.missing\ns' })).toEqual([
+    ['dangling-link', 'x.s', 'Link targets missing board "Root > missing".'],
+    ['dangling-link', 'y.s', 'Link targets missing board "Root > missing".'],
+  ]);
+});
+
+it('reads links inside block comments as comments, and an unquoted null as no link', async () => {
+  const rows = async (fs: Record<string, string>) => lint({ ...await d2.compile({ fs, options: { layout: 'elk' } }), fs }).diagnostics
+    .map(({ rule, shape, message }) => [rule, shape, message]);
+  expect(await rows({ index: '...@lib\nb.class: x', 'lib.d2': 's\n"""\n*.link: layers.gone\nclasses.x.link: layers.gone\n"""\n' +
+    'classes: {x: {style.fill: red}}' })).toEqual([]);
+  for (const fs of [<Record<string, string>>{ index: 'a.link: layers.x\na.link: null\nlayers.x: {b}\nc.link: layers.x' }, { index: 'a: {link: NULL}\n*.link: null' },
+    { index: '...@p\na', 'p.d2': 'a.link: null\nb: {link: Null}' }]) expect(await rows(fs), fs.index).toEqual([]);
 });
 
 it('finds dropped links that classes set, from the board that defines the class', async () => {
@@ -576,6 +597,13 @@ it('resolves file links in imported files from the file that wrote them', async 
     ['root.layers.L', 'c', 'Link targets missing file "sub/gone.d2".'],
     ['root.layers.L', undefined, 'Layer "Root > L" has no incoming board link.'],
   ]);
+});
+
+it('resolves a class\'s file link from the file that defines the class', async () => {
+  const fs = { index: '...@sub/lib\na.class: x', 'sub/lib.d2': 'classes: {x: {link: ./other.d2}}' };
+  const result = { ...await d2.compile({ fs, inputPath: 'index', options: { layout: 'elk' } }), fs };
+  expect(lint(result, { files: { inputPath: 'index', exists: (path: string) => path === 'sub/other.d2' } }).diagnostics).toEqual([]);
+  expect(rebaseFileLinks(result, 'index').shapes.map((shape) => [shape.id, shape.link])).toEqual([['a', './sub/other.d2']]);
 });
 
 it('rewrites file links of imported files to open from the entry file, leaving the compiled diagram for lint', async () => {

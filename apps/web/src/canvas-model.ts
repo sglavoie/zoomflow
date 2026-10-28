@@ -46,7 +46,8 @@ export function editOnCanvas(own: string, trail: string[], shape: string, edit: 
   const target = canvasShape(own, trail, shape);
   if (!target || edit.type === 'sibling' && !target.sibling || edit.type === 'remove' && !target.remove) return;
   const label = edit.type === 'rename' ? edit.label.replace(/\s+/g, ' ').trim() : '';
-  if (edit.type === 'rename' && (!label || label === target.label)) return;
+  // The rename box starts with the label as written, which may hold doubled spaces: committing it untouched is no edit.
+  if (edit.type === 'rename' && (!label || label === target.label || edit.label === target.label)) return;
   if (target.kind === 'flow') {
     const flow = readFlow(own)!;
     const step = flow.steps.find(item => item.id === shape)!;

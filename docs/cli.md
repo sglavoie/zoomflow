@@ -50,7 +50,8 @@ Exports succeed with dangling board links but print a one-line summary such as
 File links (`link: ./health.d2`, `link: "../index.d2#/Board"`; see the
 [atlas guide](workspace.md#link-diagrams-into-an-atlas)) are checked by every lint
 run: a link must open a regular `.d2` file inside `--root`, by the same rules as imports
-(a symlinked target counts as missing), and a fragment must name a board that file has.
+(a symlinked target counts as missing, and so does one spelled in another letter case, such as
+`./Health.d2` for `health.d2`, which case-sensitive systems would not open), and a fragment must name a board that file has.
 `lint --follow` also lints every file reachable through file links, breadth first and
 each once, so cycles end. Each diagnostic names its file, the summary ends `in N files`,
 and `--json` adds `files` plus `file` on every diagnostic and boundary; without
@@ -105,7 +106,9 @@ is dropped; its warnings and errors are printed once, with staging paths replace
 by your source paths. Local icon/image paths resolve
 from the original input directory (Windows drive paths such as `C:\img.png` included),
 must be regular files within the project root, and are staged alongside the sources,
-so paths with spaces work too; remote images must be accessible during export.
+so paths with spaces work too; remote images must be accessible during export. Only
+`http:`, `https:` and `data:` images are URLs; any other scheme, a `//host`, a query or a
+fragment is refused (`Local image must be a file path, not a URL`), since D2 would open it as a path.
 D2 embeds the shipped fonts and bundled assets; HTML needs no compiler or network
 at viewing time. Native D2 handles PNG rendering. No Go or Bun is needed for the CLI build.
 

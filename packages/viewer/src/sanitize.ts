@@ -23,6 +23,9 @@ export function sanitizeSvg(root: Element): boolean {
     // Skip descendants of an element already removed.
     if (!root.contains(node)) continue;
     if (!safe(node)) { node.remove(); continue; }
+    // Comments and processing instructions carry nothing D2 needs, and an HTML parser reads `<!-->` as an
+    // empty comment, so markup inside one would come alive if the SVG were ever inserted as HTML.
+    for (const child of [...node.childNodes]) if (child.nodeType === 7 || child.nodeType === 8) child.remove();
     for (const attribute of [...node.attributes]) {
       if (/^on/i.test(attribute.name)) { node.removeAttributeNode(attribute); continue; }
       if (!/href$/i.test(attribute.name)) continue;

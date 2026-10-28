@@ -338,6 +338,30 @@ describe.concurrent('zoomflow CLI', () => {
     expect((await readFile(output, 'utf8')).match(/data:image\/svg\+xml/g)).toHaveLength(2);
   });
 
+  it('refuses icon URLs that D2 would open as paths outside --root, keeping web and data URLs', async () => {
+    const project = join(temp, 'icon-urls');
+    await mkdir(join(project, 'root'), { recursive: true });
+    await writeFile(join(project, 'secret.txt'), 'TOKEN=icon-secret');
+    // Go cleans `..` lexically after the scheme, host, query or fragment, so each climbs from the staging folder.
+    const up = `${'../'.repeat(40)}${project.replace(/^\//, '')}/secret.txt`;
+    const icons = [`zz:/${up}`, `#/${up}`, `/${project}/secret.txt`, `./a.svg?/${up}`, `mailto:${up}`];
+    const results = await Promise.all(icons.map(async (icon, i) => {
+      await writeFile(join(project, 'root', `url-${i}.d2`), `a: { icon: "${icon}" }`);
+      return run(['export', join(project, 'root', `url-${i}.d2`), '-o', join(project, `url-${i}.html`)]);
+    }));
+    results.forEach((result) => {
+      expect(result.code, result.stdout).toBe(2);
+      expect(result.stderr).toContain('Local image must be a file path, not a URL:');
+    });
+    const svg = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciLz4=';
+    const diagram = (icon: unknown) => ({ name: '', shapes: [{ link: '', icon }], connections: [], root: { link: '' } }) as unknown as Diagram;
+    for (const icon of [svg, 'HTTPS://example.com/a.svg', { Scheme: 'https', Host: 'example.com', Path: '/a.svg' }, { Scheme: 'data', Opaque: 'image/png;base64,AA==' }]) {
+      await expect(stageIcons(diagram(icon), join(project, 'root', 'a.d2'), join(project, 'root'), join(project, 'stage'))).resolves.toBeUndefined();
+    }
+    await expect(stageIcons(diagram({ Scheme: '', Host: 'private', Path: '/etc/hosts' }), join(project, 'root', 'a.d2'), join(project, 'root'),
+      join(project, 'stage'))).rejects.toThrow('Local image must be a file path, not a URL: //private/etc/hosts');
+  });
+
   it('treats Windows drive paths as local images, not URLs', async () => {
     const diagram = { name: '', shapes: [{ link: '', icon: { Scheme: 'c', Opaque: '\\img.png', Host: '', Path: '' } }],
       connections: [], root: { link: '' } } as unknown as Diagram;
@@ -579,6 +603,21 @@ describe.concurrent('zoomflow CLI', () => {
     expect(followed.stdout).toContain('1 error, 1 warning in 5 files.');
     success(json);
     expect(JSON.parse(json.stdout)).toMatchObject({ files: ['index.d2', 'health.d2', 'work/index.d2', 'projects/zoomflow.d2'], diagnostics: [] });
+  });
+
+  it('counts file links and imports spelled in another letter case as missing, as case-sensitive systems do', async () => {
+    const root = join(temp, 'atlas-case');
+    await mkdir(join(root, 'Docs'), { recursive: true });
+    await Promise.all([writeFile(join(root, 'Docs', 'health.d2'), 'x'), writeFile(join(root, 'imports.d2'), '...@Docs/Health\nq'),
+      writeFile(join(root, 'index.d2'), 'A: {link: ./Docs/Health.d2}\nB: {link: ./docs/health.d2}\nC: {link: ./Docs/health.d2}')]);
+    const [linked, imported] = await Promise.all([run(['lint', join(root, 'index.d2'), '--follow', '--json']), run(['lint', join(root, 'imports.d2')])]);
+    expect(linked.code).toBe(1);
+    const result = JSON.parse(linked.stdout);
+    expect(result.files).toEqual(['index.d2', 'Docs/health.d2']);
+    expect(result.diagnostics.map((item: { rule: string; shape: string }) => [item.rule, item.shape]))
+      .toEqual([['dangling-file-link', 'A'], ['dangling-file-link', 'B']]);
+    expect(imported.code).toBe(2);
+    expect(imported.stderr).toMatch(/failed to import "Docs\/Health\.d2": file does not exist/);
   });
 
   it('follows file links once each through cycles and never outside --root or through symlinks', async () => {

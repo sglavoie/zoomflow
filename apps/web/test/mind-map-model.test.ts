@@ -136,4 +136,5 @@ it('starts a new linked mind map file centred on its name', () => {
   const map = readMindMap(newFileSource('mind map', 'Health.d2'));
   expect(map?.root.label).toBe('Health');
   expect(map?.root.children.map(topic => topic.label)).toEqual(['First idea', 'Second idea']);
+  expect(readMindMap(newFileSource('mind map', ' Plan  B .d2 '))?.root.label).toBe('Plan B');
 });

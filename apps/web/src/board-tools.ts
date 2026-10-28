@@ -538,7 +538,16 @@ export function setupBoardTools(scope: PaneScope, viewer: Viewer, options: Board
       return;
     }
     const shape = shapeAt(event.target);
-    if (!shape || !ready()) return;
+    if (!shape) return;
+    if (!ready()) {
+      // Until the preview shows an edit made on the diagram, the old shapes keep focus: swallow the keys that edit
+      // them, or a second quick Backspace would reach the viewer and go up a board.
+      if (pending?.source === options.source() && (isAdd(event) || ['F2', 'Enter', 'Delete', 'Backspace'].includes(event.key))) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+      }
+      return;
+    }
     if (event.key === 'ContextMenu' || event.shiftKey && event.key === 'F10') {
       options.selectSource(shape.id, false);
       const box = shape.focus.getBoundingClientRect();

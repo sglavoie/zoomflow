@@ -26,12 +26,14 @@ export function simplifyTrail(visits: readonly string[]): string[] {
 }
 
 /** Spell a route the way board hashes are built, as browsers leave `&` or `[` raw in an address and authors may
- * write `#/My Board`, so `#/Q&A` finds `#/Q%26A`. */
+ * write `#/My Board`, so `#/Q&A` finds `#/Q%26A`. Only the reserved `@file`, `@scenarios` and `@steps` stay raw:
+ * a board named `@home` is `#/%40home`. A trailing slash is dropped, so `#/A/` finds `#/A`. */
 export function normalizeRouteHash(hash: string): string {
-  return (hash || '#/').split('/').map((segment, index) => {
-    if (index === 0 || segment.startsWith('@')) return segment;
+  const route = (hash || '#/').split('/').map((segment, index) => {
+    if (index === 0 || /^@(?:file|scenarios|steps)$/.test(segment)) return segment;
     try { return encodeURIComponent(decodeURIComponent(segment)); } catch { return segment; }
-  }).join('/') || '#/';
+  }).join('/').replace(/\/+$/, '');
+  return route && route !== '#' ? route : '#/';
 }
 
 /** Resolve a route to the nearest existing board hash, walking up its path. */
