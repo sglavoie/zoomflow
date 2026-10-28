@@ -160,15 +160,17 @@ export function setupBoardTools(scope: PaneScope, viewer: Viewer, options: Board
     return true;
   }
   const refocus = (element: HTMLElement) => { if (element.isConnected) element.focus({ preventScroll: true }); };
+  // A link reads up to its first `#`, so a file named with one, as in `notes#1.d2`, cannot be linked.
+  const linkable = (host: FileLinkHost) => host.files.filter((file) => classifyHref(fileLink(host.path, file)).kind === 'file');
   async function linkTo(board: string, shape: string, host: FileLinkHost, returnFocus: HTMLElement, current?: string) {
     const href = current ? classifyHref(current) : undefined;
     const path = href?.kind === 'file' ? resolveFilePath(host.path, href.path) : undefined;
-    // A link reads up to its first `#`, so a file named with one, as in `notes#1.d2`, cannot be linked.
-    const files = host.files.filter((file) => classifyHref(fileLink(host.path, file)).kind === 'file');
+    const files = linkable(host);
     const choice = await fileLinkDialog().link({ files, boards: host.boards, shape: shapeLabel(board, shape),
       ...path && href?.kind === 'file' ? { current: { path, hash: href.hash } } : {} });
     refocus(returnFocus);
-    if (choice) applyLink(board, shape, fileLink(host.path, choice.path) + choice.hash);
+    // Without a file to choose, the dialog submits an empty path, which would link to the folder.
+    if (choice?.path) applyLink(board, shape, fileLink(host.path, choice.path) + choice.hash);
   }
   async function newLinked(board: string, shape: string, host: FileLinkHost, returnFocus: HTMLElement) {
     const choice = await fileLinkDialog().create(shapeLabel(board, shape));
@@ -314,8 +316,8 @@ export function setupBoardTools(scope: PaneScope, viewer: Viewer, options: Board
     if (action.action === 'add') {
       items.push(...(['flow', 'mind map'] as const).map(kind => item(`Add ${kind} board…`, focus => add(kind, board, shape, focus), { relinks: true })));
       if (files) {
-        items.push(item('Link to diagram…', focus => void linkTo(board, shape, files, focus), { relinks: true }),
-          item('New linked diagram…', focus => void newLinked(board, shape, files, focus), { relinks: true }));
+        if (linkable(files).length) items.push(item('Link to diagram…', focus => void linkTo(board, shape, files, focus), { relinks: true }));
+        items.push(item('New linked diagram…', focus => void newLinked(board, shape, files, focus), { relinks: true }));
       }
     } else if (action.action === 'edit') items.push(item(`Edit ${action.kind} board…`, focus => edit(action.board, focus)));
     else if (action.action === 'file' && files) {

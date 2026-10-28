@@ -167,7 +167,8 @@ async function compileSources(d2: D2, root: string, realRoot: string, inputPath:
     }
     return Object.hasOwn(files, key);
   }
-  await load(inputPath);
+  // D2 would only report the input missing from its snapshot, so name why it could not be read.
+  if (!(await load(inputPath)) && problems.has(inputPath)) throw Object.assign(new Error(`${inputPath}: ${problems.get(inputPath)}`), { problems });
   const tried = new Set([inputPath]);
   for (;;) {
     try {
@@ -188,8 +189,8 @@ type IconUrl = { Scheme?: string; Host?: string; Path?: string; Opaque?: string;
 const iconText = (icon: IconUrl) => `${icon.Scheme ? `${icon.Scheme}:` : ''}${icon.Host ? `//${icon.Host}` : ''}${icon.Opaque || icon.Path || ''}` +
   `${icon.RawQuery || icon.ForceQuery ? `?${icon.RawQuery ?? ''}` : ''}${icon.Fragment ? `#${icon.Fragment}` : ''}`;
 
-/** D2 resolves local icons against the entry file, so preserve that layout. Exported for tests. */
-export async function stageIcons(diagram: Diagram, input: string, root: string, temp: string) {
+/** D2 resolves local icons against the entry file, so preserve that layout; returns the images copied. Exported for tests. */
+export async function stageIcons(diagram: Diagram, input: string, root: string, temp: string): Promise<Set<string>> {
   const realRoot = await realpath(root);
   const copied = new Set<string>();
   for (const board of indexBoards(diagram).values()) {
@@ -231,6 +232,7 @@ export async function stageIcons(diagram: Diagram, input: string, root: string, 
       copied.add(asset);
     }
   }
+  return copied;
 }
 
 /** Escape a path segment as Go's url.URL does. */
@@ -321,6 +323,7 @@ export async function main(args = process.argv.slice(2)): Promise<number> {
     const format = (values.format ?? implied ?? 'svg').toLowerCase();
     if (!['svg', 'png', 'html'].includes(format)) throw new UsageError(`Unsupported format: ${values.format || '""'}`);
     if (values.output === '') throw new UsageError('Output path is empty.');
+    if (values.root === '') throw new UsageError('Root path is empty.');
     let input = resolve(filename);
     if (extname(input).toLowerCase() !== '.d2') throw new UsageError('Input must be a .d2 file.');
     if (!(await regularFile(input, filename))) {
@@ -333,10 +336,11 @@ export async function main(args = process.argv.slice(2)): Promise<number> {
       throw error;
     });
     if (!(await stat(realRoot)).isDirectory()) throw new Error(`Root is not a directory: ${root}`);
-    // The real path decides; an input named through the other side of a symlinked root is moved onto the root's side.
+    // The real path decides; an input named through the other side of a symlinked root is moved onto the root's side,
+    // and one spelled in another letter case takes the disk's, which its imports and file links inherit.
     const realInput = await realpath(input);
     if (!within(realRoot, realInput)) throw new Error('Input must be inside --root.');
-    if (!within(root, input)) input = join(root, relative(realRoot, realInput));
+    if (!within(root, input) || !(await exactCase(root, input))) input = join(root, relative(realRoot, realInput));
     shown = (path) => {
       const rel = relative(process.cwd(), join(root, path));
       return within(process.cwd(), join(root, path)) && rel ? rel : join(root, path);
@@ -432,13 +436,19 @@ export async function main(args = process.argv.slice(2)): Promise<number> {
         files: all ? { ...file.links, exists: (target: string) => held.has(target) } : file.links }).diagnostics }));
       const temp = await mkdtemp(join(tmpdir(), 'zoomflow-'));
       try {
+        const inputs = new Set<string>();
         for (const file of documents) {
           for (const [path, source] of Object.entries(file.files)) {
             await mkdir(dirname(join(temp, path)), { recursive: true });
             await writeFile(join(temp, path), source);
+            inputs.add(join(root, path));
           }
-          await stageIcons(file.compiled.diagram, join(root, file.path), root, temp);
+          for (const asset of await stageIcons(file.compiled.diagram, join(root, file.path), root, temp)) inputs.add(asset);
         }
+        // Real paths compare through symlinks and, where the disk ignores it, letter case.
+        const realOutput = await realpath(output).catch(() => undefined);
+        const realInputs = await Promise.all([...inputs].map((path) => realpath(path).catch(() => undefined)));
+        if (realOutput !== undefined && realInputs.includes(realOutput)) throw new Error(`Output must not overwrite a file the diagram uses: ${shown(relative(root, output))}`);
         // D2 logs progress for every board; keep warnings and errors once, naming the user's files.
         const staged = new RegExp(String.raw`[^\s"'()]*${basename(temp)}[\\/]([^\s"'():]*)`, 'g');
         const reported = new Set<string>();

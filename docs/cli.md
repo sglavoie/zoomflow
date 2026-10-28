@@ -68,6 +68,8 @@ that does not compile is left out with a warning such as
 `zoomflow: left out work/plan.d2, which links open: …`; links to it, or to files outside
 `--root`, then show as missing in HTML and lose their target in ZIPs. The dangling-link
 summary counts missing boards and files across every bundled file.
+An export never replaces a file the diagram uses: a `.d2` output, or one that is a
+source file or local image of the export, fails with exit **2**.
 
 Lint uses the pinned bundled WASM compiler and needs no native D2 installation.
 Exit status is **0** for success (including warnings), **1** for lint errors,
@@ -92,7 +94,8 @@ no other file or folder is read, so unrelated unreadable files cannot fail a run
 The project root defaults to the input file's directory regardless of the working
 directory. Set `--root path` to include imports from parent folders; the input
 must be inside it, by real path, so a symlinked root such as macOS `/tmp` also
-accepts the input under `/private/tmp`. Inputs, imports and local images must remain within that root,
+accepts the input under `/private/tmp`, and an input spelled in another letter case, where
+the disk allows it, is read as the disk spells it. Inputs, imports and local images must remain within that root,
 compared by real path so a symlinked directory cannot reach outside it; symlinked
 files are not followed. An import that exists but cannot be used names the reason
 after D2's error, for example `(outside --root /work/app; pass --root to include

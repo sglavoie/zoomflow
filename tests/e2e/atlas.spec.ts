@@ -445,8 +445,10 @@ test('New atlas without folder access starts a draft project', async ({ page }) 
   await expect(page.locator('#filename')).toHaveAttribute('title', 'atlas/index.d2');
   await previewReady(page);
   await expect(page.locator('#activity-status')).toContainText('the atlas is a draft');
-  // Linking needs a folder project, which the draft is.
-  await expect((await shapeMenu(page, 'n', 'atlas')).getByRole('menuitem', { name: 'New linked diagram…' })).toBeVisible();
+  // Linking needs a folder project, which the draft is; with no other file yet, there is nothing to link to.
+  const menu = await shapeMenu(page, 'n', 'atlas');
+  await expect(menu.getByRole('menuitem', { name: 'New linked diagram…' })).toBeVisible();
+  await expect(menu.getByRole('menuitem', { name: 'Link to diagram…' })).toHaveCount(0);
 });
 
 /** A folder `name` whose index.d2 links to target.d2, which draws and boards only what it imports from parts.d2. */

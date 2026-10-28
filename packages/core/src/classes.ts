@@ -91,7 +91,10 @@ export function definedClasses(files: Record<string, string>, path: string, seen
       // Only a token can open a string: the quote in `Don't` or `55" TV` is label text.
       // An unterminated string ends before its line break, so the statement still ends there.
       let end = i + 1;
-      while (end < text.length && text[end] !== char && text[end] !== '\n') end += char === '"' && text[end] === '\\' && text[end + 1] !== '\n' ? 2 : 1;
+      // A double quote escapes with a backslash, a single quote by doubling, as in `'it''s'`.
+      while (end < text.length && text[end] !== '\n' && (text[end] !== char || char === "'" && text[end + 1] === "'")) {
+        end += char === '"' && text[end] === '\\' && text[end + 1] !== '\n' || char === "'" && text[end] === "'" ? 2 : 1;
+      }
       const closed = text[end] === char;
       append(text.slice(i, closed ? end + 1 : end));
       i = closed ? end : end - 1;

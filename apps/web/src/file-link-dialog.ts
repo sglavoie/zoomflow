@@ -77,6 +77,7 @@ function create() {
     linkFields.hidden = mode !== 'link';
     newFields.hidden = mode !== 'new';
     name.required = mode === 'new';
+    file.required = mode === 'link';
     setText(status, '');
     dialog.showModal();
     return new Promise<boolean>(resolve => { finish = resolve; });

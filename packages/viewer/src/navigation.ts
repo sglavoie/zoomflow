@@ -25,14 +25,15 @@ export function simplifyTrail(visits: readonly string[]): string[] {
   return trail;
 }
 
-/** Spell a route the way board hashes are built, as browsers leave `&` or `[` raw in an address and authors may
- * write `#/My Board`, so `#/Q&A` finds `#/Q%26A`. Only the reserved `@file`, `@scenarios` and `@steps` stay raw:
- * a board named `@home` is `#/%40home`. A trailing slash is dropped, so `#/A/` finds `#/A`. */
+/** Spell a route the way board hashes are built, as browsers leave `&`, `[` or a lone `%` raw in an address and
+ * authors may write `#/My Board`, so `#/Q&A` finds `#/Q%26A` and `#/50%` finds `#/50%25`. Only the reserved `@file`,
+ * `@scenarios` and `@steps` stay raw: a board named `@home` is `#/%40home`. Empty segments, which no board has, are
+ * dropped, so `#/A/` finds `#/A` and `#/A//B` finds `#/A/B`. */
 export function normalizeRouteHash(hash: string): string {
-  const route = (hash || '#/').split('/').map((segment, index) => {
+  const route = (hash || '#/').split('/').filter((segment, index) => index === 0 || segment).map((segment, index) => {
     if (index === 0 || /^@(?:file|scenarios|steps)$/.test(segment)) return segment;
-    try { return encodeURIComponent(decodeURIComponent(segment)); } catch { return segment; }
-  }).join('/').replace(/\/+$/, '');
+    try { return encodeURIComponent(decodeURIComponent(segment.replace(/%(?![\da-f]{2})/gi, '%25'))); } catch { return segment; }
+  }).join('/');
   return route && route !== '#' ? route : '#/';
 }
 

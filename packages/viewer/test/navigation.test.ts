@@ -31,6 +31,10 @@ describe('normalizeRouteHash', () => {
     expect(normalizeRouteHash('#/Q&A/a[b]')).toBe('#/Q%26A/a%5Bb%5D');
     expect(normalizeRouteHash('#/caf%c3%a9/My Board')).toBe('#/caf%C3%A9/My%20Board');
     expect(normalizeRouteHash('#/@file/x%2Fy.d2/bad%E0')).toBe('#/@file/x%2Fy.d2/bad%E0');
+    // A lone `%` is the text a board name holds, and an empty segment names no board.
+    expect(normalizeRouteHash('#/50%/a%2')).toBe('#/50%25/a%252');
+    expect(normalizeRouteHash('#/A//B/')).toBe('#/A/B');
+    expect(normalizeRouteHash('#//')).toBe('#/');
     expect(normalizeRouteHash('')).toBe('#/');
   });
 

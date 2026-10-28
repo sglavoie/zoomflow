@@ -44,3 +44,9 @@ it('selects the listed board an unencoded authored route names, once, and a new 
   submit();
   await expect(choice).resolves.toEqual({ path: 'a.d2', hash: '' });
 });
+
+it('does not submit a link without a file to open', async () => {
+  void fileLinkDialog().link({ files: [], shape: 'X', boards: async () => [] });
+  await settle();
+  expect(document.querySelector<HTMLSelectElement>('#file-link-file')!.checkValidity()).toBe(false);
+});

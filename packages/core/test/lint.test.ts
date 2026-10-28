@@ -660,3 +660,38 @@ it('locates boards declared through dotted layers keys at their own name', async
   expect(result.diagnostics.filter((item) => item.rule === 'missing-backlink').map(({ board, range }) => [board, range?.split(',')[1].split('-')[0]]))
     .toEqual([['root.layers.x', '1:7:9'], ['root.layers.t', '2:7:23'], ['root.layers.y', '3:7:37'], ['root.layers.w', '4:9:53']]);
 });
+
+it('resolves a file link the entry file\'s glob sets on an imported shape from the entry file', async () => {
+  for (const glob of ['*.link: ./x.d2', '**: {&shape: rectangle; link: ./x.d2}']) {
+    const fs = { index: `...@sub/lib\n${glob}`, 'sub/lib.d2': 'q' };
+    const result = { ...await d2.compile({ fs, inputPath: 'index', options: { layout: 'elk' } }), fs };
+    expect(lint(result, { files: { inputPath: 'index', exists: (path: string) => path === 'x.d2' } }).diagnostics).toEqual([]);
+    expect(rebaseFileLinks(result, 'index').shapes.map((shape) => [shape.id, shape.link])).toEqual([['q', './x.d2']]);
+  }
+});
+
+it('resolves an imported shape\'s map link from its file when the entry file holds the same text', async () => {
+  const fs = { index: '...@sub/lib\na: label # see ./x.d2', 'sub/lib.d2': 'a: {link: ./x.d2}' };
+  const result = { ...await d2.compile({ fs, inputPath: 'index', options: { layout: 'elk' } }), fs };
+  expect(lint(result, { files: { inputPath: 'index', exists: (path: string) => path === 'sub/x.d2' } }).diagnostics).toEqual([]);
+  expect(rebaseFileLinks(result, 'index').shapes.map((shape) => [shape.id, shape.link])).toEqual([['a', './sub/x.d2']]);
+});
+
+it('follows nested imports written with CRLF line endings or a quoted path', async () => {
+  const rules = async (lib: string, deep: string) => {
+    const fs = { index: '...@lib', 'lib.d2': lib, 'deep.d2': deep };
+    const result = { ...await d2.compile({ fs, inputPath: 'index', options: { layout: 'elk' } }), fs };
+    return lint(result, { files: { inputPath: 'index', exists: () => true } }).diagnostics.map((item) => [item.rule, item.shape]);
+  };
+  const expected = await rules('...@deep\nq', '*.link: other.d2\nq');
+  expect(expected).toEqual([['bare-file-link', 'q']]);
+  expect(await rules('...@deep\r\nq', '*.link: other.d2\r\nq')).toEqual(expected);
+  expect(await rules('...@"deep"\nq', '*.link: other.d2\nq')).toEqual(expected);
+  expect(await rules("...@'deep'\nq", '*.link: other.d2\nq')).toEqual(expected);
+});
+
+it('reads classes after a single-quoted label with an escaped quote', async () => {
+  const source = "a: 'it''s {'\nclasses: {c: {style.fill: red}}\nb.class: c";
+  expect(lint(await compile(source)).diagnostics).toEqual([]);
+  expect([...definedClasses({ index: source }, 'index') ?? []]).toEqual(['c']);
+});

@@ -1,9 +1,9 @@
 import type { CompileResponse } from '@d2lang/d2';
-import { boardKey, classifyHref, indexBoards, resolveFilePath, type Board, type Diagram } from './index';
+import { boardKey, classifyHref, indexBoards, resolveFilePath, type Board } from './index';
 import { definedClasses } from './classes';
 import { boundaryNeighbours } from './context';
-import { fileLinkRules, importedLinks, importPath, linkAfterKey, linkSources, shapeAttributes, shapeFiles, shapeRanges, type AuthoredLink, type GlobFilter,
-  type GlobSegment } from './source';
+import { filterMatches, fileLinkRules, globMatches, idSegments, importedLinks, importPath, linkAfterKey, linkSources, shapeAttributes, shapeFiles, shapeRanges,
+  type AuthoredLink, type GlobFilter, type GlobSegment } from './source';
 
 export type LintRule = 'boundary-in' | 'boundary-out' | 'orphan-board' | 'dangling-link' | 'ignored-link' | 'missing-backlink'
   | 'undefined-class' | 'unsupported-label' | 'dangling-file-link' | 'missing-file-board' | 'bare-file-link';
@@ -102,53 +102,6 @@ function keySegment(value: AstValue): string {
 }
 /** D2 rewrites a connection's link to a board named `null` in any case, such as `NULL`, as `'null'`. */
 const nulled = (id: string) => id.replace(/(^|\.)(?:'null'|null)(?=\.|$)/gi, "$1'null'");
-/** The unquoted segments of a compiled shape ID, such as `c."a.b"`. */
-function idSegments(id: string): string[] {
-  return [...id.matchAll(/"((?:[^"\\]|\\.)*)"|'([^']*)'|([^.]+)/g)].map(([, double, single, plain]) => double?.replace(/\\(.)/g, '$1') ?? single ?? plain);
-}
-/** Whether a glob key path, where `*` matches within a segment and `**` any number of them, names a shape ID. */
-function globMatches(pattern: GlobSegment[], id: string[]): boolean {
-  const match = (p: number, s: number): boolean => {
-    if (p === pattern.length) return s === id.length;
-    const part = pattern[p];
-    if (part.glob && part.text === '**') {
-      for (let next = s + 1; next <= id.length; next++) if (match(p + 1, next)) return true;
-      return false;
-    }
-    if (s === id.length) return false;
-    const same = part.glob ? new RegExp(`^${part.text.split('*').map((piece) => piece.replace(/[.+?^${}()|[\]\\]/g, '\\$&')).join('.*')}$`, 'i').test(id[s])
-      : part.text.toLowerCase() === id[s].toLowerCase();
-    return same && match(p + 1, s + 1);
-  };
-  return match(0, 0);
-}
-/** Whether a shape passes a glob filter, as D2 reads them: by the shape's compiled attributes, such as `shape` or
- * `style.fill`, with `level` from 0, and `leaf` and `connected` from the board. An attribute the shape lacks never
- * matches, nor, in this D2, does `id`. */
-function filterMatches(filter: GlobFilter, board: Board, shape: Diagram['shapes'][number], attributes: Record<string, unknown>): boolean {
-  const segments = idSegments(shape.id);
-  const inside = (other: string) => {
-    const path = idSegments(other);
-    return path.length > segments.length && segments.every((segment, index) => segment === path[index]);
-  };
-  let actual: string | undefined;
-  if (filter.key === 'connected') actual = String(board.diagram.connections.some((item) => item.src === shape.id || item.dst === shape.id));
-  else if (filter.key === 'leaf') actual = String(!board.diagram.shapes.some((item) => inside(item.id)));
-  else if (filter.key === 'level') actual = String(segments.length - 1);
-  else if (filter.key !== 'id') {
-    let value: unknown = attributes;
-    for (const key of filter.key.split('.')) value = (value as Record<string, unknown> | undefined)?.[key];
-    const scalar = (value as { value?: unknown } | undefined)?.value;
-    if (typeof scalar === 'string') actual = scalar;
-    // D2 keeps an icon as a parsed URL.
-    const url = filter.key === 'icon' ? value as { Scheme?: string; Opaque?: string; Host?: string; Path?: string; RawQuery?: string; Fragment?: string } | undefined : undefined;
-    if (url?.Scheme !== undefined) actual = `${url.Scheme ? `${url.Scheme}:` : ''}${url.Opaque || `${url.Host ? `//${url.Host}` : ''}${url.Path ?? ''}`}` +
-      `${url.RawQuery ? `?${url.RawQuery}` : ''}${url.Fragment ? `#${url.Fragment}` : ''}`;
-  }
-  const pattern = filter.glob ? new RegExp(`^${filter.value.split('*').map((piece) => piece.replace(/[.+?^${}()|[\]\\]/g, '\\$&')).join('.*')}$`, 's') : undefined;
-  const hit = actual !== undefined && (pattern ? pattern.test(actual) : actual === filter.value);
-  return filter.negate ? !hit : hit;
-}
 /** The scalar of an edge's last `link` assignment, from `(a -> b)[0].link: x` or `a -> b: {link: x}`. */
 function edgeLink(entry: AstKey): AstValue | undefined {
   const value = (key: AstKey) => stringValue(key.value) !== undefined ? key.value : key.primary;

@@ -1,4 +1,5 @@
 import { execFile } from 'node:child_process';
+import { existsSync } from 'node:fs';
 import { chmod, mkdtemp, readFile, rm, symlink, writeFile, mkdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
@@ -356,7 +357,7 @@ describe.concurrent('zoomflow CLI', () => {
     const svg = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciLz4=';
     const diagram = (icon: unknown) => ({ name: '', shapes: [{ link: '', icon }], connections: [], root: { link: '' } }) as unknown as Diagram;
     for (const icon of [svg, 'HTTPS://example.com/a.svg', { Scheme: 'https', Host: 'example.com', Path: '/a.svg' }, { Scheme: 'data', Opaque: 'image/png;base64,AA==' }]) {
-      await expect(stageIcons(diagram(icon), join(project, 'root', 'a.d2'), join(project, 'root'), join(project, 'stage'))).resolves.toBeUndefined();
+      await expect(stageIcons(diagram(icon), join(project, 'root', 'a.d2'), join(project, 'root'), join(project, 'stage'))).resolves.toEqual(new Set());
     }
     await expect(stageIcons(diagram({ Scheme: '', Host: 'private', Path: '/etc/hosts' }), join(project, 'root', 'a.d2'), join(project, 'root'),
       join(project, 'stage'))).rejects.toThrow('Local image must be a file path, not a URL: //private/etc/hosts');
@@ -747,5 +748,56 @@ require('node:module').syncBuiltinESMExports();`)]);
       expect(await at()).toEqual(['work/index.d2', 'root']);
       expect(errors).toEqual([]);
     } finally { await context.close(); }
+  });
+
+  it('refuses an export that would overwrite a local image the diagram uses', async () => {
+    const root = join(temp, 'own-icon');
+    await mkdir(root);
+    const icon = '<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"/>';
+    await Promise.all([writeFile(join(root, 'logo.d2'), 'a: {icon: ./logo.svg}'), writeFile(join(root, 'logo.svg'), icon)]);
+    const [implied, named] = await Promise.all([run(['export', join(root, 'logo.d2')]), run(['export', join(root, 'logo.d2'), '-o', join(root, 'LOGO.svg')])]);
+    expect(implied.code).toBe(2);
+    expect(implied.stderr).toContain('Output must not overwrite a file the diagram uses:');
+    // Where the disk ignores letter case, another spelling names the same file.
+    if (existsSync(join(root, 'LOGO.svg'))) expect(named.code).toBe(2);
+    expect(await readFile(join(root, 'logo.svg'), 'utf8')).toBe(icon);
+  });
+
+  it('reads an input spelled in another letter case than on disk as the disk spells it', async () => {
+    const root = join(temp, 'case-input');
+    await mkdir(join(root, 'sub'), { recursive: true });
+    await Promise.all([writeFile(join(root, 'sub', 'a.d2'), '...@b\nx'), writeFile(join(root, 'sub', 'b.d2'), 'y')]);
+    // A case-sensitive disk has no other spelling to read.
+    if (!existsSync(join(root, 'Sub'))) return;
+    const result = await run(['lint', join(root, 'Sub', 'a.d2'), '--root', root]);
+    success(result);
+    expect(result.stdout).toBe('0 errors, 0 warnings.\n');
+  });
+
+  it('keeps the lint exit code when its reader closes the output early', async () => {
+    const input = join(temp, 'many-warnings.d2');
+    await writeFile(input, Array.from({ length: 1500 }, (_, i) => `layers.L${i}: {}`).join('\n'));
+    const { stdout, stderr } = await exec('bash', ['-c', `"$0" "$1" lint "$2" --json | head -c 1 >/dev/null; echo "\${PIPESTATUS[0]}"`,
+      process.execPath, cli, input], { cwd: repo, timeout: 180_000 });
+    expect(stderr).toBe('');
+    expect(stdout).toBe('0\n');
+  });
+
+  it('names why an unreadable input cannot be read', async () => {
+    if (process.getuid?.() === 0) return;
+    const input = join(temp, 'unreadable.d2');
+    await writeFile(input, 'a');
+    await chmod(input, 0o000);
+    try {
+      const result = await run(['lint', input]);
+      expect(result.code).toBe(2);
+      expect(result.stderr).toBe('zoomflow: unreadable.d2: cannot read: permission denied\n');
+    } finally { await chmod(input, 0o644); }
+  });
+
+  it('refuses an empty --root', async () => {
+    const result = await run(['lint', 'fixtures/lint/labelled.d2', '--root=']);
+    expect(result.code).toBe(2);
+    expect(result.stderr).toContain('zoomflow: Root path is empty.');
   });
 });

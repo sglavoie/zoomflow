@@ -1,4 +1,4 @@
-import { boardKey, classifyHref, indexBoards, resolveFilePath, type Diagram } from './index';
+import { boardKey, classifyHref, indexBoards, resolveFilePath, type Board, type Diagram } from './index';
 
 export interface SourceRange { from: number; to: number }
 export interface ShapeSource extends SourceRange { board: string; shape: string }
@@ -118,11 +118,59 @@ export function shapeFiles(compiled: { diagram: Diagram; graph: unknown },
   return files;
 }
 
+/** The unquoted segments of a compiled shape ID, such as `c."a.b"`. */
+export function idSegments(id: string): string[] {
+  return [...id.matchAll(/"((?:[^"\\]|\\.)*)"|'([^']*)'|([^.]+)/g)].map(([, double, single, plain]) => double?.replace(/\\(.)/g, '$1') ?? single ?? plain);
+}
+/** Whether a glob key path, where `*` matches within a segment and `**` any number of them, names a shape ID. */
+export function globMatches(pattern: GlobSegment[], id: string[]): boolean {
+  const match = (p: number, s: number): boolean => {
+    if (p === pattern.length) return s === id.length;
+    const part = pattern[p];
+    if (part.glob && part.text === '**') {
+      for (let next = s + 1; next <= id.length; next++) if (match(p + 1, next)) return true;
+      return false;
+    }
+    if (s === id.length) return false;
+    const same = part.glob ? new RegExp(`^${part.text.split('*').map((piece) => piece.replace(/[.+?^${}()|[\]\\]/g, '\\$&')).join('.*')}$`, 'i').test(id[s])
+      : part.text.toLowerCase() === id[s].toLowerCase();
+    return same && match(p + 1, s + 1);
+  };
+  return match(0, 0);
+}
+/** Whether a shape passes a glob filter, as D2 reads them: by the shape's compiled attributes, such as `shape` or
+ * `style.fill`, with `level` from 0, and `leaf` and `connected` from the board. An attribute the shape lacks never
+ * matches, nor, in this D2, does `id`. */
+export function filterMatches(filter: GlobFilter, board: Board, shape: Diagram['shapes'][number], attributes: Record<string, unknown>): boolean {
+  const segments = idSegments(shape.id);
+  const inside = (other: string) => {
+    const path = idSegments(other);
+    return path.length > segments.length && segments.every((segment, index) => segment === path[index]);
+  };
+  let actual: string | undefined;
+  if (filter.key === 'connected') actual = String(board.diagram.connections.some((item) => item.src === shape.id || item.dst === shape.id));
+  else if (filter.key === 'leaf') actual = String(!board.diagram.shapes.some((item) => inside(item.id)));
+  else if (filter.key === 'level') actual = String(segments.length - 1);
+  else if (filter.key !== 'id') {
+    let value: unknown = attributes;
+    for (const key of filter.key.split('.')) value = (value as Record<string, unknown> | undefined)?.[key];
+    const scalar = (value as { value?: unknown } | undefined)?.value;
+    if (typeof scalar === 'string') actual = scalar;
+    // D2 keeps an icon as a parsed URL.
+    const url = filter.key === 'icon' ? value as { Scheme?: string; Opaque?: string; Host?: string; Path?: string; RawQuery?: string; Fragment?: string } | undefined : undefined;
+    if (url?.Scheme !== undefined) actual = `${url.Scheme ? `${url.Scheme}:` : ''}${url.Opaque || `${url.Host ? `//${url.Host}` : ''}${url.Path ?? ''}`}` +
+      `${url.RawQuery ? `?${url.RawQuery}` : ''}${url.Fragment ? `#${url.Fragment}` : ''}`;
+  }
+  const pattern = filter.glob ? new RegExp(`^${filter.value.split('*').map((piece) => piece.replace(/[.+?^${}()|[\]\\]/g, '\\$&')).join('.*')}$`, 's') : undefined;
+  const hit = actual !== undefined && (pattern ? pattern.test(actual) : actual === filter.value);
+  return filter.negate ? !hit : hit;
+}
 /** The file each kept shape and connection link was written in, keyed by board ID and shape or connection ID.
  * D2 rewrites the image paths of imported files but keeps their links verbatim, so a file link resolves from
- * the file that wrote it: that of a `shape.link` reference, else that of the class that set it, else the one file
- * that mentions the shape (both ends, for a connection), else the one such file whose text holds the link. Links
- * left out cannot be told apart; callers resolve them from the entry file.
+ * the file that wrote it: that of a `shape.link` or `shape: {link: x}` reference, else that of the last glob that
+ * sets it, else that of the class that set it, else the one file that mentions the shape (both ends, for a
+ * connection), else the one such file whose text holds the link. Links left out cannot be told apart; callers
+ * resolve them from the entry file.
  */
 export function linkSources(compiled: { diagram: Diagram; graph: unknown; fs?: Record<string, string> }): Map<string, string> {
   const explicit = new Map<string, string>();
@@ -130,10 +178,31 @@ export function linkSources(compiled: { diagram: Diagram; graph: unknown; fs?: R
     const path = reference.key?.path ?? [];
     const index = reference.key_path_index ?? 0;
     if (path.length === index + 2 && keyText(path[index + 1]) === 'link') explicit.set(key, file);
+    else if (path.length === index + 1 && (reference.map_key_edge_index ?? -1) < 0) {
+      // `a: {link: x}` names the link in the map after the key.
+      const end = /,\d+:\d+:\d+-\d+:\d+:(\d+)$/.exec(reference.key?.range ?? '')?.[1];
+      const text = compiled.fs?.[file];
+      if (end !== undefined && text !== undefined && mapLink(text, Number(end))?.link) explicit.set(key, file);
+    }
   });
-  // A class's link resolves from the file that defines the class, which need not mention the shape.
   const entry = rangeFile((compiled.graph as { ast?: { range?: string } }).ast?.range);
-  const classes = compiled.fs && entry !== undefined ? fileLinkRules(compiled.fs, entry).classes : new Map<string, AuthoredLink>();
+  const rules = compiled.fs && entry !== undefined ? fileLinkRules(compiled.fs, entry) : undefined;
+  let attributes: Map<string, Record<string, unknown>> | undefined;
+  /** The file of the last glob that applies to the shape, when it set the shape's link. Globs at the top of the entry
+   * file and its imports apply to the root board and the scenarios and steps that inherit it, and an imported file's
+   * globs only to the shapes that file writes. */
+  const globFile = (board: Board, shape: Diagram['shapes'][number], key: string) => {
+    if (!rules?.globs.length || /\.layers\./.test(`${board.id}.`)) return;
+    const glob = [...rules.globs].reverse().find((item) => globMatches(item.path, idSegments(shape.id))
+      && (item.file === entry || files.get(key)?.has(item.file))
+      && (!item.filters.length || item.filters.every((filter) => {
+        const found = (attributes ??= shapeAttributes(compiled.diagram, compiled.graph)).get(key);
+        return found && filterMatches(filter, board, shape, found);
+      })));
+    return glob?.link.href === shape.link ? glob.file : undefined;
+  };
+  // A class's link resolves from the file that defines the class, which need not mention the shape.
+  const classes = rules?.classes ?? new Map<string, AuthoredLink>();
   const classFile = (shape: Diagram['shapes'][number]) => {
     const link = (shape.classes ?? []).map((name) => classes.get(name)).filter(Boolean).at(-1);
     return link?.href === shape.link ? rangeFile(link.range) : undefined;
@@ -148,7 +217,7 @@ export function linkSources(compiled: { diagram: Diagram; graph: unknown; fs?: R
     const mentions = (id: string) => [...files.get(JSON.stringify([board.id, id])) ?? []];
     for (const shape of board.diagram.shapes) {
       const key = JSON.stringify([board.id, shape.id]);
-      const file = shape.link ? explicit.get(key) ?? classFile(shape) ?? pick(mentions(shape.id), shape.link) : undefined;
+      const file = shape.link ? explicit.get(key) ?? globFile(board, shape, key) ?? classFile(shape) ?? pick(mentions(shape.id), shape.link) : undefined;
       if (file !== undefined) result.set(key, file);
     }
     for (const connection of board.diagram.connections) {
@@ -298,7 +367,12 @@ export function importedLinks(compiled: { diagram: Diagram; graph: unknown; fs?:
 /** A glob key path segment: its text, and whether it is an unquoted pattern such as `*` or `a*`. */
 export type GlobSegment = { text: string; glob: boolean };
 const keyPart = /\s*(?:"((?:[^"\\\n]|\\.)*)"|'((?:[^'\n]|'')*)'|([^.:;{}\n#"'&]*[^.:;{}\n#"'\s&]))\s*(\.|(?=:))/y;
-const importLine = /\s*(?:\.\.\.@([^\s;#}]+)|((?:[^:;{}\n#]+?))\s*:\s*@([^\s;#}]+))[ \t]*(?=[;\n#}]|$)/y;
+const importTarget = String.raw`"(?:[^"\\\n]|\\.)*"|'(?:[^'\n]|'')*'|[^\s;#}]+`;
+// Trailing whitespace takes the `\r` of CRLF line endings.
+const importLine = new RegExp(String.raw`\s*(?:\.\.\.@(${importTarget})|((?:[^:;{}\n#]+?))\s*:\s*@(${importTarget}))[ \t\r]*(?=[;\n#}]|$)`, 'y');
+/** An import's path as written, quoted or not, without its quotes. */
+const importText = (path: string) => path[0] === '"' ? path.slice(1, -1).replace(/\\(.)/g, '$1')
+  : path[0] === "'" ? path.slice(1, -1).replaceAll("''", "'") : path;
 
 /** A glob that sets links: its key path, the link, and the filters that limit it. */
 export type GlobLink = { path: GlobSegment[]; link: AuthoredLink; filters: GlobFilter[]; /** The file that wrote it. */ file: string };
@@ -339,7 +413,7 @@ export function fileLinkRules(fs: Record<string, string>, file: string, seen = n
   for (const start of statements(text, 0, true) ?? []) {
     const imported = sticky(importLine, text, start);
     if (imported) {
-      const target = importPath(fs, file, imported[1] ?? imported[3]);
+      const target = importPath(fs, file, importText(imported[1] ?? imported[3]));
       const scope = imported[2] ? keyPath(imported[2]) : [];
       if (!target || !scope) continue;
       const rules = fileLinkRules(fs, target, seen);
