@@ -1,5 +1,28 @@
 import { describe, expect, it } from 'vitest';
-import { atlasHash, parseAtlasHash, resolveFilePath } from '../src/index';
+import { atlasHash, classifyHref, parseAtlasHash, rebaseFileHref, resolveFilePath } from '../src/index';
+
+describe('rebaseFileHref', () => {
+  it.each([
+    ['lib/part.d2', '../../other.d2'],
+    ['lib/part.d2', './dist/other.d2'],
+    ['lib/part.d2', './.hidden/other.d2'],
+    ['lib/part.d2', './other.d2'],
+    ['lib/part.d2', '../other.d2'],
+    ['part.d2', '../../../other.d2'],
+    ['work/deep/part.d2', '../other.d2'],
+    ['work/deep/part.d2', './other.d2'],
+    ['lib/part.d2', './a//other.d2'],
+  ])('keeps the destination and project validity of %s linking %s', (from, path) => {
+    const input = 'work/deep/index.d2';
+    const rebased = classifyHref(rebaseFileHref(`${path}#/Q%20A`, from, input));
+    expect(rebased.kind).toBe('file');
+    if (rebased.kind !== 'file') return;
+    expect(rebased.hash).toBe('#/Q%20A');
+    for (const scanned of [false, true]) {
+      expect(resolveFilePath(input, rebased.path, scanned)).toBe(resolveFilePath(from, path, scanned));
+    }
+  });
+});
 
 describe('resolveFilePath', () => {
   it.each([

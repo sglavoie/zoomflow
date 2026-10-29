@@ -1,12 +1,12 @@
 import { D2 } from '@d2lang/d2';
 import { boardLabel, classifyHref, exportAtlasHtml, exportAtlasZip, exportBoardsHtml, exportBoardsZip, exportGlyphSource, indexBoards, lint,
-  linkSources, renderExportBoards, resolveFilePath, shapeClass, type AtlasDocument, type CompileResponse, type Diagram, type ExportBoard,
+  linkSources, rebaseFileHref, renderExportBoards, resolveFilePath, shapeClass, type AtlasDocument, type CompileResponse, type Diagram, type ExportBoard,
   type LintOptions, type LintResult } from '@zoomflow/core';
 import { offlineViewerScript, offlineViewerStyle } from '@zoomflow/viewer';
 import { execFile } from 'node:child_process';
 import { copyFile, lstat, mkdir, mkdtemp, readdir, readFile, realpath, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { availableParallelism, tmpdir } from 'node:os';
-import { basename, dirname, extname, isAbsolute, join, posix, relative, resolve, sep } from 'node:path';
+import { basename, dirname, extname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { parseArgs, promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
 
@@ -63,15 +63,6 @@ function linkedFiles(compiled: Compilation, path: string): string[] {
     }
   }
   return [...paths];
-}
-/** A file link written in an imported file, rewritten to open the same file from the input, as viewers resolve it. */
-function inputLink(href: string, from: string | undefined, input: string): string {
-  const link = classifyHref(href);
-  if (link.kind !== 'file' || from === undefined || from === input) return href;
-  const target = resolveFilePath(from, link.path, false);
-  if (target === undefined) return href;
-  const path = posix.relative(posix.dirname(input), target);
-  return `${path.startsWith('../') ? '' : './'}${path}${link.hash}`;
 }
 const usage = `Usage:
   zoomflow export file.d2 [--all] [--format svg|png|html] [-o, --output file] [--root directory]
@@ -481,7 +472,7 @@ export async function main(args = process.argv.slice(2)): Promise<number> {
               const board = byTarget.get(target)!;
               if (format === 'png') binaries.set(JSON.stringify([file.path, board.id]), data);
               // Links from imported files are rewritten to resolve from this file, as the atlas resolves them.
-              const link = (item: { id: string; link?: string }) => item.link && inputLink(item.link, sources.get(JSON.stringify([board.id, item.id])), file.path);
+              const link = (item: { id: string; link?: string }) => item.link && rebaseFileHref(item.link, sources.get(JSON.stringify([board.id, item.id])), file.path);
               return format === 'png' ? '' : safeLinks(compilerLinks(data.toString('utf8'), board.diagram, link), true, follows);
             }, format === 'html' ? file.diagnostics : [], { concurrency: availableParallelism(), skipEmpty: format === 'html' });
             rendered.push({ path: file.path, name: file.path.replace(/\.d2$/i, ''), boards: exported });

@@ -1,4 +1,4 @@
-import { boardKey, classifyHref, indexBoards, resolveFilePath, type Board, type Diagram } from './index';
+import { boardKey, classifyHref, indexBoards, type Board, type Diagram } from './index';
 
 export interface SourceRange { from: number; to: number }
 export interface ShapeSource extends SourceRange { board: string; shape: string }
@@ -606,24 +606,33 @@ export function importPath(fs: Record<string, string>, file: string, path: strin
   return [`${joined}.d2`, joined].find((key) => key in fs);
 }
 
+/** Rebase an imported file's link without changing its destination. Keep leading `..` segments and excluded
+ * folders: a link outside the project must still be outside it when resolved from a deeper entry file. */
+export function rebaseFileHref(href: string, from: string | undefined, inputPath: string): string {
+  const link = classifyHref(href);
+  if (link.kind !== 'file' || from === undefined || from === inputPath) return href;
+  const parts = from.split('/').slice(0, -1);
+  for (const part of link.path.split('/')) {
+    if (part === '.') continue;
+    if (part === '..' && parts.length && parts.at(-1) !== '..') parts.pop();
+    else parts.push(part);
+  }
+  const base = inputPath.split('/').slice(0, -1);
+  let common = 0;
+  while (common < base.length && common < parts.length - 1 && base[common] === parts[common]) common++;
+  const path = [...base.slice(common).map(() => '..'), ...parts.slice(common)].join('/');
+  return `${path.startsWith('../') ? '' : './'}${path}${link.hash}`;
+}
+
 /** The compiled diagram with each file link written in an imported file rewritten to open the same file from
  * `inputPath`, the entry file's project path, since viewers resolve links from the file they show. The diagram is
  * copied when a link changes, so lint can still trace each link to the file that wrote it. */
 export function rebaseFileLinks(compiled: { diagram: Diagram; graph: unknown; fs?: Record<string, string>; inputPath?: string },
-  inputPath: string, scanned = true): Diagram {
+  inputPath: string): Diagram {
   const sources = linkSources(compiled);
   const entry = compiled.inputPath ?? inputPath;
   const rebased = (href: string, from: string | undefined) => {
-    const link = classifyHref(href);
-    if (link.kind !== 'file' || from === undefined || from === entry || from === inputPath) return href;
-    const target = resolveFilePath(from, link.path, scanned);
-    if (target === undefined) return href;
-    const base = inputPath.split('/').slice(0, -1);
-    const parts = target.split('/');
-    let common = 0;
-    while (common < base.length && common < parts.length - 1 && base[common] === parts[common]) common++;
-    const path = [...base.slice(common).map(() => '..'), ...parts.slice(common)].join('/');
-    return `${path.startsWith('../') ? '' : './'}${path}${link.hash}`;
+    return from === entry ? href : rebaseFileHref(href, from, inputPath);
   };
   const changes: [string, string, string][] = [];
   for (const board of indexBoards(compiled.diagram).values()) {

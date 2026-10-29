@@ -572,6 +572,48 @@ test('saving asks before overwriting a file that changed on disk since it was op
   expect(await page.evaluate(() => (window as any).disk.text)).toBe('disk: Mine');
 });
 
+test('simultaneous saves in both panes each ask before overwriting externally changed files', async ({ page }) => {
+  await page.setViewportSize({ width: 1600, height: 900 });
+  await page.addInitScript(() => {
+    const disks = [{ name: 'first.d2', text: 'first: Original', modified: 1 }, { name: 'second.d2', text: 'second: Original', modified: 1 }];
+    (window as any).disks = disks;
+    let next = 0;
+    (window as any).showOpenFilePicker = async () => {
+      const disk = disks[next++];
+      return [{ kind: 'file', name: disk.name,
+        isSameEntry: async () => false,
+        getFile: async () => new File([disk.text], disk.name, { lastModified: disk.modified }),
+        createWritable: async () => ({ write: async (text: string) => { disk.text = text; disk.modified++; }, close: async () => {}, abort: async () => {} }) }];
+    };
+  });
+  await page.goto('/'); await previewReady(page);
+  await page.locator('#file').click(); await previewReady(page);
+  await page.selectOption('#layout', 'quad');
+  await page.locator('#pane-choose-b').click();
+  await page.keyboard.press('Escape');
+  await page.locator('#file').click(); await previewReady(page, 'b');
+  await expect(page.locator('#pane-document-b')).toContainText('second.d2');
+  await page.locator('#editor .cm-content').fill('first: Mine');
+  await page.locator('#editor-b .cm-content').fill('second: Mine');
+  await page.evaluate(() => {
+    for (const disk of (window as any).disks) { disk.text = 'external: Keep'; disk.modified = 99; }
+    // Both async disk checks start before either can open the modal.
+    document.querySelector<HTMLButtonElement>('#save-file')!.click();
+    document.querySelector<HTMLButtonElement>('#save-file-b')!.click();
+  });
+  const dialog = page.getByRole('dialog', { name: 'File changed on disk — overwrite?' });
+  await expect(dialog).toContainText('first.d2 changed outside Zoomflow');
+  await dialog.getByRole('button', { name: 'Overwrite file', exact: true }).click();
+  await expect(dialog).toContainText('second.d2 changed outside Zoomflow');
+  await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await expect(dialog).toBeHidden();
+  await expect(page.locator('#save-file')).toBeEnabled();
+  await expect(page.locator('#save-file-b')).toBeEnabled();
+  await expect(page.locator('#draft-status')).toHaveText('Saved to file');
+  await expect(page.locator('#draft-status-b')).toHaveText('File has unsaved changes');
+  expect(await page.evaluate(() => (window as any).disks.map((disk: { text: string }) => disk.text))).toEqual(['first: Mine', 'external: Keep']);
+});
+
 test('saving a file that was moved or deleted on disk asks where to save it', async ({ page }) => {
   await page.addInitScript(() => {
     const state = { deleted: false, opened: '', saved: '', pickerCalls: 0, cancelPicker: true };

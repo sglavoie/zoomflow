@@ -43,6 +43,33 @@ test('concurrent tabs keep both versions and unrelated drafts after reload', asy
   await expect(source(page)).toHaveText('other: Unrelated');
 });
 
+test('conflict reload keeps unsaved edits on the page when browser backup fails, then retries', async ({ page, context }) => {
+  await page.goto('/'); await previewReady(page);
+  const other = await context.newPage(); await other.goto('/'); await previewReady(other);
+  await source(page).fill('a: First saved'); await saved(page);
+  await source(other).fill('b: Second tab'); await saved(other);
+  await expect(page.locator('#draft-conflict-reload')).toBeVisible();
+  await page.evaluate(() => {
+    const setItem = Storage.prototype.setItem;
+    (window as any).backupFull = true;
+    Storage.prototype.setItem = function (key, value) {
+      if (this === localStorage && (window as any).backupFull) throw new DOMException('Storage is full.', 'QuotaExceededError');
+      setItem.call(this, key, value);
+    };
+  });
+  await source(page).fill('a: Precious latest edit');
+  await page.locator('#draft-conflict-reload').click();
+  await expect(page.locator('#draft-conflict-message')).toContainText('Could not back up your latest edits.');
+  await expect(source(page)).toHaveText('a: Precious latest edit');
+  await expect(page.locator('#draft-conflict-reload')).toBeVisible();
+  await page.evaluate(() => { (window as any).backupFull = false; });
+  await Promise.all([page.waitForEvent('load'), page.locator('#draft-conflict-reload').click()]);
+  await previewReady(page);
+  await expect(source(page)).toHaveText('a: Precious latest edit');
+  await chooseExample(page, /Order flow \(recovered\)/);
+  await expect(source(page)).toHaveText('b: Second tab');
+});
+
 test('project recovery copies keep imports and do not replace the canonical project file', async ({ page, context }) => {
   await page.goto('/'); await previewReady(page);
   await openFolder(page, 'fixtures/browser-project');

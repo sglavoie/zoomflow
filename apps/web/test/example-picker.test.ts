@@ -16,6 +16,37 @@ function picker() {
   return { api, states, shown };
 }
 
+it('keeps the page open when backing up edits before a conflict reload fails, and allows retrying', () => {
+  localStorage.clear();
+  const { api, states, shown } = picker();
+  shown.a = api.initial.source;
+  const key = api.rememberFile('precious.d2', 'a: Original', 'a: Original');
+  shown.a = 'a: Latest edits';
+  api.updateCurrent('a', shown.a);
+  const reload = vi.spyOn(location, 'reload').mockImplementation(() => {});
+  const write = vi.spyOn(localStorage, 'setItem').mockImplementation(() => {
+    throw new DOMException('Storage is full.', 'QuotaExceededError');
+  });
+  const button = document.querySelector<HTMLButtonElement>('#draft-conflict-reload')!;
+  try {
+    button.click();
+    expect(reload).not.toHaveBeenCalled();
+    expect(states.a?.recoveryAvailable).toBe(false);
+    expect(shown.a).toBe('a: Latest edits');
+    expect(document.querySelector('#draft-conflict-message')!.textContent).toContain('Could not back up');
+    expect(button.hidden).toBe(false);
+    expect(new DraftStore(localStorage).load().drafts.find(draft => draft.key === key)?.source).toBe('a: Original');
+
+    write.mockRestore();
+    button.click();
+    expect(reload).toHaveBeenCalledOnce();
+    expect(new DraftStore(localStorage).load().drafts.find(draft => draft.key === key)?.source).toBe('a: Latest edits');
+  } finally {
+    write.mockRestore();
+    reload.mockRestore();
+  }
+});
+
 it('opens a folder read from disk as saved, and a draft atlas that is not on disk as unsaved', () => {
   const { api, states, shown } = picker();
   const files = [{ path: 'index.d2', source: 'home: Home\n' }];

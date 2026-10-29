@@ -681,6 +681,28 @@ describe.concurrent('zoomflow CLI', () => {
       '@files/sub/other.d2/root.svg']);
   }, 180_000);
 
+  it('does not redirect invalid imported links to valid files beside a deeper entry', async () => {
+    const root = join(temp, 'atlas-invalid-imported');
+    await Promise.all(['lib', 'work/deep/dist'].map(folder => mkdir(join(root, folder), { recursive: true })));
+    const input = join(root, 'work/deep/index.d2');
+    await Promise.all([
+      writeFile(input, '...@../../lib/part\nvalid.link: ../../other.d2\nlocal.link: ./dist/other.d2'),
+      writeFile(join(root, 'lib/part.d2'), 'outside.link: ../../other.d2\nmissing.link: ./dist/other.d2\noutside -> missing: {link: ../../other.d2}'),
+      writeFile(join(root, 'other.d2'), 'other'),
+      writeFile(join(root, 'work/deep/dist/other.d2'), 'local'),
+    ]);
+    const zip = join(root, 'atlas.zip'), html = join(root, 'atlas.html');
+    const results = await Promise.all([run(['export', input, '--root', root, '--all', '-o', zip]),
+      run(['export', input, '--root', root, '-o', html])]);
+    results.forEach(success);
+    const hrefs = (svg: string) => [...svg.matchAll(/ href="([^"]*)"/g)].map(match => match[1]);
+    expect(hrefs(strFromU8(unzipSync(await readFile(zip))['root.svg']))).toEqual([
+      '@files/other.d2/root.svg', '@files/work/deep/dist/other.d2/root.svg',
+    ]);
+    expect(hrefs(embedded(await readFile(html, 'utf8'))[0].svg)).toEqual(['../../other.d2', './dist/other.d2']);
+    for (const result of results) expect(result.stderr).toContain('3 dangling links');
+  }, 180_000);
+
   it('reads no linked file for a lone SVG or PNG, but does for HTML', async () => {
     const root = join(temp, 'lone-board');
     await mkdir(root, { recursive: true });

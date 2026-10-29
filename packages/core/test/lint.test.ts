@@ -675,6 +675,18 @@ it('rewrites file links of imported files to open from the entry file, leaving t
   expect(rebaseFileLinks(plain, 'index.d2')).toBe(plain.diagram);
 });
 
+it('keeps invalid imported file links missing instead of opening another file relative to the entry', async () => {
+  const inputPath = 'work/deep/index.d2';
+  const fs = { [inputPath]: '...@../../lib/part',
+    'lib/part.d2': 'a.link: ../../other.d2\nb.link: ./dist/other.d2\na -> b: {link: ../../other.d2}' };
+  const result = { ...await d2.compile({ fs, inputPath, options: { layout: 'elk' } }), fs };
+  const diagram = rebaseFileLinks(result, inputPath);
+  expect([...diagram.shapes, ...diagram.connections].map(item => item.link)).toEqual([
+    '../../../other.d2', '../../lib/dist/other.d2', '../../../other.d2',
+  ]);
+  expect(result.diagram.shapes[0].link).toBe('../../other.d2');
+});
+
 it('checks file links into hidden and build folders by the caller\'s project rules', async () => {
   const result = await compile('a.link: ./dist/x.d2\nb.link: ./.hidden/y.d2');
   const files = { inputPath: 'index.d2', exists: () => true };

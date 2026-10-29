@@ -16,6 +16,7 @@ export function setupDocumentActions(returnFocus: () => void) {
   const [undo, dismiss] = [...notice.querySelectorAll('button')];
   document.body.append(dialog, notice);
   let resolve: ((confirmed: boolean) => void) | undefined;
+  let confirmations = Promise.resolve();
   let focusAfter: (() => void) | undefined;
   let pending: (() => void) | undefined;
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -53,14 +54,20 @@ export function setupDocumentActions(returnFocus: () => void) {
   return {
     /** `focus` replaces the default focus return, for confirmations asked outside the diagram menu. */
     confirm(title: string, description: string, action: string, focus?: () => void) {
-      focusAfter = focus;
-      dialog.querySelector('h2')!.textContent = title;
-      dialog.querySelector('p')!.textContent = description;
-      confirm.textContent = action;
-      dialog.returnValue = 'cancel';
-      dialog.showModal();
-      cancel.focus();
-      return new Promise<boolean>(done => { resolve = done; });
+      // Saves in both panes can finish their disk checks together. Each needs its own answer;
+      // replacing an open confirmation would leave its caller waiting forever.
+      const answer = confirmations.then(() => {
+        focusAfter = focus;
+        dialog.querySelector('h2')!.textContent = title;
+        dialog.querySelector('p')!.textContent = description;
+        confirm.textContent = action;
+        dialog.returnValue = 'cancel';
+        dialog.showModal();
+        cancel.focus();
+        return new Promise<boolean>(done => { resolve = done; });
+      });
+      confirmations = answer.then(() => {}, () => {});
+      return answer;
     },
     offerUndo(message: string, action: () => void) {
       expire();

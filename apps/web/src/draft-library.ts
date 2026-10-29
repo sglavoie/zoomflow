@@ -82,6 +82,12 @@ export function createDraftLibrary(changed: () => void) {
   reloadButton.addEventListener('click', () => {
     // Keep this tab's latest edits before reloading every saved version.
     persist();
+    if (!recoveryAvailable) {
+      conflictShown = true;
+      reloadButton.hidden = false;
+      setText(conflictText, 'Could not back up your latest edits. Save .d2 before reloading, or free browser storage and try again.');
+      return;
+    }
     location.reload();
   });
   // Without a browser backup, leaving the page would lose edits that were not saved to disk.
