@@ -214,7 +214,7 @@ function offlineViewer(lib: typeof runtime) {
         lib.restoreMissingLinks(svg, board.missingLinks ?? [], lib.shapeClass);
         lib.prepareLinks(svg, resolve, (id) => doc.byId.get(id)?.hash, (path, hash) => fileTarget(path, hash).board.hash);
         stage.replaceChildren(svg);
-        lib.decorateLinks(svg, doc.byId, board.id, lib.splitHitArea, describe, describeFile);
+        lib.decorateLinks(svg, doc.byId, board.id, lib.splitHitArea, describe, describeFile, lib.normalizeRouteHash);
       }
     }
     syncBackground();
@@ -277,6 +277,9 @@ function offlineViewer(lib: typeof runtime) {
     show(board, lib.restoreTrail(savedTrail, board.id, (id) => target.byId.has(id), () => ancestors(board, target)), true, notice, target);
   }
   function follow(event: MouseEvent | KeyboardEvent) {
+    // Ctrl, Cmd or Shift opens a link that has a route of its own in a new tab or window, as a middle click does.
+    const link = event.target instanceof Element ? event.target.closest('a') : null;
+    if ((event.ctrlKey || event.metaKey || event.shiftKey) && link?.getAttribute('href')?.startsWith('#')) return;
     const action = lib.followLink(event, resolve);
     if (action?.kind === 'board') show(doc.byId.get(action.target)!, [...trail, action.target]);
     else if (action?.kind === 'file') openFile(action.path, action.hash);

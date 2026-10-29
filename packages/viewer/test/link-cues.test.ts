@@ -61,6 +61,13 @@ describe('decorateLinks', () => {
     expect(svg.querySelector<SVGAElement>('#home')!.dataset.linkDirection).toBeUndefined();
   });
 
+  it('names the board of a file link as navigation reads its route, a lone percent sign included', () => {
+    const svg = mount('<a id="sale" data-file="./Health.d2#/50%%20off"/><a id="bad" data-file="./Health.d2#/A/bad%E0"/><a id="up" data-file="./Health.d2#//"/>');
+    decorateLinks(svg, boards, 'root', splitHitArea);
+    const label = (id: string) => svg.querySelector(`#${id}`)!.getAttribute('aria-label');
+    expect([label('sale'), label('bad'), label('up')]).toEqual(['Opens Health at 50% off', 'Opens Health at bad%E0', 'Opens Health']);
+  });
+
   it('names external links by their scheme in any case, with the spaces URL parsing trims', () => {
     const svg = mount('<a id="web" href=" https://example.com"><text>Site</text></a><a id="mail" href="MAILTO:a@example.com"><text>Mail</text></a>');
     decorateLinks(svg, boards, 'root', splitHitArea);

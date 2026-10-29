@@ -111,6 +111,16 @@ describe('offline atlas runtime', () => {
     expect(stage().dataset.file).toBe('index.d2');
   });
 
+  it('lets a Ctrl, Cmd or Shift click open a link that has a route in a new tab or window, but not one with nowhere to go', () => {
+    load();
+    const click = (target: Element, modifier: string) => !target.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, [modifier]: true }));
+    for (const modifier of ['ctrlKey', 'metaKey', 'shiftKey']) {
+      expect(click(link('./health.d2'), modifier)).toBe(false);
+      expect(click(link('./lost.d2'), modifier)).toBe(true);
+    }
+    expect(stage().dataset.file).toBe('index.d2');
+  });
+
   it('follows file links into build and hidden folders the export holds, as the CLI bundles them', () => {
     load('', [{ path: 'index.d2', name: 'index', boards: [board('root', 'Root', '#/', svg(['Built', './dist/out.d2']))] },
       { path: 'dist/out.d2', name: 'dist/out', boards: [board('root', 'Root', '#/', svg(['Done']))] }]);

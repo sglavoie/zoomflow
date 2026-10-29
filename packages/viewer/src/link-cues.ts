@@ -1,3 +1,5 @@
+import { normalizeRouteHash } from './navigation';
+
 export type Rect = { left: number; top: number; right: number; bottom: number };
 
 /** Grow a link's hit area from its shape's `own` bounds towards `expanded`, splitting the
@@ -23,7 +25,9 @@ export function decorateLinks(svg: Element, boards: Map<string, { name: string; 
   /** Name a missing board target; defaults to its raw ID. */
   describe: (target: string) => string = (target) => target,
   /** Name a linked diagram file from its authored path; defaults to its file name without `.d2`. */
-  describeFile: (path: string) => string = (path) => path.replace(/^.*\//, '').replace(/\.d2$/i, '')) {
+  describeFile: (path: string) => string = (path) => path.replace(/^.*\//, '').replace(/\.d2$/i, ''),
+  /** `normalizeRouteHash`, passed in by the offline runtime, which never evaluates this default. */
+  normalize: typeof normalizeRouteHash = normalizeRouteHash) {
   const ns = 'http://www.w3.org/2000/svg';
   // Badges draw in a 32-unit box with a 24-unit circle; this scales that circle to 32 screen pixels.
   const badgeScale = 4 / 3;
@@ -40,8 +44,9 @@ export function decorateLinks(svg: Element, boards: Map<string, { name: string; 
     if (file !== null) {
       // Same shape as classifyHref's file links: a relative `.d2` path with an optional `#/…` board route.
       const [, path = file, hash = ''] = /^([^#]*)(#.*)?$/s.exec(file) ?? [];
-      // Empty segments drop, as navigation does, so `#/A/` opens A.
-      let board = hash.replace(/^#\/?/, '').split('/').filter(Boolean).pop() ?? '';
+      // Read the route as navigation does: empty segments drop, so `#/A/` opens A, and a lone `%` is literal, so
+      // `#/50%%20off` opens `50% off`.
+      let board = hash ? normalize(hash).split('/').slice(1).pop() ?? '' : '';
       try { board = decodeURIComponent(board); } catch { /* Keep the authored segment. */ }
       const name = describeFile(path);
       link.dataset.linkKind = 'file';
