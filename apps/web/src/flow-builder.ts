@@ -1,6 +1,6 @@
 import { guardBuilderDialog, lookControls, lookFields, type BuilderTarget } from './builder-dialog';
 import { plural, setText } from './text';
-import { flowFilename, flowSource, flowTemplate, readFlow, type Flow, type FlowStep } from './flow-model';
+import { cleanLabel, flowFilename, flowSource, flowTemplate, readFlow, type Flow, type FlowStep } from './flow-model';
 
 /** One builder dialog: New flow creates a draft, and each pane opens it to add or edit a flow board. */
 export function setupFlowBuilder(create: (source: string, name: string) => void,
@@ -130,7 +130,7 @@ export function setupFlowBuilder(create: (source: string, name: string) => void,
       label.placeholder = 'What happens here?';
       label.setAttribute('aria-label', `Step ${i + 1} name`);
       // Checked on every render too: a rebuilt row holding only spaces would otherwise pass.
-      const check = () => label.setCustomValidity(label.value.trim() ? '' : 'Give this step a name.');
+      const check = () => label.setCustomValidity(cleanLabel(label.value).trim() ? '' : 'Give this step a name.');
       if (label.value) check();
       label.addEventListener('input', () => {
         step.label = label.value;

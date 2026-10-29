@@ -277,3 +277,14 @@ it('keeps the boards and links of the central topic when an edit renames it and 
   const kept = withBoard.update('root', edited);
   expect('source' in kept && (await sites(kept.source)).sites.shapeAction('root', 'n')).toMatchObject({ action: 'edit' });
 });
+
+it('drops the file link of a removed topic when a detail board has a topic with the same label', () => {
+  const before = mindMapSource(map('Plan\n  Team\n    Hiring\n  Hiring', 1));
+  const links = [{ shape: 'n_2', file: './hiring.d2' }];
+  const removed = editOnCanvas(before, [], 'n_2', { type: 'remove' })!;
+  expect(reattach(before, removed.own, links, removed.moved)).toEqual([]);
+  // Removed in the outline: fewer topics have its label, so it did not move to a detail board.
+  expect(reattach(before, mindMapSource(map('Plan\n  Team\n    Hiring', 1)), links)).toEqual([]);
+  // Moved there, it is still refused.
+  expect(reattach(before, mindMapSource(map('Plan\n  Team\n    Hiring\n    Hiring', 1)), links)).toMatch(/would move to a detail board/);
+});

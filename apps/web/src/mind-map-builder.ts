@@ -1,5 +1,5 @@
 import { guardBuilderDialog, lookControls, lookFields, type BuilderTarget } from './builder-dialog';
-import { flowFilename, plainLook } from './flow-model';
+import { cleanLabel, flowFilename, plainLook } from './flow-model';
 import { countTopics, mindMapExample, mindMapSource, outlineText, parseOutline, readMindMap, type MindMap } from './mind-map-model';
 import { plural, setText } from './text';
 
@@ -98,7 +98,7 @@ export function setupMindMapBuilder(create: (source: string, name: string) => vo
     target = next;
     editing = next.mode === 'edit';
     // A board starts from its shape's label as the central topic, kept whole: outline markup such as `- ` is its text.
-    const root = next.mode === 'board' ? { label: next.name.replace(/\s+/g, ' ').trim() || 'Topic',
+    const root = next.mode === 'board' ? { label: cleanLabel(next.name).replace(/\s+/g, ' ').trim() || 'Topic',
       children: ['First idea', 'Second idea'].map(label => ({ label, children: [] })) } : parseOutline(mindMapExample)!;
     const map: MindMap = existing ?? { direction: 'right', split: 2, look: plainLook(), root };
     returnFocus = edit ?? launch;

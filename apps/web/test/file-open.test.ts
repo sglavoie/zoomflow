@@ -33,3 +33,21 @@ it('opens a file dropped on the editor without also inserting its text there', a
   expect(opened).toEqual(['other.d2']);
   expect(view.state.doc.toString()).toBe('a: A\n');
 });
+
+it('opens a file with CRLF line breaks as the editor will show it, so it is not unsaved before any edit', async () => {
+  document.body.innerHTML = '<p id="file-status"></p><input id="file" type="file"><input id="folder" type="file"><button id="open-folder"></button><button id="open-folder-picker"></button><button id="new-atlas-picker"></button><div id="pane-a"></div>';
+  const root = document.querySelector<HTMLElement>('#pane-a')!;
+  const remembered: string[][] = [];
+  const opened: string[] = [];
+  const pane = { replaceDocument: async (source: string) => { opened.push(source); }, setActivity: () => {} };
+  setupFileOpen({ picker: () => ({ rememberFile: (_name: string, source: string, baseline: string) => { remembered.push([source, baseline]); return 'file:new'; }, refresh: () => {} }), activePane: () => pane, fileHandles: { ready: async () => {}, *[Symbol.iterator]() {}, set() {} }, directoryHandles: {}, paneRoots: { a: root, b: document.createElement('div') }, setActive: () => {} } as never);
+  const transfer = new DataTransfer();
+  transfer.items.add(new File(['a -> b\r\nb -> c\r\n'], 'windows.d2', { type: 'text/plain' }));
+  const event = new DragEvent('drop', { bubbles: true, cancelable: true });
+  Object.defineProperty(event, 'dataTransfer', { value: transfer });
+  root.dispatchEvent(event);
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  // The editor reads CRLF back as LF; a CRLF baseline would differ from it without any edit.
+  expect(remembered).toEqual([['a -> b\nb -> c\n', 'a -> b\nb -> c\n']]);
+  expect(opened).toEqual(['a -> b\nb -> c\n']);
+});

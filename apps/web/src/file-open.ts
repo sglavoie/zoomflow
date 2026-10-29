@@ -1,6 +1,6 @@
 import type { DocumentPane, PaneId } from './document-pane';
 import type { setupExamplePicker } from './example-picker';
-import { readDirectoryHandle, readFolderInput } from './project-files';
+import { readDirectoryHandle, readFolderInput, readSourceText } from './project-files';
 import { rememberDiskVersion } from './disk-version';
 import { createProjectFile, type DirectoryHandles, type FileHandles } from './file-handles';
 import { plainLook } from './flow-model';
@@ -51,7 +51,7 @@ export function setupFileOpen({ picker, activePane, fileHandles, directoryHandle
   async function openFile(file: File, handle?: FileSystemFileHandle) {
     try {
       if (!/\.d2$/i.test(file.name)) throw new Error('Choose a .d2 file.');
-      const source = await file.text();
+      const source = await readSourceText(file);
       setFileError('');
       // A file a draft came from before a reload opens that draft again.
       await fileHandles.ready();

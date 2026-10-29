@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { afterAll, expect, it } from 'vitest';
 import { indexShapeSources, parseSourceRange } from '@zoomflow/core';
 import { resolveFilePath } from '@zoomflow/core';
-import { fileLink, newProjectPath, projectFileSystem, projectIdOf, validProjectPath } from '../src/project-files';
+import { fileLink, newProjectPath, projectFileSystem, projectIdOf, projectPathOf, readDirectoryHandle, readFolderInput, validProjectPath } from '../src/project-files';
 
 const d2 = new D2();
 afterAll(() => d2.dispose());
@@ -55,4 +55,18 @@ it('finds the project of a file, its atlas map and a recovered copy of the file'
   expect(projectIdOf(`file:recovered:${encodeURIComponent('project:p1:a:b.d2')}:v7`)).toBe('p1');
   expect(projectIdOf(`file:recovered:${encodeURIComponent('file:abc')}:v7`)).toBeUndefined();
   expect(projectIdOf('file:abc')).toBeUndefined();
+  expect(projectPathOf('project:p1:docs/a:b.d2')).toBe('docs/a:b.d2');
+  expect(projectPathOf(`file:recovered:${encodeURIComponent('project:p1:a:b.d2')}:v7`)).toBe('a:b.d2');
+  expect(projectPathOf('atlas:p1')).toBeUndefined();
+  expect(projectPathOf(`file:recovered:${encodeURIComponent('file:abc')}:v7`)).toBeUndefined();
+});
+
+it('reads folder files with the line breaks the editor keeps, so an unedited file is not unsaved', async () => {
+  const text = 'a -> b\r\nb -> c\rc\n';
+  const file = new File([text], 'index.d2', { lastModified: 1 });
+  Object.defineProperty(file, 'webkitRelativePath', { value: 'notes/index.d2' });
+  expect((await readFolderInput([file] as unknown as FileList)).files).toEqual([{ path: 'index.d2', source: 'a -> b\nb -> c\nc\n' }]);
+  const handle = { kind: 'file', name: 'index.d2', getFile: async () => file };
+  const folder = { name: 'notes', values: async function* () { yield handle; } } as unknown as FileSystemDirectoryHandle;
+  expect((await readDirectoryHandle(folder)).files).toEqual([{ path: 'index.d2', source: 'a -> b\nb -> c\nc\n' }]);
 });

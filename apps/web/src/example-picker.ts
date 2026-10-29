@@ -395,10 +395,13 @@ export function setupExamplePicker({ readSource, open, onState, forget, checkpoi
     },
     inputPath: library.inputPath,
     compilation: library.compilation,
-    /** Open another file of the pane's project, or report the pane already showing it. */
-    selectProjectPath(pane: PaneId, path: string) {
+    /** Open another file of the pane's project, or report the pane already showing it. `key` prefers that draft of
+     * the project, such as a recovered copy, while it still exists. */
+    selectProjectPath(pane: PaneId, path: string, key?: string) {
       const projectId = draftOf(pane)?.projectId ?? draftOf(pane)?.atlasOf;
-      const file = [...drafts.values()].find((item) => item.projectId === projectId && item.path === path && !item.recoveredFrom);
+      const chosen = key === undefined ? undefined : drafts.get(key);
+      const file = chosen?.projectId === projectId && chosen?.path !== undefined ? chosen
+        : [...drafts.values()].find((item) => item.projectId === projectId && item.path === path && !item.recoveredFrom);
       if (!file) return;
       if (current[otherPane(pane)] === file.key) return { pane: otherPane(pane), source: file.source, name: file.name, key: file.key };
       syncSources();

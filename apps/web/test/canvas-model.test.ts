@@ -90,3 +90,12 @@ it('reports where each main board topic moved, so attached boards follow renames
   expect([...removed]).toEqual([['n', 'n'], ['n_2', 'n_1'], ['n_2_1', 'n_1_1']]);
   expect(editOnCanvas(own, [], 'n_1', { type: 'sibling' })!.moved!.get('n_2_1')).toBe('n_3_1');
 });
+
+it('drops control characters from a new label before checking it, so the board stays a builder board', () => {
+  // `quote` cannot write control characters, so a label of only those would be written empty.
+  expect(editOnCanvas(flow, [], 'step_2', { type: 'rename', label: '\u0007' })).toBeUndefined();
+  expect(readFlow(editOnCanvas(flow, [], 'step_2', { type: 'rename', label: 'Ready\u0007?' })!.own)!.steps[1].label).toBe('Ready?');
+  const own = mindMapSource(map('Plan\n  A\n  B'));
+  // A control character after a space would leave a label that ends in one.
+  expect(outline(editOnCanvas(own, [], 'n_1', { type: 'rename', label: 'x \u0008' })!.own)).toBe('Plan\n  x\n  B');
+});

@@ -1,4 +1,4 @@
-import { flowSource, readFlow } from './flow-model';
+import { cleanLabel, flowSource, readFlow } from './flow-model';
 import { boardTopics, mindMapSource, readMindMap, type BoardTopic, type MindMap } from './mind-map-model';
 
 /** Edits made on the diagram of a builder board: rename a shape, add the next step or a subtopic,
@@ -45,7 +45,7 @@ export const canvasShape = (own: string, trail: string[], shape: string) => canv
 export function editOnCanvas(own: string, trail: string[], shape: string, edit: CanvasEdit): CanvasResult | undefined {
   const target = canvasShape(own, trail, shape);
   if (!target || edit.type === 'sibling' && !target.sibling || edit.type === 'remove' && !target.remove) return;
-  const label = edit.type === 'rename' ? edit.label.replace(/\s+/g, ' ').trim() : '';
+  const label = edit.type === 'rename' ? cleanLabel(edit.label).replace(/\s+/g, ' ').trim() : '';
   // The rename box starts with the label as written, which may hold doubled spaces: committing it untouched is no edit.
   if (edit.type === 'rename' && (!label || label === target.label || edit.label === target.label)) return;
   if (target.kind === 'flow') {

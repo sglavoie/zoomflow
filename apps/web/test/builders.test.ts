@@ -36,3 +36,16 @@ it('keeps a shape label that looks like outline markup as the mind map board\'s 
     expect(document.querySelector<HTMLTextAreaElement>('#mind-map-outline')!.value, name).toBe(`- ${name}\n  First idea\n  Second idea`);
   }
 });
+
+it('refuses a step named only with control characters, which the flow cannot write', () => {
+  document.body.innerHTML = '<button id="new-flow"></button>';
+  let created: string | undefined;
+  setupFlowBuilder(source => { created = source; }, async () => true);
+  document.querySelector<HTMLButtonElement>('#new-flow')!.click();
+  const first = document.querySelector<HTMLInputElement>('#flow-steps input')!;
+  first.value = '\u0007';
+  first.dispatchEvent(new Event('input'));
+  expect(first.checkValidity()).toBe(false);
+  document.querySelector<HTMLFormElement>('#flow-builder form')!.requestSubmit();
+  expect(created).toBeUndefined();
+});

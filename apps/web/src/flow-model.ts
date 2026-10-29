@@ -12,9 +12,12 @@ const library = '...@zoomflow';
 const roles: Record<FlowStep['shape'], string> = { rectangle: 'zf-step', diamond: 'zf-decision', oval: 'zf-terminal' };
 const shapes = Object.fromEntries(Object.entries(roles).map(([shape, role]) => [role, shape])) as Record<string, FlowStep['shape']>;
 
+/** A label without the control characters `quote` cannot write; tabs and line breaks stay. Check labels after this,
+ * or one made only of control characters passes as named and is written empty. */
+export const cleanLabel = (text: string) => text.replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g, '');
 /** A D2 double-quoted string. D2 also interpolates dollar signs inside them, and does not decode the `\u` escapes
  * JSON writes for control characters, so those are dropped; tabs and line breaks keep their escapes. */
-export const quote = (text: string) => JSON.stringify(text.replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g, '')).replaceAll('$', '\\$');
+export const quote = (text: string) => JSON.stringify(cleanLabel(text)).replaceAll('$', '\\$');
 export const unquote = (text: string): string => JSON.parse(text.replaceAll('\\$', '$'));
 
 /** A shape's classes: its role first, then the looks that override it. */

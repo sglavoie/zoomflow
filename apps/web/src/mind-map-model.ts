@@ -1,4 +1,4 @@
-import { lookClasses, quote, readLook, unquote, type Look } from './flow-model';
+import { cleanLabel, lookClasses, quote, readLook, unquote, type Look } from './flow-model';
 
 export type MindTopic = { label: string; children: MindTopic[] };
 /** `split` is the level whose topics open their subtopics on a detail board; 0 keeps one board. */
@@ -72,7 +72,7 @@ export function parseOutline(text: string): MindTopic | undefined {
   let root: MindTopic | undefined;
   const open: { indent: number; topic: MindTopic }[] = [];
   for (const line of text.split(/\r?\n/)) {
-    const label = line.trim().replace(/^(?:[-*+]|#{1,6})\s+/, '').trim();
+    const label = cleanLabel(line).trim().replace(/^(?:[-*+]|#{1,6})\s+/, '').trim();
     if (!label) continue;
     const topic: MindTopic = { label, children: [] };
     if (!root) { root = topic; continue; }

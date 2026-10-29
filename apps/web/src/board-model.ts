@@ -119,10 +119,15 @@ export function reattach(before: string, after: string, attachments: Attachment[
   const [old, next] = maps.map(map => boardTopics(map!));
   const taken = new Map(next.filter(topic => topic.board).map(topic => [topic.board!.toLowerCase(), topic]));
   const sameShape = old.length === next.length && old.every((topic, i) => topic.id === next[i].id);
-  // Topics of the whole outline, detail boards included, to tell a topic that left this board from a removed one.
-  const outline = new Set<string>();
-  const collect = (topic: MindTopic) => { outline.add(topic.label); topic.children.forEach(collect); };
-  collect(maps[1].root);
+  // How many topics of the whole outline, detail boards included, have each label before and after, to tell a topic
+  // that left this board from a removed one: a removed topic leaves fewer with its label.
+  const labels = maps.map(map => {
+    const counts = new Map<string, number>();
+    const collect = (topic: MindTopic) => { counts.set(topic.label, (counts.get(topic.label) ?? 0) + 1); topic.children.forEach(collect); };
+    collect(map!.root);
+    return counts;
+  });
+  const left = (label: string) => (labels[1].get(label) ?? 0) >= (labels[0].get(label) ?? 0);
   const kept: Attachment[] = [];
   for (const item of attachments) {
     const from = old.find(topic => topic.id === item.shape);
@@ -142,7 +147,8 @@ export function reattach(before: string, after: string, attachments: Attachment[
         // A renamed ancestor keeps the topic in place; so does a renamed topic when no topic was added or removed.
         : inPlace && !another(inPlace) && (inPlace.path.at(-1) === label || sameShape) ? inPlace : undefined);
     if (isFileAttachment(item)) {
-      if (!to && !sameLabel.length && outline.has(label)) return `The topic “${label}” opens the file “${item.file}” and would move to a detail board. Keep it on this board, or remove its link first.`;
+      // An edit on the diagram knows its removed topics, and never moves a topic off this board.
+      if (!to && !moved && !sameLabel.length && left(label)) return `The topic “${label}” opens the file “${item.file}” and would move to a detail board. Keep it on this board, or remove its link first.`;
       if (!to) continue;
       if (to.board) return `The topic “${label}” would open a detail board and the file “${item.file}”. Choose fewer detail boards, or remove its link first.`;
       if (kept.some(other => other.shape === to.id)) return `Two topics named “${label}” open boards or files. Rename one of them first.`;

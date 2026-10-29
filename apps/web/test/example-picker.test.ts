@@ -54,3 +54,32 @@ it('opens a single file as a new draft rather than taking over a recovered proje
   expect(key).not.toContain('recovered');
   expect(states.a?.identity.projectId).toBeUndefined();
 });
+
+it('returns to a recovered copy of a project file by its key, not to the file it copies', () => {
+  localStorage.clear();
+  const file = { key: 'project:p1:index.d2', name: 'index.d2', title: 'notes/index.d2', description: 'Project file', projectId: 'p1', path: 'index.d2' };
+  const other = { key: 'project:p1:other.d2', name: 'other.d2', title: 'notes/other.d2', description: 'Project file', projectId: 'p1', path: 'other.d2', source: 'o', baseline: 'o' };
+  const seed = new DraftStore(localStorage, 'seed');
+  seed.load();
+  seed.save([{ ...file, source: 'a', baseline: 'a' }, other], file.key);
+  const saved = new DraftStore(localStorage, 'saved'), edited = new DraftStore(localStorage, 'edited');
+  saved.load();
+  edited.load();
+  const now = vi.spyOn(Date, 'now').mockReturnValue(1000);
+  saved.save([{ ...file, source: 'x: {link: ./other.d2}\n', baseline: 'a' }, other], file.key);
+  now.mockReturnValue(2000);
+  edited.save([{ ...file, source: 'y: Y\n', baseline: 'a' }, other], file.key);
+  now.mockRestore();
+  const recovered = `file:recovered:${encodeURIComponent(file.key)}:saved-1`;
+  localStorage.setItem('zoomflow.selection.v2', recovered);
+  const { api, shown } = picker();
+  expect(api.currentKey('a')).toBe(recovered);
+  shown.a = api.initial.source;
+  // Following a link from the copy, then going back the way it came.
+  const path = api.inputPath('a');
+  expect(api.selectProjectPath('a', 'other.d2')?.key).toBe(other.key);
+  shown.a = 'o';
+  expect(api.selectProjectPath('a', path, recovered)).toMatchObject({ key: recovered, source: 'x: {link: ./other.d2}\n' });
+  // A copy removed since falls back to the file at that path.
+  expect(api.selectProjectPath('a', path, 'file:recovered:gone:v1')?.key).toBe(file.key);
+});

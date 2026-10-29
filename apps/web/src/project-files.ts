@@ -4,6 +4,10 @@ import { flowFilename } from './flow-model';
 
 export type ProjectSource = { path: string; source: string };
 
+/** The editor keeps `\n` line breaks; a file read with CRLF or CR breaks would otherwise differ from its own baseline
+ * as soon as the editor's text is read back, showing unsaved changes that were never made. */
+export const readSourceText = async (file: Blob) => (await file.text()).replace(/\r\n?/g, '\n');
+
 /** Paths in D2's virtual filesystem always use forward slashes and stay in the chosen folder. */
 export function validProjectPath(path: string): boolean {
   const parts = path.split('/');
@@ -37,7 +41,7 @@ export async function readFolderInput(files: FileList): Promise<{ name: string; 
     const [root, ...parts] = file.webkitRelativePath.split('/');
     if (root !== name) throw new Error('Choose one folder at a time.');
     const path = parts.join('/');
-    if (validProjectPath(path)) sources.push({ path, source: await file.text() });
+    if (validProjectPath(path)) sources.push({ path, source: await readSourceText(file) });
   }
   if (!sources.length) throw new Error('The selected folder has no .d2 files.');
   sources.sort((a, b) => a.path.localeCompare(b.path));
@@ -61,7 +65,7 @@ export async function readDirectoryHandle(root: FileSystemDirectoryHandle, allow
         handles[path] = handle;
         const file = await handle.getFile();
         rememberDiskVersion(handle, file);
-        files.push({ path, source: await file.text() });
+        files.push({ path, source: await readSourceText(file) });
       }
     }
   }
@@ -98,4 +102,11 @@ export function newProjectPath(fromPath: string, label: string, taken: Iterable<
 export function projectIdOf(key: string) {
   const recovered = /^file:recovered:([^:]*):/.exec(key);
   return /^(?:project|atlas):([^:]*)/.exec(recovered ? decodeURIComponent(recovered[1]!) : key)?.[1];
+}
+
+/** The project path of a `project:<id>:<path>` key, also inside a recovered copy's key. */
+export function projectPathOf(key: string) {
+  const recovered = /^file:recovered:([^:]*):/.exec(key);
+  const project = recovered ? decodeURIComponent(recovered[1]!) : key;
+  return project.startsWith('project:') ? project.split(':').slice(2).join(':') : undefined;
 }

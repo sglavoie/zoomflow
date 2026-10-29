@@ -1,3 +1,11 @@
+/** The key ⌘S or Ctrl+S presses: S by the letter it types, or by its place on layouts whose S key types a letter
+ * outside the Latin alphabet. Layouts such as Colemak or Dvorak type another Latin letter there, such as R or O,
+ * whose own shortcuts must keep working. */
+export function isSaveKey(event: KeyboardEvent) {
+  const key = event.key.toLowerCase();
+  return key === 's' || !/^[a-z]$/.test(key) && event.code === 'KeyS';
+}
+
 /** Native modal focus handling keeps the shortcut reference keyboard accessible. */
 export function setupShortcuts() {
   const button = document.querySelector<HTMLButtonElement>('#show-shortcuts')!;
@@ -29,7 +37,7 @@ export function setupShortcuts() {
       event.preventDefault();
       close.focus({ preventScroll: true });
     }
-    if ((event.metaKey || event.ctrlKey) && (['s', '/', '?'].includes(event.key.toLowerCase()) || event.code === 'KeyS')) {
+    if ((event.metaKey || event.ctrlKey) && (['/', '?'].includes(event.key) || isSaveKey(event))) {
       event.preventDefault();
     }
   }, { capture: true });

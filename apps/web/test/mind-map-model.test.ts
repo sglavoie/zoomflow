@@ -138,3 +138,9 @@ it('starts a new linked mind map file centred on its name', () => {
   expect(map?.root.children.map(topic => topic.label)).toEqual(['First idea', 'Second idea']);
   expect(readMindMap(newFileSource('mind map', ' Plan  B .d2 '))?.root.label).toBe('Plan B');
 });
+
+it('reads outline lines without the control characters a mind map cannot write', () => {
+  const root = parseOutline('Plan\n  Idea \u0001\n  \u0002\n  B')!;
+  expect(outlineText(root)).toBe('Plan\n  Idea\n  B');
+  expect(readMindMap(mindMapSource({ direction: 'right', split: 0, look: plainLook(), root }))).toBeTruthy();
+});

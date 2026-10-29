@@ -8,7 +8,7 @@ import { createPreviewQueue } from './preview-queue';
 import { setupFullscreen } from './fullscreen';
 import { setupAiAssistant } from './ai-assistant';
 import { setupMobileView } from './mobile-view';
-import { newProjectPath, projectFileSystem, projectIdOf } from './project-files';
+import { newProjectPath, projectFileSystem, projectIdOf, projectPathOf } from './project-files';
 import { setupCanvasGuidance } from './canvas-guidance';
 import { setupBoardTools } from './board-tools';
 import { boardRoute, setupLinkPreview } from './link-preview';
@@ -373,7 +373,8 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
   /** Reopen a file on the way here at the board it was left on. */
   async function returnToFile(index: number) {
     const visit = fileStack[index];
-    const target = visit && picker().selectProjectPath(id, visit.path);
+    // By key, so a recovered copy on the way here reopens itself rather than the file it copies.
+    const target = visit && picker().selectProjectPath(id, visit.path, visit.key);
     if (!target || target.pane !== id) {
       viewer.setMessage(target ? `${target.name} is open in the other pane.` : `Missing file: ${projectLabel(visit.path)}`, true);
       return;
@@ -389,22 +390,25 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
   /** Back or Forward reached an entry of another file: open it when it belongs to this pane's project. */
   function restoreFromHistory(state: { zoomflowFile: string } & Record<string, unknown>) {
     const key = state.zoomflowFile;
-    const inProject = /^(project|atlas):/;
-    if (!inProject.test(key) || !inProject.test(currentDocumentKey ?? '') ||
-      siblingKey(currentDocumentKey!, '') !== siblingKey(key, '')) return false;
-    const target = key.startsWith('atlas:') ? picker().showAtlas(id, key.slice('atlas:'.length))
-      : picker().selectProjectPath(id, key.split(':').slice(2).join(':'));
+    // Project files, the atlas map and recovered copies of project files all name their project.
+    const project = projectIdOf(key);
+    if (project === undefined || project !== projectIdOf(currentDocumentKey ?? '')) return false;
+    const path = projectPathOf(key);
+    const target = key.startsWith('atlas:') ? picker().showAtlas(id, project)
+      : path !== undefined ? picker().selectProjectPath(id, path, key) : undefined;
     if (!target || target.pane !== id) return false;
     void replaceDocument(target.source, target.name, target.key, false, viewer.route, savedStack(state.zoomflowFiles));
     return true;
   }
   let atlasRequest = 0;
+  /** Counts documents shown in this pane, so work for one is abandoned when another opens, even the same one again. */
+  let documentOpens = 0;
   /** Draw a project's atlas map from its files' latest sources, compiling each file to find its links, and show it. */
   async function openAtlasMap(projectId: string) {
     const request = ++atlasRequest;
     // Opening another document or closing the pane while files compile abandons the map.
-    const from = currentDocumentKey;
-    const current = () => request === atlasRequest && currentDocumentKey === from;
+    const from = documentOpens;
+    const current = () => request === atlasRequest && documentOpens === from;
     const { fs, home } = picker().projectSources(projectId);
     const paths = Object.keys(fs).sort((a, b) => a.localeCompare(b));
     const files: AtlasFile[] = [];
@@ -462,6 +466,7 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
 
   /** Show a document; `route` overrides its remembered board. Without `stack`, it starts a new way through files. */
   async function replaceDocument(source: string, name: string, key: string, reset = false, route?: ViewerRoute, stack: FileVisit[] = []) {
+    ++documentOpens;
     ai?.documentSwitched();
     sourceError = false;
     viewer.setRoute(reset ? undefined : route ?? shared.documentRoutes.get(key));
@@ -793,6 +798,7 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
     },
     /** Show a document restored on startup, keeping its board from the page URL. */
     open(document: { key: string; name: string; source: string }) {
+      ++documentOpens;
       ai?.documentSwitched();
       sourceError = false;
       documentName = document.name;
@@ -809,6 +815,7 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
     },
     /** Leave the pane without a document, for example when its draft is removed. */
     close() {
+      ++documentOpens;
       sourceError = false;
       clearTimeout(debounce);
       clearTimeout(previewTimer);

@@ -93,8 +93,9 @@ export function setupBoardTools(scope: PaneScope, viewer: Viewer, options: Board
   let menuReturn: HTMLElement | SVGElement | undefined;
   let renaming: { shape: string; element: SVGElement; frame: number } | undefined;
   let lastBoard: string | undefined;
-  /** The last edit on the diagram that moved the board on view, by the source and board before and after it. */
-  let lastMove: { before: { source: string; board: string }; after: { source: string; board: string } } | undefined;
+  /** The recent edits on the diagram that moved the board on view, by the source and board before and after each,
+   * so undoing or redoing several of them in turn follows each one. */
+  let boardMoves: { before: { source: string; board: string }; after: { source: string; board: string } }[] = [];
   let shapeCache: { own: string; trail: string; find: (shape: string) => CanvasShape | undefined } | undefined;
 
   const ready = () => Boolean(sites) && compiledSource === options.source();
@@ -221,7 +222,7 @@ export function setupBoardTools(scope: PaneScope, viewer: Viewer, options: Board
     const added = edits.some(change => change.type === 'add' || change.type === 'sibling');
     // A rename that renames the board, or a remove that removes it, replaces it in history, since the old board is gone.
     const moves = board !== boardId() ? { board, replace: true } : {};
-    if (board !== boardId()) lastMove = { before: { source: options.source(), board: boardId() }, after: { source: updated.source, board } };
+    if (board !== boardId()) boardMoves = [...boardMoves.slice(-49), { before: { source: options.source(), board: boardId() }, after: { source: updated.source, board } }];
     // A press elsewhere on the diagram that finished a rename selects what it landed on instead.
     const shown = landed !== undefined ? landed ?? undefined : result.select;
     pending = { source: updated.source, ...moves, ...shown ? { shape: shown, rename: added && shown === result.select && shown !== shape } : {} };
@@ -231,10 +232,10 @@ export function setupBoardTools(scope: PaneScope, viewer: Viewer, options: Board
   /** Undo and redo of an edit that moved the board on view move it back and forth too, since its board is gone. */
   function followHistory() {
     const source = options.source();
-    if (!lastMove || pending?.source === source) return;
-    const { before, after } = lastMove;
-    const board = source === before.source && boardId() === after.board ? before.board
-      : source === after.source && boardId() === before.board ? after.board : undefined;
+    if (pending?.source === source) return;
+    // The latest move that leads from the board on view to this source.
+    const board = [...boardMoves].reverse().map(({ before, after }) => source === before.source && boardId() === after.board ? before.board
+      : source === after.source && boardId() === before.board ? after.board : undefined).find(Boolean);
     if (board) pending = { source, board, replace: true };
   }
 

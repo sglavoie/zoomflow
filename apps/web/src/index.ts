@@ -5,7 +5,7 @@ import { createCompiler } from './compiler';
 import { setupReference } from './reference';
 import { setupSplit, type SplitAxis } from './source-split';
 import { setupViewportHeight } from './mobile-view';
-import { setupShortcuts } from './shortcuts';
+import { isSaveKey, setupShortcuts } from './shortcuts';
 import { setupFlowBuilder } from './flow-builder';
 import { setupMindMapBuilder } from './mind-map-builder';
 import { createDocumentPane, type DocumentPane, type PaneContext, type PaneId } from './document-pane';
@@ -276,9 +276,7 @@ narrow.addEventListener('change', applyLayout);
 roomy.addEventListener('change', applyLayout);
 
 window.addEventListener('keydown', (event) => {
-  // `code` keeps the shortcut on layouts whose S key types another letter.
-  if (event.isComposing || event.altKey || event.shiftKey || !(event.metaKey || event.ctrlKey)
-    || (event.key.toLowerCase() !== 's' && event.code !== 'KeyS')) return;
+  if (event.isComposing || event.altKey || event.shiftKey || !(event.metaKey || event.ctrlKey) || !isSaveKey(event)) return;
   event.preventDefault();
   if (event.repeat) return;
   // A name typed in the Export menu applies on change; apply it first so the save uses it.
