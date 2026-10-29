@@ -703,7 +703,7 @@ require('node:module').syncBuiltinESMExports();`)]);
     expect(html.stderr).toContain(`read ${join(root, 'linked.d2')}`);
   }, 180_000);
 
-  it('exports linked files into ZIPs under folders named after them, file links pointing at their root SVG', async () => {
+  it('exports linked files into ZIPs under folders named after them, file links pointing at their requested boards', async () => {
     const [svg, png] = [join(temp, 'atlas-svg.zip'), join(temp, 'atlas-png.zip')];
     const results = await Promise.all([run(['export', 'fixtures/atlas/index.d2', '--all', '-o', svg]),
       run(['export', 'fixtures/atlas/index.d2', '--all', '--format', 'png', '-o', png])]);
@@ -714,7 +714,7 @@ require('node:module').syncBuiltinESMExports();`)]);
       '@files/work/index.d2/root.svg', '@files/projects/zoomflow.d2/root.svg', '@files/projects/zoomflow.d2/Viewer.svg']);
     expect(hrefs('root.svg')).toEqual(['@files/health.d2/root.svg', '@files/work/index.d2/root.svg']);
     expect(hrefs('@files/health.d2/root.svg')).toEqual(['Sleep.svg']);
-    expect(hrefs('@files/work/index.d2/root.svg')).toEqual(['../../projects/zoomflow.d2/root.svg']);
+    expect(hrefs('@files/work/index.d2/root.svg')).toEqual(['../../projects/zoomflow.d2/Viewer.svg']);
     const images = unzipSync(await readFile(png));
     expect(Object.keys(images)).toEqual(Object.keys(files).map((path) => path.replace(/\.svg$/, '.png')));
     for (const data of Object.values(images)) expect([...data.slice(1, 4)]).toEqual([0x50, 0x4e, 0x47]);

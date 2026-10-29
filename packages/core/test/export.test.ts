@@ -15,6 +15,16 @@ it('downloads the edited D2 project tree without adding bundled library files', 
 });
 
 describe('board tree exports', () => {
+  it('makes SVG ZIP links navigate between exported boards, preserving external links and graphics', () => {
+    const board = (id: string, path: string, svg: string): ExportBoard => ({ id, path, svg, name: id, hash: '#/', empty: false });
+    const files = unzipSync(exportBoardsZip([
+      board('root', 'root.svg', '<svg><a href="root.layers.Child"/><a xlink:href="https://example.com/?a=1&amp;b=2"/><use href="#icon"/></svg>'),
+      board('root.layers.Child', 'a b/child.svg', '<svg><a href="root"/><a href="root.layers.Gone"/></svg>'),
+    ]));
+    expect(strFromU8(files['root.svg'])).toBe('<svg><a href="a%20b/child.svg"/><a xlink:href="https://example.com/?a=1&amp;b=2"/><use href="#icon"/></svg>');
+    expect(strFromU8(files['a b/child.svg'])).toBe('<svg><a href="../root.svg"/><a/></svg>');
+  });
+
   it.each([
     ['order', ['root.svg', 'checkout.svg', 'checkout/charge.svg']],
     ['cycle', ['root.svg', 'A.svg', 'B.svg']],
@@ -29,12 +39,12 @@ describe('board tree exports', () => {
     expect(Object.keys(files)).toEqual(paths);
     expect(new Set(targets).size).toBe(paths.length);
     for (const board of boards) {
-      expect(strFromU8(files[board.path])).toBe(board.svg);
+      expect(strFromU8(files[board.path])).toContain('<svg');
       expect(board.svg).toContain('<svg');
     }
     if (fixture === 'cycle') {
-      expect(boards[1].svg).toContain('href="root.layers.B"');
-      expect(boards[2].svg).toContain('href="root.layers.A"');
+      expect(strFromU8(files['A.svg'])).toContain('href="B.svg"');
+      expect(strFromU8(files['B.svg'])).toContain('href="A.svg"');
     } else {
       expect(strFromU8(files['checkout/charge.svg'])).toContain('Capture');
       expect(strFromU8(files['root.svg'])).not.toContain('Capture');
@@ -214,13 +224,27 @@ describe('atlas exports', () => {
     expect(exportBoardsHtml((await documents())[0].boards, { title: 't', script: '', style: '' })).not.toContain('zoomflow-files');
   });
 
-  it('zips other files in their own folders and points file links at their root SVGs', async () => {
+  it('zips other files in their own folders and points file links at their requested boards', async () => {
     const files = unzipSync(exportAtlasZip(await documents()));
     expect(Object.keys(files)).toEqual(['root.svg', 'Work.svg', '@files/health.d2/root.svg', '@files/work/plan.d2/root.svg', '@files/work/plan.d2/Q1.svg']);
     expect(strFromU8(files['root.svg'])).toContain('href="@files/health.d2/root.svg"');
-    expect(strFromU8(files['Work.svg'])).toContain('href="@files/work/plan.d2/root.svg"');
+    expect(strFromU8(files['Work.svg'])).toContain('href="@files/work/plan.d2/Q1.svg"');
     expect(strFromU8(files['@files/health.d2/root.svg'])).toContain('href="../../root.svg"');
     expect(strFromU8(files['@files/work/plan.d2/root.svg'])).toContain('href="../../health.d2/root.svg"');
+  });
+
+  it('keeps board links within their own atlas file and resolves fragments to the nearest board', async () => {
+    const [index, health, plan] = await documents();
+    index.boards[0].svg = '<svg><a href="root.layers.Work"/><a href="./work/plan.d2#/Q%201/Missing"/><a href="./work/plan.d2#/Missing"/></svg>';
+    health.boards[0].svg = '<svg><a href="root.layers.Work"/></svg>';
+    plan.boards[0].svg = '<svg><a href="root.layers.Q1"/></svg>';
+    plan.boards[1].hash = '#/Q%201';
+    index.boards[1].svg = '<svg><a xlink:href="./work/plan.d2#/Q 1/"/></svg>';
+    const files = unzipSync(exportAtlasZip([index, health, plan]));
+    expect(strFromU8(files['root.svg'])).toBe('<svg><a href="Work.svg"/><a href="@files/work/plan.d2/Q1.svg"/><a href="@files/work/plan.d2/root.svg"/></svg>');
+    expect(strFromU8(files['Work.svg'])).toContain('xlink:href="@files/work/plan.d2/Q1.svg"');
+    expect(strFromU8(files['@files/health.d2/root.svg'])).toBe('<svg><a/></svg>');
+    expect(strFromU8(files['@files/work/plan.d2/root.svg'])).toBe('<svg><a href="Q1.svg"/></svg>');
   });
 
   it('keeps links to files outside the export and avoids a board folder named @files', async () => {

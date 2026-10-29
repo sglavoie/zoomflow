@@ -2,6 +2,7 @@ import { strToU8, zipSync } from 'fflate';
 import { atlasHash, classifyHref, indexBoards, resolveFilePath, type Diagram } from './index';
 import type { LintDiagnostic } from './lint';
 import { parentContext, type ParentContext } from './context';
+import { normalizeRouteHash, resolveRouteHash } from './routes';
 
 export interface ExportBoard {
   id: string;
@@ -81,13 +82,22 @@ export async function renderExportBoards(diagram: Diagram, render: (target: stri
   return result;
 }
 
-/** Zip one file per board; `contents` substitutes other renders, such as PNGs, for the SVG. */
+/** Zip one file per board, linking SVG boards by relative filename.
+ * `contents` substitutes other renders, such as PNGs, for the rewritten SVG. */
 export function exportBoardsZip(boards: readonly ExportBoard[],
   contents: (board: ExportBoard) => string | Uint8Array = (board) => board.svg): Uint8Array<ArrayBuffer> {
   const files: Record<string, Uint8Array> = Object.create(null);
+  // Atlas files reuse board IDs; resolve each link within the file that owns its board.
+  const paths = new Map(boards.map((board) => [JSON.stringify([board.file, board.id]), board.path]));
   for (const board of boards) {
     if (board.path in files) throw new Error(`Duplicate export path: ${board.path}`);
-    const data = contents(board);
+    const svg = rewriteSvgLinks(board.svg, (href) => {
+      const link = classifyHref(href);
+      if (link.kind !== 'board') return href;
+      const path = paths.get(JSON.stringify([board.file, link.target]));
+      return path === undefined ? undefined : zipHref(board.path, path);
+    });
+    const data = contents({ ...board, svg });
     files[board.path] = typeof data === 'string' ? strToU8(data) : data;
   }
   return new Uint8Array(zipSync(files));
@@ -102,8 +112,21 @@ function relativePath(from: string, to: string): string {
   return [...base.slice(common).map(() => '..'), ...parts.slice(common)].join('/');
 }
 
+/** Encode archive filenames without treating `#` and `?` as URL delimiters. */
+const zipHref = (from: string, to: string) => encodeURI(relativePath(from, to)).replace(/[#?]/g, encodeURIComponent);
+
+/** Rewrite only navigation anchors; image and same-document graphic references keep their targets. */
+function rewriteSvgLinks(svg: string, resolve: (href: string) => string | undefined): string {
+  return svg.replace(/<a\b(?:[^>"]|"[^"]*")*>/g, (anchor) => anchor.replace(/(\s(?:xlink:)?href=")([^"]*)"/g, (attribute, prefix: string, href: string) => {
+    const decoded = unescapeXml(href);
+    const target = resolve(decoded);
+    if (target === decoded) return attribute;
+    return target === undefined ? '' : `${prefix}${target.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;')}"`;
+  }));
+}
+
 /** Zip every board of every atlas file. The entry file keeps its usual layout; other files go in
- * `@files/<project path>/` folders, and file links point at the relative path of their target's root SVG.
+ * `@files/<project path>/` folders, and file links point at their target board's relative SVG path.
  * `contents` receives each placed board, with its `file` set, for formats other than SVG. */
 export function exportAtlasZip(documents: readonly AtlasDocument[],
   contents: (board: ExportBoard) => string | Uint8Array = (board) => board.svg): Uint8Array<ArrayBuffer> {
@@ -125,15 +148,15 @@ export function exportAtlasZip(documents: readonly AtlasDocument[],
     const base = index ? place(document.path) : '';
     return document.boards.map((board) => ({ ...board, file: document.path, path: `${base}${board.path}` }));
   });
-  const roots = new Map(documents.map((document, index) => [document.path, (placed[index].find((board) => board.id === 'root') ?? placed[index][0])?.path]));
-  return exportBoardsZip(placed.flat().map((board) => ({ ...board, svg: board.svg.replace(/((?:xlink:)?href=")([^"]*)"/g, (match, prefix: string, href: string) => {
-    const link = classifyHref(unescapeXml(href));
-    // Only exported files have a root here, so any folder may hold one.
+  const routes = new Map(documents.map((document, index) => [document.path, new Map(placed[index].map((board) => [board.hash, board.path]))]));
+  return exportBoardsZip(placed.flat().map((board) => ({ ...board, svg: rewriteSvgLinks(board.svg, (href) => {
+    const link = classifyHref(href);
     const target = link.kind === 'file' ? resolveFilePath(board.file, link.path, false) : undefined;
-    const root = target === undefined ? undefined : roots.get(target);
-    if (root === undefined) return match;
-    const relative = encodeURI(relativePath(board.path, root)).replace(/[#?]/g, encodeURIComponent);
-    return `${prefix}${relative.replace(/&/g, '&amp;')}"`;
+    const boards = target === undefined ? undefined : routes.get(target);
+    if (!boards || link.kind !== 'file') return href;
+    const route = resolveRouteHash(normalizeRouteHash(link.hash), (hash) => boards.has(hash));
+    const path = boards.get(route);
+    return path === undefined ? href : zipHref(board.path, path);
   }) })), contents);
 }
 

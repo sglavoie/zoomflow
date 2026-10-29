@@ -73,16 +73,6 @@ function inputLink(href: string, from: string | undefined, input: string): strin
   const path = posix.relative(posix.dirname(input), target);
   return `${path.startsWith('../') ? '' : './'}${path}${link.hash}`;
 }
-/** Point board links at the relative paths of their files in the ZIP, keeping other links. A link to a board
- * the ZIP lacks, which D2 keeps on connections, loses its href rather than staying a dead relative URL. */
-function zipLinks(svg: string, from: string, paths: Map<string, string>): string {
-  return svg.replace(/<a\b(?:[^>"]|"[^"]*")*>/g, (anchor) => anchor.replace(/(\s(?:xlink:)?href=")([^"]*)"/g, (attribute, prefix: string, href: string) => {
-    const path = paths.get(unescapeXml(href));
-    if (path === undefined) return classifyHref(unescapeXml(href)).kind === 'board' ? '' : attribute;
-    const link = encodeURI(posix.relative(posix.dirname(from), path)).replace(/[#?]/g, encodeURIComponent);
-    return `${prefix}${link.replace(/&/g, '&amp;')}"`;
-  }));
-}
 const usage = `Usage:
   zoomflow export file.d2 [--all] [--format svg|png|html] [-o, --output file] [--root directory]
   zoomflow lint file.d2 [--follow] [--boundary-ports] [--missing-backlink] [--json] [--root directory]
@@ -507,11 +497,8 @@ export async function main(args = process.argv.slice(2)): Promise<number> {
             const options = { title: basename(input).slice(0, -3), script: offlineViewerScript(), style: offlineViewerStyle, glyphs };
             await save(output, atlas ? exportAtlasHtml(rendered, options) : exportBoardsHtml(rendered[0].boards, options));
           } else {
-            const placed = rendered.map((document) => {
-              const paths = new Map(document.boards.map((board) => [board.id, board.path]));
-              return { ...document, boards: document.boards.map((board) => ({ ...board, path: board.path.replace(/\.svg$/, `.${format}`),
-                svg: format === 'svg' ? zipLinks(board.svg, board.path, paths) : board.svg })) };
-            });
+            const placed = rendered.map((document) => ({ ...document,
+              boards: document.boards.map((board) => ({ ...board, path: board.path.replace(/\.svg$/, `.${format}`) })) }));
             const contents = (board: ExportBoard) => format === 'png' ? binaries.get(JSON.stringify([board.file ?? inputPath, board.id]))! : board.svg;
             await save(output, atlas ? exportAtlasZip(placed, contents) : exportBoardsZip(placed[0].boards, contents));
           }

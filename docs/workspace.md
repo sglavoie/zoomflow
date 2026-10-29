@@ -496,7 +496,9 @@ SVG, PNG and ZIP exports keep the theme shown in the workspace; interactive HTML
 follows its reader's light or dark color scheme. Remote images are embedded when
 accessible; failed fetches produce a placeholder and a visible warning. ZIP paths follow the
 board tree (`root.svg`, `checkout.svg`, `checkout/charge.svg`); scenarios and steps
-use `@scenarios/` and `@steps/` directories. PNG uses the board's native dimensions
+use `@scenarios/` and `@steps/` directories. Links between exported boards open their
+SVG files; atlas file links keep their target board, including board fragments.
+PNG uses the board's native dimensions
 and has a 64 megapixel limit.
 
 The viewer and browser/CLI exports use the same shipped Source Sans Pro Regular,

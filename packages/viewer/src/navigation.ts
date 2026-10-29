@@ -1,4 +1,5 @@
 import type { ParentContext } from '@zoomflow/core';
+export { normalizeRouteHash, resolveRouteHash } from '@zoomflow/core';
 
 /** Shared with the standalone HTML runtime; render authored labels as plain text. */
 export function renderParentContext(element: HTMLElement, contexts: readonly ParentContext[]) {
@@ -23,28 +24,6 @@ export function simplifyTrail(visits: readonly string[]): string[] {
     else trail.length = previous + 1;
   }
   return trail;
-}
-
-/** Spell a route the way board hashes are built, as browsers leave `&`, `[` or a lone `%` raw in an address and
- * authors may write `#/My Board`, so `#/Q&A` finds `#/Q%26A` and `#/50%` finds `#/50%25`. Only the reserved `@file`,
- * `@scenarios` and `@steps` stay raw: a board named `@home` is `#/%40home`. Empty segments, which no board has, are
- * dropped, so `#/A/` finds `#/A` and `#/A//B` finds `#/A/B`. */
-export function normalizeRouteHash(hash: string): string {
-  const route = (hash || '#/').split('/').filter((segment, index) => index === 0 || segment).map((segment, index) => {
-    if (index === 0 || /^@(?:file|scenarios|steps)$/.test(segment)) return segment;
-    try { return encodeURIComponent(decodeURIComponent(segment.replace(/%(?![\da-f]{2})/gi, '%25'))); } catch { return segment; }
-  }).join('/');
-  return route && route !== '#' ? route : '#/';
-}
-
-/** Resolve a route to the nearest existing board hash, walking up its path. */
-export function resolveRouteHash(hash: string, exists: (hash: string) => boolean): string {
-  let current = hash || '#/';
-  while (!exists(current) && current !== '#/') {
-    current = current.slice(0, current.lastIndexOf('/')) || '#/';
-    if (current === '#') current = '#/';
-  }
-  return current;
 }
 
 /** Describe a deep link that fell back to an ancestor board; empty when it resolved exactly. */

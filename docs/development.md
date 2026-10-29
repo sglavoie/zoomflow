@@ -90,7 +90,9 @@ literal board names are percent-encoded, so `@file` cannot collide with a board 
 `atlasHash(path, boardHash)` and `parseAtlasHash(hash)` in core build and read these
 routes. Atlas HTML carries a second JSON script, `#zoomflow-files` (`[{ path, name }]`),
 and its runtime follows file links only when that script exists. Atlas ZIPs put other
-files under `@files/<path>/`. The web app's atlas map (`apps/web/src/atlas-map.ts`) is
+files under `@files/<path>/`. SVG ZIP links point to each target board's SVG, including
+file links with board fragments; missing boards fall back to their nearest exported ancestor.
+The web app's atlas map (`apps/web/src/atlas-map.ts`) is
 generated D2 compiled as the project root's `index`, so its links are `./<path>`.
 
 ## Source locations and lint contracts
