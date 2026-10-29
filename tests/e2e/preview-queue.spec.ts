@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { source } from './helpers';
+import { previewReady, source } from './helpers';
 import { devURL } from './servers';
 
 // Rewrites /src/compiler.ts, which only the dev server serves as its own module.
@@ -44,4 +44,39 @@ test('a busy compiler skips superseded previews and compiles the latest edit nex
   await expect(page.locator('#viewer')).toHaveAttribute('aria-busy', 'false');
   expect(await page.evaluate(() => (window as any).previewProbe.inputs)).toEqual(['first: Running', 'latest: Keep this']);
   await expect(page.locator('#compile-error')).toBeHidden();
+});
+
+test('a failed render keeps the good preview, disables export and offers retry without source errors', async ({ page }) => {
+  await page.route((url) => url.pathname === '/src/compiler.ts', async (route) => {
+    const response = await route.fetch();
+    const body = await response.text();
+    expect(body).toContain('const d2 = new D2();');
+    await route.fulfill({ response, body: body.replace('const d2 = new D2();', `
+      const d2 = new D2();
+      const render = d2.render.bind(d2);
+      d2.render = async (...args) => {
+        if (window.failNextRender) {
+          window.failNextRender = false;
+          throw new Error('Simulated render failure');
+        }
+        return render(...args);
+      };
+    `) });
+  });
+  const errors: string[] = [];
+  page.on('pageerror', error => errors.push(error.message));
+  await page.goto('/'); await previewReady(page);
+  await page.evaluate(() => { (window as any).failNextRender = true; });
+  await source(page).fill('latest: Keep this edit');
+  await expect(page.locator('#preview-status')).toHaveText('Preview unavailable');
+  await expect(page.locator('.zf-stage')).toContainText('Checkout');
+  await expect(page.locator('#compile-error')).toBeHidden();
+  await expect(page.locator('.cm-lint-marker-error')).toHaveCount(0);
+  await expect(page.locator('#export')).toBeDisabled();
+  await expect(page.locator('#engine-message')).toContainText('could not be drawn');
+  await page.locator('#retry-engine').click();
+  await previewReady(page);
+  await expect(page.locator('.zf-stage')).toContainText('Keep this edit');
+  await expect(page.locator('#export')).toBeEnabled();
+  expect(errors).toEqual([]);
 });

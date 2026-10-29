@@ -523,14 +523,15 @@ export function setupExamplePicker({ readSource, open, onState, forget, checkpoi
       persist();
       return { key: keys[first.path], name: first.path.split('/').at(-1)!, source: first.source, keys, projectId };
     },
-    /** Add a new file to the pane's project; `saved` when it is on disk already, otherwise Save asks where to put it. */
-    addProjectFile(pane: PaneId, path: string, source: string, saved: boolean) {
-      const draft = draftOf(pane);
-      if (!draft?.projectId) return;
-      const key = `project:${draft.projectId}:${path}`;
+    /** Add a new file to its requested project, even if its pane switched during the write. `saved` when it is
+     * on disk already, otherwise Save asks where to put it. A removed project stays removed. */
+    addProjectFile(projectId: string, path: string, source: string, saved: boolean) {
+      const draft = [...drafts.values()].find(item => item.projectId === projectId && !item.recoveredFrom);
+      if (!draft) return;
+      const key = `project:${projectId}:${path}`;
       if (drafts.has(key)) return;
       const item: Draft = { key, name: path.split('/').at(-1)!, title: `${draft.title.split('/')[0]}/${path}`, description: 'Project file',
-        source, baseline: saved ? source : '', projectId: draft.projectId, path, updatedAt: Date.now() };
+        source, baseline: saved ? source : '', projectId, path, updatedAt: Date.now() };
       drafts.set(key, item);
       addOption(item);
       persist();

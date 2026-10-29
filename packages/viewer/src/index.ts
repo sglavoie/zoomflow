@@ -7,6 +7,10 @@ import { followLink, linkTo, prepareLinks, resolveLink } from './links';
 import { sanitizeSvg } from './sanitize';
 
 export type RenderBoard = (target: string) => Promise<string>;
+/** Compilation succeeded, but its preview could not be rendered or read as SVG. */
+export class ViewerRenderError extends Error {
+  constructor(cause: unknown) { super('The preview could not be drawn.', { cause }); }
+}
 export type ViewerRoute = { hash: string; trail?: unknown };
 export type ViewerOptions = {
   /** Mirror the current board in the page URL and history; otherwise keep the route in memory. */
@@ -93,7 +97,7 @@ export class Viewer {
       const file: unknown = history.state?.zoomflowFile;
       const owner = this.settings.document;
       if (owner && typeof file === 'string' && file !== owner.key() && owner.restore(history.state)) return;
-      void this.fromLocation();
+      void this.fromLocation().catch((error) => this.navigationError(error));
     }, options);
     this.resume();
   }
@@ -182,12 +186,19 @@ export class Viewer {
   }
 
   async setDocument(diagram: Diagram, render: RenderBoard, diagnostics: readonly LintDiagnostic[] = [], preserveViewport = false) {
-    this.boards = indexBoards(diagram);
+    const previous = { boards: this.boards, diagnostics: this.diagnostics, render: this.render, cache: this.cache };
+    const boards = this.boards = indexBoards(diagram);
     this.diagnostics = diagnostics;
     this.render = render;
     this.cache = new Map();
     // Preserve the requested route, falling back to its nearest existing ancestor.
-    await this.fromLocation(preserveViewport);
+    try { await this.fromLocation(preserveViewport); }
+    catch (error) {
+      // Keep the last good preview's navigation together with its SVG. A failed render must also reach the host,
+      // which otherwise marks the new source ready and enables exports of a board that was never displayed.
+      if (this.boards === boards) Object.assign(this, previous);
+      throw new ViewerRenderError(error);
+    }
   }
 
   private ancestors(id: string): string[] {
@@ -202,7 +213,7 @@ export class Viewer {
     const byHash = new Map([...this.boards.values()].map((item) => [item.hash, item]));
     const board = byHash.get(resolveRouteHash(route.hash, (hash) => byHash.has(hash))) ?? this.boards.get('root')!;
     const trail = restoreTrail(route.trail, board.id, (id) => this.boards.has(id), () => this.ancestors(board.id));
-    await this.navigate(board.id, 'replace', trail, preserveViewport, routeFallbackNotice(route.hash, board.hash, board.name));
+    await this.showBoard(board.id, 'replace', trail, preserveViewport, routeFallbackNotice(route.hash, board.hash, board.name));
   }
 
   private readonly resolve = (href: string) => resolveLink(href, (id) => this.boards.has(id), classifyHref,
@@ -272,6 +283,13 @@ export class Viewer {
   }
 
   async navigate(id: string, mode: 'push' | 'replace' = 'push', trail?: string[], preserveViewport = false, notice = '') {
+    try { await this.showBoard(id, mode, trail, preserveViewport, notice); }
+    catch (error) { this.navigationError(error); }
+  }
+
+  private navigationError(error: unknown) { this.setMessage(error instanceof Error ? error.message : String(error), true); }
+
+  private async showBoard(id: string, mode: 'push' | 'replace', trail?: string[], preserveViewport = false, notice = '') {
     const board = this.boards.get(id);
     if (!board) return;
     const revision = ++this.revision;
@@ -335,7 +353,7 @@ export class Viewer {
       renderParentContext(this.context, parentContext(board, this.boards));
       this.setMessage(notice);
     } catch (error) {
-      if (revision === this.revision) { this.cancelTransition(); this.setMessage(error instanceof Error ? error.message : String(error), true); }
+      if (revision === this.revision) { this.cancelTransition(); throw error; }
     } finally {
       if (revision === this.revision) this.setBusy(false);
     }

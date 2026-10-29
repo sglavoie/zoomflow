@@ -1,5 +1,5 @@
 import { boardBlocks, classifyHref, indexBoards, indexShapeSources, parseSourceRange, lint, rebaseFileLinks, resolveFilePath, type CompileResponse, type ShapeSource, type SourceRange, type Diagram, type LintDiagnostic, type LintResult } from '@zoomflow/core';
-import { Viewer, openFolderMessage, setupViewport, type RenderBoard, type ViewerRoute } from '@zoomflow/viewer';
+import { Viewer, ViewerRenderError, openFolderMessage, setupViewport, type RenderBoard, type ViewerRoute } from '@zoomflow/viewer';
 import { SourceEditor } from './editor';
 import { compilerDiagnostics, lintDiagnostics, type SourceDiagnostic } from './diagnostics';
 import { CompilerStartupError, isEngineUnavailable, type createCompiler } from './compiler';
@@ -179,7 +179,7 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
     previewStatus.dataset.state = state;
     setText(previewStatus, { loading: 'Loading preview…',
       ready: 'Preview ready', error: 'Preview out of date', unavailable: 'Preview unavailable' }[state]);
-    if (state === 'error') viewer.stage.dataset.previewState = 'stale';
+    if (state === 'error' || state === 'unavailable') viewer.stage.dataset.previewState = 'stale';
     else delete viewer.stage.dataset.previewState;
     viewer.stage.dispatchEvent(new Event('zf-sourcechange'));
   }
@@ -265,6 +265,7 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
       const context = projectSources();
       if (!context) return;
       return {
+        key: currentDocumentKey!,
         path: context.inputPath,
         files: Object.keys(context.fs).filter((path) => path !== context.inputPath).sort((a, b) => a.localeCompare(b)),
         boards: linkedBoards,
@@ -298,7 +299,7 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
         const path = newProjectPath(context.inputPath, name, taken);
         const created = folder ? await createProjectFile(folder, path, source) : 'refused';
         if (created === 'exists') { taken.add(path); continue; }
-        const key = picker().addProjectFile(id, path, source, created !== 'refused');
+        const key = picker().addProjectFile(projectId, path, source, created !== 'refused');
         if (!key) return;
         if (created !== 'refused') shared.fileHandles.set(key, created);
         else if (folder) setActivity(`Created ${path} as a draft. Save it to keep it.`);
@@ -733,11 +734,13 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
       }
     } catch (error) {
       if (request === generation) {
-        if (error instanceof CompilerStartupError) {
+        if (error instanceof CompilerStartupError || error instanceof ViewerRenderError) {
           setEditorDiagnostics([]);
           compileError.hide();
           setText(lintSummary, '');
-          notice.show('The diagram engine could not start. Check your connection and retry. Your source is preserved.', 'alert', 'Retry preview');
+          notice.show(error instanceof ViewerRenderError
+            ? 'The preview could not be drawn. Retry the preview. Your source is preserved.'
+            : 'The diagram engine could not start. Check your connection and retry. Your source is preserved.', 'alert', 'Retry preview');
           setPreviewState('unavailable');
           return;
         }

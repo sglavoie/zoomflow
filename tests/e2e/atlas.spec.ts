@@ -362,6 +362,64 @@ test('creates a new linked flow that opens, stays editable, and links on from it
   await expect(page.locator('#viewer .zf-stage a[data-file="./Exercise.d2"]')).not.toHaveAttribute('data-missing', '');
 });
 
+test('finishing a linked file write after switching projects keeps it in its original project', async ({ page }) => {
+  await page.addInitScript(() => {
+    let opened = 0;
+    const projects = ['first', 'second'].map(name => {
+      const files: Record<string, string> = { 'index.d2': 'Topic\n' };
+      const handle = (filename: string) => ({
+        kind: 'file', name: filename,
+        getFile: async () => new File([files[filename]], filename, { lastModified: 1 }),
+        isSameEntry: async () => false,
+        createWritable: async () => ({
+          async write(source: string) {
+            if (filename === 'Detail.d2') await new Promise<void>(resolve => { (window as any).finishLinkedWrite = resolve; });
+            files[filename] = source;
+          },
+          close: async () => {}, abort: async () => {},
+        }),
+      });
+      return {
+        kind: 'directory', name,
+        queryPermission: async () => 'granted', requestPermission: async () => 'granted',
+        async *values() { for (const filename of Object.keys(files)) yield handle(filename); },
+        async getFileHandle(filename: string, options?: { create?: boolean }) {
+          if (!(filename in files) && !options?.create) throw new DOMException('Not found', 'NotFoundError');
+          files[filename] ??= '';
+          return handle(filename);
+        },
+      };
+    });
+    (window as any).showDirectoryPicker = async () => projects[opened++];
+  });
+  async function chooseFolder(name: string) {
+    await page.locator('#example-picker > summary').click();
+    await page.locator('#open-folder-picker').click();
+    await expect(page.locator('#filename')).toHaveAttribute('title', `${name}/index.d2`);
+    await previewReady(page);
+  }
+  await page.goto('/'); await previewReady(page);
+  await chooseFolder('first');
+  await (await shapeMenu(page, 'Topic', 'Topic')).getByRole('menuitem', { name: 'New linked diagram…' }).click();
+  const dialog = page.getByRole('dialog', { name: 'New linked diagram' });
+  await dialog.getByLabel('File name').fill('Detail');
+  await dialog.getByRole('button', { name: 'Create and open', exact: true }).click();
+  await expect.poll(() => page.evaluate(() => typeof (window as any).finishLinkedWrite)).toBe('function');
+
+  // The second project deliberately has the same source and shape ID as the first.
+  await chooseFolder('second');
+  await page.evaluate(() => (window as any).finishLinkedWrite());
+  await page.locator('#example-picker > summary').click();
+  await expect(page.locator('.example-option[title="first/Detail.d2"]')).toHaveCount(1);
+  await expect(page.locator('.example-option[title="second/Detail.d2"]')).toHaveCount(0);
+  await expect(page.locator('#filename')).toHaveAttribute('title', 'second/index.d2');
+  expect(await editorText(page)).toBe('Topic\n');
+  await page.getByRole('button', { name: 'first', exact: true }).click();
+  await page.locator('.example-option[title="first/Detail.d2"]').click();
+  await previewReady(page);
+  expect(await editorText(page)).toContain('# Created with the Zoomflow flow builder.');
+});
+
 test('the atlas map draws every project file and file link, groups unlinked files, and opens a file on click', async ({ page }) => {
   await page.goto('/');
   await openFolder(page, atlas);

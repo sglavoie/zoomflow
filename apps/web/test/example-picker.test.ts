@@ -134,3 +134,22 @@ it('opens files and folders into their requested pane after the header target ch
   // Opening the same folder in b must keep the two panes on separate drafts.
   expect(api.rememberFolder('notes', [{ path: 'index.d2', source: 'b' }], undefined, true, 'b').key).not.toBe(folder.key);
 });
+
+it('adds a completed file write to its requested project after its pane switched projects', () => {
+  localStorage.clear();
+  const { api, shown } = picker();
+  shown.a = api.initial.source;
+  const first = api.rememberFolder('first', [{ path: 'index.d2', source: 'Topic\n' }]);
+  shown.a = first.source;
+  const second = api.rememberFolder('second', [{ path: 'index.d2', source: 'Topic\n' }]);
+  shown.a = second.source;
+  const source = 'Detail\n';
+  const key = api.addProjectFile(first.projectId, 'Detail.d2', source, true);
+  expect(key).toBe(`project:${first.projectId}:Detail.d2`);
+  expect(api.currentKey('a')).toBe(second.key);
+  expect(api.projectSources(first.projectId).fs).toEqual({ 'index.d2': 'Topic\n', 'Detail.d2': source });
+  expect(api.projectSources(second.projectId).fs).toEqual({ 'index.d2': 'Topic\n' });
+  expect(new DraftStore(localStorage).load().drafts.find(draft => draft.key === key)).toMatchObject({ source, baseline: source });
+  expect(api.addProjectFile('removed-project', 'Detail.d2', source, true)).toBeUndefined();
+  expect(api.hasProject('removed-project')).toBe(false);
+});

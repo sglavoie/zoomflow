@@ -13,6 +13,8 @@ import { setText } from './text';
 /** What a folder project offers for linking its files: this document's project path, the other files, a file's
  * boards, and opening or creating a file. `create` resolves the new file's project path, or undefined when it failed. */
 export type FileLinkHost = {
+  /** The draft requesting the link; a delayed file write must not change another document. */
+  key: string;
   path: string;
   files: string[];
   boards: (path: string) => Promise<FileBoard[]>;
@@ -169,17 +171,19 @@ export function setupBoardTools(scope: PaneScope, viewer: Viewer, options: Board
     const files = linkable(host);
     const choice = await fileLinkDialog().link({ files, boards: host.boards, shape: shapeLabel(board, shape),
       ...path && href?.kind === 'file' ? { current: { path, hash: href.hash } } : {} });
+    if (options.files?.()?.key !== host.key) return;
     refocus(returnFocus);
     // Without a file to choose, the dialog submits an empty path, which would link to the folder.
     if (choice?.path) applyLink(board, shape, fileLink(host.path, choice.path) + choice.hash);
   }
   async function newLinked(board: string, shape: string, host: FileLinkHost, returnFocus: HTMLElement) {
     const choice = await fileLinkDialog().create(shapeLabel(board, shape));
+    if (options.files?.()?.key !== host.key) return;
     refocus(returnFocus);
     if (!choice) return;
     if (!ready() || sites!.shapeAction(board, shape).action !== 'add') { options.status(stale, 'error'); return; }
     const path = await host.create(choice.name, newFileSource(choice.kind, choice.name));
-    if (!path) return;
+    if (!path || options.files?.()?.key !== host.key) return;
     const link = fileLink(host.path, path);
     if (applyLink(board, shape, link)) host.open(link);
   }
