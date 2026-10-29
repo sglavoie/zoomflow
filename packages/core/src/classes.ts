@@ -61,7 +61,8 @@ export function definedClasses(files: Record<string, string>, path: string, seen
       return inner;
     }
     const segments = keyPath(key);
-    if (current.kind === 'root' && segments[0] === 'classes') {
+    // A quoted `"classes"` is an ordinary shape.
+    if (current.kind === 'root' && segments[0] === 'classes' && !/^["']/.test(key)) {
       if (segments.length > 1) names.add(segments[1]);
       else if (opens) inner = 'classes';
       else if (value.startsWith('@')) known = false;

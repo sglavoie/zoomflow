@@ -761,3 +761,35 @@ it('follows `./` and `../` imports to the files they name', async () => {
   const keyed = await run({ 'app/lib.d2': 'classes: {hot: {style.fill: red}}\n', 'app/main.d2': 'g: @./lib\nx: {class: hot}\n' });
   expect(keyed.diagnostics[0].message).toContain('...@./lib');
 });
+
+it('credits globs in imported files to the board D2 writes them on, past quoted keys after arrows and parentheses', async () => {
+  const rows = async (fs: Record<string, string>) => {
+    const result = { ...await d2.compile({ fs, inputPath: 'index', options: { layout: 'elk' } }), fs };
+    return lint(result, { files: { inputPath: 'index', exists: (path: string) => path === 'sub/y.d2' } }).diagnostics
+      .filter((item) => item.rule === 'dangling-file-link').map((item) => [item.board, item.shape]);
+  };
+  // Each entry file also holds the link text, so only the glob can credit the link to `sub/x.d2`.
+  for (const edge of ['p ->"q}"', 'p <-"q{"', '"q}" -> p\n("q}" -> p)[0].style.bold: true']) {
+    expect(await rows({ index: '...@sub/x\na\n# ./y.d2', 'sub/x.d2': `${edge}\na\n*.link: ./y.d2` }), edge).toEqual([]);
+  }
+  for (const index of ['layers.x: @sub/x', 'layers: {x: @sub/x}']) {
+    expect(await rows({ index: `${index}\nlayers.x.q.style.bold: true\n# ./y.d2`, 'sub/x.d2': 'q\n*.link: ./y.d2' }), index).toEqual([]);
+  }
+  // D2 merges `LAYERS` into `layers`, and reads a quoted `"layers"` as a shape.
+  expect(await rows({ index: '...@sub/x\nlayers: {l: {q}}\n# ./y.d2', 'sub/x.d2': 'layers: {l: {q}}\nLAYERS.l.*.link: ./y.d2' })).toEqual([]);
+  expect(await rows({ index: '...@sub/x\n"layers".x.q\n# ./y.d2', 'sub/x.d2': '"layers".x.q\n"layers".x.*.link: ./y.d2' })).toEqual([]);
+});
+
+it('reads quoted keyword keys, such as "layers", "vars" and "classes", as the shapes D2 makes of them', async () => {
+  const rows = async (index: string) => {
+    const result = { ...await d2.compile({ fs: { index }, inputPath: 'index', options: { layout: 'elk' } }), fs: { index } };
+    return lint(result, { files: { inputPath: 'index', exists: () => false } }).diagnostics.map((item) => [item.rule, item.shape]);
+  };
+  expect(await rows('"layers".x.q.link: layers.nope')).toEqual([['dangling-link', 'layers.x.q']]);
+  expect(await rows('"vars".q.link: layers.nope')).toEqual([['dangling-link', 'vars.q']]);
+  // D2 styles `a` with no class from a quoted `"classes"`.
+  expect(await rows('"classes".k.style.fill: red\na.class: k')).toEqual([['undefined-class', 'a']]);
+  expect(await rows('a.class: k\n"classes".k.link: layers.nope')).toEqual([['dangling-link', 'classes.k'], ['undefined-class', 'a']]);
+  expect(await rows('"classes": {k: {link: ./y.d2}}\na.class: k')).toEqual([['dangling-file-link', 'classes.k'], ['undefined-class', 'a']]);
+  expect([...definedClasses({ index: '"classes".k.style.fill: red\n\'classes\': {j}' }, 'index') ?? []]).toEqual([]);
+});

@@ -89,6 +89,8 @@ function stringValue(value?: AstValue): string | undefined {
   return typeof scalar?.value === 'string' ? scalar.value
     : scalar?.value?.map((part) => part.string ?? '').join('');
 }
+/** The text of an unquoted key segment: a quoted one, such as `"layers"`, is an ordinary shape, never a keyword. */
+const keyword = (value?: AstValue) => value?.unquoted_string ? stringValue(value) : undefined;
 function scalarRange(value?: AstValue): string | undefined {
   return (value?.unquoted_string ?? value?.double_quoted_string ?? value?.single_quoted_string)?.range;
 }
@@ -174,8 +176,9 @@ function boardClasses(compiled: LintInput): Map<string, Set<string> | undefined>
         const childId = `${id}.${group}.${boardKey(child.name ?? '')}`;
         const names = new Set<string>();
         for (const node of child.ast?.nodes ?? []) {
-          const path = node.map_key?.key?.path?.map((part) => stringValue(part) ?? '') ?? [];
-          if (path[0] !== 'classes') continue;
+          const parts = node.map_key?.key?.path ?? [];
+          const path = parts.map((part) => stringValue(part) ?? '');
+          if (keyword(parts[0]) !== 'classes') continue;
           if (path.length > 1) names.add(path[1]);
           else for (const entry of node.map_key?.value?.map?.nodes ?? []) {
             const name = stringValue(entry.map_key?.key?.path?.[0]);
@@ -435,7 +438,7 @@ export function lint(compiled: LintInput, options: LintOptions = {}): LintResult
         const path = entry.key?.path ?? [];
         const names = path.map((part) => stringValue(part) ?? '');
         if (entry.value?.import) { importRules(entry.value.import, resolve(path)); continue; }
-        if (names[0] === 'classes' && !scope.length) {
+        if (keyword(path[0]) === 'classes' && !scope.length) {
           if (path.length > 1) defineClass(path.slice(1), entry);
           else for (const child of entry.value?.map?.nodes ?? []) if (child.map_key?.key?.path) defineClass(child.map_key.key.path, child.map_key);
           continue;
@@ -454,8 +457,9 @@ export function lint(compiled: LintInput, options: LintOptions = {}): LintResult
           if (link) globs.push({ path: named ? pattern.slice(0, -1) : pattern, link: authoredLink(link), filters });
           continue;
         }
-        if (['classes', 'vars', 'style', 'source-arrowhead', 'target-arrowhead'].includes(names[0])) continue;
-        if (['layers', 'scenarios', 'steps'].includes(names[0])) {
+        const first = keyword(path[0]) ?? '';
+        if (['classes', 'vars', 'style', 'source-arrowhead', 'target-arrowhead'].includes(first)) continue;
+        if (['layers', 'scenarios', 'steps'].includes(first)) {
           // `layers.x: ...` names its board in the key; bare `layers: {x: ...}` in each child key.
           const children = path.length > 1 ? [path[1]] : (entry.value?.map?.nodes ?? []).map((child) => child.map_key?.key?.path?.[0]);
           for (const part of children) {

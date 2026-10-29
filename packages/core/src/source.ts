@@ -307,8 +307,9 @@ function scanMap(text: string, from: number, file = false): { starts: number[]; 
       const end = text.indexOf('"""', i + 3);
       i = end < 0 ? text.length : end + 2;
     }
-    // Only a token opens a string: the quote in `Don't` or the pipe in `x: in | out` is label text; `c."k#1"` quotes a key.
-    else if ((char === '"' || char === "'") && /[\s:;.,{[@]/.test(text[i - 1] ?? '\n') || char === '|' && /:[ \t]*$/.test(text.slice(Math.max(from, i - 40), i))) {
+    // Only a token opens a string: the quote in `Don't` or the pipe in `x: in | out` is label text; `c."k#1"`,
+    // `a ->"k}"` and `("k}" -> a)` quote keys.
+    else if ((char === '"' || char === "'") && /[\s:;.,{[@(<>&!-]/.test(text[i - 1] ?? '\n') || char === '|' && /:[ \t]*$/.test(text.slice(Math.max(from, i - 40), i))) {
       const string = scalarAt(text, i);
       if (string) i = string.to - 1;
     }
@@ -392,8 +393,15 @@ export function importedLinks(compiled: { diagram: Diagram; graph: unknown; fs?:
   return result;
 }
 
-/** A glob key path segment: its text, and whether it is an unquoted pattern such as `*` or `a*`. */
-export type GlobSegment = { text: string; glob: boolean };
+/** A glob key path segment: its text, and whether it is an unquoted pattern such as `*` or `a*`; `quoted` marks a
+ * quoted key, such as `"layers"`, which D2 reads as an ordinary shape, never a keyword. */
+export type GlobSegment = { text: string; glob: boolean; quoted?: boolean };
+const segmentOf = (part: RegExpExecArray): GlobSegment => ({ text: part[1]?.replace(/\\(.)/g, '$1') ?? part[2]?.replaceAll("''", "'") ?? part[3],
+  glob: part[3]?.includes('*') ?? false, quoted: part[3] === undefined });
+/** An unquoted board keyword, in any case, as D2 merges `LAYERS` into `layers`. */
+const boardGroup = (segment: GlobSegment | undefined) =>
+  segment && !segment.quoted && !segment.glob && boardGroups.has(segment.text.toLowerCase()) ? segment.text.toLowerCase() : undefined;
+const isClasses = (segment: GlobSegment) => !segment.quoted && segment.text === 'classes';
 const keyPart = /\s*(?:"((?:[^"\\\n]|\\.)*)"|'((?:[^'\n]|'')*)'|([^.:;{}\n#"'&]*[^.:;{}\n#"'\s&]))\s*(\.|(?=:))/y;
 const importTarget = String.raw`"(?:[^"\\\n]|\\.)*"|'(?:[^'\n]|'')*'|[^\s;#}]+`;
 // Trailing whitespace takes the `\r` of CRLF line endings.
@@ -440,7 +448,7 @@ export function fileLinkRules(fs: Record<string, string>, file: string, seen = n
       const path: GlobSegment[] = [];
       let at = start;
       for (let part = sticky(keyPart, text, at); part; part = sticky(keyPart, text, at)) {
-        path.push({ text: part[1]?.replace(/\\(.)/g, '$1') ?? part[2]?.replaceAll("''", "'") ?? part[3], glob: part[3]?.includes('*') ?? false });
+        path.push(segmentOf(part));
         at = keyPart.lastIndex;
         if (part[4] !== '.') break;
       }
@@ -469,21 +477,39 @@ export function fileLinkRules(fs: Record<string, string>, file: string, seen = n
       const brace = sticky(/[ \t]*\{/y, text, i);
       return brace ? scanMap(text, i + brace[0].length) : undefined;
     };
+    /** Follow the import `imported` at `start`, under `prefix` and its own key; a key naming a board, as in
+     * `layers.x: @f` or `layers: {x: @f}`, imports the file as that board. */
+    const readImport = (imported: RegExpExecArray, start: number, place: Place, prefix: GlobSegment[], classy: boolean) => {
+      const target = importPath(fs, file, importText(imported[1] ?? imported[3]));
+      const key = imported[2] ? keyPath(imported[2]) : [];
+      if (!target || !key) return;
+      let path = [...prefix, ...key];
+      let { board, depth } = place;
+      for (let group = boardGroup(path[0]); !place.scope.length && group && path.length > 1 && !path[1].glob; group = boardGroup(path[0])) {
+        board = `${board}.${group}.${boardKey(path[1].text)}`;
+        depth++;
+        path = path.slice(2);
+      }
+      readFile(target, { board, depth, scope: [...place.scope, ...path], chain: [...place.chain, start] }, classy);
+    };
     /** A statement with key path `path` ending at the colon `at`, read on `place`. */
     const statement = (path: GlobSegment[], start: number, at: number, end: number, place: Place, classy: boolean) => {
       const { scope } = place;
       // `layers.x: {…}` and `scenarios.s.a.link: y` write board `x` or `s`; `layers: {x: …}` names each board in its map.
-      if (!scope.length && !path[0].glob && boardGroups.has(path[0].text)) {
+      const group = scope.length ? undefined : boardGroup(path[0]);
+      if (group) {
         if (path.length === 1) {
           const inner = mapAfter(at);
           for (const child of inner?.starts ?? []) {
+            const imported = sticky(importLine, text, child);
+            if (imported) { readImport(imported, child, place, [path[0]], false); continue; }
             const key = keyAt(child);
             if (key) statement([path[0], ...key.path], child, key.at, end, place, false);
           }
           return;
         }
         if (path[1].glob) return;
-        const child = { ...place, board: `${place.board}.${path[0].text}.${boardKey(path[1].text)}`, depth: place.depth + 1 };
+        const child = { ...place, board: `${place.board}.${group}.${boardKey(path[1].text)}`, depth: place.depth + 1 };
         const rest = path.slice(2);
         if (!rest.length) {
           const inner = mapAfter(at);
@@ -495,7 +521,7 @@ export function fileLinkRules(fs: Record<string, string>, file: string, seen = n
         }
         return;
       }
-      if (!path[0].glob && path[0].text === 'classes') {
+      if (isClasses(path[0])) {
         if (!classy) return;
         if (path.length > 1) defineClass(path.slice(1), start, at);
         else {
@@ -522,9 +548,7 @@ export function fileLinkRules(fs: Record<string, string>, file: string, seen = n
       const end = scan.starts[index + 1] ?? scan.end;
       const imported = sticky(importLine, text, start);
       if (imported) {
-        const target = importPath(fs, file, importText(imported[1] ?? imported[3]));
-        const key = imported[2] ? keyPath(imported[2]) : [];
-        if (target && key) readFile(target, { board, depth, scope: [...scope, ...key], chain: [...chain, start] }, classy && !imported[2]);
+        readImport(imported, start, place, [], classy && !imported[2]);
         continue;
       }
       const key = keyAt(start);
@@ -567,7 +591,7 @@ function keyPath(key: string): GlobSegment[] | undefined {
   const text = `${key}:`;
   let at = 0;
   for (let part = sticky(keyPart, text, at); part; part = sticky(keyPart, text, at)) {
-    path.push({ text: part[1]?.replace(/\\(.)/g, '$1') ?? part[2]?.replaceAll("''", "'") ?? part[3], glob: part[3]?.includes('*') ?? false });
+    path.push(segmentOf(part));
     at = keyPart.lastIndex;
     if (part[4] !== '.') return at === key.length ? path : undefined;
   }
