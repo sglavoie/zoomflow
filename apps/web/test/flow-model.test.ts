@@ -113,6 +113,16 @@ it('colours lines labelled Yes and No with the library branch classes', async ()
   expect(readFlow(source.replace(' {class: zf-yes}', ''))).toBeUndefined();
 });
 
+it('keeps pasted Yes/No labels editable after removing control characters', async () => {
+  const flow = flowTemplate('approval');
+  flow.connections[1].label = 'Ye\u0001s';
+  flow.connections[2].label = 'N\u0007o';
+  const source = flowSource(flow);
+  expect(readFlow(source)?.connections.slice(1, 3).map(edge => edge.label)).toEqual(['Yes', 'No']);
+  const compiled = await compile(source);
+  expect(compiled.diagram.connections.slice(1, 3).map(edge => edge.stroke)).toEqual(['#30a46c', '#e5484d']);
+});
+
 it('stays editable with steps that open other files, and round-trips their links', async () => {
   const flow = flowTemplate('approval');
   const attachments = [{ shape: 'step_2', file: './decide.d2' }, { shape: 'step_4', file: '../review/changes.d2#/Notes' }];

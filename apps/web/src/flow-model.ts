@@ -53,7 +53,7 @@ export function flowTemplate(template: string): Flow {
 
 /** Lines labelled Yes or No take the library's branch colours. */
 function connectionLine(edge: FlowConnection) {
-  const branch = /^(yes|no)$/i.exec(edge.label.trim())?.[1].toLowerCase();
+  const branch = /^(yes|no)$/i.exec(cleanLabel(edge.label).trim())?.[1].toLowerCase();
   return `${edge.from} -> ${edge.to}: ${quote(edge.label)}${branch ? ` {class: zf-${branch}}` : ''}`;
 }
 

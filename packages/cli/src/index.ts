@@ -474,7 +474,8 @@ export async function main(args = process.argv.slice(2)): Promise<number> {
               // Links from imported files are rewritten to resolve from this file, as the atlas resolves them.
               const link = (item: { id: string; link?: string }) => item.link && rebaseFileHref(item.link, sources.get(JSON.stringify([board.id, item.id])), file.path);
               return format === 'png' ? '' : safeLinks(compilerLinks(data.toString('utf8'), board.diagram, link), true, follows);
-            }, format === 'html' ? file.diagnostics : [], { concurrency: availableParallelism(), skipEmpty: format === 'html' });
+            }, format === 'html' ? file.diagnostics : [], { concurrency: availableParallelism(), skipEmpty: format === 'html',
+              extension: format === 'png' ? 'png' : 'svg' });
             rendered.push({ path: file.path, name: file.path.replace(/\.d2$/i, ''), boards: exported });
           }
           if (format === 'html') {
@@ -488,10 +489,8 @@ export async function main(args = process.argv.slice(2)): Promise<number> {
             const options = { title: basename(input).slice(0, -3), script: offlineViewerScript(), style: offlineViewerStyle, glyphs };
             await save(output, atlas ? exportAtlasHtml(rendered, options) : exportBoardsHtml(rendered[0].boards, options));
           } else {
-            const placed = rendered.map((document) => ({ ...document,
-              boards: document.boards.map((board) => ({ ...board, path: board.path.replace(/\.svg$/, `.${format}`) })) }));
             const contents = (board: ExportBoard) => format === 'png' ? binaries.get(JSON.stringify([board.file ?? inputPath, board.id]))! : board.svg;
-            await save(output, atlas ? exportAtlasZip(placed, contents) : exportBoardsZip(placed[0].boards, contents));
+            await save(output, atlas ? exportAtlasZip(rendered, contents) : exportBoardsZip(rendered[0].boards, contents));
           }
         }
         const dangling = documents.flatMap((file) => file.diagnostics).filter((item) => item.rule === 'dangling-link' || item.rule === 'dangling-file-link').length;

@@ -28,6 +28,8 @@ function segment(name: string): string {
 }
 
 export interface RenderExportOptions {
+  /** Filename extension to reserve while avoiding file/folder collisions. Defaults to SVG. */
+  extension?: 'svg' | 'png';
   /** Maximum simultaneous render calls; results keep tree order. */
   concurrency?: number;
   /** Skip rendering boards without shapes, whose SVG the HTML viewer never shows. */
@@ -38,6 +40,7 @@ export interface RenderExportOptions {
 export async function renderExportBoards(diagram: Diagram, render: (target: string) => Promise<string>,
   diagnostics: readonly LintDiagnostic[] = [], options: RenderExportOptions = {}): Promise<ExportBoard[]> {
   const boards = indexBoards(diagram);
+  const extension = `.${options.extension ?? 'svg'}`;
   // Names compare case-insensitively (Windows, macOS); a file and folder may not share one.
   const used = new Set<string>();
   // A board's file and the folder for its children share one name, so both must be free.
@@ -61,10 +64,10 @@ export async function renderExportBoards(diagram: Diagram, render: (target: stri
   const result: ExportBoard[] = [];
   for (const board of boards.values()) {
     const parent = board.parent ? folder(board.parent, board.kind) : '';
-    const name = board.parent ? claim(parent, segment(board.name), ['.svg', '']) : claim(parent, 'root', ['.svg']);
+    const name = board.parent ? claim(parent, segment(board.name), [extension, '']) : claim(parent, 'root', [extension]);
     places.set(board.id, { folder: parent, name });
     result.push({ id: board.id, name: board.name, hash: board.hash, parent: board.parent,
-      path: `${parent}${name}.svg`, empty: board.diagram.shapes.length === 0, svg: '',
+      path: `${parent}${name}${extension}`, empty: board.diagram.shapes.length === 0, svg: '',
       parentContext: parentContext(board, boards),
       missingLinks: diagnostics.filter((item) => (item.rule === 'dangling-link' || item.rule === 'dangling-file-link') && item.board === board.id && item.shape && item.target) });
   }

@@ -102,6 +102,18 @@ describe.concurrent('zoomflow CLI', () => {
     }
   }, 180_000);
 
+  it('exports PNG ZIPs without file/folder collisions for boards named like images', async () => {
+    const input = join(temp, 'png-names.d2');
+    const output = join(temp, 'png-names.zip');
+    await writeFile(input, 'layers: {\n A: {a}\n "A.png": {b; layers: {child: {c}}}\n "root.png": {d; layers: {child: {e}}}\n}');
+    success(await run(['export', input, '--all', '--format', 'png', '-o', output]));
+    const files = unzipSync(await readFile(output));
+    const paths = Object.keys(files);
+    expect(paths.some(path => paths.some(other => other.startsWith(`${path}/`)))).toBe(false);
+    expect(paths).toHaveLength(6);
+    for (const bytes of Object.values(files)) expect([...bytes.slice(0, 8)]).toEqual([137, 80, 78, 71, 13, 10, 26, 10]);
+  }, 180_000);
+
   it('links ZIP SVGs across scenarios and escaped board names', async () => {
     const input = join(temp, 'zip-links.d2');
     const output = join(temp, 'zip-links.zip');

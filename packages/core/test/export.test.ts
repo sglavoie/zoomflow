@@ -114,6 +114,14 @@ steps: {first: {Step}}`, { layout: 'elk' });
     expect(() => exportBoardsZip([board('a.svg', ''), board('a.svg', '')])).toThrow('Duplicate export path: a.svg');
   });
 
+  it('reserves PNG filenames before naming folders for child boards', async () => {
+    const compiled = await d2.compile('layers: {\n A: {a}\n "A.png": {b; layers: {child: {c}}}\n "root.png": {d; layers: {child: {e}}}\n}', { layout: 'elk' });
+    const boards = await renderExportBoards(compiled.diagram, async () => '', [], { extension: 'png' });
+    expect(boards.map(board => board.path)).toEqual(['root.png', 'A.png', '@A.png.png', '@A.png/child.png', '@root.png.png', '@root.png/child.png']);
+    const paths = Object.keys(unzipSync(exportBoardsZip(boards, () => new Uint8Array([137, 80, 78, 71]))));
+    expect(paths.some(path => paths.some(other => other.startsWith(`${path}/`)))).toBe(false);
+  });
+
   it('renders with bounded concurrency in tree order and can skip empty boards', async () => {
     const compiled = await d2.compile('r\nlayers: {a: {x}; b: {}; c: {y}; d: {z}}', { layout: 'elk' });
     let active = 0, peak = 0;
