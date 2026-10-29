@@ -278,7 +278,7 @@ export function lint(compiled: LintInput, options: LintOptions = {}): LintResult
       if (!range || range.startsWith(',')) range = shape ? shapeRange(board.id, shape) : undefined;
       // D2 drops `x.d2` and `folder/x.d2`, reading them as board paths; only `./` paths link to files. It keeps
       // some others, such as `/x.d2` or `.\x.d2`, which the viewer still ignores. Suggest forward slashes either way.
-      const [file, fragment] = /^([^#]*\.d2)(#.*)?$/s.exec(href)?.slice(1) ?? [];
+      const [file, fragment] = /^([^#]*\.d2)(#.*)?$/si.exec(href)?.slice(1) ?? [];
       if (file && !/^\.\.?\//.test(file)) {
         const path = file.replace(/\\/g, '/');
         const suggestion = /^\.\.?\//.test(path) ? path : `./${path.replace(/^\/+/, '')}`;

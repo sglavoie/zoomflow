@@ -165,7 +165,7 @@ export function exportSourcesZip(sources: Record<string, string>): Uint8Array<Ar
   const files: Record<string, Uint8Array> = Object.create(null);
   for (const [path, source] of Object.entries(sources)) {
     const parts = path.split('/');
-    if (!path.endsWith('.d2') || parts.some((part) => !part || part === '.' || part === '..') ||
+    if (!path.toLowerCase().endsWith('.d2') || parts.some((part) => !part || part === '.' || part === '..') ||
       path.includes('\\') || path.includes('\0') || /^[A-Za-z]:/.test(path))
       throw new Error(`Invalid project source path: ${path}`);
     files[path] = strToU8(source);

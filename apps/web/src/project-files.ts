@@ -13,7 +13,7 @@ export function validProjectPath(path: string): boolean {
   const parts = path.split('/');
   return parts.length > 0 && parts.every((part, index) => part && part !== '.' && part !== '..' &&
     (index === parts.length - 1 || !part.startsWith('.')) && !['node_modules', 'dist', 'coverage'].includes(part)) &&
-    path.endsWith('.d2') && !path.includes('\\') && !path.includes('\0') && !/^[A-Za-z]:/.test(path);
+    path.toLowerCase().endsWith('.d2') && !path.includes('\\') && !path.includes('\0') && !/^[A-Za-z]:/.test(path);
 }
 
 export function projectFileSystem(inputPath: string, sources: Record<string, string>, source: string) {

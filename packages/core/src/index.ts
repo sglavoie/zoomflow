@@ -67,7 +67,7 @@ export type ClassifiedHref =
  * Self-contained because the offline viewer embeds its source. */
 export function classifyHref(href: string): ClassifiedHref {
   if (href === 'root' || /^root\.(layers|scenarios|steps)\..+/.test(href)) return { kind: 'board', target: href };
-  const file = /^(\.\.?\/[^#]*\.d2)(#\/.*)?$/s.exec(href);
+  const file = /^(\.\.?\/[^#]*\.d2)(#\/.*)?$/si.exec(href);
   if (file) return { kind: 'file', path: file[1], hash: file[2] ?? '' };
   try {
     const url = new URL(href);
@@ -93,7 +93,7 @@ export function resolveFilePath(fromPath: string, relativePath: string, scanned 
   // The rules of `validProjectPath`: no empty or dot segments and, when `scanned`, no hidden or build folders.
   const valid = parts.length > 0 && parts.every((part, index) => part && part !== '.' && part !== '..' && (!scanned ||
     ((index === parts.length - 1 || !part.startsWith('.')) && !['node_modules', 'dist', 'coverage'].includes(part)))) &&
-    path.endsWith('.d2') && !path.includes('\\') && !path.includes('\0') && !/^[A-Za-z]:/.test(path);
+    path.toLowerCase().endsWith('.d2') && !path.includes('\\') && !path.includes('\0') && !/^[A-Za-z]:/.test(path);
   return valid ? path : undefined;
 }
 

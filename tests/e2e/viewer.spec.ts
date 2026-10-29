@@ -5,6 +5,19 @@ import { readFileSync } from 'node:fs';
 import { board, drill } from './helpers';
 import { devURL } from './servers';
 
+test('opening a board in another tab keeps the current board', async ({ page, context, browserName }) => {
+  await page.goto('/');
+  await board(page, 'root');
+  const opened = context.waitForEvent('page');
+  // WebKit's automation shell opens tabs with the platform modifier, rather than middle click.
+  await page.locator('.zf-stage a[data-board="root.layers.checkout"]').click(
+    browserName === 'webkit' ? { modifiers: ['ControlOrMeta'] } : { button: 'middle' });
+  const tab = await opened;
+  await board(tab, 'root.layers.checkout');
+  await expect(page.locator('.zf-stage')).toHaveAttribute('data-board', 'root');
+  await expect(page).toHaveURL(/#\/$/);
+});
+
 for (const offline of [false, true]) {
   test(`port-free layers infer parent context ${offline ? 'in offline HTML' : 'in the viewer'}`, async ({ page, context }, info) => {
     await page.emulateMedia({ reducedMotion: 'reduce' });

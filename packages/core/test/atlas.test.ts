@@ -33,6 +33,7 @@ describe('resolveFilePath', () => {
     ['a/b/c.d2', '../../x/./y.d2', 'x/y.d2'],
     ['a/b/c.d2', './../d.d2', 'a/d.d2'],
     ['index.d2', './My Life.d2', 'My Life.d2'],
+    ['index.d2', './Main.D2', 'Main.D2'],
     ['leben/übersicht.d2', './gesundheit/schlaf 😴.d2', 'leben/gesundheit/schlaf 😴.d2'],
   ])('from %s, %s is %s', (from, relative, path) => {
     expect(resolveFilePath(from, relative)).toBe(path);

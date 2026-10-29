@@ -5,6 +5,24 @@ import { source, previewReady, stubAiStatus, projectFolder, openFolder } from '.
 
 const folder = fileURLToPath(new URL('../../fixtures/browser-project', import.meta.url));
 
+test('mixed-case D2 files open as a folder, follow file links and download together', async ({ page }, info) => {
+  const directory = info.outputPath('mixed-case-project');
+  await mkdir(directory, { recursive: true });
+  await writeFile(`${directory}/index.D2`, 'Open: {link: ./Detail.D2}');
+  await writeFile(`${directory}/Detail.D2`, 'Detail: Mixed case file');
+  await page.goto('/');
+  await openFolder(page, directory);
+  await expect(page.locator('#filename')).toHaveText('index.D2');
+  await previewReady(page);
+  await page.locator('.zf-stage a[data-file="./Detail.D2"]').click();
+  await expect(page.locator('#filename')).toHaveText('Detail.D2');
+  await expect(page.locator('.zf-stage')).toContainText('Mixed case file');
+  await page.locator('#header-more-toggle').click();
+  const [download] = await Promise.all([page.waitForEvent('download'), page.locator('#save-project').click()]);
+  expect(download.suggestedFilename()).toBe('mixed-case-project.zip');
+  await expect(page.locator('#export-status')).toContainText('Project source download started');
+});
+
 test('folder files resolve imports and keep edits across file switches and reload', async ({ page }) => {
   await page.goto('/');
   await openFolder(page, folder);

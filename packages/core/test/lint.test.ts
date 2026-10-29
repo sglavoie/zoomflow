@@ -369,6 +369,15 @@ it('says which bare file links D2 keeps, and suggests forward slashes for backsl
   ]);
 });
 
+it('recognizes mixed-case file extensions in kept and dropped file links', async () => {
+  const result = await compile('kept.link: ./Other.D2\nbare.link: Other.D2');
+  expect(result.diagram.shapes.find(shape => shape.id === 'kept')?.link).toBe('./Other.D2');
+  const diagnostics = lint(result, { files: { inputPath: 'index.d2', exists: path => path === 'Other.D2' } }).diagnostics;
+  expect(diagnostics.filter(item => item.rule.includes('file')).map(({ rule, shape }) => [rule, shape]))
+    .toEqual([['bare-file-link', 'bare']]);
+  expect(diagnostics.some(item => item.rule === 'ignored-link')).toBe(false);
+});
+
 it('warns about classes nothing defines, on the root and in layers that inherit its classes', async () => {
   const result = lint(await compile(`...@zoomflow
 classes.mine.style.bold: true

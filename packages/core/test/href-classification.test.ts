@@ -19,6 +19,7 @@ describe('href classification', () => {
     ['./a.d2', './a.d2', ''], ['./a.d2#/x', './a.d2', '#/x'], ['../a.d2', '../a.d2', ''],
     ['./health.d2#/Sleep/@scenarios/Night', './health.d2', '#/Sleep/@scenarios/Night'], ['./My Life.d2', './My Life.d2', ''],
     ['./work/plan.d2#/', './work/plan.d2', '#/'], ['../../a/b.d2', '../../a/b.d2', ''],
+    ['./Other.D2#/Board', './Other.D2', '#/Board'], ['../Main.d2', '../Main.d2', ''],
   ])('%s links to a file', (href, path, hash) => {
     expect(classifyHref(href)).toEqual({ kind: 'file', path, hash });
   });

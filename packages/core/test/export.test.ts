@@ -14,6 +14,12 @@ it('downloads the edited D2 project tree without adding bundled library files', 
   expect(() => exportSourcesZip({ '../escape.d2': 'Bad' })).toThrow('Invalid project source path');
 });
 
+it('exports source files with mixed-case D2 extensions without renaming them', () => {
+  const files = unzipSync(exportSourcesZip({ 'Main.D2': 'a', 'lib/Nodes.d2': 'b' }));
+  expect(Object.keys(files)).toEqual(['Main.D2', 'lib/Nodes.d2']);
+  expect(strFromU8(files['Main.D2'])).toBe('a');
+});
+
 describe('board tree exports', () => {
   it('makes SVG ZIP links navigate between exported boards, preserving external links and graphics', () => {
     const board = (id: string, path: string, svg: string): ExportBoard => ({ id, path, svg, name: id, hash: '#/', empty: false });

@@ -80,3 +80,14 @@ it('reads folder files with the line breaks the editor keeps, so an unedited fil
   const folder = { name: 'notes', values: async function* () { yield handle; } } as unknown as FileSystemDirectoryHandle;
   expect((await readDirectoryHandle(folder)).files).toEqual([{ path: 'index.d2', source: 'a -> b\nb -> c\nc\n' }]);
 });
+
+it('includes mixed-case D2 extensions through both folder-opening APIs, preserving filename case', async () => {
+  const file = new File(['a -> b'], 'Main.D2', { lastModified: 1 });
+  Object.defineProperty(file, 'webkitRelativePath', { value: 'notes/Main.D2' });
+  const expected = [{ path: 'Main.D2', source: 'a -> b' }];
+  expect(validProjectPath('Main.D2')).toBe(true);
+  expect((await readFolderInput([file] as unknown as FileList)).files).toEqual(expected);
+  const handle = { kind: 'file', name: file.name, getFile: async () => file };
+  const folder = { name: 'notes', values: async function* () { yield handle; } } as unknown as FileSystemDirectoryHandle;
+  expect((await readDirectoryHandle(folder)).files).toEqual(expected);
+});

@@ -88,8 +88,12 @@ export class Viewer {
     host.replaceChildren(this.crumbs, this.context, this.message, this.announcement, this.stage);
     const options = { signal: this.events.signal };
     this.stage.addEventListener('click', (event) => this.follow(event), options);
-    // A board link's href is a board id, not a URL: a middle click must not open it in a new tab.
-    this.stage.addEventListener('auxclick', (event) => followLink(event, this.resolve), options);
+    // Only the history-owning viewer has routes that another tab can reopen. Missing links and
+    // in-memory viewers still need interception instead of opening an unusable address.
+    this.stage.addEventListener('auxclick', (event) => {
+      const link = event.target instanceof Element ? event.target.closest('a') : null;
+      if (!this.history || !link?.getAttribute('href')?.startsWith('#')) followLink(event, this.resolve);
+    }, options);
     this.stage.addEventListener('keydown', (event) => {
       if (event.key === 'Enter') this.follow(event);
     }, options);
@@ -261,6 +265,7 @@ export class Viewer {
   private follow(event: MouseEvent | KeyboardEvent) {
     const link = event.target instanceof Element ? event.target.closest('a') : null;
     if (link && this.settings.follows?.(link, event) === false) { event.preventDefault(); return; }
+    if (this.history && (event.ctrlKey || event.metaKey || event.shiftKey) && link?.getAttribute('href')?.startsWith('#')) return;
     const action = followLink(event, this.resolve);
     if (action?.kind === 'missing') this.setMessage(`Missing board: ${boardLabel(action.target, this.boards)}`, true);
     else if (action?.kind === 'board') void this.navigate(action.target);
