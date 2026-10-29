@@ -8,7 +8,7 @@ import { createPreviewQueue } from './preview-queue';
 import { setupFullscreen } from './fullscreen';
 import { setupAiAssistant } from './ai-assistant';
 import { setupMobileView } from './mobile-view';
-import { newProjectPath, projectFileSystem } from './project-files';
+import { newProjectPath, projectFileSystem, projectIdOf } from './project-files';
 import { setupCanvasGuidance } from './canvas-guidance';
 import { setupBoardTools } from './board-tools';
 import { boardRoute, setupLinkPreview } from './link-preview';
@@ -78,8 +78,8 @@ function statusLine(element: HTMLElement) {
 type FileVisit = { key: string; path: string; route: ViewerRoute };
 /** Board hashes of each project file's last compile, by draft key, for checking links into that file. */
 const compiledBoards = new Map<string, ReadonlySet<string>>();
-/** The draft key of another file in the project of `key`, a `project:<id>:<path>` key. */
-const siblingKey = (key: string, path: string) => `project:${key.split(':')[1]}:${path}`;
+/** The draft key of another file in the project of `key`. */
+const siblingKey = (key: string, path: string) => `project:${projectIdOf(key)}:${path}`;
 const projectLabel = (path: string) => path.replace(/\.d2$/i, '');
 /** One document's editor, preview, diagnostics and status. The workspace shows one or two panes. */
 export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneContext) {
@@ -289,7 +289,7 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
    * draft that Save asks where to put. Resolves its project path. */
   async function createLinkedFile(name: string, source: string) {
     const context = projectSources();
-    const projectId = currentDocumentKey?.split(':')[1];
+    const projectId = currentDocumentKey && projectIdOf(currentDocumentKey);
     if (!context || !projectId) return;
     const taken = new Set(Object.keys(context.fs));
     const folder = shared.directoryHandles.get(projectId);
@@ -511,7 +511,7 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
       if (editor.view.state.doc !== document || documentRevision !== revision) return;
       // A restart or closed workspace says nothing about the source.
       if (isEngineUnavailable(error)) { setFormatStatus('Formatting stopped because the diagram engine was unavailable. Try again.', 'error'); return; }
-      setFormatStatus(`Formatting failed:${compilerDiagnostics(error, source, picker().inputPath(id)).map((item) => item.message).join('\n')}`, 'error');
+      setFormatStatus(`Formatting failed: ${compilerDiagnostics(error, source, picker().inputPath(id)).map((item) => item.message).join('\n')}`, 'error');
     } finally { formatButton.disabled = false; }
   }
   formatButton.addEventListener('click', () => void formatSource());

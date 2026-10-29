@@ -4,6 +4,7 @@ import type { RenderBoard } from '@zoomflow/viewer';
 import { prepareExportSvg, rasterizeSvg, offlineViewerScript, offlineViewerStyle } from '@zoomflow/viewer';
 import type { DocumentExport, DocumentPane } from './document-pane';
 import type { setupExamplePicker } from './example-picker';
+import { compilerDiagnostics } from './diagnostics';
 import { describeError, plural, safeFilename } from './text';
 
 /** The project paths of the files a diagram's file links open, in board order. Connections link files too, as
@@ -192,7 +193,7 @@ export function setupExportMenu(activePane: () => DocumentPane | undefined, pick
           try { file = await pane.compileProjectFile(path, fs); }
           catch (error) {
             // Links to a file that does not compile stay, marked missing.
-            warnings.push(`Left out ${path}: ${describeError(error)}`);
+            warnings.push(`Left out ${path}: ${compilerDiagnostics(error, fs[path] ?? '', path).map((item) => item.message).join(' ')}`);
             continue;
           }
         }

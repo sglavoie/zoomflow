@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { afterAll, expect, it } from 'vitest';
 import { indexShapeSources, parseSourceRange } from '@zoomflow/core';
 import { resolveFilePath } from '@zoomflow/core';
-import { fileLink, newProjectPath, projectFileSystem, validProjectPath } from '../src/project-files';
+import { fileLink, newProjectPath, projectFileSystem, projectIdOf, validProjectPath } from '../src/project-files';
 
 const d2 = new D2();
 afterAll(() => d2.dispose());
@@ -47,4 +47,12 @@ it('names new project files after a label, beside the file they open from', () =
   expect(newProjectPath('index.d2', 'Notes.d2', [])).toBe('Notes.d2');
   expect(newProjectPath('work/index.d2', 'Zoomflow', [])).toBe('work/Zoomflow 2.d2');
   expect(validProjectPath(newProjectPath('work/index.d2', '.hidden', []))).toBe(true);
+});
+
+it('finds the project of a file, its atlas map and a recovered copy of the file', () => {
+  expect(projectIdOf('project:p1:docs/index.d2')).toBe('p1');
+  expect(projectIdOf('atlas:p1')).toBe('p1');
+  expect(projectIdOf(`file:recovered:${encodeURIComponent('project:p1:a:b.d2')}:v7`)).toBe('p1');
+  expect(projectIdOf(`file:recovered:${encodeURIComponent('file:abc')}:v7`)).toBeUndefined();
+  expect(projectIdOf('file:abc')).toBeUndefined();
 });

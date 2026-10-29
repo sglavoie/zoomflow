@@ -629,13 +629,15 @@ export function boardBlocks(graph: unknown, source: string, filename = 'index'):
   // Keyed in lower case, as D2 matches board names.
   const declarations = new Map<string, number>();
   // A quoted `"layers"` is an ordinary shape.
-  const keyword = (part: AstKeySegment | undefined) => part !== undefined && 'unquoted_string' in part && keyText(part) === 'layers';
-  function declare(path: AstKeySegment[], value: AstMapKey['value'], board: string) {
+  const keyword = (part: AstKeySegment | undefined) => part !== undefined && 'unquoted_string' in part && keyText(part)?.toLowerCase() === 'layers';
+  // D2 merges `LAYERS` into an existing `layers` board but, written alone, also makes root shapes of it,
+  // so another casing counts as a declaration without giving a board its block.
+  function declare(path: AstKeySegment[], value: AstMapKey['value'], board: string, editable: boolean) {
     if (!keyword(path[0]) || path.length < 2) {
       if (path.length === 1 && keyword(path[0]) && value?.map) {
         for (const node of value.map.nodes ?? []) {
           const child = node.map_key?.key?.path;
-          if (child) declare([path[0], ...child], node.map_key!.value, board);
+          if (child) declare([path[0], ...child], node.map_key!.value, board, editable);
         }
       }
       return;
@@ -643,20 +645,21 @@ export function boardBlocks(graph: unknown, source: string, filename = 'index'):
     const name = keyText(path[1]);
     if (name === undefined) return;
     const id = `${board}.layers.${boardKey(name)}`;
+    const exact = editable && keyText(path[0]) === 'layers';
     declarations.set(id.toLowerCase(), (declarations.get(id.toLowerCase()) ?? 0) + 1);
-    if (path.length > 2) { declare(path.slice(2), value, id); return; }
+    if (path.length > 2) { declare(path.slice(2), value, id, exact); return; }
     const range = value?.map?.range && parseSourceRange(value.map.range, source, filename);
-    if (range && source[range.from] === '{' && source[range.to - 1] === '}') blocks.set(id, { from: range.from + 1, to: range.to - 1 });
-    if (value?.map) visit(value.map, id);
+    if (exact && range && source[range.from] === '{' && source[range.to - 1] === '}') blocks.set(id, { from: range.from + 1, to: range.to - 1 });
+    if (value?.map) visit(value.map, id, exact);
   }
-  function visit(map: AstMap, board: string) {
+  function visit(map: AstMap, board: string, editable: boolean) {
     for (const node of map.nodes ?? []) {
       const path = node.map_key?.key?.path;
-      if (path) declare(path, node.map_key!.value, board);
+      if (path) declare(path, node.map_key!.value, board, editable);
     }
   }
   const ast = (graph as { ast?: AstMap }).ast;
-  if (ast) visit(ast, 'root');
+  if (ast) visit(ast, 'root', true);
   for (const id of blocks.keys()) if ((declarations.get(id.toLowerCase()) ?? 0) > 1) blocks.delete(id);
   return blocks;
 }

@@ -464,7 +464,7 @@ export function setupExamplePicker({ readSource, open, onState, forget, checkpoi
      * without it, the file always becomes a new draft. A matching draft without unsaved changes is reused. */
     rememberFile(name: string, source: string, baseline = source, match?: (key: string) => boolean | undefined) {
       syncSources();
-      const existing = match && [...drafts.values()].find((item) => item.key.startsWith('file:') && reusable(item) &&
+      const existing = match && [...drafts.values()].find((item) => item.key.startsWith('file:') && !item.recoveredFrom && !item.projectId && reusable(item) &&
         (match(item.key) ?? (item.name === name && item.baseline === baseline && item.source === source)));
       if (existing) {
         Object.assign(existing, { name, title: name, source, baseline, updatedAt: Date.now() });

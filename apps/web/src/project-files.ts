@@ -92,3 +92,10 @@ export function newProjectPath(fromPath: string, label: string, taken: Iterable<
   for (let n = 2; used.has(path.toLowerCase()); n++) path = `${folder}${base} ${n}.d2`;
   return path;
 }
+
+/** The project of a `project:<id>:<path>` or `atlas:<id>` key, also inside a recovered copy's
+ * `file:recovered:<encoded key>:<copy>` key. */
+export function projectIdOf(key: string) {
+  const recovered = /^file:recovered:([^:]*):/.exec(key);
+  return /^(?:project|atlas):([^:]*)/.exec(recovered ? decodeURIComponent(recovered[1]!) : key)?.[1];
+}

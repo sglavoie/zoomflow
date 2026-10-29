@@ -255,3 +255,25 @@ it('reads the section it writes after one edited by hand, so the new link stays 
   expect(again.split('# Boards that open from shapes on this board.').length).toBe(3);
   expect(splitBoard(again).attachments).toEqual([{ shape: 'b', file: './third.d2' }, { shape: 'c', file: './other.d2' }]);
 });
+
+it('keeps the link of a topic that moves to a detail board rather than dropping it', async () => {
+  const outline = 'Plan\n  People\n    Hiring\n  Money';
+  const { sites: site } = await sites(mindMapSource(map(outline)));
+  const { sites: linked } = await sites(site.linkFile('root', 'n_1_1', './hiring.d2'));
+  expect(linked.update('root', mindMapSource(map(outline, 1)))).toEqual({
+    error: 'The topic “Hiring” opens the file “./hiring.d2” and would move to a detail board. Keep it on this board, or remove its link first.' });
+  // A removed topic still takes its link along.
+  expect(linked.update('root', mindMapSource(map('Plan\n  People\n  Money')))).not.toHaveProperty('error');
+});
+
+it('keeps the boards and links of the central topic when an edit renames it and adds a topic', async () => {
+  const edited = mindMapSource(map('Roadmap\n  People\n  Money\n  Risks'));
+  const { sites: site } = await sites(mindMapSource(map('Plan\n  People\n  Money')));
+  const { sites: linked } = await sites(site.linkFile('root', 'n', './plan.d2'));
+  const relinked = linked.update('root', edited);
+  expect('source' in relinked && (await sites(relinked.source)).sites.shapeAction('root', 'n')).toEqual({ action: 'file', link: './plan.d2', attached: true });
+  const added = site.add('root', 'n', mindMapSource(map('Sub\n  x')), 'Plan');
+  const { sites: withBoard } = await sites(added.source);
+  const kept = withBoard.update('root', edited);
+  expect('source' in kept && (await sites(kept.source)).sites.shapeAction('root', 'n')).toMatchObject({ action: 'edit' });
+});

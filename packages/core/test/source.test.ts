@@ -73,3 +73,11 @@ it('counts board declarations as D2 names boards, ignoring case and quoted `"lay
   const blocks = boardBlocks((await d2.compile(source, { layout: 'elk' })).graph, source);
   expect([...blocks.keys()]).toEqual(['root', 'root.layers.y']);
 });
+
+it('counts an upper-case `LAYERS` block as a declaration without giving its boards a block', async () => {
+  const merged = 'a: {link: layers.x}\nlayers: {\n  x: {b}\n}\nLAYERS: {x: {c}}\n';
+  expect([...boardBlocks((await d2.compile(merged, { layout: 'elk' })).graph, merged).keys()]).toEqual(['root']);
+  // Alone, D2 also makes root shapes of it, so the board is more than its block.
+  const alone = 'LAYERS: {x: {c}}\n';
+  expect([...boardBlocks((await d2.compile(alone, { layout: 'elk' })).graph, alone).keys()]).toEqual(['root']);
+});

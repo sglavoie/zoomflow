@@ -1,6 +1,6 @@
 import { classifyHref, type Board, type SourceRange } from '@zoomflow/core';
 import { quote, readFlow, unquote } from './flow-model';
-import { boardTopics, keywords, readMindMap, uniqueBoardName, type BoardTopic } from './mind-map-model';
+import { boardTopics, keywords, readMindMap, uniqueBoardName, type BoardTopic, type MindTopic } from './mind-map-model';
 
 export type BuilderKind = 'flow' | 'mind map';
 /** A board that opens from a shape, kept in a section at the end of the board it opens from. */
@@ -102,7 +102,7 @@ export function builderKind(own: string): BuilderKind | undefined {
 /** Keep each attached board on the same step or topic after a builder rewrites the own text, or explain why it cannot.
  * Flow steps keep their identifiers. Mind map topics follow `moved`, each topic's new identifier by its old one, when
  * the edit knows it; otherwise they are found again by their labels, or in place when only labels changed.
- * A link to another file goes with a removed step or topic, since the file stays. */
+ * The central topic is always itself. A link to another file goes with a removed step or topic, since the file stays. */
 export function reattach(before: string, after: string, attachments: Attachment[], moved?: Map<string, string>): Attachment[] | string {
   if (!attachments.length) return attachments;
   const flows = [readFlow(before), readFlow(after)];
@@ -119,6 +119,10 @@ export function reattach(before: string, after: string, attachments: Attachment[
   const [old, next] = maps.map(map => boardTopics(map!));
   const taken = new Map(next.filter(topic => topic.board).map(topic => [topic.board!.toLowerCase(), topic]));
   const sameShape = old.length === next.length && old.every((topic, i) => topic.id === next[i].id);
+  // Topics of the whole outline, detail boards included, to tell a topic that left this board from a removed one.
+  const outline = new Set<string>();
+  const collect = (topic: MindTopic) => { outline.add(topic.label); topic.children.forEach(collect); };
+  collect(maps[1].root);
   const kept: Attachment[] = [];
   for (const item of attachments) {
     const from = old.find(topic => topic.id === item.shape);
@@ -133,11 +137,12 @@ export function reattach(before: string, after: string, attachments: Attachment[
     const inPlace = next.find(topic => topic.id === from.id);
     // Topics with the same labels from the centre down are told apart by their place.
     const samePath = next.filter(topic => path(topic) === path(from));
-    const to = moved ? next.find(topic => topic.id === moved.get(from.id))
+    const to = from.id === 'n' ? next[0] : moved ? next.find(topic => topic.id === moved.get(from.id))
       : (inPlace && path(inPlace) === path(from) ? inPlace : samePath.length === 1 ? samePath[0] : undefined) ?? (elsewhere ? sameLabel[0]
         // A renamed ancestor keeps the topic in place; so does a renamed topic when no topic was added or removed.
         : inPlace && !another(inPlace) && (inPlace.path.at(-1) === label || sameShape) ? inPlace : undefined);
     if (isFileAttachment(item)) {
+      if (!to && !sameLabel.length && outline.has(label)) return `The topic “${label}” opens the file “${item.file}” and would move to a detail board. Keep it on this board, or remove its link first.`;
       if (!to) continue;
       if (to.board) return `The topic “${label}” would open a detail board and the file “${item.file}”. Choose fewer detail boards, or remove its link first.`;
       if (kept.some(other => other.shape === to.id)) return `Two topics named “${label}” open boards or files. Rename one of them first.`;

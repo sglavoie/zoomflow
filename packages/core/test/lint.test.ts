@@ -751,3 +751,13 @@ it('reads classes after a single-quoted label with an escaped quote', async () =
   expect(lint(await compile(source)).diagnostics).toEqual([]);
   expect([...definedClasses({ index: source }, 'index') ?? []]).toEqual(['c']);
 });
+
+it('follows `./` and `../` imports to the files they name', async () => {
+  const run = async (fs: Record<string, string>) => lint(await d2.compile({ fs, inputPath: 'app/main.d2', options: { layout: 'elk' } }));
+  const glob = await run({ 'sub/part.d2': '*.link: layers.nope\nk\n', 'app/main.d2': '...@../sub/part\nr\n' });
+  expect(glob.diagnostics.map(({ rule, range }) => [rule, range?.split(',')[0]])).toEqual([['dangling-link', 'sub/part.d2']]);
+  const spread = await run({ 'lib.d2': 'classes: {go: {link: layers.nope}}\n', 'app/main.d2': '...@../lib\nx: {class: go}\n' });
+  expect(spread.diagnostics.map(({ rule }) => rule)).toEqual(['dangling-link']);
+  const keyed = await run({ 'app/lib.d2': 'classes: {hot: {style.fill: red}}\n', 'app/main.d2': 'g: @./lib\nx: {class: hot}\n' });
+  expect(keyed.diagnostics[0].message).toContain('...@./lib');
+});

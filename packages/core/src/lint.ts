@@ -64,7 +64,7 @@ interface AstValue {
   import?: AstImport;
   map?: AstMap;
 }
-interface AstImport { spread?: boolean; path?: AstValue[] }
+interface AstImport { spread?: boolean; pre?: string; path?: AstValue[] }
 interface AstKey {
   range?: string;
   key?: { path?: AstValue[] };
@@ -386,7 +386,9 @@ export function lint(compiled: LintInput, options: LintOptions = {}): LintResult
     }
     /** Globs an imported file sets, under the key it is imported into, and the classes a whole spread file defines. */
     function importRules(imported: AstImport, scope: string[]) {
-      const path = stringValue(imported.path?.[0]);
+      // D2 keeps a leading `./` or `../` apart from the rest of the path.
+      const name = stringValue(imported.path?.[0]);
+      const path = name && `${imported.pre ?? ''}${name}`;
       const file = compiled.fs && entryFile !== undefined && path ? importPath(compiled.fs, entryFile, path) : undefined;
       if (!file) return;
       const rules = fileLinkRules(compiled.fs!, file);
