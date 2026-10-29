@@ -97,9 +97,10 @@ export function setupMindMapBuilder(create: (source: string, name: string) => vo
     if (next.mode === 'edit' && !existing) return;
     target = next;
     editing = next.mode === 'edit';
-    // A board starts from its shape's label as the central topic.
-    const example = next.mode === 'board' ? `${next.name.replace(/\s+/g, ' ').trim() || 'Topic'}\n  First idea\n  Second idea` : mindMapExample;
-    const map: MindMap = existing ?? { direction: 'right', split: 2, look: plainLook(), root: parseOutline(example)! };
+    // A board starts from its shape's label as the central topic, kept whole: outline markup such as `- ` is its text.
+    const root = next.mode === 'board' ? { label: next.name.replace(/\s+/g, ' ').trim() || 'Topic',
+      children: ['First idea', 'Second idea'].map(label => ({ label, children: [] })) } : parseOutline(mindMapExample)!;
+    const map: MindMap = existing ?? { direction: 'right', split: 2, look: plainLook(), root };
     returnFocus = edit ?? launch;
     fallbackFocus = fallback;
     name.value = next.name;

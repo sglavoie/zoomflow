@@ -243,3 +243,15 @@ it('drops a file link with its removed step or topic, and moves it with a moved 
   expect(reattach(before, mindMapSource(map('Plan\n  Money')), topics)).toEqual([]);
   expect(reattach(before, mindMapSource(map('Plan\n  People\n    Hiring\n      Roles', 2)), topics)).toMatch(/would open a detail board and the file/);
 });
+
+it('reads the section it writes after one edited by hand, so the new link stays attached', async () => {
+  let source = (await sites('a\nb\nc\n')).sites.linkFile('root', 'a', './other.d2').replace('a.link', '# see other\na.link');
+  source = (await sites(source)).sites.linkFile('root', 'b', './third.d2');
+  expect(splitBoard(source).attachments).toEqual([{ shape: 'b', file: './third.d2' }]);
+  const { sites: linked } = await sites(source);
+  expect(linked.shapeAction('root', 'b')).toEqual({ action: 'file', link: './third.d2', attached: true });
+  // Linking again rewrites that section rather than adding another.
+  const again = linked.linkFile('root', 'c', './other.d2');
+  expect(again.split('# Boards that open from shapes on this board.').length).toBe(3);
+  expect(splitBoard(again).attachments).toEqual([{ shape: 'b', file: './third.d2' }, { shape: 'c', file: './other.d2' }]);
+});

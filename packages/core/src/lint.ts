@@ -448,7 +448,7 @@ export function lint(compiled: LintInput, options: LintOptions = {}): LintResult
             && stringValue(key.key.path[0]) === 'link').at(-1);
           const filters = keys.filter((key) => key?.ampersand || key?.not_ampersand).map((key) => ({
             key: (key!.key?.path ?? []).map((part) => stringValue(part) ?? '').join('.'),
-            value: stringValue(key!.value) ?? key!.value?.number?.raw ?? String(key!.value?.boolean?.value ?? ''), glob: Boolean(key!.value?.unquoted_string), negate: Boolean(key!.not_ampersand) }));
+            value: stringValue(key!.value) ?? key!.value?.number?.raw ?? String(key!.value?.boolean?.value ?? ''), glob: Boolean(key!.value?.unquoted_string && stringValue(key!.value)?.includes('*')), negate: Boolean(key!.not_ampersand) }));
           if (link) globs.push({ path: named ? pattern.slice(0, -1) : pattern, link: authoredLink(link), filters });
           continue;
         }

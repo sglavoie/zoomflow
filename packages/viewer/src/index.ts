@@ -100,7 +100,7 @@ export class Viewer {
 
   private readonly goUp = (event: KeyboardEvent) => {
     if (event.defaultPrevented || event.repeat || this.settings.active?.() === false || event.altKey || event.ctrlKey || event.metaKey ||
-      (event.target instanceof Element && event.target.closest('input, textarea, select, [contenteditable="true"]'))) return;
+      (event.target instanceof Element && event.target.closest('input, textarea, select, [contenteditable]:not([contenteditable="false"])'))) return;
     if (event.key === 'Escape' || event.key === 'Backspace') {
       const parent = this.boards.get(this.current)?.parent;
       if (parent) { event.preventDefault(); void this.navigate(parent); }

@@ -55,7 +55,8 @@ export function setupBreadcrumbs(container: HTMLElement) {
         node.textContent = item.name;
         node.title = item.name;
         if (index === items.length - 1) node.setAttribute('aria-current', 'page');
-        node.onclick = () => { close(); item.activate(); };
+        // A menu item hides with the menu, so focus moves to its toggle first, for navigation to restore.
+        node.onclick = () => { close(menu.contains(node)); item.activate(); };
         return node;
       }
       function append(node: HTMLElement) {

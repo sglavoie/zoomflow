@@ -67,3 +67,9 @@ it('finds board blocks past single-quoted keys', async () => {
   const range = boardBlocks(compiled.graph, source).get('root.layers.b');
   expect(range && source.slice(range.from, range.to)).toBe('c');
 });
+
+it('counts board declarations as D2 names boards, ignoring case and quoted `"layers"` keys', async () => {
+  const source = 'layers: {x: {a}}\nlayers.X.b\n"layers".y.c\nlayers.y: {d}\n';
+  const blocks = boardBlocks((await d2.compile(source, { layout: 'elk' })).graph, source);
+  expect([...blocks.keys()]).toEqual(['root', 'root.layers.y']);
+});

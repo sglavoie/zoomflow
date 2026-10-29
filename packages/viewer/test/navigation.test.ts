@@ -243,6 +243,21 @@ describe('Viewer file links and the root board', () => {
     expect(onTopLevelBack).toHaveBeenCalledTimes(3);
   });
 
+  it('leaves Escape and Backspace to every kind of editable host', async () => {
+    await mount({});
+    await viewer!.navigate('root.layers.L');
+    for (const value of ['true', '', 'plaintext-only']) {
+      const editor = document.createElement('div');
+      editor.setAttribute('contenteditable', value);
+      document.body.append(editor);
+      const event = new KeyboardEvent('keydown', { key: 'Backspace', bubbles: true, cancelable: true });
+      editor.dispatchEvent(event);
+      editor.remove();
+      expect(event.defaultPrevented, value).toBe(false);
+    }
+    expect(viewer!.currentBoard?.id).toBe('root.layers.L');
+  });
+
   it('records the document in history entries and hands entries of another document to it', async () => {
     let key = 'one';
     const restore = vi.fn((state: { zoomflowFile: string }) => state.zoomflowFile === 'two');

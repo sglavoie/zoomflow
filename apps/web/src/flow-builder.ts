@@ -129,9 +129,12 @@ export function setupFlowBuilder(create: (source: string, name: string) => void,
       label.value = step.label;
       label.placeholder = 'What happens here?';
       label.setAttribute('aria-label', `Step ${i + 1} name`);
+      // Checked on every render too: a rebuilt row holding only spaces would otherwise pass.
+      const check = () => label.setCustomValidity(label.value.trim() ? '' : 'Give this step a name.');
+      if (label.value) check();
       label.addEventListener('input', () => {
         step.label = label.value;
-        label.setCustomValidity(label.value.trim() ? '' : 'Give this step a name.');
+        check();
         refreshChoices();
       });
       const shape = document.createElement('select');

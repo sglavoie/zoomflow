@@ -110,7 +110,7 @@ export function createViewport(stage: HTMLElement, host: HTMLElement, clamp: typ
   function releaseSpace() { spaceHeld = false; stage.classList.remove('zf-pan-ready'); }
   function onKeyDown(event: KeyboardEvent) {
     if (event.code !== 'Space' || event.target instanceof Element &&
-      event.target.closest('button, [role="button"], input, textarea, select, [contenteditable="true"]')) return;
+      event.target.closest('button, [role="button"], input, textarea, select, [contenteditable]:not([contenteditable="false"])')) return;
     // Auto-repeat would scroll the page mid-pan.
     if (event.repeat) { if (spaceHeld) event.preventDefault(); return; }
     // A hidden stage may never receive pointerleave; it must not claim Space page-wide.

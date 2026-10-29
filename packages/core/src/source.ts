@@ -122,12 +122,12 @@ export function shapeFiles(compiled: { diagram: Diagram; graph: unknown },
 export function idSegments(id: string): string[] {
   return [...id.matchAll(/"((?:[^"\\]|\\.)*)"|'([^']*)'|([^.]+)/g)].map(([, double, single, plain]) => double?.replace(/\\(.)/g, '$1') ?? single ?? plain);
 }
-/** Whether a glob key path, where `*` matches within a segment and `**` any number of them, names a shape ID. */
+/** Whether a glob key path, where `*` matches within a segment and `**` or `***` any number of them, names a shape ID. */
 export function globMatches(pattern: GlobSegment[], id: string[]): boolean {
   const match = (p: number, s: number): boolean => {
     if (p === pattern.length) return s === id.length;
     const part = pattern[p];
-    if (part.glob && part.text === '**') {
+    if (part.glob && (part.text === '**' || part.text === '***')) {
       for (let next = s + 1; next <= id.length; next++) if (match(p + 1, next)) return true;
       return false;
     }
@@ -139,8 +139,8 @@ export function globMatches(pattern: GlobSegment[], id: string[]): boolean {
   return match(0, 0);
 }
 /** Whether a shape passes a glob filter, as D2 reads them: by the shape's compiled attributes, such as `shape` or
- * `style.fill`, with `level` from 0, and `leaf` and `connected` from the board. A glob value such as `a*` ignores
- * case; a quoted one does not. An attribute the shape lacks never matches, nor, in this D2, does `id`. */
+ * `style.fill`, with `level` from 0, and `leaf` and `connected` from the board. An unquoted value with `*`, such as `a*`, ignores
+ * case; any other does not. An attribute the shape lacks never matches, nor, in this D2, does `id`. */
 export function filterMatches(filter: GlobFilter, board: Board, shape: Diagram['shapes'][number], attributes: Record<string, unknown>): boolean {
   const segments = idSegments(shape.id);
   const inside = (other: string) => {
@@ -157,8 +157,11 @@ export function filterMatches(filter: GlobFilter, board: Board, shape: Diagram['
     const scalar = (value as { value?: unknown } | undefined)?.value;
     if (typeof scalar === 'string') actual = scalar;
     // D2 keeps an icon as a parsed URL.
-    const url = filter.key === 'icon' ? value as { Scheme?: string; Opaque?: string; Host?: string; Path?: string; RawQuery?: string; Fragment?: string } | undefined : undefined;
-    if (url?.Scheme !== undefined) actual = `${url.Scheme ? `${url.Scheme}:` : ''}${url.Opaque || `${url.Host ? `//${url.Host}` : ''}${url.Path ?? ''}`}` +
+    const url = filter.key === 'icon' ? value as { Scheme?: string; Opaque?: string; Host?: string; Path?: string; RawPath?: string; RawQuery?: string; Fragment?: string } | undefined : undefined;
+    // As Go writes it: the path as escaped in the source, else re-escaped.
+    const path = url?.RawPath || encodeURIComponent(url?.Path ?? '').replace(/%(24|26|2B|2C|2F|3A|3B|3D|40)/g, (code) => decodeURIComponent(code))
+      .replace(/[!'()*]/g, (char) => `%${char.charCodeAt(0).toString(16).toUpperCase()}`);
+    if (url?.Scheme !== undefined) actual = `${url.Scheme ? `${url.Scheme}:` : ''}${url.Opaque || `${url.Host ? `//${url.Host}` : ''}${path}`}` +
       `${url.RawQuery ? `?${url.RawQuery}` : ''}${url.Fragment ? `#${url.Fragment}` : ''}`;
   }
   const pattern = filter.glob ? new RegExp(`^${filter.value.split('*').map((piece) => piece.replace(/[.+?^${}()|[\]\\]/g, '\\$&')).join('.*')}$`, 'si') : undefined;
@@ -196,12 +199,14 @@ export function linkSources(compiled: { diagram: Diagram; graph: unknown; fs?: R
   });
   let attributes: Map<string, Record<string, unknown>> | undefined;
   /** The last glob that applies to the shape. A glob applies to its board and the scenarios and steps that inherit
-   * it, and an imported file's globs only to the shapes that file writes. */
+   * it, `***` to layers as well, and an imported file's globs only to the shapes that file writes. */
   const lastGlob = (board: Board, shape: Diagram['shapes'][number], key: string) => {
     let last: { glob: GlobLink; order?: number[] } | undefined;
     for (const glob of rules?.globs ?? []) {
       const full = `root${glob.board}`;
-      if (board.id !== full && !(board.id.startsWith(`${full}.`) && !/\.layers\./.test(`${board.id.slice(full.length)}.`))) continue;
+      // `***` reaches into layers too.
+      const global = glob.path[0]?.glob && glob.path[0].text === '***';
+      if (board.id !== full && !(board.id.startsWith(`${full}.`) && (global || !/\.layers\./.test(`${board.id.slice(full.length)}.`)))) continue;
       if (!globMatches(glob.path, idSegments(shape.id)) || glob.file !== entry && !files.get(key)?.has(glob.file)) continue;
       if (glob.filters.length && !glob.filters.every((filter) => {
         const found = (attributes ??= shapeAttributes(compiled.diagram, compiled.graph)).get(key);
@@ -335,7 +340,7 @@ function mapLink(text: string, from: number): { link?: Scalar; filters: GlobFilt
     const value = filter && scalarAt(text, filterKey.lastIndex);
     if (filter) {
       if (!value) return { filters: [] };
-      filters.push({ key: filter[2].trim(), value: value.value, glob: !/["']/.test(text[value.from]), negate: filter[1] === '!' });
+      filters.push({ key: filter[2].trim(), value: value.value, glob: !/["']/.test(text[value.from]) && value.value.includes('*'), negate: filter[1] === '!' });
     } else if (sticky(linkKey, text, start)) link = scalarAt(text, linkKey.lastIndex) ?? link;
   }
   return { link, filters };
@@ -621,20 +626,24 @@ interface AstMapKey { key?: { path?: AstKeySegment[] }; value?: { map?: AstMap }
  * Boards declared in more than one place, imported, or under scenarios and steps have no single block, so they are left out. */
 export function boardBlocks(graph: unknown, source: string, filename = 'index'): Map<string, SourceRange> {
   const blocks = new Map<string, SourceRange>([['root', { from: 0, to: source.length }]]);
+  // Keyed in lower case, as D2 matches board names.
   const declarations = new Map<string, number>();
-  function declare(path: (string | undefined)[], value: AstMapKey['value'], board: string) {
-    if (path[0] !== 'layers' || path.length < 2) {
-      if (path.length === 1 && path[0] === 'layers' && value?.map) {
+  // A quoted `"layers"` is an ordinary shape.
+  const keyword = (part: AstKeySegment | undefined) => part !== undefined && 'unquoted_string' in part && keyText(part) === 'layers';
+  function declare(path: AstKeySegment[], value: AstMapKey['value'], board: string) {
+    if (!keyword(path[0]) || path.length < 2) {
+      if (path.length === 1 && keyword(path[0]) && value?.map) {
         for (const node of value.map.nodes ?? []) {
-          const child = node.map_key?.key?.path?.map(keyText);
-          if (child) declare(['layers', ...child], node.map_key!.value, board);
+          const child = node.map_key?.key?.path;
+          if (child) declare([path[0], ...child], node.map_key!.value, board);
         }
       }
       return;
     }
-    if (path[1] === undefined) return;
-    const id = `${board}.layers.${boardKey(path[1])}`;
-    declarations.set(id, (declarations.get(id) ?? 0) + 1);
+    const name = keyText(path[1]);
+    if (name === undefined) return;
+    const id = `${board}.layers.${boardKey(name)}`;
+    declarations.set(id.toLowerCase(), (declarations.get(id.toLowerCase()) ?? 0) + 1);
     if (path.length > 2) { declare(path.slice(2), value, id); return; }
     const range = value?.map?.range && parseSourceRange(value.map.range, source, filename);
     if (range && source[range.from] === '{' && source[range.to - 1] === '}') blocks.set(id, { from: range.from + 1, to: range.to - 1 });
@@ -642,12 +651,12 @@ export function boardBlocks(graph: unknown, source: string, filename = 'index'):
   }
   function visit(map: AstMap, board: string) {
     for (const node of map.nodes ?? []) {
-      const path = node.map_key?.key?.path?.map(keyText);
+      const path = node.map_key?.key?.path;
       if (path) declare(path, node.map_key!.value, board);
     }
   }
   const ast = (graph as { ast?: AstMap }).ast;
   if (ast) visit(ast, 'root');
-  for (const [id, count] of declarations) if (count > 1) blocks.delete(id);
+  for (const id of blocks.keys()) if ((declarations.get(id.toLowerCase()) ?? 0) > 1) blocks.delete(id);
   return blocks;
 }

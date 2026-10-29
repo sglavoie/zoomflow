@@ -35,6 +35,19 @@ describe('setupBreadcrumbs', () => {
     expect(activated).toEqual(['checkout']);
   });
 
+  it('moves focus to the menu toggle before a board picked from the menu opens, so navigation can restore it', () => {
+    const container = document.createElement('nav');
+    document.body.append(container);
+    const crumbs = setupBreadcrumbs(container);
+    cleanup = crumbs.destroy;
+    let focused: Element | null = null;
+    crumbs.render(['Root', 'a', 'b', 'c', 'd'].map((name) => ({ name, activate: () => { focused = document.activeElement; } })));
+    const toggle = container.querySelector<HTMLButtonElement>('.zf-ancestor-toggle')!;
+    toggle.click();
+    container.querySelector<HTMLButtonElement>('.zf-ancestor-menu button')!.click();
+    expect(focused).toBe(toggle);
+  });
+
   it('collapses the middle of long trails behind an Earlier boards menu', () => {
     const { visible, toggle, menu } = mount(['Root', 'a', 'b', 'c', 'd', 'e']);
     expect(visible().map((node) => node.textContent)).toEqual(['Root', '/', '…', '/', 'd', '/', 'e']);

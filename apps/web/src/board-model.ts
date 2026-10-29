@@ -17,12 +17,14 @@ const quoted = '"(?:[^"\\\\]|\\\\.)*"';
 const linkLine = new RegExp(`^(.+)\\.link: layers\\.(${quoted})$`);
 const fileLine = new RegExp(`^(.+)\\.link: (${quoted})$`);
 
-/** The attached boards are read only in the exact form `joinBoard` writes; anything else stays own text. */
+/** The attached boards are read only in the exact form `joinBoard` writes; anything else stays own text. Of several
+ * sections, the last is read: a hand-edited one stays own text, and `joinBoard` writes a new one after it. */
 export function splitBoard(text: string): BoardParts {
   const normalized = text.replaceAll('\r\n', '\n');
-  const at = normalized.startsWith(`${heading}\n`) ? 0 : normalized.indexOf(`\n${heading}\n`) + 1;
+  const later = normalized.lastIndexOf(`\n${heading}\n`) + 1;
+  const at = later || (normalized.startsWith(`${heading}\n`) ? 0 : -1);
   const whole = { own: text, attachments: [] };
-  if (at === 0 && !normalized.startsWith(`${heading}\n`)) return whole;
+  if (at < 0) return whole;
   const lines = normalized.slice(at + heading.length + 1).split('\n');
   const attachments: Attachment[] = [];
   try {

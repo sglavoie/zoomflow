@@ -213,7 +213,9 @@ export function setupAiAssistant({ root, part }: PaneScope, { read, validate, ap
       if (typeof data.reply !== 'string' || (data.source !== null && typeof data.source !== 'string')) {
         throw new AiError('The AI server returned an incomplete response. Try again; your source is unchanged.', 'Expected reply text and source text or null.');
       }
-      const locked = data.source !== null && data.source !== snapshot.source ? readOnly() : undefined;
+      // The editor keeps `\n` line breaks: a `\r` left in would become a line of its own.
+      const source = data.source === null ? null : (data.source as string).replace(/\r\n?/g, '\n');
+      const locked = source !== null && source !== snapshot.source ? readOnly() : undefined;
       if (locked) {
         status.dataset.kind = 'info';
         status.textContent = `${data.reply ? `${data.reply} ` : ''}The proposed source change was not applied. ${locked}`;
@@ -221,12 +223,12 @@ export function setupAiAssistant({ root, part }: PaneScope, { read, validate, ap
         prompt.value = '';
         return;
       }
-      if (data.source !== null) {
+      if (source !== null) {
         controller.signal.throwIfAborted();
         if (!unchanged()) {
           throw new Error('The diagram changed while AI was working. Your edits were kept; send the prompt again.');
         }
-        try { await validate(data.source); }
+        try { await validate(source); }
         catch (error) {
           if (error instanceof AiError) throw error;
           throw new AiError('AI returned invalid D2. Your source is unchanged; try a smaller change or rephrase the request.', String(error));
@@ -235,8 +237,8 @@ export function setupAiAssistant({ root, part }: PaneScope, { read, validate, ap
         if (!unchanged()) {
           throw new Error('The diagram changed while AI was working. Your edits were kept; send the prompt again.');
         }
-        if (data.source !== snapshot.source) {
-          changeSummary.textContent = apply(data.source);
+        if (source !== snapshot.source) {
+          changeSummary.textContent = apply(source);
           changeSummary.disabled = false;
           dismiss.hidden = false;
           undoRevision = read().revision;
@@ -245,7 +247,7 @@ export function setupAiAssistant({ root, part }: PaneScope, { read, validate, ap
         }
       }
       status.dataset.kind = 'success';
-      status.textContent = `${data.source !== null && data.source !== snapshot.source ? 'Diagram updated. ' : ''}${data.reply || 'Done.'}`;
+      status.textContent = `${source !== null && source !== snapshot.source ? 'Diagram updated. ' : ''}${data.reply || 'Done.'}`;
       if (!changeFeedback.hidden) requestAnimationFrame(() => {
         if (changeFeedback.hidden || undoRevision !== read().revision) return;
         // Reveal the change summary and Undo within the tools, leaving editor
@@ -254,7 +256,7 @@ export function setupAiAssistant({ root, part }: PaneScope, { read, validate, ap
         const visibleBottom = tools.getBoundingClientRect().bottom;
         if (bottom > visibleBottom) tools.scrollTop += bottom - visibleBottom;
       });
-      onStatus(data.source !== null && data.source !== snapshot.source ? 'AI updated the source.' : 'AI response ready.', 'info');
+      onStatus(source !== null && source !== snapshot.source ? 'AI updated the source.' : 'AI response ready.', 'info');
       prompt.value = '';
     } catch (error) {
       if (controller.signal.aborted) {

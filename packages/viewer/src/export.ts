@@ -284,7 +284,11 @@ function offlineViewer(lib: typeof runtime) {
     else if (action?.kind === 'missing-file') setMessage(`Missing file: ${describeFile(action.path)}`, true);
   }
   stage.addEventListener('click', follow);
-  stage.addEventListener('auxclick', (event) => lib.followLink(event, resolve));
+  // A link with a route of its own opens it in a new tab; one without, such as a missing board's, has nowhere to go.
+  stage.addEventListener('auxclick', (event) => {
+    const link = event.target instanceof Element ? event.target.closest('a') : null;
+    if (!link?.getAttribute('href')?.startsWith('#')) lib.followLink(event, resolve);
+  });
   stage.addEventListener('keydown', (event) => { if (event.key === 'Enter') follow(event); });
   window.addEventListener('keydown', (event) => {
     if (event.defaultPrevented || event.repeat || event.altKey || event.ctrlKey || event.metaKey ||

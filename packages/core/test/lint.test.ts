@@ -507,6 +507,8 @@ it('applies globs only to the shapes their filters pass, as D2 does, and reads g
   const shapes = async (fs: Record<string, string>) => lint({ ...await d2.compile({ fs, options: { layout: 'elk' } }), fs }).diagnostics
     .filter((item) => item.rule === 'dangling-link').map((item) => item.shape).sort();
   for (const [filter, expected] of [['&shape: circle', ['a']], ['!&shape: circle', ['b', 'c', 'c.d']], ['&label: A*', ['a']], ['&label: a*', ['a']], ['&label: "A*"', []],
+    // Without `*`, an unquoted value matches exactly too.
+    ['&label: a', []], ['&shape: CIRCLE', []],
     ['&style.fill: red', ['a']], ['&width: 90', ['a']], ['&icon: https://x.y/i.svg', ['b']], ['&connected: false', ['c', 'c.d']],
     ['&leaf: false', ['c']], ['&level: 1', ['c.d']], ['&id: c', []], ['&shape: circle; !&label: A', []]] as const) {
     const glob = `**: {${filter}; link: layers.missing}`;
@@ -517,6 +519,16 @@ it('applies globs only to the shapes their filters pass, as D2 does, and reads g
   const layered = lint(await compile('layers.x: {*.link: layers.missing; a}\nz.link: layers.x')).diagnostics;
   expect(layered.map(({ rule, board, shape, message }) => [rule, board, shape, message]))
     .toEqual([['dangling-link', 'root.layers.x', 'a', 'Link targets missing board "Root > x > missing".']]);
+});
+
+it('matches percent-encoded icons, and applies `***` at every depth and in layers', async () => {
+  const shapes = async (source: string) => lint(await d2.compile(source, { layout: 'elk' })).diagnostics
+    .filter((item) => item.rule === 'dangling-link').map((item) => `${item.board}/${item.shape}`).sort();
+  const icons = 'i.icon: https://icons.terrastruct.com/essentials%2F004-picture.svg\nm.icon: https://e.com/a%20b.svg\n';
+  expect(await shapes(`${icons}*: {&icon: https://icons.terrastruct.com/essentials%2F004-picture.svg; link: layers.missing}`)).toEqual(['root/i']);
+  expect(await shapes(`${icons}*: {&icon: https://e.com/a%20b.svg; link: layers.missing}`)).toEqual(['root/m']);
+  expect(await shapes('a\ng.b\nlayers.x: {c}\n***.link: layers.missing'))
+    .toEqual(['root.layers.x/c', 'root/a', 'root/g', 'root/g.b']);
 });
 
 it('reads globs after a quoted key holding a comment mark or brace', async () => {

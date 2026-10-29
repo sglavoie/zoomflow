@@ -835,6 +835,8 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
     retry(restart: boolean) {
       if (!currentDocumentKey) return;
       if (restart) previewQueue.restart();
+      // Linked files' boards render with the engine a restart disposes.
+      if (restart) linkedCompiles.clear();
       clearTimeout(debounce);
       invalidateSource();
       void load(editor.source, documentName, true);
