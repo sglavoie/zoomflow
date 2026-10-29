@@ -2,6 +2,7 @@ import type { setupExamplePicker } from './example-picker';
 import { changedOnDisk, refreshDiskVersion } from './disk-version';
 import { hasWritePermission, writePermission, type FileHandles } from './file-handles';
 import { describeError } from './text';
+import { downloadSource } from './download';
 
 type PickerWindow = Window & { showSaveFilePicker?: (options?: object) => Promise<FileSystemFileHandle> };
 const pickerWindow = window as PickerWindow;
@@ -22,6 +23,8 @@ export type SaveFileTarget = {
   key: () => string | undefined;
   name: () => string;
   source: () => string;
+  /** The current revision was downloaded; later edits still need their own download. */
+  downloaded: () => void;
   /** The saved draft is still open: take on its key and name, which a saved example changes. */
   adopt: (saved: { key: string; name: string }) => void;
   setActivity: (message: string, kind?: 'info' | 'error') => void;
@@ -88,7 +91,11 @@ export function setupSaveFile(button: HTMLButtonElement, target: SaveFileTarget)
         }
       }
       if (!handle) {
-        document.querySelector<HTMLButtonElement>('#save-source')!.click();
+        const filename = downloadSource(source, name);
+        if (target.key() === key) {
+          if (target.source() === source) target.downloaded();
+          target.setActivity(`Source download started: ${filename}`);
+        }
         return;
       }
       saving = setTimeout(() => { if (target.key() === key) target.setActivity('Saving file…'); }, 700);

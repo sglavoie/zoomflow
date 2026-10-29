@@ -85,9 +85,9 @@ export function setupExamplePicker({ readSource, open, onState, forget, checkpoi
   let split = false;
   const downloadRequested: Record<PaneId, boolean> = { a: false, b: false };
   /** Opening a file or project may reuse a draft without unsaved changes that the other pane is not showing. */
-  function reusable(item: Draft) {
+  function reusable(item: Draft, pane = target) {
     return item.source === item.baseline && !(split && [...drafts.values()].some((other) =>
-      other.key === current[otherPane(target)] && (other.key === item.key || item.projectId && other.projectId === item.projectId)));
+      other.key === current[otherPane(pane)] && (other.key === item.key || item.projectId && other.projectId === item.projectId)));
   }
   function currentDraft() { return draftOf(target); }
   function syncSources() {
@@ -465,14 +465,14 @@ export function setupExamplePicker({ readSource, open, onState, forget, checkpoi
     },
     /** `match` tells whether a draft is the file being opened (undefined: compare name and contents);
      * without it, the file always becomes a new draft. A matching draft without unsaved changes is reused. */
-    rememberFile(name: string, source: string, baseline = source, match?: (key: string) => boolean | undefined) {
+    rememberFile(name: string, source: string, baseline = source, match?: (key: string) => boolean | undefined, pane = target) {
       syncSources();
-      const existing = match && [...drafts.values()].find((item) => item.key.startsWith('file:') && !item.recoveredFrom && !item.projectId && reusable(item) &&
+      const existing = match && [...drafts.values()].find((item) => item.key.startsWith('file:') && !item.recoveredFrom && !item.projectId && reusable(item, pane) &&
         (match(item.key) ?? (item.name === name && item.baseline === baseline && item.source === source)));
       if (existing) {
         Object.assign(existing, { name, title: name, source, baseline, updatedAt: Date.now() });
         refreshRows.get(existing.key)?.();
-        activate(existing.key);
+        activate(existing.key, pane);
         picker.open = false;
         persist();
         return existing.key;
@@ -482,7 +482,7 @@ export function setupExamplePicker({ readSource, open, onState, forget, checkpoi
       const item: Draft = { key, number, name, title: name, description: 'Your file · return to your edits', source, baseline, updatedAt: Date.now() };
       drafts.set(key, item);
       addOption(item);
-      activate(key);
+      activate(key, pane);
       picker.open = false;
       persist();
       return key;
@@ -490,12 +490,12 @@ export function setupExamplePicker({ readSource, open, onState, forget, checkpoi
     /** Reopening an unchanged project reuses its drafts; see `rememberFile` for `match`. An unsaved project, such as
      * a draft atlas in a browser that cannot write to folders, is not on disk, so all of its source counts as unsaved. */
     rememberFolder(folderName: string, files: { path: string; source: string }[], match: (key: string) => boolean | undefined = () => undefined,
-      saved = true) {
+      saved = true, pane = target) {
       syncSources();
       const sources = new Map(files.map((file) => [file.path, file.source]));
       const project = saved ? [...projectGroups.keys()].find((id) => {
         const members = [...drafts.values()].filter((item) => item.projectId === id);
-        return members.length === files.length && members.every((item) => !item.recoveredFrom && reusable(item) &&
+        return members.length === files.length && members.every((item) => !item.recoveredFrom && reusable(item, pane) &&
           item.title === `${folderName}/${item.path}` && sources.has(item.path!) && (match(item.key) ?? item.baseline === sources.get(item.path!)));
       }) : undefined;
       const projectId = project ?? `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
@@ -518,7 +518,7 @@ export function setupExamplePicker({ readSource, open, onState, forget, checkpoi
       }
       const home = homePath(files.map((file) => file.path));
       const first = files.find((file) => file.path === home)!;
-      activate(keys[first.path]);
+      activate(keys[first.path], pane);
       picker.open = false;
       persist();
       return { key: keys[first.path], name: first.path.split('/').at(-1)!, source: first.source, keys, projectId };

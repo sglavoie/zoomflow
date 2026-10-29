@@ -3,6 +3,9 @@ import { beforeEach, expect, it, vi } from 'vitest';
 import type { FileHandles } from '../src/file-handles';
 import { writePermission } from '../src/file-handles';
 import { setupSaveFile } from '../src/save-file';
+import { downloadSource } from '../src/download';
+
+vi.mock('../src/download', () => ({ downloadSource: vi.fn((_source: string, name: string) => name) }));
 
 type Permission = { query: PermissionState; request: PermissionState | Error };
 
@@ -30,18 +33,19 @@ function fakeHandle(name: string, permission: Permission) {
 let downloads = 0;
 beforeEach(() => {
   downloads = 0;
-  document.body.innerHTML = '<button id="save-file"></button><button id="save-file-b"></button><button id="save-source"></button>';
-  document.querySelector<HTMLButtonElement>('#save-source')!.onclick = () => { downloads++; };
+  vi.mocked(downloadSource).mockClear().mockImplementation((_source, name) => { downloads++; return name; });
+  document.body.innerHTML = '<button id="save-file"></button><button id="save-file-b"></button>';
 });
 
 function setup(handles: Map<string, FileSystemFileHandle>, id = 'save-file') {
   const button = document.querySelector<HTMLButtonElement>(`#${id}`)!;
-  const state = { key: 'file:doc' as string | undefined, activity: '' };
+  const state = { key: 'file:doc' as string | undefined, source: 'a: Mine', name: 'doc.d2', activity: '', downloaded: false };
   const fileHandles = Object.assign(handles, { ready: async () => {} }) as unknown as FileHandles;
   setupSaveFile(button, {
     fileHandles,
     picker: () => ({ markDiskSaved: (key: string, _source: string, name: string) => ({ key, name }) }) as never,
-    key: () => state.key, name: () => 'doc.d2', source: () => 'a: Mine',
+    key: () => state.key, name: () => state.name, source: () => state.source,
+    downloaded: () => { state.downloaded = true; },
     adopt: () => {}, setActivity: (message) => { state.activity = message; }, activity: () => state.activity,
   });
   const save = async () => {
@@ -64,7 +68,7 @@ it('asks again after a dismissed permission prompt', async () => {
   const { handle, disk } = fakeHandle('doc.d2', { query: 'prompt', request: 'prompt' });
   const { state, save } = setup(new Map([['file:doc', handle]]));
   await save();
-  expect(state.activity).toBe('Zoomflow needs permission to write doc.d2; choose where to save.');
+  expect(state.activity).toBe('Source download started: doc.d2');
   await save();
   expect([disk.prompts, downloads]).toEqual([2, 2]);
 });
@@ -76,7 +80,7 @@ it('stops asking after a refusal until permission is granted or another file is 
   const { state, save } = setup(handles);
   await save();
   await save();
-  expect(state.activity).toBe('Zoomflow may not write doc.d2; choose where to save.');
+  expect(state.activity).toBe('Source download started: doc.d2');
   expect([disk.prompts, downloads]).toEqual([1, 2]);
   // Granted in site settings: Save writes back without prompting.
   permission.query = 'granted';
@@ -96,7 +100,7 @@ it('remembers a refusal in every pane that shows the draft', async () => {
   await setup(handles).save();
   const other = setup(handles, 'save-file-b');
   await other.save();
-  expect(other.state.activity).toBe('Zoomflow may not write doc.d2; choose where to save.');
+  expect(other.state.activity).toBe('Source download started: doc.d2');
   expect([disk.prompts, downloads]).toEqual([1, 2]);
 });
 
@@ -116,4 +120,41 @@ it('names the file when its save fails after switching documents', async () => {
   disk.onWrite = () => { state.key = 'file:other'; };
   await save();
   expect(state.activity).toBe('Could not save doc.d2: Disk full');
+});
+
+it('downloads the requested document when permission resolves after switching documents', async () => {
+  let release!: (permission: PermissionState) => void;
+  const { handle } = fakeHandle('doc.d2', { query: 'prompt', request: 'denied' });
+  Object.assign(handle, { queryPermission: () => new Promise<PermissionState>(resolve => { release = resolve; }) });
+  const { state, save } = setup(new Map([['file:doc', handle]]));
+  const saved = save();
+  await vi.waitFor(() => expect(release).toBeTypeOf('function'));
+  state.key = 'file:other'; state.name = 'other.d2'; state.source = 'other: Other';
+  release('denied');
+  await saved;
+  expect(downloadSource).toHaveBeenCalledWith('a: Mine', 'doc.d2');
+  expect(state.downloaded).toBe(false);
+  expect(state.activity).toBe('');
+});
+
+it('keeps later edits marked as needing a download', async () => {
+  let release!: (permission: PermissionState) => void;
+  const { handle } = fakeHandle('doc.d2', { query: 'prompt', request: 'denied' });
+  Object.assign(handle, { queryPermission: () => new Promise<PermissionState>(resolve => { release = resolve; }) });
+  const { state, save } = setup(new Map([['file:doc', handle]]));
+  const saved = save();
+  await vi.waitFor(() => expect(release).toBeTypeOf('function'));
+  state.source = 'a: Later edit';
+  release('denied');
+  await saved;
+  expect(downloadSource).toHaveBeenCalledWith('a: Mine', 'doc.d2');
+  expect(state.downloaded).toBe(false);
+  expect(state.activity).toBe('Source download started: doc.d2');
+});
+
+it('marks an unchanged document as downloaded without the header download button', async () => {
+  const { state, save } = setup(new Map());
+  await save();
+  expect(downloadSource).toHaveBeenCalledWith('a: Mine', 'doc.d2');
+  expect(state.downloaded).toBe(true);
 });

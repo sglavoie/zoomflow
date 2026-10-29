@@ -6,6 +6,7 @@ import type { DocumentExport, DocumentPane } from './document-pane';
 import type { setupExamplePicker } from './example-picker';
 import { compilerDiagnostics } from './diagnostics';
 import { describeError, plural, safeFilename } from './text';
+import { download, downloadSource } from './download';
 
 /** The project paths of the files a diagram's file links open, in board order. Connections link files too, as
  * the CLI, lint and the atlas map follow them. */
@@ -19,18 +20,6 @@ export function linkedFiles(diagram: Diagram, path: string): string[] {
     }
   }
   return paths;
-}
-
-export function download(blob: Blob, name: string) {
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = name;
-  link.addEventListener('click', (event) => event.stopPropagation());
-  document.body.append(link);
-  link.click();
-  link.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
 /** The header Export menu: diagram exports and source downloads for the active pane. */
@@ -90,8 +79,7 @@ export function setupExportMenu(activePane: () => DocumentPane | undefined, pick
   document.querySelector<HTMLButtonElement>('#save-source')!.addEventListener('click', () => {
     const pane = activePane()!;
     if (!pane.key) return;
-    const name = safeFilename(pane.name.replace(/\.d2$/i, '')) + '.d2';
-    download(new Blob([pane.source], { type: 'text/plain;charset=utf-8' }), name);
+    const name = downloadSource(pane.source, pane.name);
     picker().markDownloadRequested(pane.id);
     pane.setActivity(`Source download started: ${name}`);
   });

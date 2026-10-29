@@ -83,3 +83,23 @@ it('returns to a recovered copy of a project file by its key, not to the file it
   // A copy removed since falls back to the file at that path.
   expect(api.selectProjectPath('a', path, 'file:recovered:gone:v1')?.key).toBe(file.key);
 });
+
+it('opens files and folders into their requested pane after the header target changes', () => {
+  localStorage.clear();
+  const { api, shown } = picker();
+  shown.a = api.initial.source;
+  api.setSplit(true);
+  api.setTarget('b');
+  const file = api.rememberFile('slow.d2', 'a', 'a', undefined, 'a');
+  shown.a = 'a';
+  expect(api.currentKey('a')).toBe(file);
+  expect(api.currentKey('b')).toBeUndefined();
+  const folder = api.rememberFolder('notes', [{ path: 'index.d2', source: 'b' }], undefined, true, 'a');
+  shown.a = 'b';
+  expect(api.currentKey('a')).toBe(folder.key);
+  expect(api.currentKey('b')).toBeUndefined();
+  // Reopening in its own pane reuses it even though the header still targets b.
+  expect(api.rememberFolder('notes', [{ path: 'index.d2', source: 'b' }], undefined, true, 'a').key).toBe(folder.key);
+  // Opening the same folder in b must keep the two panes on separate drafts.
+  expect(api.rememberFolder('notes', [{ path: 'index.d2', source: 'b' }], undefined, true, 'b').key).not.toBe(folder.key);
+});

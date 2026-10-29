@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { EditorState } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';
-import { expect, it } from 'vitest';
+import { expect, it, vi } from 'vitest';
 import { sameEntries, setupFileOpen } from '../src/file-open';
 
 const handle = (id: string) => ({ id, isSameEntry: async (other: { id?: string }) => other.id === id }) as unknown as FileSystemFileHandle;
@@ -50,4 +50,30 @@ it('opens a file with CRLF line breaks as the editor will show it, so it is not 
   // The editor reads CRLF back as LF; a CRLF baseline would differ from it without any edit.
   expect(remembered).toEqual([['a -> b\nb -> c\n', 'a -> b\nb -> c\n']]);
   expect(opened).toEqual(['a -> b\nb -> c\n']);
+});
+
+it.each(['file', 'folder'] as const)('keeps a slow %s open in its original pane when focus changes', async (kind) => {
+  document.body.innerHTML = '<p id="file-status"></p><input id="file" type="file"><input id="folder" type="file"><button id="open-folder"></button><button id="open-folder-picker"></button><button id="new-atlas-picker"></button><div id="pane-a"></div>';
+  const root = document.querySelector<HTMLElement>('#pane-a')!;
+  const a = { id: 'a', replaceDocument: vi.fn(async () => {}), setActivity: vi.fn() };
+  const b = { id: 'b', replaceDocument: vi.fn(async () => {}), setActivity: vi.fn() };
+  let active = a;
+  const rememberFile = vi.fn(() => 'file:new');
+  const rememberFolder = vi.fn(() => ({ key: 'project:new:index.d2', name: 'index.d2', source: 'a', keys: {}, projectId: 'new' }));
+  setupFileOpen({ picker: () => ({ rememberFile, rememberFolder, refresh: () => {} }), activePane: () => active,
+    fileHandles: { ready: async () => {}, *[Symbol.iterator]() {}, set() {} }, directoryHandles: {},
+    paneRoots: { a: root, b: document.createElement('div') }, setActive: () => {} } as never);
+  let finish!: (text: string) => void;
+  const file = new File(['a'], 'index.d2');
+  Object.defineProperty(file, 'webkitRelativePath', { value: 'notes/index.d2' });
+  file.text = () => new Promise(resolve => { finish = resolve; });
+  const input = document.querySelector<HTMLInputElement>(`#${kind}`)!;
+  Object.defineProperty(input, 'files', { value: [file] });
+  input.dispatchEvent(new Event('change'));
+  await vi.waitFor(() => expect(finish).toBeTypeOf('function'));
+  active = b;
+  finish('a');
+  await vi.waitFor(() => expect(a.replaceDocument).toHaveBeenCalled());
+  expect(b.replaceDocument).not.toHaveBeenCalled();
+  expect((kind === 'file' ? rememberFile : rememberFolder).mock.calls[0].at(-1)).toBe('a');
 });

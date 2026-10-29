@@ -459,6 +459,7 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
   }
   setupSaveFile(saveFileButton, {
     fileHandles: shared.fileHandles, picker,
+    downloaded: () => picker().markDownloadRequested(id),
     key: () => showsAtlas() ? undefined : currentDocumentKey, name: () => documentName, source: () => editor.source,
     adopt: (saved) => { adopt(saved); setActivity(''); },
     setActivity, activity: () => activityStatus.textContent,

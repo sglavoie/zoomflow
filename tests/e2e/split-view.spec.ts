@@ -193,3 +193,28 @@ test('split view keeps one main landmark, distinct editors and per-pane divider 
   await expect(first).toHaveAttribute('aria-valuenow', initial!);
   await expect(second).toHaveAttribute('aria-valuenow', changed!);
 });
+
+test('a slow file open stays in its destination pane after focus moves', async ({ page }) => {
+  await page.selectOption('#layout', 'quad');
+  await chooseSecond(page, /Flowchart basics/);
+  await page.locator('#viewer').click({ position: { x: 5, y: 5 } });
+  await page.evaluate(() => {
+    const original = File.prototype.text;
+    File.prototype.text = function () {
+      if (this.name !== 'slow.d2') return original.call(this);
+      return new Promise<string>(resolve => {
+        Object.assign(window, { finishFileOpen: () => resolve('slow: Opened in the first pane') });
+      });
+    };
+  });
+  await page.locator('#file').setInputFiles({ name: 'slow.d2', mimeType: 'text/plain', buffer: Buffer.from('slow') });
+  await page.waitForFunction(() => 'finishFileOpen' in window);
+  await page.locator('#viewer-b').click({ position: { x: 5, y: 5 } });
+  await expect(page.locator('#pane-b')).toHaveAttribute('data-active', '');
+  await page.evaluate(() => (window as typeof window & { finishFileOpen: () => void }).finishFileOpen());
+  await expect(page.locator('#pane-document')).toHaveText(/slow\.d2/);
+  await expect(page.locator('#viewer [data-shape-id="slow"]')).toBeVisible();
+  await expect(page.locator('#pane-document-b')).toHaveText(/flowchart\.d2/);
+  await expect(page.locator('#filename')).toHaveText('flowchart.d2');
+  await expect(page.locator('#pane-b')).toHaveAttribute('data-active', '');
+});
