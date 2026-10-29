@@ -97,16 +97,23 @@ export function newProjectPath(fromPath: string, label: string, taken: Iterable<
   return path;
 }
 
-/** The project of a `project:<id>:<path>` or `atlas:<id>` key, also inside a recovered copy's
- * `file:recovered:<encoded key>:<copy>` key. */
-export function projectIdOf(key: string) {
-  const recovered = /^file:recovered:([^:]*):/.exec(key);
-  return /^(?:project|atlas):([^:]*)/.exec(recovered ? decodeURIComponent(recovered[1]!) : key)?.[1];
+/** Unwrap every recovery layer: concurrent edits to a recovered copy can themselves need recovery. */
+function originalKey(key: string): string {
+  let recovered: RegExpExecArray | null;
+  while ((recovered = /^file:recovered:([^:]*):/.exec(key))) {
+    try { key = decodeURIComponent(recovered[1]!); }
+    catch { return ''; }
+  }
+  return key;
 }
 
-/** The project path of a `project:<id>:<path>` key, also inside a recovered copy's key. */
+/** The project of a `project:<id>:<path>` or `atlas:<id>` key, also inside recovered copies' keys. */
+export function projectIdOf(key: string) {
+  return /^(?:project|atlas):([^:]*)/.exec(originalKey(key))?.[1];
+}
+
+/** The project path of a `project:<id>:<path>` key, also inside recovered copies' keys. */
 export function projectPathOf(key: string) {
-  const recovered = /^file:recovered:([^:]*):/.exec(key);
-  const project = recovered ? decodeURIComponent(recovered[1]!) : key;
+  const project = originalKey(key);
   return project.startsWith('project:') ? project.split(':').slice(2).join(':') : undefined;
 }

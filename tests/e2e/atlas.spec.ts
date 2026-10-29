@@ -188,6 +188,31 @@ test('hovering a file link previews the board it opens', async ({ page }) => {
   await expect(card.locator('img')).toBeVisible();
 });
 
+test('linked-board previews and the link editor normalize authored routes like navigation', async ({ page }) => {
+  const folder = join(mkdtempSync(join(tmpdir(), 'zoomflow-routes-')), 'routes');
+  mkdirSync(folder);
+  writeFileSync(join(folder, 'index.d2'), 'Percent\nAt\nSlash\n\n# Boards that open from shapes on this board.\nPercent.link: "./target.d2#/50%"\nAt.link: "./target.d2#/@home"\nSlash.link: "./target.d2#/Plan/"\n');
+  writeFileSync(join(folder, 'target.d2'), 'Home\nlayers: {"50%": {One; Two}; "@home": {One; Two}; Plan: {One; Two}}\n');
+  await page.goto('/');
+  await openFolder(page, folder);
+  await showingProjectFile(page, 'routes', 'index.d2');
+  for (const [shape, authored, compiled, label] of [
+    ['Percent', '#/50%', '#/50%25', '50%'], ['At', '#/@home', '#/%40home', '@home'], ['Slash', '#/Plan/', '#/Plan', 'Plan'],
+  ]) {
+    await page.locator(`#viewer .zf-stage a[data-file="./target.d2${authored}"]`).hover();
+    const card = page.locator('.link-preview');
+    await expect(card).toContainText(`target · ${label}`);
+    await expect(card).toContainText('2 shapes');
+    await expect(card.locator('img')).toBeVisible();
+    await (await shapeMenu(page, shape, shape)).getByRole('menuitem', { name: 'Change linked diagram…' }).click();
+    const dialog = page.getByRole('dialog', { name: 'Change linked diagram' });
+    await expect(dialog.getByLabel('Opens at')).toBeEnabled();
+    await expect(dialog.getByLabel('Opens at')).toHaveValue(compiled);
+    await expect(dialog.getByLabel('Opens at').locator('option')).toHaveCount(4);
+    await dialog.getByRole('button', { name: 'Cancel' }).click();
+  }
+});
+
 test('a file link in a single opened file asks for its folder', async ({ page }) => {
   await page.goto('/');
   await previewReady(page);

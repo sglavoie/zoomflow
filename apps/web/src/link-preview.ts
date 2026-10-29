@@ -1,17 +1,12 @@
 import { classifyHref, type Board } from '@zoomflow/core';
-import { resolveRouteHash, type RenderBoard, type Viewer } from '@zoomflow/viewer';
+import { normalizeRouteHash, resolveRouteHash, type RenderBoard, type Viewer } from '@zoomflow/viewer';
 import type { BoardSites } from './board-model';
 import { pageListeners } from './canvas-guidance';
 import type { PaneScope } from './pane-scope';
 import { plural } from './text';
 
 /** An authored `#/…` fragment in the board hash form, so `#/My Board` names `#/My%20Board`. */
-export function boardRoute(hash: string) {
-  return hash.split('/').map((segment, index) => {
-    if (index === 0 || segment.startsWith('@')) return segment;
-    try { return encodeURIComponent(decodeURIComponent(segment)); } catch { return segment; }
-  }).join('/') || '#/';
-}
+export const boardRoute = normalizeRouteHash;
 
 /** Other diagram files that links open, by path relative to the document as authored. */
 export type LinkedFiles = {

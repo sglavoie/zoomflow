@@ -123,8 +123,12 @@ export class DraftStore {
     const written = new Map<string, Version>();
     let failure: unknown;
     let pruned = false;
-    for (const key of new Set([...next.keys(), ...this.baselines.keys()])) {
+    // A recovered copy may still depend on its original's conflict record. Make copies durable first,
+    // before deleting an original can reclaim the only stored version of their source.
+    for (const key of new Set([...this.pendingCopies, ...next.keys(), ...this.baselines.keys()])) {
       const draft = next.get(key) ?? null;
+      // A quota failure while saving a retained copy must leave its original records recoverable.
+      if (!draft && [...this.pendingCopies].some(copy => next.get(copy)?.recoveredFrom === key)) continue;
       const baseline = this.baselines.get(key);
       const unchanged = draft ? baseline !== undefined && sameDraft(draft, baseline) : baseline === undefined;
       if (unchanged && !this.pendingMigration.has(key) && !this.pendingCopies.has(key)) continue;

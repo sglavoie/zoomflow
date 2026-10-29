@@ -122,6 +122,23 @@ describe('draft recovery across tabs', () => {
     expect(reloaded[0].key).toBe(copy.key);
   });
 
+  test('a full quota cannot discard a recovered copy when its original is removed', () => {
+    const storage = new LimitedStorage(Infinity);
+    const a = new DraftStore(storage, 'a'), b = new DraftStore(storage, 'b'); a.load(); b.load();
+    a.save([draft('order', 'first'.repeat(400))], 'order');
+    b.save([draft('order', 'second'.repeat(400))], 'order');
+    const reader = new DraftStore(storage, 'reader');
+    const copy = reader.load().drafts.find((item) => item.recoveredFrom)!;
+    // A deletion record fits, but making the recovered source independent does not.
+    storage.limit = [...storage.data.values()].reduce((total, text) => total + text.length, 0) + 500;
+    expect(() => reader.save([copy], copy.key)).toThrow('Quota exceeded');
+    expect(new DraftStore(storage, 'reload').load().drafts.map((item) => item.source)).toContain(copy.source);
+    // Once storage is available, the removal and the independent copy can both be saved.
+    storage.limit = Infinity;
+    reader.save([copy], copy.key);
+    expect(new DraftStore(storage, 'last').load().drafts).toEqual([copy]);
+  });
+
   test('sequential saves and reloads reclaim superseded sources', () => {
     const storage = new MemoryStorage();
     for (let i = 0; i < 30; i++) {

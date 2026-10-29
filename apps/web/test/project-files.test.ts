@@ -61,6 +61,16 @@ it('finds the project of a file, its atlas map and a recovered copy of the file'
   expect(projectPathOf(`file:recovered:${encodeURIComponent('file:abc')}:v7`)).toBeUndefined();
 });
 
+it('keeps project context through repeated recovery of conflicting copies', () => {
+  const original = 'project:p1:docs/a:b.d2';
+  const recovered = (key: string) => `file:recovered:${encodeURIComponent(key)}:v7`;
+  const twice = recovered(recovered(original));
+  expect(projectIdOf(twice)).toBe('p1');
+  expect(projectPathOf(twice)).toBe('docs/a:b.d2');
+  expect(projectIdOf(recovered(recovered('file:abc')))).toBeUndefined();
+  expect(projectPathOf(recovered(recovered('file:abc')))).toBeUndefined();
+});
+
 it('reads folder files with the line breaks the editor keeps, so an unedited file is not unsaved', async () => {
   const text = 'a -> b\r\nb -> c\rc\n';
   const file = new File([text], 'index.d2', { lastModified: 1 });

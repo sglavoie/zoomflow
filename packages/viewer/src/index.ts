@@ -30,7 +30,7 @@ export type TrailPrefixEntry = { name: string; activate(): void };
 export const openFolderMessage = 'Open the folder that contains this file to follow links to other diagrams.';
 export { prepareExportSvg, rasterizeSvg, offlineViewerScript } from './export';
 export { setupViewport } from './viewport';
-export { resolveRouteHash } from './navigation';
+export { normalizeRouteHash, resolveRouteHash } from './navigation';
 export { offlineViewerStyle } from './export-style';
 export { viewerStyle } from './viewer-style';
 
