@@ -7,7 +7,7 @@ export type MindMap = { direction: 'right' | 'down'; split: number; look: Look; 
 const heading = '# Created with the Zoomflow mind map builder.';
 const splitNote = (split: number) => split
   ? `# Level ${split} topics with subtopics open as detail boards.` : '# All topics stay on one board.';
-/** Detail boards inherit the root board's classes, so the library is imported once. */
+/** Import on every board: a map attached inside another board cannot pass its classes to its details. */
 const library = '...@zoomflow';
 const accents = 6;
 const quoted = '"(?:[^"\\\\]|\\\\.)*"';
@@ -110,8 +110,8 @@ export function countTopics(map: MindMap) {
 }
 
 /** One board: its central topic, the topics within `split` levels, and detail boards for deeper ones.
- * Earlier maps imported the library on every board; `legacy` writes that form so they still reopen. */
-function boardSource(center: MindTopic, map: MindMap, legacy: boolean, accent?: number): string[] {
+ * `rootOnly` writes the earlier form with one import, so existing maps still reopen. */
+function boardSource(center: MindTopic, map: MindMap, rootOnly: boolean, accent?: number): string[] {
   const shapes: string[] = [];
   const edges: string[] = [];
   const details: string[] = [];
@@ -123,7 +123,7 @@ function boardSource(center: MindTopic, map: MindMap, legacy: boolean, accent?: 
     if (detail) {
       const name = uniqueBoardName(topic.label, names);
       link = `; link: layers.${quote(name)}`;
-      details.push(`${quote(name)}: {`, ...boardSource(topic, map, legacy, tone).map(line => line && `  ${line}`), '}');
+      details.push(`${quote(name)}: {`, ...boardSource(topic, map, rootOnly, tone).map(line => line && `  ${line}`), '}');
     }
     shapes.push(`${id}: ${quote(topic.label)} {class: ${lookClasses(tone ? [role, `zf-accent-${tone}`] : [role], map.look)}${link}}`);
     if (detail) return;
@@ -136,13 +136,13 @@ function boardSource(center: MindTopic, map: MindMap, legacy: boolean, accent?: 
   };
   visit(center, 'n', 0, accent);
   const root = accent === undefined;
-  return [...legacy || root ? [library] : [], `direction: ${map.direction}`, '', ...shapes, '', ...edges,
+  return [...!rootOnly || root ? [library] : [], `direction: ${map.direction}`, '', ...shapes, '', ...edges,
     ...details.length ? ['', 'layers: {', ...details.map(line => line && `  ${line}`), '}'] : []];
 }
 
 /** Fixed identifiers keep labels, punctuation and duplicate names out of D2 syntax. */
-export function mindMapSource(map: MindMap, legacy = false): string {
-  return [heading, splitNote(map.split), ...boardSource(map.root, map, legacy), ''].join('\n');
+export function mindMapSource(map: MindMap, rootOnly = false): string {
+  return [heading, splitNote(map.split), ...boardSource(map.root, map, rootOnly), ''].join('\n');
 }
 
 /** Only reopen the builder's complete, losslessly understood subset of D2, like `readFlow`. */

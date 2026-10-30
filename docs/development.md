@@ -31,6 +31,14 @@ of the same project. Both panes debounce and coalesce previews, so direct and
 transitive imports refresh together, including recovery from an import error.
 Generated atlas maps are still redrawn on request.
 
+Workspace project search compiles files on demand without rendering their SVGs,
+publishes results incrementally, and permits one indexing compile at a time. Its
+cache is keyed by project identity and all canonical project sources, including
+unsaved edits: changing any source invalidates every file because of transitive
+imports. Closing search, suspending a pane or switching documents abandons queued
+work and ignores late results. Syntax failures affect only their file; engine
+failures stop indexing and offer retry separately from source diagnostics.
+
 To compare sustained editing with and without preview coalescing, start `pnpm dev`
 and run `node spike/preview-throughput.mjs http://127.0.0.1:5173 600` (use the actual
 Vite URL). This sends six edits 400 ms apart to a generated diagram and reports

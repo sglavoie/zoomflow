@@ -14,3 +14,8 @@ supporting import, not a standalone lint-clean example.
 `nested-navigation` needs no ports by default. Its only error is the deepest
 `Capture` link, which mistakenly targets a nonexistent child named `charge`.
 Changing that link to `_` makes the fixture lint-clean without the stdlib.
+
+`nested-mind-map` preserves an older builder map that imports the library only on
+its own board. Its detail board has three undefined-class warnings because classes
+defined inside a layer do not pass to its child layers. Editing the map with the
+builder adds the missing detail import and clears the warnings.

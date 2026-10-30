@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { expect, test, type Page } from '@playwright/test';
 import { board, openFromBadge, chooseExample, editorText } from './helpers';
 
@@ -64,6 +65,24 @@ test('adds a mind map board to a selected flow step, and edits each board with i
   await flow.getByRole('button', { name: 'Remove step 3' }).click();
   await flow.getByRole('button', { name: 'Apply changes', exact: true }).click();
   await expect(flow.getByRole('alert')).toHaveText('The step “Done” opens the board “Complete request”. Keep the step, or delete its board in the source first.');
+});
+
+test('repairs missing detail imports when editing an existing attached mind map', async ({ page }) => {
+  await page.goto('/'); await ready(page);
+  await page.locator('#file').setInputFiles({ name: 'nested-map.d2', mimeType: 'text/plain',
+    buffer: Buffer.from(readFileSync('fixtures/lint/nested-mind-map.d2', 'utf8')) });
+  await ready(page);
+  await expect(page.locator('#lint-summary')).toHaveText('0 lint errors, 3 warnings');
+  await openFromBadge(page, 'Open Review the request board');
+  await board(page, 'root.layers.Review the request');
+  await page.getByRole('button', { name: 'Edit mind map', exact: true }).click();
+  await page.getByRole('dialog', { name: 'Edit mind map' }).getByRole('button', { name: 'Apply changes', exact: true }).click();
+  await ready(page);
+  await expect(page.locator('#lint-summary')).toHaveText('No lint issues');
+  expect((await editorText(page)).match(/\.\.\.@zoomflow/g)).toHaveLength(2);
+  await openFromBadge(page, 'Open Detail board');
+  await board(page, 'root.layers.Review the request.layers.Detail');
+  await expect(shape(page, 'n_1')).toContainText('New topic');
 });
 
 test('offers the same actions from a context menu and the keyboard', async ({ page }) => {

@@ -1,6 +1,6 @@
 import { D2 } from '@d2lang/d2';
 import { afterAll, beforeAll, expect, it } from 'vitest';
-import { boardBlocks, indexBoards } from '@zoomflow/core';
+import { boardBlocks, indexBoards, lint } from '@zoomflow/core';
 import { blockText, boardSites, builderKind, joinBoard, reattach, splitBoard } from '../src/board-model';
 import { editOnCanvas } from '../src/canvas-model';
 import { flowSource, flowTemplate, readFlow } from '../src/flow-model';
@@ -69,6 +69,28 @@ it('adds a mind map board to a flow step and keeps the flow editable', async () 
   if (!('source' in nested)) throw new Error(nested.error);
   expect(nested.source.startsWith(splitBoard(source).own.trimEnd())).toBe(true);
   expect((await compile(nested.source)).diagram.layers?.[0]?.shapes.map(shape => shape.id)).toContain('n_3');
+});
+
+it('styles and lints every detail board of a mind map attached to an unstyled diagram', async () => {
+  const source = 'triage: Review the request\n';
+  const mindMap = map('Review the request\n  Ideas\n    Detail\n      Next\n        Deeper\n          Last', 2);
+  const { sites: site } = await sites(source);
+  const added = site.add('root', 'triage', mindMapSource(mindMap), 'Review the request');
+  const compiled = await compile(added.source);
+  expect(lint(compiled).diagnostics).toEqual([]);
+  const boards = [...indexBoards(compiled.diagram).values()].slice(1);
+  expect(boards.map(board => board.id)).toEqual([
+    'root.layers.Review the request',
+    'root.layers.Review the request.layers.Detail',
+    'root.layers.Review the request.layers.Detail.layers.Deeper',
+  ]);
+  for (const board of boards) {
+    expect(board.diagram.shapes[0]).toMatchObject({ borderRadius: 999, fontSize: 20, bold: true });
+    expect(board.diagram.shapes[1]).toMatchObject({ borderRadius: 999, fontSize: 16 });
+    expect(board.diagram.connections[0]).toMatchObject({ stroke: '#e5484d' });
+  }
+  const attached = splitBoard(added.source).attachments[0];
+  expect('body' in attached && readMindMap(attached.body)).toEqual(mindMap);
 });
 
 it('adds boards to topics on a mind map and to its attached boards, not to its detail boards', async () => {

@@ -232,6 +232,78 @@ header > strong {
 .board-outline {
   position: relative;
 }
+.diagram-search-trigger,
+.project-search-trigger {
+  min-height: 32px;
+  padding: 0 var(--space-3);
+}
+.diagram-search {
+  width: min(600px, calc(100vw - 24px));
+  max-height: calc(100dvh - 24px);
+  box-sizing: border-box;
+  overflow: auto;
+  padding: var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  color: inherit;
+  background: var(--surface);
+  box-shadow: var(--shadow-dialog);
+}
+.diagram-search::backdrop {
+  background: var(--backdrop);
+}
+.diagram-search-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-bottom: var(--space-3);
+}
+.diagram-search h2 {
+  margin: 0;
+  font-size: var(--font-size-lg);
+}
+.diagram-search input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: var(--space-3);
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  color: inherit;
+  background: var(--surface);
+  font: inherit;
+}
+.diagram-search p,
+.diagram-search small {
+  color: var(--muted);
+  font-size: var(--font-size-sm);
+  overflow-wrap: anywhere;
+}
+.diagram-search ul {
+  max-height: 45dvh;
+  overflow: auto;
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.diagram-search li + li {
+  margin-top: var(--space-2);
+}
+.diagram-search li button {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-1);
+  width: 100%;
+  padding: var(--space-3);
+  text-align: left;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.diagram-search :is(input, button):focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
 .board-outline summary {
   display: inline-flex;
   align-items: center;

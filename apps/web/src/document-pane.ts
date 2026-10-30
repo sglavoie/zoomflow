@@ -1,4 +1,4 @@
-import { boardBlocks, classifyHref, indexBoards, indexShapeSources, parseSourceRange, lint, rebaseFileLinks, resolveFilePath, type CompileResponse, type ShapeSource, type SourceRange, type Diagram, type LintDiagnostic, type LintResult } from '@zoomflow/core';
+import { boardBlocks, classifyHref, indexBoards, indexDiagramSearch, indexShapeSources, parseSourceRange, lint, rebaseFileLinks, resolveFilePath, type CompileResponse, type ShapeSource, type SourceRange, type Diagram, type DiagramSearchEntry, type LintDiagnostic, type LintResult } from '@zoomflow/core';
 import { Viewer, ViewerRenderError, openFolderMessage, setupViewport, type RenderBoard, type ViewerRoute } from '@zoomflow/viewer';
 import { SourceEditor } from './editor';
 import { compilerDiagnostics, lintDiagnostics, type SourceDiagnostic } from './diagnostics';
@@ -14,7 +14,7 @@ import { setupBoardTools } from './board-tools';
 import { boardRoute, setupLinkPreview } from './link-preview';
 import { boardSites } from './board-model';
 import { createProjectFile, type DirectoryHandles, type FileHandles } from './file-handles';
-import { atlasMapSource, fileLinks as linksOfFile, type AtlasFile } from './atlas-map';
+import { atlasMapName, atlasMapSource, fileLinks as linksOfFile, type AtlasFile } from './atlas-map';
 import type { setupFlowBuilder } from './flow-builder';
 import type { setupMindMapBuilder } from './mind-map-builder';
 import type { DraftState, setupExamplePicker } from './example-picker';
@@ -23,6 +23,7 @@ import { paneNotice, type EngineNotice } from './engine-notice';
 import { setupCompileError } from './compile-error';
 import { canChooseSaveFile, setupSaveFile } from './save-file';
 import { describeError, plural, setText } from './text';
+import type { ProjectSearchEntry } from './project-search';
 
 export type { PaneId } from './pane-scope';
 export type DocumentExport = { diagram: Diagram; render: RenderBoard; name: string; diagnostics: LintDiagnostic[];
@@ -52,6 +53,8 @@ export type PaneContext = {
   adoptSaved: (key: string, saved: { key: string; name: string }) => void;
   /** Select a source location in the pane that shows it. */
   revealSource: (pane: PaneId, range?: { from: number; to: number }) => void;
+  /** Activate the pane already showing a project search result and reveal it there. */
+  revealMatch: (pane: PaneId, entry: DiagramSearchEntry) => Promise<void>;
   /** The lint options changed in this pane; other panes follow. */
   lintChanged: () => void;
 };
@@ -78,7 +81,7 @@ function statusLine(element: HTMLElement) {
   };
 }
 
-/** A file a pane came through on the way to the one it shows, and the board it was left on. */
+/** A file or atlas map a pane came through, and the board it was left on. */
 type FileVisit = { key: string; path: string; route: ViewerRoute };
 /** Board hashes of each project file's last compile, by draft key, for checking links into that file. */
 const compiledBoards = new Map<string, ReadonlySet<string>>();
@@ -234,12 +237,14 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
     changed: () => {
       invalidateSource();
       picker().updateCurrent(id, editor.source);
+      boardTools.refreshSearch();
       if (currentDocumentKey?.startsWith('project:')) shared.projectChanged(projectIdOf(currentDocumentKey)!);
       clearTimeout(debounce);
       debounce = setTimeout(() => void load(editor.source, documentName, true), immediate ? 0 : 350);
       immediate = false;
     },
     selected: () => { selectionCleared = undefined; void highlightSelection(false); },
+    sourceClicked: (position) => void focusSourceBoard(position),
     format: () => void formatSource(),
     reveal: () => void revealSelection(),
     label: id === 'a' ? 'D2 source' : 'D2 source, second diagram',
@@ -261,6 +266,37 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
       if (focusEditor) showView('source');
       editor.select(entry, focusEditor);
       void highlightSelection(false);
+    },
+    revealMatch: (shape) => {
+      showView('preview');
+      viewport.refresh();
+      if (shape === undefined) { viewer.stage.focus({ preventScroll: true }); return; }
+      const entry = sourceMap.find(item => item.board === viewer.currentBoard?.id && item.shape === shape);
+      if (entry && mappedSource === editor.source) {
+        selectionCleared = undefined;
+        editor.select(entry, false);
+      }
+      // Imported shapes can be found too, even when their source is in another file.
+      viewer.highlightShapes([shape]);
+      boardTools.select([shape]);
+      const element = [...viewer.stage.querySelectorAll<SVGGraphicsElement>('[data-shape-id]')].find(node => node.dataset.shapeId === shape);
+      if (!element) { viewer.stage.focus({ preventScroll: true }); return; }
+      const target = element.closest<SVGElement>('a') ?? element;
+      if (!target.hasAttribute('tabindex')) target.setAttribute('tabindex', '-1');
+      target.focus({ preventScroll: true });
+      viewport.reveal([element]);
+    },
+    projectSearch: {
+      available: () => currentDocumentKey !== undefined && projectIdOf(currentDocumentKey) !== undefined,
+      read: () => {
+        const project = currentDocumentKey && projectIdOf(currentDocumentKey);
+        return project === undefined || project === '' ? undefined : { id: project, fs: picker().projectSources(project).fs };
+      },
+      compile: async (path, fs) => {
+        const boards = indexBoards((await compileSource(fs[path], { inputPath: path, fs })).diagram);
+        return indexDiagramSearch(boards).map(entry => ({ ...entry, hash: boards.get(entry.board)!.hash }));
+      },
+      activate: openProjectMatch,
     },
     status: (message, kind) => setActivity(message, kind),
     undo: () => { immediate = true; editor.undo(); immediate = false; },
@@ -363,6 +399,25 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
       `${location.pathname}${location.search}${route.hash}`);
     await replaceDocument(target.source, target.name, target.key, false, route, stack);
   }
+  /** A search jump follows the same file history as a link, including a way back from an unlinked file. */
+  async function openProjectMatch(entry: ProjectSearchEntry) {
+    if (entry.file === picker().inputPath(id) && !showsAtlas()) {
+      await boardTools.revealSearchMatch(entry);
+      return;
+    }
+    const here: FileVisit = { key: currentDocumentKey!, path: showsAtlas() ? atlasMapName : picker().inputPath(id), route: viewer.route };
+    const target = picker().selectProjectPath(id, entry.file);
+    if (!target) { viewer.setMessage(`Missing file: ${entry.file}`, true); return; }
+    if (target.pane !== id) { await shared.revealMatch(target.pane, entry); return; }
+    const earlier = fileStack.findIndex(visit => visit.key === target.key);
+    const stack = earlier >= 0 ? fileStack.slice(0, earlier) : [...fileStack, here];
+    const opening = visitFile(target, { hash: entry.hash, trail: entry.trail }, stack);
+    const request = documentOpens;
+    await opening;
+    if (documentOpens !== request || currentDocumentKey !== target.key || editor.source !== target.source || mappedSource !== editor.source || sourceError) return;
+    // The file visit already pushed history; revealing its shape keeps that single entry.
+    await boardTools.revealSearchMatch(entry, 'replace');
+  }
   function openFileLink(path: string, hash: string) {
     const resolved = linkedPath(path);
     // Before the picker switches this pane to the target.
@@ -380,7 +435,8 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
   async function returnToFile(index: number) {
     const visit = fileStack[index];
     // By key, so a recovered copy on the way here reopens itself rather than the file it copies.
-    const target = visit && picker().selectProjectPath(id, visit.path, visit.key);
+    const target = visit && (visit.key.startsWith('atlas:') ? picker().showAtlas(id, projectIdOf(visit.key)!)
+      : picker().selectProjectPath(id, visit.path, visit.key));
     if (!target || target.pane !== id) {
       viewer.setMessage(target ? `${target.name} is open in the other pane.` : `Missing file: ${projectLabel(visit.path)}`, true);
       return;
@@ -475,6 +531,7 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
   /** Show a document; `route` overrides its remembered board. Without `stack`, it starts a new way through files. */
   async function replaceDocument(source: string, name: string, key: string, reset = false, route?: ViewerRoute, stack: FileVisit[] = []) {
     ++documentOpens;
+    boardTools.resetSearch();
     ai?.documentSwitched();
     sourceError = false;
     viewer.setRoute(reset ? undefined : route ?? shared.documentRoutes.get(key));
@@ -610,6 +667,21 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
     const shapes = selectionCleared ? [] : matches.filter((entry) => entry.board === viewer.currentBoard?.id).map((entry) => entry.shape);
     viewer.highlightShapes(shapes);
     boardTools.select([...new Set(shapes)]);
+  }
+  async function focusSourceBoard(position: number) {
+    if (mappedSource !== editor.source) return;
+    const line = editor.view.state.doc.lineAt(position);
+    // The opening and closing lines belong to the board too. Choose the smallest
+    // enclosing block so nested boards take precedence over their ancestors.
+    let target = 'root';
+    let size = editor.source.length;
+    for (const [board, block] of blocks) {
+      if (line.to >= block.from - 1 && line.from <= block.to + 1 && block.to - block.from < size) {
+        target = board;
+        size = block.to - block.from;
+      }
+    }
+    if (target !== viewer.currentBoard?.id) await viewer.navigate(target);
   }
   async function revealSelection() {
     if (revealButton.disabled) return;
@@ -792,6 +864,13 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
     get documentOpens() { return documentOpens; },
     get documentExport() { return documentExport; },
     get sourceError() { return sourceError; },
+    async revealMatch(entry: DiagramSearchEntry) {
+      const request = documentOpens;
+      const revision = documentRevision;
+      if (mappedSource !== editor.source) await load(editor.source, documentName, true);
+      if (request === documentOpens && revision === documentRevision && mappedSource === editor.source && !sourceError)
+        await boardTools.revealSearchMatch(entry);
+    },
     compileProjectFile,
     /** The preview reflects the current source, so exports and source selection are valid. */
     get current() { return mappedSource === editor.source; },
@@ -799,7 +878,9 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
     adopt,
     /** A sibling's source may be imported directly or transitively, including by a failed compile. */
     refreshProject(projectId: string) {
-      if (!currentDocumentKey || showsAtlas() || projectIdOf(currentDocumentKey) !== projectId) return;
+      if (!currentDocumentKey || projectIdOf(currentDocumentKey) !== projectId) return;
+      boardTools.refreshSearch();
+      if (showsAtlas()) return;
       invalidateSource();
       clearTimeout(debounce);
       debounce = setTimeout(() => void load(editor.source, documentName, true), 350);
@@ -819,6 +900,7 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
     /** Show a document restored on startup, keeping its board from the page URL. */
     open(document: { key: string; name: string; source: string }) {
       ++documentOpens;
+      boardTools.resetSearch();
       ai?.documentSwitched();
       sourceError = false;
       documentName = document.name;
@@ -836,6 +918,7 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
     /** Leave the pane without a document, for example when its draft is removed. */
     close() {
       ++documentOpens;
+      boardTools.resetSearch();
       sourceError = false;
       clearTimeout(debounce);
       clearTimeout(previewTimer);
@@ -875,6 +958,7 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
     },
     renderDraftState({ dirty, recoveryAvailable, savePending, hasDraft, downloadRequested }: DraftState) {
       const atlas = showsAtlas();
+      boardTools.refreshSearch();
       for (const name of ['save-file', 'format-source', 'clear-source']) part(name).hidden = atlas;
       const handle = currentDocumentKey ? shared.fileHandles.get(currentDocumentKey) : undefined;
       const canSave = Boolean(handle) || canChooseSaveFile();

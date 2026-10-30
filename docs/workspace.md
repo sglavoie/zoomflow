@@ -50,8 +50,9 @@ one board** for a single board.
 
 **Create mind map**, **Edit mind map**, undo, discard confirmation and **Look** work as
 in the flow builder. The generated D2 imports the [standard library](../stdlib/README.md)
-once, on the root board; detail boards inherit its mind map classes. Label edits that keep
-the structure still reopen in the outline; other custom D2 makes **Edit mind map**
+on each board, so detail boards keep their styles when the map is attached inside another
+diagram. Existing maps with one import still reopen and gain the detail imports when
+edited. Label edits that keep the structure still reopen in the outline; other custom D2 makes **Edit mind map**
 unavailable so the outline cannot discard it.
 
 ## Mix flows and mind maps
@@ -121,6 +122,29 @@ the board too. Other shapes keep their usual behaviour: clicking one selects its
 editor.
 
 ## Find your way between boards
+
+**Find in diagram** above the preview searches board names and
+shape labels throughout the current document, including nested boards, scenarios and
+steps. Results show their board breadcrumbs. Choose a match to open its board and
+frame and select the shape. Use ↓ and ↑ to move through matches, Enter to open one,
+or Escape to close without changing boards. ⌘F / Ctrl+F in the source editor still
+finds source text. Diagram search uses the latest successful preview; it updates when
+edits compile and stays available on that preview if the source has an error.
+
+For an open folder, **Find in project** searches board names and shape labels in every
+`.d2` file, including files you have not visited, unlinked files, and unsaved edits.
+Results show the file path and board breadcrumbs. Choose one to open the file and
+frame and select its shape. Browser Back returns to where you searched from; Escape
+and Backspace climb the destination's boards, then return to the file you came from.
+A result already open in the other pane activates and reveals it there.
+
+Project search indexes files one at a time and shows progress, with results available
+as each file finishes. Files that cannot compile are listed with their errors while
+matches from other files remain usable; **Retry search** retries failed files.
+Closing search stops queued indexing. Reopening reuses successful results until a
+project source changes; changes to imports also refresh diagrams that use them.
+⌘⇧F / Ctrl+Shift+F opens project search in a folder, or diagram search for a single
+document. **Find in diagram** remains available to search only the current preview.
 
 **Boards** above the preview lists every board of the document as a tree, marked with
 the builder that writes it: **Flow**, **Mind map**, or **Part of mind map** for a map's
@@ -486,6 +510,12 @@ board image (SVG)** and **Current board image (PNG)** for the board on screen, a
 download: **Download HTML**, **Download SVG**, **Download PNG** or **Download SVG
 ZIP**. The HTML opens directly from disk without a server or network connection
 and includes every board, including cyclic links.
+**Find in diagram** beside the zoom controls (⌘⇧F / Ctrl+Shift+F) searches board names
+and shape labels across the exported diagram. Atlas exports offer **Find in atlas**
+across every bundled file, with file paths and board breadcrumbs to distinguish matches.
+Choose a result to open its board and frame and highlight its shape; use ↓ and ↑ to
+move through results, Enter to open one, or Escape to close search. Search works
+entirely offline, including boards you have not visited.
 The export menu names the current board for SVG/PNG, or shows the total board count
 for ZIP/HTML, and explains that HTML preserves offline drill-down navigation.
 Until you choose a format, multi-board diagrams default to interactive HTML and

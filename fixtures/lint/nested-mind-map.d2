@@ -1,0 +1,29 @@
+# A map made with one import, attached to a diagram without a root library import.
+triage: Review the request
+
+# Boards that open from shapes on this board.
+triage.link: layers."Review the request"
+layers."Review the request": {
+  # Created with the Zoomflow mind map builder.
+  # Level 2 topics with subtopics open as detail boards.
+  ...@zoomflow
+  direction: right
+
+  n: "Review the request" {class: zf-topic}
+  n_1: "Ideas" {class: [zf-branch; zf-accent-1]}
+  n_1_1: "Detail" {class: [zf-leaf; zf-accent-1]; link: layers."Detail"}
+
+  n -- n_1: {class: zf-accent-1}
+  n_1 -- n_1_1: {class: zf-accent-1}
+
+  layers: {
+    "Detail": {
+      direction: right
+
+      n: "Detail" {class: [zf-topic; zf-accent-1]}
+      n_1: "New topic" {class: [zf-branch; zf-accent-1]}
+
+      n -- n_1: {class: zf-accent-1}
+    }
+  }
+}

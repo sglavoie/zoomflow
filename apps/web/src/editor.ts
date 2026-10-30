@@ -20,6 +20,8 @@ export type SourceEditorOptions = {
   panelId: string;
   changed: () => void;
   selected: () => void;
+  /** A plain click on a source line. */
+  sourceClicked?: (position: number) => void;
   format: () => void;
   reveal: () => void;
   /** Accessible name of the editable source. */
@@ -36,7 +38,7 @@ export class SourceEditor {
   private updating = false;
   private diagnosticsRequest = 0;
   private readonly documents = new Map<string, { state: EditorState; scroll: ReturnType<EditorView['scrollSnapshot']> }>();
-  constructor(parent: HTMLElement, { source = '', panelId, changed, selected, format, reveal, label = 'D2 source' }: SourceEditorOptions) {
+  constructor(parent: HTMLElement, { source = '', panelId, changed, selected, sourceClicked, format, reveal, label = 'D2 source' }: SourceEditorOptions) {
     this.extensions = [
         basicSetup, d2Language, lintGutter(), EditorView.lineWrapping, hangingIndentation, aiHighlights, boardFocus,
         codeFolding({ placeholderDOM: (view, unfold) => {
@@ -59,7 +61,11 @@ export class SourceEditor {
           { key: 'Mod-Shift-Enter', run: () => { reveal(); return true; } },
         ])),
         EditorView.contentAttributes.of({ 'aria-label': label, 'aria-multiline': 'true' }),
-        EditorView.domEventHandlers({ focus: (_event, view) => {
+        EditorView.domEventHandlers({ click: (event, view) => {
+          if (event.button !== 0 || event.shiftKey || event.ctrlKey || event.metaKey || event.altKey || !view.state.selection.main.empty) return;
+          const line = event.target instanceof Element ? event.target.closest('.cm-line') : null;
+          if (line && !(event.target instanceof Element && event.target.closest('button'))) sourceClicked?.(view.posAtDOM(line));
+        }, focus: (_event, view) => {
           const { scrollTop, scrollLeft } = view.scrollDOM;
           const document = view.state.doc;
           // WebKit scrolls contenteditable back to its start after native focus.

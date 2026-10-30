@@ -21,6 +21,24 @@ it('exports source files with mixed-case D2 extensions without renaming them', (
 });
 
 describe('board tree exports', () => {
+  it('embeds compiled shape labels and IDs for search, including inherited and empty boards', async () => {
+    const { diagram } = await d2.compile(`plain
+x: "Café </script> [review]"
+layers: {Empty: {}; Details: {x: Nested approval}}
+scenarios: {Alternative: {other: Scenario approval}}
+steps: {Later: {other: Step approval}}`, { layout: 'elk' });
+    const boards = await renderExportBoards(diagram, async () => '<svg/>');
+    expect(boards[0].searchShapes).toEqual([{ id: 'plain', label: 'plain' }, { id: 'x', label: 'Café </script> [review]' }]);
+    expect(boards.find(board => board.id === 'root.layers.Empty')!.searchShapes).toEqual([]);
+    expect(boards.find(board => board.id === 'root.layers.Details')!.searchShapes).toEqual([{ id: 'x', label: 'Nested approval' }]);
+    expect(boards.find(board => board.id === 'root.scenarios.Alternative')!.searchShapes).toContainEqual({ id: 'x', label: 'Café </script> [review]' });
+    expect(boards.find(board => board.id === 'root.steps.Later')!.searchShapes).toContainEqual({ id: 'other', label: 'Step approval' });
+    const html = exportBoardsHtml(boards, { title: 'Search', script: '', style: '' });
+    const data = /<script id="zoomflow-data" type="application\/json">([\s\S]*?)<\/script>/.exec(html)![1];
+    expect(data).not.toContain('</script>');
+    expect(JSON.parse(data)[0].searchShapes).toEqual(boards[0].searchShapes);
+  });
+
   it('makes SVG ZIP links navigate between exported boards, preserving external links and graphics', () => {
     const board = (id: string, path: string, svg: string): ExportBoard => ({ id, path, svg, name: id, hash: '#/', empty: false });
     const files = unzipSync(exportBoardsZip([

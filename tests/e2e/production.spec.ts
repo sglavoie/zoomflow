@@ -33,5 +33,10 @@ test('the production build compiles, navigates, edits and exports offline HTML',
   await expect(offline.locator('.zf-stage')).toContainText('Production check');
   await offline.locator('.zf-stage a[data-board="root.layers.checkout"]').click();
   await expect(offline.locator('.zf-stage')).toHaveAttribute('data-board', 'root.layers.checkout');
+  await offline.getByRole('button', { name: 'Find in diagram', exact: true }).click();
+  await offline.getByRole('searchbox').fill('Production check');
+  await offline.getByRole('searchbox').press('Enter');
+  await expect(offline.locator('.zf-stage')).toHaveAttribute('data-board', 'root');
+  await expect(offline.locator('[data-shape-id="Built"]')).toHaveClass(/zf-search-selected/);
   expect(errors).toEqual([]);
 });

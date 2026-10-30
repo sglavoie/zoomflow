@@ -783,6 +783,13 @@ require('node:module').syncBuiltinESMExports();`)]);
       expect(await page.locator('.zf-breadcrumbs').textContent()).toContain('work/index');
       await page.goBack();
       expect(await at()).toEqual(['work/index.d2', 'root']);
+      await page.getByRole('button', { name: 'Find in atlas', exact: true }).click();
+      await page.getByRole('searchbox').fill('Stage');
+      const result = page.getByRole('list', { name: 'Search results' }).getByRole('button');
+      expect(await result.textContent()).toBe('StageShape · projects/zoomflow.d2 › Root › Viewer');
+      await result.click();
+      expect(await at()).toEqual(['projects/zoomflow.d2', 'root.layers.Viewer']);
+      expect(await stage.locator('[data-shape-id="Stage"]').getAttribute('class')).toContain('zf-search-selected');
       expect(errors).toEqual([]);
     } finally { await context.close(); }
   });

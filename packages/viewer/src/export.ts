@@ -1,4 +1,5 @@
-import { atlasHash, boardLabel, classifyHref, type ExportBoard, parseAtlasHash, resolveFilePath, shapeClass } from '@zoomflow/core';
+import { atlasHash, boardLabel, classifyHref, type ExportBoard, indexDiagramSearch, parseAtlasHash, resolveFilePath, searchDiagram, shapeClass } from '@zoomflow/core';
+import { setupOfflineSearch } from './offline-search';
 import { restoreMissingLinks } from './missing-links';
 import { childToward, normalizeRouteHash, renderParentContext, resolveRouteHash, restoreTrail, routeFallbackNotice, simplifyTrail, watchHistory } from './navigation';
 import { clampBox, createViewport, revealBox } from './viewport';
@@ -109,7 +110,8 @@ export async function rasterizeSvg(svg: string): Promise<Blob> {
 // compiled source text, so they cannot reach module imports or one another directly.
 const runtime = { classifyHref, shapeClass, boardLabel, sanitizeSvg, restoreMissingLinks, simplifyTrail, renderParentContext,
   createViewport, clampBox, revealBox, decorateLinks, splitHitArea, setupBreadcrumbs, resolveRouteHash, routeFallbackNotice,
-  normalizeRouteHash, restoreTrail, watchHistory, childToward, resolveLink, prepareLinks, followLink, linkTo, atlasHash, parseAtlasHash, resolveFilePath };
+  normalizeRouteHash, restoreTrail, watchHistory, childToward, resolveLink, prepareLinks, followLink, linkTo, atlasHash, parseAtlasHash, resolveFilePath,
+  indexDiagramSearch, searchDiagram, setupOfflineSearch };
 
 // Keep this runtime self-contained: its compiled function body is embedded in HTML.
 // It consumes the same board IDs, hashes, parent and visited-trail model as Viewer.
@@ -215,6 +217,18 @@ function offlineViewer(lib: typeof runtime) {
         lib.prepareLinks(svg, resolve, (id) => doc.byId.get(id)?.hash, (path, hash) => fileTarget(path, hash).board.hash);
         stage.replaceChildren(svg);
         lib.decorateLinks(svg, doc.byId, board.id, lib.splitHitArea, describe, describeFile, lib.normalizeRouteHash);
+        const groups = new Map<string, SVGGElement>();
+        for (const group of svg.querySelectorAll('g')) for (const name of group.classList) if (!groups.has(name)) groups.set(name, group);
+        for (const shape of board.searchShapes ?? []) {
+          const group = groups.get(lib.shapeClass(shape.id));
+          if (group) {
+            group.dataset.shapeId = shape.id;
+            if (!group.closest('a')) {
+              group.setAttribute('tabindex', '-1');
+              group.setAttribute('aria-label', shape.label);
+            }
+          }
+        }
       }
     }
     syncBackground();
@@ -255,6 +269,27 @@ function offlineViewer(lib: typeof runtime) {
     stack = index >= 0 ? stack.slice(0, index) : [...stack, { file: doc.file, trail }];
     show(board, ancestors(board, target), false, notice, target);
   }
+  const searchEntries = [...docs.values()].flatMap(owner => {
+    const searchable = new Map(owner.boards.map(board => [board.id, { ...board, diagram: { shapes: board.searchShapes ?? [] } }]));
+    return lib.indexDiagramSearch(searchable).map(entry => ({ ...entry, file: owner.file,
+      breadcrumb: names.size ? `${owner.file} › ${entry.breadcrumb}` : entry.breadcrumb }));
+  });
+  lib.setupOfflineSearch(area, searchEntries, Boolean(fileData), lib.searchDiagram, result => {
+    const owner = docs.get(result.file)!;
+    const board = owner.byId.get(result.board)!;
+    if (owner !== doc) {
+      const index = stack.findIndex(visit => visit.file === owner.file);
+      stack = index >= 0 ? stack.slice(0, index) : [...stack, { file: doc.file, trail }];
+    }
+    show(board, result.trail, false, '', owner);
+    const shape = [...stage.querySelectorAll<SVGGraphicsElement>('[data-shape-id]')].find(node => node.dataset.shapeId === result.shape);
+    if (!shape) { stage.focus({ preventScroll: true }); return; }
+    shape.classList.add('zf-search-selected');
+    const target = shape.closest<SVGElement>('a') ?? shape;
+    target.setAttribute('tabindex', '0');
+    target.focus({ preventScroll: true });
+    viewport.reveal([shape]);
+  });
   const validVisit = (visit: unknown): visit is Visit => {
     const { file, trail: visits } = (visit ?? {}) as Partial<Visit>;
     const owner = typeof file === 'string' ? docs.get(file) : undefined;
@@ -295,6 +330,7 @@ function offlineViewer(lib: typeof runtime) {
   stage.addEventListener('keydown', (event) => { if (event.key === 'Enter') follow(event); });
   window.addEventListener('keydown', (event) => {
     if (event.defaultPrevented || event.repeat || event.altKey || event.ctrlKey || event.metaKey ||
+      document.querySelector('dialog[open]') ||
       (event.key !== 'Escape' && event.key !== 'Backspace')) return;
     if (current.parent) {
       event.preventDefault();

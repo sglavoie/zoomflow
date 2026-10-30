@@ -108,6 +108,7 @@ function context(id: PaneId): PaneContext {
       for (const pane of Object.values(panes)) if (pane.key === key) pane.adopt(saved);
     },
     revealSource: (pane, range) => { setActive(pane); panes[pane]?.focusSource(range); },
+    revealMatch: async (pane, entry) => { setActive(pane); await panes[pane]?.revealMatch(entry); },
     lintChanged: () => {
       const source = panes[id]!.lintOptions;
       const other = panes[otherPane(id)];

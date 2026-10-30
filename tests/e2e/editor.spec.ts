@@ -12,7 +12,7 @@ async function replace(page: Page, text: string) {
   await page.keyboard.insertText(text);
 }
 async function findSource(page: Page, text: string) {
-  await source(page).click();
+  await source(page).focus();
   await source(page).press('ControlOrMeta+f');
   const search = page.locator('.cm-search input[name="search"]');
   await page.getByLabel('match case', { exact: true }).check();
@@ -93,6 +93,99 @@ test('explicit reveal opens the selected source board, linked shapes still drill
   await expect(source(page)).toHaveText('new: New document');
   await expect(page.locator('.zf-stage')).toContainText('New document');
   await ready(page);
+});
+
+test('source clicks open boards from root and from undimmed nested source', async ({ page }) => {
+  await page.goto('/'); await previewReady(page);
+  await replace(page, `home: Root shape
+layers.outer: {
+  node: Outer shape
+  layers.inner: {
+    # Inner board comment
+
+    leaf: Inner shape
+  }
+}`);
+  await previewReady(page);
+  const lines = source(page).locator('.cm-line');
+  const home = lines.filter({ hasText: 'home: Root shape' }).getByText('home', { exact: true });
+  await expect(source(page).locator('.zf-outside-board')).toHaveCount(0);
+  await lines.filter({ hasText: 'layers.outer: {' }).click();
+  await ready(page, 'root.layers.outer');
+  const inner = lines.filter({ hasText: 'layers.inner: {' });
+  await expect(inner).not.toHaveClass(/zf-outside-board/);
+  await inner.click();
+  await ready(page, 'root.layers.outer.layers.inner');
+  for (const target of [
+    lines.filter({ hasText: '# Inner board comment' }),
+    lines.filter({ hasText: /^$/ }),
+    lines.filter({ hasText: 'leaf: Inner shape' }).getByText('leaf', { exact: true }),
+  ]) {
+    await home.click();
+    await ready(page);
+    await expect(page.locator('.zf-stage [data-shape-id="home"]')).toHaveClass(/zf-source-selected/);
+    await expect(source(page).locator('.zf-outside-board')).toHaveCount(0);
+    await target.click();
+    await ready(page, 'root.layers.outer.layers.inner');
+    await expect(source(page)).toBeFocused();
+  }
+  await expect(page.locator('.zf-stage [data-shape-id="leaf"]')).toHaveClass(/zf-source-selected/);
+});
+
+test('clicking dimmed source focuses its board and keeps the editor cursor and viewport', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 1100 });
+  await page.goto('/'); await previewReady(page);
+  const text = `${'# Root documentation\n'.repeat(40)}home: Root shape {link: layers.first}
+layers.first: {
+  first: First board
+  layers.deep: {
+    # Deep board comment
+    leaf: Nested leaf
+  }
+}
+layers.second: {
+  # Second board comment
+
+  second: Second board
+}
+# Root footer`;
+  await replace(page, text); await previewReady(page);
+  await page.locator('.zf-stage a[data-board="root.layers.first"]').click();
+  await ready(page, 'root.layers.first');
+  const lines = source(page).locator('.cm-line');
+  const header = lines.filter({ hasText: 'layers.second: {' });
+  await expect(header).toHaveClass(/zf-outside-board/);
+  // A click must work even when it leaves the cursor at its existing position.
+  await withEditorView(page, (view, _, text) => {
+    view.dispatch({ selection: { anchor: view.state.doc.toString().indexOf(text) } });
+    view.focus();
+  }, 'layers.second: {');
+  await header.click({ position: { x: 2, y: 5 } });
+  await ready(page, 'root.layers.second');
+  await expect(header).not.toHaveClass(/zf-outside-board/);
+  await expect(source(page)).toBeFocused();
+  const cursor = await withEditorView(page, view => view.state.selection.main.head);
+  expect(cursor).toBeGreaterThanOrEqual(text.indexOf('layers.second: {'));
+  expect(cursor).toBeLessThanOrEqual(text.indexOf('layers.second: {') + 'layers.second: {'.length);
+  const scroll = await page.locator('#editor .cm-scroller').evaluate(el => el.scrollTop);
+
+  // Comments and whitespace have no shape source mapping; nested blocks win over their parents.
+  await lines.filter({ hasText: '# Deep board comment' }).click();
+  await ready(page, 'root.layers.first.layers.deep');
+  await expect(page.locator('.zf-stage')).toContainText('Nested leaf');
+  await lines.filter({ hasText: 'first: First board' }).getByText('first', { exact: true }).click();
+  await ready(page, 'root.layers.first');
+  await expect(page.locator('.zf-stage [data-shape-id="first"]')).toHaveClass(/zf-source-selected/);
+  await lines.filter({ hasText: /^$/ }).click();
+  await ready(page, 'root.layers.second');
+  await lines.filter({ hasText: /^ {2}}$/ }).click();
+  await ready(page, 'root.layers.first.layers.deep');
+  await lines.filter({ hasText: '# Root footer' }).click();
+  await ready(page);
+  await expect(source(page)).toBeFocused();
+  await expect(source(page).locator('.zf-outside-board')).toHaveCount(0);
+  expect(await page.locator('#editor .cm-scroller').evaluate(el => el.scrollTop)).toBe(scroll);
+  expect(await editorText(page)).toBe(text);
 });
 
 test('edits during compiler startup publish only the newest source', async ({ page }) => {

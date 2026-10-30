@@ -52,6 +52,18 @@ CodeMirror access through `withEditorView`, selection) and `menu.ts` (export men
   the keyboard, undo and redo on the diagram, selecting the shape that led down after going
   up, the boards outline, the source following the board on view, and link previews.
   `apps/web/test/canvas-model.test.ts` covers the edits on flows, mind maps and detail boards.
+- `diagram-search.spec.ts`: finding nested boards and shapes by label, board ancestry,
+  framing and selection, keyboard controls, literal labels, preview updates and errors,
+  document switches, imported shapes, and narrow screens. Core search tests cover
+  indexing layers, scenarios and steps with board-scoped shape IDs.
+- `project-search.spec.ts`: searching unvisited and unlinked project files, file paths
+  and board breadcrumbs, cross-file Back/Forward and Escape navigation, broken-file
+  reporting, unsaved imports changed in another pane, activating a result already
+  open there, and narrow dark layouts. Unit tests cover incremental indexing,
+  cache invalidation, cancellation, coalescing, failed-file retry and engine failures.
+- `project-search-indexing.spec.ts`: indexing progress with a held compiler request,
+  stopping queued work on close, cached results and keyboard focus during incremental
+  updates, and retry after an engine interruption.
 - `ai.spec.ts`: AI edits and undo, availability checks and timeouts, cancellation,
   transport failures, highlights of changed lines, deletions on short phone screens, the
   phone composer, sending with ⌘/Ctrl+Enter, and AI settings mirrored across split panes
@@ -106,6 +118,9 @@ CodeMirror access through `withEditorView`, selection) and `menu.ts` (export men
   defaults and remembered choices, progress, cancellation when the source changes, and an
   export button that stays disabled until the running export finishes.
 - `export-visual.spec.ts`: offline HTML at phone, short, landscape and enlarged-text sizes.
+- `export-search.spec.ts`: offline search of exported diagrams and atlases, duplicate
+  labels across files, nested boards, scenarios and steps, framing and focus, browser
+  history, literal labels, modal keyboard controls, and narrow dark layouts.
 
 ## Production build
 

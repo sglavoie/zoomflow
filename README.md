@@ -48,7 +48,11 @@ use **Retry preview** to try again without losing your source.
    contains searchable examples.
 2. **Explore:** click **Checkout** in the default diagram, then **Charge** to drill
    deeper. Use breadcrumbs or **Boards** to move around, hover a link to preview its
-   board, or zoom and drag to inspect the diagram. In a folder, links to other files
+   board, or zoom and drag to inspect the diagram. **Find in diagram** (⌘⇧F / Ctrl+Shift+F)
+   finds board names and shape labels across the current document and jumps to a match.
+   In an open folder, **Find in project** searches every project file, including unsaved
+   edits and unlinked diagrams; ⌘⇧F / Ctrl+Shift+F opens project search there.
+   In a folder, links to other files
    open them with breadcrumbs that lead back, and **Atlas map** under the project in the
    filename menu draws every file and the links between them.
    Click an ordinary shape to select its source. On narrow screens, switch between
@@ -57,6 +61,8 @@ use **Retry preview** to try again without losing your source.
    **Interactive diagram (HTML)** for one file with offline drill-down navigation,
    **Interactive atlas (HTML)** for a project file and every file it links to,
    **Current board image** as SVG or PNG, or **All boards as SVG (ZIP)**.
+   Interactive HTML includes offline search for boards and shapes, across every
+   bundled file in an atlas.
 
 Edits have browser recovery backups, but save a disk copy to keep them. Browsers
 without direct file access offer **Download .d2**. Syntax errors retain the last
