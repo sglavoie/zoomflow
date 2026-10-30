@@ -106,6 +106,31 @@ it.each(['work/Plan.d2', 'work/plan.d2'])('does not overwrite a project file ano
   await expect(createProjectFile(folder, 'work/Other.d2', 'other diagram')).resolves.toMatchObject({ name: 'Other.d2' });
 });
 
+it.each([true, false])('checks simultaneous creations through separate folder handles (same folder: %s)', async (sameFolder) => {
+  const firstFiles = new Map<string, string>();
+  const secondFiles = sameFolder ? firstFiles : new Map<string, string>();
+  const firstFolder = memoryFolder(firstFiles);
+  const secondFolder = memoryFolder(secondFiles);
+  Object.assign(secondFolder, { isSameEntry: async () => sameFolder });
+  const [first, second] = await Promise.all([
+    createProjectFile(firstFolder, 'Plan.d2', 'first diagram'),
+    createProjectFile(secondFolder, 'Plan.d2', 'second diagram'),
+  ]);
+  expect(typeof first).toBe('object');
+  expect(firstFiles.get('Plan.d2')).toBe('first diagram');
+  if (sameFolder) expect(second).toBe('exists');
+  else {
+    expect(typeof second).toBe('object');
+    expect(secondFiles.get('Plan.d2')).toBe('second diagram');
+  }
+});
+
+it('treats a directory at the requested file path as an occupied name', async () => {
+  const folder = memoryFolder(new Map());
+  vi.spyOn(folder, 'getFileHandle').mockRejectedValue(new DOMException('A directory has this name', 'TypeMismatchError'));
+  await expect(createProjectFile(folder, 'Plan.d2', 'diagram')).resolves.toBe('exists');
+});
+
 it('releases a reserved project filename when creation fails', async () => {
   const files = new Map<string, string>();
   const folder = memoryFolder(files);
