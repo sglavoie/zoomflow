@@ -8,6 +8,11 @@ type PickerWindow = Window & { showSaveFilePicker?: (options?: object) => Promis
 const pickerWindow = window as PickerWindow;
 
 const moved = 'The file was moved or deleted; choose where to save.';
+const inProgress = 'A save for this document is still in progress. Save again when it finishes.';
+
+/** A document can move between panes while its write is pending. Each workspace shares these locks,
+ * so an older write cannot finish after, and replace, a newer save started from the other pane. */
+const pendingSaves = new WeakMap<FileHandles, Set<string>>();
 
 /** The file each draft was refused writing to, shared by every pane; Save asks where to save instead of asking
  * again, until the visitor grants it elsewhere or opens the draft from another file. */
@@ -33,12 +38,16 @@ export type SaveFileTarget = {
 
 /** Save writes the source back to its file, asks for one, or falls back to a download. */
 export function setupSaveFile(button: HTMLButtonElement, target: SaveFileTarget) {
-  /** Notices that a file needs a new destination, cleared once a save succeeds. */
-  const notices = new Set([moved]);
+  /** Save notices cleared once a save succeeds. */
+  const notices = new Set([moved, inProgress]);
   button.addEventListener('click', async () => {
-    if (!target.key()) return;
+    const key = target.key();
+    if (!key) return;
+    let pending = pendingSaves.get(target.fileHandles);
+    if (!pending) { pending = new Set(); pendingSaves.set(target.fileHandles, pending); }
+    if (pending.has(key)) { target.setActivity(inProgress); return; }
+    pending.add(key);
     button.disabled = true;
-    const key = target.key()!;
     const source = target.source();
     const name = target.name();
     let saving: ReturnType<typeof setTimeout> | undefined;
@@ -116,6 +125,7 @@ export function setupSaveFile(button: HTMLButtonElement, target: SaveFileTarget)
       target.setActivity(target.key() === key ? `Could not save file: ${describeError(error)}`
         : `Could not save ${name}: ${describeError(error)}`, 'error');
     } finally {
+      pending.delete(key);
       clearTimeout(saving);
       if (target.key() === key && target.activity() === 'Saving file…') target.setActivity('');
       button.disabled = false;

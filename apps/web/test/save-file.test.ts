@@ -158,3 +158,35 @@ it('marks an unchanged document as downloaded without the header download button
   expect(downloadSource).toHaveBeenCalledWith('a: Mine', 'doc.d2');
   expect(state.downloaded).toBe(true);
 });
+
+it('prevents overlapping saves after a document moves to another pane', async () => {
+  const { handle } = fakeHandle('doc.d2', { query: 'granted', request: 'granted' });
+  let finish!: () => void;
+  const completed: string[] = [];
+  Object.assign(handle, { createWritable: async () => {
+    let text = '';
+    return {
+      write: async (source: string) => { text = source; },
+      close: async () => {
+        if (text === 'a: Mine') await new Promise<void>(resolve => { finish = resolve; });
+        completed.push(text);
+      },
+      abort: async () => {},
+    };
+  } });
+  const handles = new Map([['file:doc', handle]]);
+  const first = setup(handles);
+  const saving = first.save();
+  await vi.waitFor(() => expect(finish).toBeTypeOf('function'));
+  first.state.key = 'file:other';
+  const second = setup(handles, 'save-file-b');
+  second.state.source = 'a: Latest edits';
+  await second.save();
+  expect(second.state.activity).toContain('still in progress');
+  expect(completed).toEqual([]);
+  finish();
+  await saving;
+  await second.save();
+  expect(completed).toEqual(['a: Mine', 'a: Latest edits']);
+  expect(second.state.activity).toBe('');
+});

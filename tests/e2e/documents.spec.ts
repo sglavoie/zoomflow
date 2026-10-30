@@ -6,7 +6,7 @@ import { source, previewReady, stubAiStatus, chooseExample, projectFolder, openF
 
 /** Documents: drafts, recovery, saving to disk, downloads and removal with undo. */
 
-test('a slow save follows an example moved to the other pane and reuses its saved file', async ({ page }) => {
+test('a slow save follows an example moved to the other pane and prevents overlapping writes', async ({ page }) => {
   await page.setViewportSize({ width: 1600, height: 1000 });
   await stubAiStatus(page);
   await page.addInitScript(() => {
@@ -31,13 +31,18 @@ test('a slow save follows an example moved to the other pane and reuses its save
   await page.locator('#pane-choose-b').click();
   await page.locator('.example-option').filter({ hasText: 'Order flow' }).click();
   await previewReady(page, 'b');
+  await page.locator('#editor-b .cm-content').fill('x: Later edits');
+  await page.keyboard.press('ControlOrMeta+s');
+  await expect(page.locator('#activity-status-b')).toContainText('still in progress');
+  expect(await page.evaluate(() => (window as any).saveProbe.writes)).toEqual(['x: Source being saved']);
+  expect(await page.evaluate(() => (window as any).saveProbe.picks)).toBe(1);
   await page.evaluate(() => (window as any).saveProbe.finish());
   await expect(page.locator('#save-file')).toBeEnabled();
   await expect(page.locator('#filename')).toHaveText('saved-order.d2');
   await expect(page.locator('#pane-document-b .pane-document-name')).toHaveText('saved-order.d2');
-  await expect(page.locator('#draft-status-b')).toHaveText('Saved to file');
+  await expect(page.locator('#draft-status-b')).toHaveText('File has unsaved changes');
+  await expect(page.locator('#editor-b .cm-content')).toHaveText('x: Later edits');
   await expect(page.locator('#pane-document .pane-document-name')).toHaveText('flowchart.d2');
-  await page.locator('#editor-b .cm-content').fill('x: Later edits');
   await page.keyboard.press('ControlOrMeta+s');
   await expect(page.locator('#draft-status-b')).toHaveText('Saved to file');
   expect(await page.evaluate(() => (window as any).saveProbe.writes)).toEqual(['x: Source being saved', 'x: Later edits']);
