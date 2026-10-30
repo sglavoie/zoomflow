@@ -39,6 +39,15 @@ imports. Closing search, suspending a pane or switching documents abandons queue
 work and ignores late results. Syntax failures affect only their file; engine
 failures stop indexing and offer retry separately from source diagnostics.
 
+Project checking also compiles one file at a time without rendering SVGs, from an
+immutable snapshot of all current canonical project sources and lint options.
+Once compilation finishes, lint uses the snapshot's complete board index to check
+cross-file fragments independently of compile order or session navigation caches.
+Compiler failures are reported per file and do not prevent other files from being
+checked. Closing, cancelling or invalidating the check abandons queued work and
+late output; source or option changes clear stale results and require an explicit
+new check. Results never feed back into editor sources or live preview caches.
+
 To compare sustained editing with and without preview coalescing, start `pnpm dev`
 and run `node spike/preview-throughput.mjs http://127.0.0.1:5173 600` (use the actual
 Vite URL). This sends six edits 400 ms apart to a generated diagram and reports

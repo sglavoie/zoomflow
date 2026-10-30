@@ -64,6 +64,13 @@ CodeMirror access through `withEditorView`, selection) and `menu.ts` (export men
 - `project-search-indexing.spec.ts`: indexing progress with a held compiler request,
   stopping queued work on close, cached results and keyboard focus during incremental
   updates, and retry after an engine interruption.
+- `project-check.spec.ts`: fresh cross-file board checks across unvisited and unlinked
+  files, unsaved edits, compiler and imported-source navigation, preservation of file
+  contents, invalidation from another pane, active-project scope, and narrow dark layouts.
+- `project-check-progress.spec.ts`: progress, cancellation and closing with a held
+  compiler request, discarding stale output, checking again, engine interruptions,
+  and opening files for errors without source locations. Unit tests use the real D2
+  compiler to check snapshot consistency, lint options and compile-order independence.
 - `ai.spec.ts`: AI edits and undo, availability checks and timeouts, cancellation,
   transport failures, highlights of changed lines, deletions on short phone screens, the
   phone composer, sending with ⌘/Ctrl+Enter, and AI settings mirrored across split panes

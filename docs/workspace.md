@@ -260,6 +260,23 @@ browsers offer a Save dialog or source download. **Export → Download project .
 keeps all project sources and their relative paths together. Local image assets are
 not yet loaded with folder projects.
 
+**Check project**, beside **Find in project** above the preview, checks every `.d2`
+file in the folder, including unlinked files and unsaved edits in either pane.
+It compiles the current sources before checking links against the target files'
+current boards, so a renamed board is caught even when you have not opened its file.
+Results group compiler errors and lint issues by the file being checked; imported
+issues name their original source file. Choose an issue to open that location,
+including in the other pane if it already shows the file. When no source location
+is available, the issue opens its file without selecting a guessed location.
+
+The check shows progress, error and warning counts, and uses the current **Lint
+options**. **Cancel check**, Close or Escape stops queued work; an engine request
+already running can finish, but its results are ignored. Cancelled checks label
+their results as incomplete. Editing a source or changing check options clears the
+old results; **Check again** starts a fresh check. Engine interruptions stop the
+check separately from source errors, while a file that fails to compile does not
+stop the remaining files from being checked. A check does not save or modify files.
+
 ## Link diagrams into an atlas
 
 A shape or connection in one project file can open another file, so a folder becomes
@@ -333,8 +350,9 @@ Home: {link: ../index.d2}
   SVG. The command line lints with `--follow` and exports atlases the same way; see
   [Command line and CI](cli.md).
 - **Limitations:** links to local files other than `.d2` and to files outside the
-  project folder are not followed. A link's board check uses the linked file's last
-  compile in this browser session. Opening a file that the other pane shows only says
+  project folder are not followed. Live diagnostics for an individual diagram use
+  the linked file's last compile in this browser session; **Check project** checks
+  every target against fresh sources. Opening a file that the other pane shows only says
   so. Images in folder projects are not loaded yet.
 
 ## Explore a diagram

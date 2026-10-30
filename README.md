@@ -52,6 +52,8 @@ use **Retry preview** to try again without losing your source.
    finds board names and shape labels across the current document and jumps to a match.
    In an open folder, **Find in project** searches every project file, including unsaved
    edits and unlinked diagrams; ⌘⇧F / Ctrl+Shift+F opens project search there.
+   **Check project** checks every file for compilation errors and lint issues, including
+   links to missing files or boards; choose an issue to open its source.
    In a folder, links to other files
    open them with breadcrumbs that lead back, and **Atlas map** under the project in the
    filename menu draws every file and the links between them.

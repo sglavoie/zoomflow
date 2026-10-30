@@ -298,6 +298,26 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
       },
       activate: openProjectMatch,
     },
+    projectCheck: {
+      available: () => currentDocumentKey !== undefined && projectIdOf(currentDocumentKey) !== undefined,
+      read: () => {
+        const project = currentDocumentKey && projectIdOf(currentDocumentKey);
+        return project ? { id: project, fs: picker().projectSources(project).fs,
+          options: { missingBacklink: missingBacklink.checked, boundaryPorts: boundaryPorts.checked } } : undefined;
+      },
+      compile: (path, fs) => compileSource(fs[path], { inputPath: path, fs }),
+      activate: async (item) => {
+        if (canOpenDiagnostic(item)) { await openDiagnostic(item); return; }
+        // Compiler/layout failures can lack a range; still let the user open the file that failed.
+        if (!item.filename) return;
+        if (item.filename === picker().inputPath(id) && !showsAtlas()) { showView('source'); editor.view.focus(); return; }
+        const target = picker().selectProjectPath(id, item.filename);
+        if (!target) return;
+        if (target.pane !== id) { shared.revealSource(target.pane); return; }
+        await replaceDocument(target.source, target.name, target.key);
+        if (currentDocumentKey === target.key) { showView('source'); editor.view.focus(); }
+      },
+    },
     status: (message, kind) => setActivity(message, kind),
     undo: () => { immediate = true; editor.undo(); immediate = false; },
     redo: () => { immediate = true; editor.redo(); immediate = false; },
@@ -615,6 +635,7 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
     return { inputPath, exists: (path: string) => Object.hasOwn(context.fs, path), boards: (path: string) => compiledBoards.get(siblingKey(key, path)) };
   }
   function updateLint() {
+    boardTools.refreshSearch();
     if (!lintDocument || mappedSource !== editor.source) return;
     const result = !missingBacklink.checked && !boundaryPorts.checked && defaultLint ? defaultLint
       : lint(lintDocument, { missingBacklink: missingBacklink.checked, boundaryPorts: boundaryPorts.checked, files: lintFiles(lintDocument.inputPath) });

@@ -10,6 +10,8 @@ import { fileLinkDialog, newFileSource, type FileBoard } from './file-link-dialo
 import { fileLink } from './project-files';
 import type { PaneScope } from './pane-scope';
 import type { ProjectSearchHost } from './project-search';
+import { setupProjectCheck } from './project-check-dialog';
+import type { ProjectCheckHost } from './project-check';
 import { setText } from './text';
 
 /** What a folder project offers for linking its files: this document's project path, the other files, a file's
@@ -34,6 +36,7 @@ type BoardToolsOptions = {
   /** Show a search destination in the preview, framing and selecting its shape when present. */
   revealMatch: (shape?: string) => void;
   projectSearch?: ProjectSearchHost;
+  projectCheck?: ProjectCheckHost;
   /** Whether the shape's source is in this document, rather than an imported file. */
   inSource: (shape: string) => boolean;
   status: (message: string, kind?: 'info' | 'error') => void;
@@ -89,6 +92,7 @@ export function setupBoardTools(scope: PaneScope, viewer: Viewer, options: Board
   const outline = setupBoardOutline(toolbar, viewer, (board, focus) => edit(board, focus));
   let searchRevision = 0;
   const search = setupDiagramSearch(toolbar, scope, viewer, revealSearchMatch, options.projectSearch);
+  const projectCheck = options.projectCheck && setupProjectCheck(toolbar, scope, viewer, options.projectCheck);
   async function revealSearchMatch(entry: DiagramSearchEntry, mode: 'push' | 'replace' = 'push') {
     const revision = ++searchRevision;
     const indexed = boards;
@@ -365,7 +369,8 @@ export function setupBoardTools(scope: PaneScope, viewer: Viewer, options: Board
     }
     outline.render(ready() ? sites : undefined, boards, boardId());
     search.refresh();
-    toolbar.hidden = editGroup.hidden && outline.hidden && search.empty;
+    projectCheck?.refresh();
+    toolbar.hidden = editGroup.hidden && outline.hidden && search.empty && (!projectCheck || projectCheck.empty);
     const shape = selected && compiledSource === source ? selected : undefined;
     const button: Item = (label, run, { relinks, keys } = {}) => {
       const element = document.createElement('button');
@@ -634,9 +639,9 @@ export function setupBoardTools(scope: PaneScope, viewer: Viewer, options: Board
 
   return {
     refresh,
-    refreshSearch: search.refresh,
+    refreshSearch() { search.refresh(); projectCheck?.refresh(); },
     revealSearchMatch,
-    resetSearch() { ++searchRevision; search.reset(); },
+    resetSearch() { ++searchRevision; search.reset(); projectCheck?.reset(); },
     /** Whether a shape on the board on view is edited on the diagram, so clicking it keeps focus there. */
     editsOnCanvas: (shape: string) => Boolean(canvasTarget(shape)),
     /** The diagram keys for the step or topic at `target`, for keyboard guidance. */
