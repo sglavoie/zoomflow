@@ -244,6 +244,7 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
       immediate = false;
     },
     selected: () => { selectionCleared = undefined; void highlightSelection(false); },
+    outsideBoardClicked: (position) => void focusSourceBoard(position),
     format: () => void formatSource(),
     reveal: () => void revealSelection(),
     label: id === 'a' ? 'D2 source' : 'D2 source, second diagram',
@@ -666,6 +667,21 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
     const shapes = selectionCleared ? [] : matches.filter((entry) => entry.board === viewer.currentBoard?.id).map((entry) => entry.shape);
     viewer.highlightShapes(shapes);
     boardTools.select([...new Set(shapes)]);
+  }
+  async function focusSourceBoard(position: number) {
+    if (mappedSource !== editor.source) return;
+    const line = editor.view.state.doc.lineAt(position);
+    // The opening and closing lines belong to the board too. Choose the smallest
+    // enclosing block so nested boards take precedence over their ancestors.
+    let target = 'root';
+    let size = editor.source.length;
+    for (const [board, block] of blocks) {
+      if (line.to >= block.from - 1 && line.from <= block.to + 1 && block.to - block.from < size) {
+        target = board;
+        size = block.to - block.from;
+      }
+    }
+    if (target !== viewer.currentBoard?.id) await viewer.navigate(target);
   }
   async function revealSelection() {
     if (revealButton.disabled) return;
