@@ -34,7 +34,10 @@ spaces, `.`/`..`, and Windows device names such as `CON` or `LPT1`) are replaced
 with `_` or prefixed, and names that differ only by case or Unicode normalization
 gain an `@` prefix; a board's child boards sit in the folder named like its own file,
 so `@a_b.svg` keeps its children in `@a_b/`. HTML always includes the whole board tree, titled after the
-input file without `.d2`, and a minified offline navigation runtime. Its
+input file without `.d2`, and a minified offline navigation runtime. **Find in diagram**
+(⌘⇧F / Ctrl+Shift+F) searches board names and shape labels; atlas HTML offers
+**Find in atlas** across every bundled file, with file paths in its results.
+Choosing a result opens its board and frames and highlights its shape. The HTML
 Content-Security-Policy allows only the inline runtime and styles and embedded
 (`data:`) images and fonts, and no network requests. When two or more boards have
 shapes, one extra render of their characters gives them the same font subsets, so each

@@ -12,6 +12,8 @@ export interface ExportBoard {
   path: string;
   empty: boolean;
   svg: string;
+  /** Compiled labels and board-scoped IDs for offline search, without the compiler model. */
+  searchShapes?: { id: string; label: string }[];
   missingLinks?: LintDiagnostic[];
   parentContext?: ParentContext[];
   /** The project path of the diagram file this board belongs to, in atlas exports. */
@@ -68,6 +70,7 @@ export async function renderExportBoards(diagram: Diagram, render: (target: stri
     places.set(board.id, { folder: parent, name });
     result.push({ id: board.id, name: board.name, hash: board.hash, parent: board.parent,
       path: `${parent}${name}${extension}`, empty: board.diagram.shapes.length === 0, svg: '',
+      searchShapes: board.diagram.shapes.map((shape) => ({ id: shape.id, label: ('label' in shape && shape.label) || shape.id })),
       parentContext: parentContext(board, boards),
       missingLinks: diagnostics.filter((item) => (item.rule === 'dangling-link' || item.rule === 'dangling-file-link') && item.board === board.id && item.shape && item.target) });
   }

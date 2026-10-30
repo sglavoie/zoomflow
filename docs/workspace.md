@@ -494,6 +494,12 @@ board image (SVG)** and **Current board image (PNG)** for the board on screen, a
 download: **Download HTML**, **Download SVG**, **Download PNG** or **Download SVG
 ZIP**. The HTML opens directly from disk without a server or network connection
 and includes every board, including cyclic links.
+**Find in diagram** beside the zoom controls (⌘⇧F / Ctrl+Shift+F) searches board names
+and shape labels across the exported diagram. Atlas exports offer **Find in atlas**
+across every bundled file, with file paths and board breadcrumbs to distinguish matches.
+Choose a result to open its board and frame and highlight its shape; use ↓ and ↑ to
+move through results, Enter to open one, or Escape to close search. Search works
+entirely offline, including boards you have not visited.
 The export menu names the current board for SVG/PNG, or shows the total board count
 for ZIP/HTML, and explains that HTML preserves offline drill-down navigation.
 Until you choose a format, multi-board diagrams default to interactive HTML and

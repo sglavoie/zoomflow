@@ -1,5 +1,10 @@
 import type { Board } from './index';
 
+/** Only labels and board ancestry are needed, including in an offline export. */
+type SearchBoard = Pick<Board, 'id' | 'name' | 'parent'> & {
+  diagram: { shapes: readonly { id: string; label?: string }[] };
+};
+
 /** A destination in a compiled document. Shape IDs are scoped to their board. */
 export type DiagramSearchEntry = {
   board: string;
@@ -9,8 +14,8 @@ export type DiagramSearchEntry = {
   shape?: string;
 };
 
-/** Index the compiled board tree once per preview, without rendering its SVGs. */
-export function indexDiagramSearch(boards: ReadonlyMap<string, Board>): DiagramSearchEntry[] {
+/** Index a board tree without rendering its SVGs. */
+export function indexDiagramSearch(boards: ReadonlyMap<string, SearchBoard>): DiagramSearchEntry[] {
   const entries: DiagramSearchEntry[] = [];
   for (const board of boards.values()) {
     const trail = [board.id];
@@ -24,7 +29,7 @@ export function indexDiagramSearch(boards: ReadonlyMap<string, Board>): DiagramS
 }
 
 /** Literal, case-insensitive label matching. Empty queries wait for the user to type. */
-export function searchDiagram(entries: readonly DiagramSearchEntry[], query: string): DiagramSearchEntry[] {
+export function searchDiagram<T extends DiagramSearchEntry>(entries: readonly T[], query: string): T[] {
   const text = query.trim().toLocaleLowerCase();
   return text ? entries.filter(entry => entry.label.toLocaleLowerCase().includes(text)) : [];
 }

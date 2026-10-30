@@ -110,6 +110,9 @@ CodeMirror access through `withEditorView`, selection) and `menu.ts` (export men
   defaults and remembered choices, progress, cancellation when the source changes, and an
   export button that stays disabled until the running export finishes.
 - `export-visual.spec.ts`: offline HTML at phone, short, landscape and enlarged-text sizes.
+- `export-search.spec.ts`: offline search of exported diagrams and atlases, duplicate
+  labels across files, nested boards, scenarios and steps, framing and focus, browser
+  history, literal labels, modal keyboard controls, and narrow dark layouts.
 
 ## Production build
 
