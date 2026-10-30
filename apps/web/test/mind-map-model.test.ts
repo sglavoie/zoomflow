@@ -46,8 +46,8 @@ it('opens deep branches as linked detail boards, recursively', async () => {
   const boards = [...indexBoards(compiled.diagram).values()].map(board => [board.name, board.parent, board.diagram.shapes.length]);
   expect(boards).toEqual([['Root', undefined, 4], ['style', 'root', 2], ['S1', 'root.layers.style', 2], ['style 2', 'root', 2]]);
   expect(compiled.diagram.shapes.filter(shape => shape.link).map(shape => shape.link)).toEqual(['root.layers.style', 'root.layers.style 2']);
-  // Detail boards inherit the root's library import, and a main branch keeps its colour on them.
-  expect(source.match(/\.\.\.@zoomflow/g)).toHaveLength(1);
+  // Each board imports its styles, and a main branch keeps its colour on them.
+  expect(source.match(/\.\.\.@zoomflow/g)).toHaveLength(boards.length);
   const tone = compiled.diagram.shapes[1].stroke;
   expect(compiled.diagram.layers?.[0]?.shapes.map(shape => shape.stroke)).toEqual([tone, tone]);
   expect(readMindMap(source)).toEqual(map);
@@ -112,11 +112,12 @@ it('writes looks as library classes that apply on every board', async () => {
   expect(readMindMap(source.replace('{class: [zf-topic; zf-filled; zf-compact]}', '{class: zf-topic}'))).toBeUndefined();
 });
 
-it('reopens maps written when every board imported the library', () => {
+it('reopens maps written with one import and adds detail imports when regenerated', () => {
   const map = example(1);
   const legacy = mindMapSource(map, true);
-  expect(legacy.match(/\.\.\.@zoomflow/g)!.length).toBeGreaterThan(1);
+  expect(legacy.match(/\.\.\.@zoomflow/g)).toHaveLength(1);
   expect(readMindMap(legacy)).toEqual(map);
+  expect(mindMapSource(readMindMap(legacy)!).match(/\.\.\.@zoomflow/g)!.length).toBeGreaterThan(1);
 });
 
 it('stays editable with topics that open other files, and round-trips their links', async () => {

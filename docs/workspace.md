@@ -50,8 +50,9 @@ one board** for a single board.
 
 **Create mind map**, **Edit mind map**, undo, discard confirmation and **Look** work as
 in the flow builder. The generated D2 imports the [standard library](../stdlib/README.md)
-once, on the root board; detail boards inherit its mind map classes. Label edits that keep
-the structure still reopen in the outline; other custom D2 makes **Edit mind map**
+on each board, so detail boards keep their styles when the map is attached inside another
+diagram. Existing maps with one import still reopen and gain the detail imports when
+edited. Label edits that keep the structure still reopen in the outline; other custom D2 makes **Edit mind map**
 unavailable so the outline cannot discard it.
 
 ## Mix flows and mind maps

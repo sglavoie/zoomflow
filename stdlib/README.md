@@ -61,7 +61,10 @@ before them:
 - `zf-shadow`: a drop shadow.
 
 Classes defined on the root board apply on every board below it, so import once at
-the top. Lint warns about a class that nothing defines, which catches a misspelt name
+the top of the document. Classes defined inside a nested layer apply only on that layer;
+its detail layers need their own imports. The mind map builder imports on every board
+so its maps also work when attached inside another diagram.
+Lint warns about a class that nothing defines, which catches a misspelt name
 or a missing import. D2 reports a connection class used on a shape, such as
 `zf-to-many`, as a compile error.
 
