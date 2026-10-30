@@ -52,6 +52,10 @@ CodeMirror access through `withEditorView`, selection) and `menu.ts` (export men
   the keyboard, undo and redo on the diagram, selecting the shape that led down after going
   up, the boards outline, the source following the board on view, and link previews.
   `apps/web/test/canvas-model.test.ts` covers the edits on flows, mind maps and detail boards.
+- `diagram-search.spec.ts`: finding nested boards and shapes by label, board ancestry,
+  framing and selection, keyboard controls, literal labels, preview updates and errors,
+  document switches, imported shapes, and narrow screens. Core search tests cover
+  indexing layers, scenarios and steps with board-scoped shape IDs.
 - `ai.spec.ts`: AI edits and undo, availability checks and timeouts, cancellation,
   transport failures, highlights of changed lines, deletions on short phone screens, the
   phone composer, sending with ⌘/Ctrl+Enter, and AI settings mirrored across split panes

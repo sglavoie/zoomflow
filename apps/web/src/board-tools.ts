@@ -5,6 +5,7 @@ import { boardSites, type BoardSites, type BuilderKind, type ShapeAction } from 
 import { canvasShapes, editOnCanvas, type CanvasEdit, type CanvasShape } from './canvas-model';
 import { pageListeners } from './canvas-guidance';
 import { setupBoardOutline } from './board-outline';
+import { setupDiagramSearch } from './diagram-search';
 import { fileLinkDialog, newFileSource, type FileBoard } from './file-link-dialog';
 import { fileLink } from './project-files';
 import type { PaneScope } from './pane-scope';
@@ -29,6 +30,8 @@ type BoardToolsOptions = {
   update: (source: string) => void;
   /** Select a shape's source; `focusEditor` moves to the source editor, as Alt+click does. */
   selectSource: (shape: string, focusEditor: boolean) => void;
+  /** Show a search destination in the preview, framing and selecting its shape when present. */
+  revealMatch: (shape?: string) => void;
   /** Whether the shape's source is in this document, rather than an imported file. */
   inSource: (shape: string) => boolean;
   status: (message: string, kind?: 'info' | 'error') => void;
@@ -82,6 +85,17 @@ export function setupBoardTools(scope: PaneScope, viewer: Viewer, options: Board
   let toggled: HTMLElement | undefined;
   scope.root.append(menu);
   const outline = setupBoardOutline(toolbar, viewer, (board, focus) => edit(board, focus));
+  let searchRevision = 0;
+  const search = setupDiagramSearch(toolbar, scope, viewer, async entry => {
+    const revision = ++searchRevision;
+    const indexed = boards;
+    const board = indexed.get(entry.board);
+    if (!board) return;
+    await viewer.navigate(entry.board, 'push', entry.trail);
+    // A delayed render must not select a shape after a different document or route opened.
+    if (revision === searchRevision && boards === indexed && viewer.currentBoard?.id === board.id &&
+      viewer.currentBoard.diagram === board.diagram) options.revealMatch(entry.shape);
+  });
 
   /** The compiled document's boards, or only the root board's text until the current source compiles. */
   let sites: BoardSites | undefined;
@@ -347,7 +361,7 @@ export function setupBoardTools(scope: PaneScope, viewer: Viewer, options: Board
         : 'Change topics as an outline, without writing code.');
     }
     outline.render(ready() ? sites : undefined, boards, boardId());
-    toolbar.hidden = editGroup.hidden && outline.hidden;
+    toolbar.hidden = editGroup.hidden && outline.hidden && search.empty;
     const shape = selected && compiledSource === source ? selected : undefined;
     const button: Item = (label, run, { relinks, keys } = {}) => {
       const element = document.createElement('button');
@@ -616,6 +630,7 @@ export function setupBoardTools(scope: PaneScope, viewer: Viewer, options: Board
 
   return {
     refresh,
+    resetSearch() { ++searchRevision; search.reset(); },
     /** Whether a shape on the board on view is edited on the diagram, so clicking it keeps focus there. */
     editsOnCanvas: (shape: string) => Boolean(canvasTarget(shape)),
     /** The diagram keys for the step or topic at `target`, for keyboard guidance. */
@@ -636,6 +651,8 @@ export function setupBoardTools(scope: PaneScope, viewer: Viewer, options: Board
       sites = next;
       boards = nextBoards;
       compiledSource = source;
+      ++searchRevision;
+      search.update(boards);
       refresh();
     },
     /** The preview shows the compiled document: open a board just added or renamed, then select a shape just made,

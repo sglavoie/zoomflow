@@ -262,6 +262,25 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
       editor.select(entry, focusEditor);
       void highlightSelection(false);
     },
+    revealMatch: (shape) => {
+      showView('preview');
+      viewport.refresh();
+      if (shape === undefined) { viewer.stage.focus({ preventScroll: true }); return; }
+      const entry = sourceMap.find(item => item.board === viewer.currentBoard?.id && item.shape === shape);
+      if (entry && mappedSource === editor.source) {
+        selectionCleared = undefined;
+        editor.select(entry, false);
+      }
+      // Imported shapes can be found too, even when their source is in another file.
+      viewer.highlightShapes([shape]);
+      boardTools.select([shape]);
+      const element = [...viewer.stage.querySelectorAll<SVGGraphicsElement>('[data-shape-id]')].find(node => node.dataset.shapeId === shape);
+      if (!element) { viewer.stage.focus({ preventScroll: true }); return; }
+      const target = element.closest<SVGElement>('a') ?? element;
+      if (!target.hasAttribute('tabindex')) target.setAttribute('tabindex', '-1');
+      target.focus({ preventScroll: true });
+      viewport.reveal([element]);
+    },
     status: (message, kind) => setActivity(message, kind),
     undo: () => { immediate = true; editor.undo(); immediate = false; },
     redo: () => { immediate = true; editor.redo(); immediate = false; },
@@ -475,6 +494,7 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
   /** Show a document; `route` overrides its remembered board. Without `stack`, it starts a new way through files. */
   async function replaceDocument(source: string, name: string, key: string, reset = false, route?: ViewerRoute, stack: FileVisit[] = []) {
     ++documentOpens;
+    boardTools.resetSearch();
     ai?.documentSwitched();
     sourceError = false;
     viewer.setRoute(reset ? undefined : route ?? shared.documentRoutes.get(key));
@@ -819,6 +839,7 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
     /** Show a document restored on startup, keeping its board from the page URL. */
     open(document: { key: string; name: string; source: string }) {
       ++documentOpens;
+      boardTools.resetSearch();
       ai?.documentSwitched();
       sourceError = false;
       documentName = document.name;
@@ -836,6 +857,7 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
     /** Leave the pane without a document, for example when its draft is removed. */
     close() {
       ++documentOpens;
+      boardTools.resetSearch();
       sourceError = false;
       clearTimeout(debounce);
       clearTimeout(previewTimer);

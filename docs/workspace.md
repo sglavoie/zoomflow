@@ -122,6 +122,14 @@ editor.
 
 ## Find your way between boards
 
+**Find in diagram** above the preview (⌘⇧F / Ctrl+Shift+F) searches board names and
+shape labels throughout the current document, including nested boards, scenarios and
+steps. Results show their board breadcrumbs. Choose a match to open its board and
+frame and select the shape. Use ↓ and ↑ to move through matches, Enter to open one,
+or Escape to close without changing boards. ⌘F / Ctrl+F in the source editor still
+finds source text. Diagram search uses the latest successful preview; it updates when
+edits compile and stays available on that preview if the source has an error.
+
 **Boards** above the preview lists every board of the document as a tree, marked with
 the builder that writes it: **Flow**, **Mind map**, or **Part of mind map** for a map's
 detail boards. Choose a board to open it, with breadcrumbs that follow the tree, or

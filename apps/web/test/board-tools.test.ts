@@ -31,7 +31,7 @@ it('follows each of several board-moving edits on the diagram back through undo 
     async navigate(id: string) { viewer.currentBoard = boards.get(id); } };
   const tools = setupBoardTools(paneScope('a', document.getElementById('pane')!), viewer as never, {
     builders: {} as never, source: () => source, update: next => { source = next; tools.invalidate(); },
-    selectSource: () => {}, inSource: () => true, status: () => {}, undo: () => {}, redo: () => {},
+    selectSource: () => {}, revealMatch: () => {}, inSource: () => true, status: () => {}, undo: () => {}, redo: () => {},
   });
   /** Compile and show the source; like the viewer, a board that is gone falls back to the main board. */
   async function settle() {

@@ -48,7 +48,9 @@ use **Retry preview** to try again without losing your source.
    contains searchable examples.
 2. **Explore:** click **Checkout** in the default diagram, then **Charge** to drill
    deeper. Use breadcrumbs or **Boards** to move around, hover a link to preview its
-   board, or zoom and drag to inspect the diagram. In a folder, links to other files
+   board, or zoom and drag to inspect the diagram. **Find in diagram** (⌘⇧F / Ctrl+Shift+F)
+   finds board names and shape labels across the current document and jumps to a match.
+   In a folder, links to other files
    open them with breadcrumbs that lead back, and **Atlas map** under the project in the
    filename menu draws every file and the links between them.
    Click an ordinary shape to select its source. On narrow screens, switch between
