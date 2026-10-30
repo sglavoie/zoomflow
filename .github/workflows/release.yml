@@ -1,0 +1,86 @@
+name: Release
+
+# Tags publish to GitHub Releases. Manual runs exercise the same build and upload
+# downloadable workflow artifacts without publishing a release.
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/setup-workspace
+        with:
+          browsers: chromium webkit
+      - name: Validate release version
+        env:
+          REF_TYPE: ${{ github.ref_type }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          node --input-type=module <<'JS'
+          import { readVersion } from './scripts/version.ts';
+          const version = readVersion();
+          if (process.env.REF_TYPE === 'tag' && process.env.REF_NAME !== `v${version}`) {
+            throw new Error(`Tag must match package.json: v${version}`);
+          }
+          JS
+      - name: Typecheck and lint
+        run: pnpm typecheck && pnpm lint
+      - name: Verify vendored checksums
+        run: (cd fonts && shasum -a 256 -c SHA256SUMS) && (cd vendor/d2 && shasum -a 256 -c SHA256SUMS)
+      - uses: ./.github/actions/setup-d2
+      - name: Unit, release and CLI integration tests
+        run: pnpm test:unit
+      - name: Build release archives
+        run: pnpm release:build
+      - name: Smoke-test the extracted CLI
+        run: pnpm release:smoke
+      - name: Production smoke tests in Chromium and WebKit
+        run: pnpm exec playwright test --project=production --project=production-webkit --reporter=github
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release
+          path: dist/release/
+          if-no-files-found: error
+
+  publish:
+    if: github.ref_type == 'tag'
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: release
+          path: dist
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          # Upload to a draft first; failed uploads can be retried without a partial
+          # public release. A published release is never overwritten by a rerun.
+          if gh release view "$GITHUB_REF_NAME" --json isDraft --jq '.isDraft' > draft.txt; then
+            if [ "$(cat draft.txt)" != true ]; then
+              echo "Release $GITHUB_REF_NAME is already published."
+              exit 0
+            fi
+          else
+            gh release create "$GITHUB_REF_NAME" --verify-tag --draft --title "$GITHUB_REF_NAME" --generate-notes
+          fi
+          gh release upload "$GITHUB_REF_NAME" dist/* --clobber
+          gh release edit "$GITHUB_REF_NAME" --draft=false

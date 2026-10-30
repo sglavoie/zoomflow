@@ -17,7 +17,10 @@
     "lint": "biome check .",
     "dev": "pnpm --filter @zoomflow/web dev",
     "build": "pnpm --filter @zoomflow/web build",
-    "zoomflow": "node packages/cli/bin/zoomflow.mjs"
+    "zoomflow": "node packages/cli/bin/zoomflow.mjs",
+    "release": "node scripts/release.ts",
+    "release:build": "node scripts/package-release.ts",
+    "release:smoke": "node scripts/smoke-release.ts"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.15",

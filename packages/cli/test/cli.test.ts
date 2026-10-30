@@ -480,7 +480,8 @@ describe.concurrent('zoomflow CLI', () => {
   it('reports usage concisely and prints the version', async () => {
     const version = await run(['--version']);
     success(version);
-    expect(version.stdout).toBe('zoomflow 0.0.0\n');
+    const manifest = JSON.parse(await readFile(resolve(repo, 'package.json'), 'utf8'));
+    expect(version.stdout).toBe(`zoomflow ${manifest.version}\n`);
     expect((await run(['-v'])).stdout).toBe('zoomflow 0.0.0\n');
     const help = await run(['-h']);
     success(help);

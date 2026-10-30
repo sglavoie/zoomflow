@@ -9,6 +9,7 @@
     // Vite's `?raw` and `?url` imports in the web sources the tests load.
     "apps/web/src/vite-env.d.ts",
     "tests/**/*.ts",
+    "scripts/**/*.ts",
     "*.config.ts",
     "spike/*.mjs"
   ]

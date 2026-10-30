@@ -1,5 +1,9 @@
 # Command line and CI
 
+Download the built CLI from [GitHub Releases](https://github.com/sglavoie/zoomflow/releases)
+and follow the [archive instructions](releases.md#downloads), or build from source below.
+The downloadable CLI needs Node.js but no pnpm or dependency installation.
+
 Install [D2 v0.9.0](https://d2lang.com/tour/install/) on `PATH` for headless
 exports (`brew install d2` on macOS), then build the CLI:
 

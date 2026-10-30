@@ -10,8 +10,9 @@ Diagrams compile locally in your browser.
 **[Try it in your browser](https://sglavoie.github.io/zoomflow/)**: no install needed.
 Ask AI needs a local server, so it is available only when you [run locally](#run-locally).
 
-**Status:** early development; expect breaking changes. The CLI runs from source and
-is not published to npm.
+**Status:** early development; expect breaking changes. Download builds from
+[GitHub Releases](https://github.com/sglavoie/zoomflow/releases), or run from source.
+The project is not published to npm.
 
 ![Zoomflow with a drill-down diagram beside its D2 source](docs/images/workspace.png)
 
@@ -73,6 +74,8 @@ good preview; **Go to error** and **Diagnostics** lead back to the relevant sour
 - [Command line and CI](docs/cli.md): linting, headless exports, exit codes, and workflows.
 - [Development](docs/development.md): checks, package boundaries, compiler contracts,
   and known limitations.
+- [Releases](docs/releases.md): version bumps, GitHub Releases, downloadable builds,
+  and retries.
 - [Browser tests](tests/e2e/README.md): behavioral coverage and visual baseline review.
 
 ## Check a change
