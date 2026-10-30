@@ -9,10 +9,13 @@ const pickerWindow = window as PickerWindow;
 
 const moved = 'The file was moved or deleted; choose where to save.';
 const inProgress = 'A save for this document is still in progress. Save again when it finishes.';
+const fileInProgress = 'A save to this file is still in progress. Save again when it finishes.';
 
 /** A document can move between panes while its write is pending. Each workspace shares these locks,
- * so an older write cannot finish after, and replace, a newer save started from the other pane. */
-const pendingSaves = new WeakMap<FileHandles, Set<string>>();
+ * so an older write cannot finish after, and replace, a newer save started from the other pane.
+ * Different drafts can also share a disk file, including through separate handles to the same entry. */
+type PendingSave = { key: string; handle?: FileSystemFileHandle };
+const pendingSaves = new WeakMap<FileHandles, Set<PendingSave>>();
 
 /** The file each draft was refused writing to, shared by every pane; Save asks where to save instead of asking
  * again, until the visitor grants it elsewhere or opens the draft from another file. */
@@ -39,19 +42,33 @@ export type SaveFileTarget = {
 /** Save writes the source back to its file, asks for one, or falls back to a download. */
 export function setupSaveFile(button: HTMLButtonElement, target: SaveFileTarget) {
   /** Save notices cleared once a save succeeds. */
-  const notices = new Set([moved, inProgress]);
+  const notices = new Set([moved, inProgress, fileInProgress]);
   button.addEventListener('click', async () => {
     const key = target.key();
     if (!key) return;
-    let pending = pendingSaves.get(target.fileHandles);
-    if (!pending) { pending = new Set(); pendingSaves.set(target.fileHandles, pending); }
-    if (pending.has(key)) { target.setActivity(inProgress); return; }
-    pending.add(key);
+    const pending = pendingSaves.get(target.fileHandles) ?? new Set<PendingSave>();
+    pendingSaves.set(target.fileHandles, pending);
+    if ([...pending].some(save => save.key === key)) { target.setActivity(inProgress); return; }
+    const request: PendingSave = { key };
+    pending.add(request);
     button.disabled = true;
     const source = target.source();
     const name = target.name();
     let saving: ReturnType<typeof setTimeout> | undefined;
     const notify = (message: string) => { notices.add(message); if (target.key() === key) target.setActivity(message); };
+    async function reserveFile(handle: FileSystemFileHandle) {
+      const others = [...pending].filter(save => save !== request && save.handle);
+      // Reserve before comparing entries: a concurrent save must see this one while isSameEntry awaits.
+      request.handle = handle;
+      for (const other of others) {
+        const entry = other.handle!;
+        if ((entry === handle || await handle.isSameEntry(entry)) && pending.has(other) && other.handle === entry) {
+          notify(fileInProgress);
+          return false;
+        }
+      }
+      return true;
+    }
     try {
       await target.fileHandles.ready();
       let handle = target.fileHandles.get(key);
@@ -67,6 +84,7 @@ export function setupSaveFile(button: HTMLButtonElement, target: SaveFileTarget)
           handle = undefined;
         }
       }
+      if (handle && !await reserveFile(handle)) return;
       if (handle && await changedOnDisk(handle)) {
         const focused = document.activeElement;
         const overwrite = await target.picker().confirm('File changed on disk — overwrite?',
@@ -85,6 +103,7 @@ export function setupSaveFile(button: HTMLButtonElement, target: SaveFileTarget)
           if (!(error instanceof DOMException && error.name === 'NotFoundError')) throw error;
           target.fileHandles.delete(key);
           handle = undefined;
+          request.handle = undefined;
           notify(moved);
         }
       }
@@ -98,6 +117,7 @@ export function setupSaveFile(button: HTMLButtonElement, target: SaveFileTarget)
           notify('Click Save again to choose where to save.');
           return;
         }
+        if (!await reserveFile(handle)) return;
       }
       if (!handle) {
         const filename = downloadSource(source, name);
@@ -125,7 +145,7 @@ export function setupSaveFile(button: HTMLButtonElement, target: SaveFileTarget)
       target.setActivity(target.key() === key ? `Could not save file: ${describeError(error)}`
         : `Could not save ${name}: ${describeError(error)}`, 'error');
     } finally {
-      pending.delete(key);
+      pending.delete(request);
       clearTimeout(saving);
       if (target.key() === key && target.activity() === 'Saving file…') target.setActivity('');
       button.disabled = false;

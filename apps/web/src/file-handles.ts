@@ -171,28 +171,41 @@ export class DirectoryHandles extends Map<string, FileSystemDirectoryHandle> {
   async ready() { await this.restoring; }
 }
 
+/** The two panes share their project's folder handle. Reserve names before any disk await, since checking for a
+ * file then creating it is not atomic. The caller treats a reserved name as taken and chooses another. */
+const creatingFiles = new WeakMap<FileSystemDirectoryHandle, Set<string>>();
+
 /** Create the file at project `path` in `folder` with `source`, during a user action so the browser may ask to write
- * the folder. Resolves why it wrote nothing when the visitor refused or a file is already there. */
+ * the folder. Resolves why it wrote nothing when the visitor refused or a file is already there or being created. */
 export async function createProjectFile(folder: FileSystemDirectoryHandle, path: string, source: string): Promise<FileSystemFileHandle | 'refused' | 'exists'> {
-  const permissions = folder as DirectoryPermissions;
-  if (permissions.queryPermission && permissions.requestPermission) {
-    const state = await permissions.queryPermission({ mode: 'readwrite' }).catch(() => 'prompt' as const);
-    if (state !== 'granted' && await permissions.requestPermission({ mode: 'readwrite' }).catch(() => 'denied' as const) !== 'granted') return 'refused';
-  }
-  const parts = path.split('/');
-  let directory = folder;
-  for (const part of parts.slice(0, -1)) directory = await directory.getDirectoryHandle(part, { create: true });
-  const name = parts.at(-1)!;
+  const pending = creatingFiles.get(folder) ?? new Set<string>();
+  creatingFiles.set(folder, pending);
+  const reserved = path.normalize('NFC').toLowerCase();
+  if (pending.has(reserved)) return 'exists';
+  pending.add(reserved);
   try {
-    await directory.getFileHandle(name);
-    return 'exists';
-  } catch (error) {
-    if (!(error instanceof DOMException && error.name === 'NotFoundError')) throw error;
+    const permissions = folder as DirectoryPermissions;
+    if (permissions.queryPermission && permissions.requestPermission) {
+      const state = await permissions.queryPermission({ mode: 'readwrite' }).catch(() => 'prompt' as const);
+      if (state !== 'granted' && await permissions.requestPermission({ mode: 'readwrite' }).catch(() => 'denied' as const) !== 'granted') return 'refused';
+    }
+    const parts = path.split('/');
+    let directory = folder;
+    for (const part of parts.slice(0, -1)) directory = await directory.getDirectoryHandle(part, { create: true });
+    const name = parts.at(-1)!;
+    try {
+      await directory.getFileHandle(name);
+      return 'exists';
+    } catch (error) {
+      if (!(error instanceof DOMException && error.name === 'NotFoundError')) throw error;
+    }
+    const handle = await directory.getFileHandle(name, { create: true });
+    const writable = await handle.createWritable();
+    try { await writable.write(source); await writable.close(); }
+    catch (error) { await writable.abort().catch(() => {}); throw error; }
+    await refreshDiskVersion(handle);
+    return handle;
+  } finally {
+    pending.delete(reserved);
   }
-  const handle = await directory.getFileHandle(name, { create: true });
-  const writable = await handle.createWritable();
-  try { await writable.write(source); await writable.close(); }
-  catch (error) { await writable.abort().catch(() => {}); throw error; }
-  await refreshDiskVersion(handle);
-  return handle;
 }

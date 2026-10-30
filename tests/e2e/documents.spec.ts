@@ -6,6 +6,56 @@ import { source, previewReady, stubAiStatus, chooseExample, projectFolder, openF
 
 /** Documents: drafts, recovery, saving to disk, downloads and removal with undo. */
 
+test('two drafts opened from the same disk file cannot overwrite a pending save', async ({ page }) => {
+  await page.setViewportSize({ width: 1600, height: 1000 });
+  await stubAiStatus(page);
+  await page.addInitScript(() => {
+    const probe = (window as any).saveProbe = { source: 'x: Original', version: 1, writes: [] as string[], finish: undefined as (() => void) | undefined };
+    (window as any).showOpenFilePicker = async () => [{
+      kind: 'file', name: 'shared.d2',
+      isSameEntry: async (other: FileSystemHandle) => other.name === 'shared.d2',
+      getFile: async () => new File([probe.source], 'shared.d2', { lastModified: probe.version }),
+      createWritable: async () => {
+        let source = '';
+        return {
+          write: async (text: string) => { source = text; probe.writes.push(text); },
+          close: async () => {
+            if (probe.writes.length === 1) await new Promise<void>(resolve => { probe.finish = resolve; });
+            probe.source = source; probe.version++;
+          },
+          abort: async () => {},
+        };
+      },
+    }];
+  });
+  await page.goto('/');
+  await previewReady(page);
+  await page.locator('#file').click();
+  await expect(page.locator('#filename')).toHaveText('shared.d2');
+  await source(page).fill('x: First draft');
+  await page.selectOption('#layout', 'quad');
+  await page.locator('#pane-start-empty-b').click();
+  await page.locator('#file').click();
+  await expect(page.locator('#pane-document-b .pane-document-name')).toHaveText('shared.d2');
+  await previewReady(page, 'b');
+  await page.locator('#editor-b .cm-content').fill('x: Second draft');
+  // Save in the inactive pane must activate it and write on the same click, including in WebKit.
+  await page.locator('#save-file').click();
+  await expect.poll(() => page.evaluate(() => typeof (window as any).saveProbe.finish)).toBe('function');
+  await page.locator('#editor-b .cm-content').focus();
+  await page.keyboard.press('ControlOrMeta+s');
+  await expect(page.locator('#activity-status-b')).toContainText('still in progress');
+  expect(await page.evaluate(() => (window as any).saveProbe.writes)).toEqual(['x: First draft']);
+  await page.evaluate(() => (window as any).saveProbe.finish());
+  await expect(page.locator('#save-file')).toBeEnabled();
+  await page.keyboard.press('ControlOrMeta+s');
+  const dialog = page.getByRole('dialog', { name: 'File changed on disk — overwrite?' });
+  await expect(dialog).toBeVisible();
+  await dialog.getByRole('button', { name: 'Overwrite file', exact: true }).click();
+  await expect(page.locator('#draft-status-b')).toHaveText('Saved to file');
+  expect(await page.evaluate(() => (window as any).saveProbe.source)).toBe('x: Second draft');
+});
+
 test('a slow save follows an example moved to the other pane and prevents overlapping writes', async ({ page }) => {
   await page.setViewportSize({ width: 1600, height: 1000 });
   await stubAiStatus(page);

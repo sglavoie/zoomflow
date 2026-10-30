@@ -92,3 +92,25 @@ it('creates new project files in their folder, without overwriting or writing wi
   await expect(createProjectFile(memoryFolder(files, 'denied'), 'New.d2', 'c')).resolves.toBe('refused');
   expect(files.has('New.d2')).toBe(false);
 });
+
+it.each(['work/Plan.d2', 'work/plan.d2'])('does not overwrite a project file another creation is still writing (%s)', async (path) => {
+  const files = new Map<string, string>();
+  const folder = memoryFolder(files);
+  const [first, second] = await Promise.all([
+    createProjectFile(folder, 'work/Plan.d2', 'first diagram'),
+    createProjectFile(folder, path, 'second diagram'),
+  ]);
+  expect(typeof first).toBe('object');
+  expect(second).toBe('exists');
+  expect(files.get('work/Plan.d2')).toBe('first diagram');
+  await expect(createProjectFile(folder, 'work/Other.d2', 'other diagram')).resolves.toMatchObject({ name: 'Other.d2' });
+});
+
+it('releases a reserved project filename when creation fails', async () => {
+  const files = new Map<string, string>();
+  const folder = memoryFolder(files);
+  vi.spyOn(folder, 'getFileHandle').mockRejectedValueOnce(new DOMException('Cannot read', 'NotAllowedError'));
+  await expect(createProjectFile(folder, 'Plan.d2', 'first attempt')).rejects.toThrow('Cannot read');
+  await expect(createProjectFile(folder, 'Plan.d2', 'retry')).resolves.toMatchObject({ name: 'Plan.d2' });
+  expect(files.get('Plan.d2')).toBe('retry');
+});

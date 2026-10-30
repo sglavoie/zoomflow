@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { beforeEach, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import type { FileHandles } from '../src/file-handles';
 import { writePermission } from '../src/file-handles';
 import { setupSaveFile } from '../src/save-file';
@@ -14,6 +14,7 @@ function fakeHandle(name: string, permission: Permission) {
   const disk = { written: [] as string[], prompts: 0, writeError: undefined as Error | undefined, abortError: false, onWrite: () => {} };
   const handle = {
     kind: 'file', name,
+    isSameEntry: async (other: FileSystemHandle) => other === handle,
     queryPermission: async () => permission.query,
     requestPermission: async () => {
       disk.prompts++;
@@ -36,6 +37,7 @@ beforeEach(() => {
   vi.mocked(downloadSource).mockClear().mockImplementation((_source, name) => { downloads++; return name; });
   document.body.innerHTML = '<button id="save-file"></button><button id="save-file-b"></button>';
 });
+afterEach(() => { delete (window as Window & { showSaveFilePicker?: unknown }).showSaveFilePicker; });
 
 function setup(handles: Map<string, FileSystemFileHandle>, id = 'save-file') {
   const button = document.querySelector<HTMLButtonElement>(`#${id}`)!;
@@ -188,5 +190,57 @@ it('prevents overlapping saves after a document moves to another pane', async ()
   await saving;
   await second.save();
   expect(completed).toEqual(['a: Mine', 'a: Latest edits']);
+  expect(second.state.activity).toBe('');
+});
+
+it.each([false, true])('prevents overlapping writes from different drafts of the same file (separate handles: %s)', async (separateHandles) => {
+  const firstFile = fakeHandle('doc.d2', { query: 'granted', request: 'granted' });
+  const secondFile = separateHandles ? fakeHandle('doc.d2', { query: 'granted', request: 'granted' }) : firstFile;
+  Object.assign(secondFile.handle, { isSameEntry: async (other: FileSystemHandle) => other === firstFile.handle || other === secondFile.handle });
+  let finish!: () => void;
+  Object.assign(firstFile.handle, { createWritable: async () => ({
+    write: async (source: string) => { firstFile.disk.written.push(source); },
+    close: () => firstFile.disk.written.length === 1 ? new Promise<void>(resolve => { finish = resolve; }) : Promise.resolve(),
+    abort: async () => {},
+  }) });
+  const handles = new Map([['file:doc', firstFile.handle], ['file:reopened', secondFile.handle]]);
+  const first = setup(handles);
+  const second = setup(handles, 'save-file-b');
+  second.state.key = 'file:reopened';
+  second.state.source = 'a: Newer edits';
+  const saving = first.save();
+  await vi.waitFor(() => expect(finish).toBeTypeOf('function'));
+  const otherSave = second.save();
+  try {
+    await otherSave;
+    expect(second.state.activity).toContain('still in progress');
+    expect(firstFile.disk.written).toEqual(['a: Mine']);
+    if (separateHandles) expect(secondFile.disk.written).toEqual([]);
+  } finally { finish(); await saving; }
+});
+
+it.each([true, false])('checks newly chosen destinations while allowing unrelated files to save (same file: %s)', async (sameFile) => {
+  const firstFile = fakeHandle('doc.d2', { query: 'granted', request: 'granted' });
+  const destination = fakeHandle('other.d2', { query: 'granted', request: 'granted' });
+  Object.assign(destination.handle, { isSameEntry: async () => sameFile });
+  Object.assign(window, { showSaveFilePicker: async () => destination.handle });
+  let finish!: () => void;
+  Object.assign(firstFile.handle, { createWritable: async () => ({
+    write: async () => {}, close: () => new Promise<void>(resolve => { finish = resolve; }), abort: async () => {},
+  }) });
+  const handles = new Map([['file:doc', firstFile.handle]]);
+  const first = setup(handles);
+  const second = setup(handles, 'save-file-b');
+  second.state.key = 'file:new';
+  const saving = first.save();
+  await vi.waitFor(() => expect(finish).toBeTypeOf('function'));
+  try {
+    await second.save();
+    expect(destination.disk.written).toEqual(sameFile ? [] : ['a: Mine']);
+    if (sameFile) expect(second.state.activity).toContain('still in progress');
+  } finally { finish(); await saving; }
+  // Completing the first save releases its file reservation too.
+  await second.save();
+  expect(destination.disk.written).toEqual(sameFile ? ['a: Mine'] : ['a: Mine', 'a: Mine']);
   expect(second.state.activity).toBe('');
 });

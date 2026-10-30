@@ -878,7 +878,8 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
       for (const name of ['save-file', 'format-source', 'clear-source']) part(name).hidden = atlas;
       const handle = currentDocumentKey ? shared.fileHandles.get(currentDocumentKey) : undefined;
       const canSave = Boolean(handle) || canChooseSaveFile();
-      saveFileButton.textContent = canSave ? 'Save .d2' : 'Download .d2';
+      // Activating this pane on pointerdown refreshes its status; replacing the label cancels WebKit's click.
+      setText(saveFileButton, canSave ? 'Save .d2' : 'Download .d2');
       saveFileButton.title = `${canSave ? 'Save source to a file' : 'Download a source copy; this browser cannot write back to your file'} (⌘S or Ctrl+S)`;
       const recovery = !recoveryAvailable ? 'Browser draft unavailable' : savePending ? 'Saving browser draft…' : 'Browser draft saved';
       const file = downloadRequested ? 'Source download started' : handle && !dirty ? 'Saved to file'
