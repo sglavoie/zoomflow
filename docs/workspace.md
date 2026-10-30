@@ -227,6 +227,8 @@ Open a project with **Open folder** (also in the filename menu on narrow screens
 Zoomflow loads its `.d2` files into a shared virtual filesystem, so relative imports
 resolve from each file's folder. Pick another project file from the filename menu to
 edit it; changes to imported files appear when you return to the main diagram.
+When both files are open in split view, editing an import also refreshes the other
+pane's preview and diagnostics. Exports wait for the updated preview.
 Project drafts and their file handles survive reload in browser storage. In browsers
 that support directory access, **Save .d2** writes the active project file to its
 original folder, after a reload too. Other

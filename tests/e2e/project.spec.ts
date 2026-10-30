@@ -1,9 +1,46 @@
 import { expect, test } from '@playwright/test';
 import { fileURLToPath } from 'node:url';
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { source, previewReady, stubAiStatus, projectFolder, openFolder } from './helpers';
 
 const folder = fileURLToPath(new URL('../../fixtures/browser-project', import.meta.url));
+
+test('editing an import in the other pane refreshes the preview, export and source errors', async ({ page }) => {
+  await page.setViewportSize({ width: 1600, height: 1000 });
+  await stubAiStatus(page);
+  await page.goto('/');
+  await openFolder(page, folder);
+  await expect(page.locator('#viewer .zf-stage')).toContainText('From a local import');
+  await previewReady(page);
+  await page.selectOption('#layout', 'quad');
+  await page.locator('#pane-choose-b').click();
+  await page.locator('.project-toggle').click();
+  await page.locator('.example-option[title="browser-project/lib/nodes.d2"]').click();
+  await previewReady(page, 'b');
+  const imported = page.locator('#editor-b .cm-content');
+  await imported.fill('Imported: Latest imported label');
+  await expect(page.locator('#viewer .zf-stage')).toContainText('Latest imported label');
+  await previewReady(page);
+  await page.locator('#viewer').click({ position: { x: 5, y: 5 } });
+  await page.locator('#header-more-toggle').click();
+  await page.locator('#export-format input[value="svg"]').check();
+  const [download] = await Promise.all([page.waitForEvent('download'), page.locator('#export').click()]);
+  const svg = await readFile(await download.path(), 'utf8');
+  expect(svg).toContain('Latest imported label');
+  expect(svg).not.toContain('From a local import');
+  await page.locator('#header-more-toggle').click();
+
+  await imported.fill('Imported: {');
+  await expect(page.locator('#compile-error')).toContainText('lib/nodes.d2');
+  await page.locator('#viewer').click({ position: { x: 5, y: 5 } });
+  await expect(page.locator('#export')).toBeDisabled();
+  await imported.fill('Imported: Repaired import');
+  await expect(page.locator('#viewer .zf-stage')).toContainText('Repaired import');
+  await previewReady(page);
+  await expect(page.locator('#compile-error')).toBeHidden();
+  await page.locator('#viewer').click({ position: { x: 5, y: 5 } });
+  await expect(page.locator('#export')).toBeEnabled();
+});
 
 test('mixed-case D2 files open as a folder, follow file links and download together', async ({ page }, info) => {
   const directory = info.outputPath('mixed-case-project');

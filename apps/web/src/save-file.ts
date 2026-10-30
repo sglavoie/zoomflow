@@ -25,8 +25,8 @@ export type SaveFileTarget = {
   source: () => string;
   /** The current revision was downloaded; later edits still need their own download. */
   downloaded: () => void;
-  /** The saved draft is still open: take on its key and name, which a saved example changes. */
-  adopt: (saved: { key: string; name: string }) => void;
+  /** Update whichever pane now shows `key`, taking on the saved example's new identity. */
+  adopt: (key: string, saved: { key: string; name: string }) => void;
   setActivity: (message: string, kind?: 'info' | 'error') => void;
   activity: () => string | null;
 };
@@ -108,7 +108,7 @@ export function setupSaveFile(button: HTMLButtonElement, target: SaveFileTarget)
       if (!saved) return; // The draft may have been removed while the file dialog was open.
       target.fileHandles.set(saved.key, handle);
       refused.delete(key);
-      if (target.key() === key) target.adopt(saved);
+      target.adopt(key, saved);
       if (target.key() === key && notices.has(target.activity() ?? '')) target.setActivity('');
     } catch (error) {
       if (error instanceof DOMException && error.name === 'AbortError') return;

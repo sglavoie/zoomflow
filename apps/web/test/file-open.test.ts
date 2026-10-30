@@ -77,3 +77,60 @@ it.each(['file', 'folder'] as const)('keeps a slow %s open in its original pane 
   expect(b.replaceDocument).not.toHaveBeenCalled();
   expect((kind === 'file' ? rememberFile : rememberFolder).mock.calls[0].at(-1)).toBe('a');
 });
+
+it.each([
+  ['file', 'file'], ['file', 'folder'], ['folder', 'file'], ['folder', 'folder'],
+] as const)('keeps the newer %s/%s selection when the older read finishes last', async (older, newer) => {
+  document.body.innerHTML = '<p id="file-status" hidden></p><input id="file" type="file"><input id="folder" type="file"><button id="open-folder"></button><button id="open-folder-picker"></button><button id="new-atlas-picker"></button><div id="pane-a"></div>';
+  const pane = { id: 'a', documentOpens: 0, replaceDocument: vi.fn(async () => { pane.documentOpens++; }), setActivity: vi.fn() };
+  const rememberFile = vi.fn(() => 'file:new');
+  const rememberFolder = vi.fn(() => ({ key: 'project:new:latest.d2', name: 'latest.d2', source: 'Latest', keys: {}, projectId: 'new' }));
+  setupFileOpen({ picker: () => ({ rememberFile, rememberFolder, refresh() {} }), activePane: () => pane,
+    fileHandles: { ready: async () => {}, *[Symbol.iterator]() {}, set() {} }, directoryHandles: {},
+    paneRoots: { a: document.querySelector('#pane-a'), b: document.createElement('div') }, setActive() {} } as never);
+  const select = (kind: 'file' | 'folder', file: File) => {
+    Object.defineProperty(file, 'webkitRelativePath', { value: `notes/${file.name}` });
+    const input = document.querySelector<HTMLInputElement>(`#${kind}`)!;
+    Object.defineProperty(input, 'files', { value: [file], configurable: true });
+    Object.defineProperty(input, 'value', { value: 'chosen', writable: true, configurable: true });
+    input.dispatchEvent(new Event('change'));
+  };
+  let finish!: (text: string) => void;
+  const slow = new File(['Old'], 'old.d2');
+  slow.text = () => new Promise(resolve => { finish = resolve; });
+  select(older, slow);
+  await vi.waitFor(() => expect(finish).toBeTypeOf('function'));
+  select(newer, new File(['Latest'], 'latest.d2'));
+  await vi.waitFor(() => expect(pane.replaceDocument).toHaveBeenCalledWith('Latest', 'latest.d2', expect.any(String)));
+  finish('Old');
+  await new Promise(resolve => setTimeout(resolve, 0));
+  expect(pane.replaceDocument).toHaveBeenCalledOnce();
+  expect(rememberFile.mock.calls.length + rememberFolder.mock.calls.length).toBe(1);
+  expect(document.querySelector('#file-status')!.textContent).toBe('');
+  expect(document.querySelector<HTMLInputElement>(`#${older}`)!.value).toBe('');
+});
+
+it.each(['success', 'error'] as const)('ignores an outstanding file read completing with %s after the pane changes documents', async (result) => {
+  document.body.innerHTML = '<p id="file-status" hidden></p><input id="file" type="file"><input id="folder" type="file"><button id="open-folder"></button><button id="open-folder-picker"></button><button id="new-atlas-picker"></button><div id="pane-a"></div>';
+  const pane = { id: 'a', documentOpens: 0, replaceDocument: vi.fn(async () => {}), setActivity: vi.fn() };
+  const rememberFile = vi.fn(() => 'file:new');
+  setupFileOpen({ picker: () => ({ rememberFile, refresh() {} }), activePane: () => pane,
+    fileHandles: { ready: async () => {}, *[Symbol.iterator]() {}, set() {} }, directoryHandles: {},
+    paneRoots: { a: document.querySelector('#pane-a'), b: document.createElement('div') }, setActive() {} } as never);
+  let finish!: (text: string) => void;
+  let fail!: (error: Error) => void;
+  const file = new File(['Old'], 'old.d2');
+  file.text = () => new Promise((resolve, reject) => { finish = resolve; fail = reject; });
+  const input = document.querySelector<HTMLInputElement>('#file')!;
+  Object.defineProperty(input, 'files', { value: [file] });
+  input.dispatchEvent(new Event('change'));
+  await vi.waitFor(() => expect(finish).toBeTypeOf('function'));
+  pane.documentOpens++;
+  if (result === 'error') fail(new Error('Old read failed'));
+  else finish('Old');
+  await new Promise(resolve => setTimeout(resolve, 0));
+  expect(rememberFile).not.toHaveBeenCalled();
+  expect(pane.replaceDocument).not.toHaveBeenCalled();
+  expect(pane.setActivity).not.toHaveBeenCalled();
+  expect(document.querySelector('#file-status')!.textContent).toBe('');
+});

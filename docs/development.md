@@ -26,6 +26,11 @@ the UI offers an explicit engine restart. Restart disposes the old D2 instance,
 releases queue callers, and invalidates old results before compiling the latest
 source. It does not restart slow work automatically.
 
+Editing a canonical project file invalidates the other pane when it shows a file
+of the same project. Both panes debounce and coalesce previews, so direct and
+transitive imports refresh together, including recovery from an import error.
+Generated atlas maps are still redrawn on request.
+
 To compare sustained editing with and without preview coalescing, start `pnpm dev`
 and run `node spike/preview-throughput.mjs http://127.0.0.1:5173 600` (use the actual
 Vite URL). This sends six edits 400 ms apart to a generated diagram and reports

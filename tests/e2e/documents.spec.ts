@@ -6,6 +6,77 @@ import { source, previewReady, stubAiStatus, chooseExample, projectFolder, openF
 
 /** Documents: drafts, recovery, saving to disk, downloads and removal with undo. */
 
+test('a slow save follows an example moved to the other pane and reuses its saved file', async ({ page }) => {
+  await page.setViewportSize({ width: 1600, height: 1000 });
+  await stubAiStatus(page);
+  await page.addInitScript(() => {
+    const probe = (window as any).saveProbe = { picks: 0, writes: [] as string[], finish: undefined as (() => void) | undefined };
+    const handle = { kind: 'file', name: 'saved-order.d2',
+      getFile: async () => new File([probe.writes.at(-1) ?? ''], 'saved-order.d2', { lastModified: probe.writes.length }),
+      createWritable: async () => ({
+        write: async (text: string) => { probe.writes.push(text); },
+        close: () => probe.writes.length === 1 ? new Promise<void>(resolve => { probe.finish = resolve; }) : Promise.resolve(),
+        abort: async () => {},
+      }),
+    };
+    (window as any).showSaveFilePicker = async () => { probe.picks++; return handle; };
+  });
+  await page.goto('/');
+  await previewReady(page);
+  await page.selectOption('#layout', 'quad');
+  await source(page).fill('x: Source being saved');
+  await page.locator('#save-file').click();
+  await expect.poll(() => page.evaluate(() => typeof (window as any).saveProbe.finish)).toBe('function');
+  await chooseExample(page, /Flowchart basics/);
+  await page.locator('#pane-choose-b').click();
+  await page.locator('.example-option').filter({ hasText: 'Order flow' }).click();
+  await previewReady(page, 'b');
+  await page.evaluate(() => (window as any).saveProbe.finish());
+  await expect(page.locator('#save-file')).toBeEnabled();
+  await expect(page.locator('#filename')).toHaveText('saved-order.d2');
+  await expect(page.locator('#pane-document-b .pane-document-name')).toHaveText('saved-order.d2');
+  await expect(page.locator('#draft-status-b')).toHaveText('Saved to file');
+  await expect(page.locator('#pane-document .pane-document-name')).toHaveText('flowchart.d2');
+  await page.locator('#editor-b .cm-content').fill('x: Later edits');
+  await page.keyboard.press('ControlOrMeta+s');
+  await expect(page.locator('#draft-status-b')).toHaveText('Saved to file');
+  expect(await page.evaluate(() => (window as any).saveProbe.writes)).toEqual(['x: Source being saved', 'x: Later edits']);
+  expect(await page.evaluate(() => (window as any).saveProbe.picks)).toBe(1);
+});
+
+for (const delayed of ['getFile', 'text'] as const) {
+  test(`a newer file selection wins when an older ${delayed} finishes last`, async ({ page }) => {
+    await stubAiStatus(page);
+    await page.addInitScript((delayed) => {
+      let count = 0;
+      (window as any).showOpenFilePicker = async () => {
+        const first = ++count === 1;
+        const file = new File([first ? 'old: Older selection' : 'latest: Latest selection'], first ? 'old.d2' : 'latest.d2');
+        if (first && delayed === 'text') file.text = () => new Promise(resolve => { (window as any).finishOldOpen = () => resolve('old: Older selection'); });
+        return [{ name: file.name, isSameEntry: async () => false,
+          getFile: () => first && delayed === 'getFile' ? new Promise(resolve => { (window as any).finishOldOpen = () => resolve(file); }) : Promise.resolve(file) }];
+      };
+    }, delayed);
+    await page.goto('/');
+    await previewReady(page);
+    await page.locator('#file').click();
+    await expect.poll(() => page.evaluate(() => typeof (window as any).finishOldOpen)).toBe('function');
+    await page.locator('#file').click();
+    await expect(page.locator('#filename')).toHaveText('latest.d2');
+    await previewReady(page);
+    // Release and drain the older read before checking that it cannot activate a draft.
+    await page.evaluate(async () => {
+      (window as any).finishOldOpen();
+      await new Promise(resolve => setTimeout(resolve, 0));
+    });
+    await expect(page.locator('#filename')).toHaveText('latest.d2');
+    await expect(source(page)).toHaveText('latest: Latest selection');
+    await expect(page.locator('.zf-stage')).toContainText('Latest selection');
+    await page.locator('#example-picker summary').click();
+    await expect(page.locator('#draft-options .example-option')).toHaveCount(1);
+  });
+}
+
 async function draftRows(page: Page, name: string) {
   await page.locator('#example-picker > summary').click();
   const count = await page.locator('#draft-options .example-option').filter({ hasText: name }).count();

@@ -32,7 +32,7 @@ export function projectFileSystem(inputPath: string, sources: Record<string, str
   return { fs, inputPath };
 }
 
-export async function readFolderInput(files: FileList): Promise<{ name: string; files: ProjectSource[] }> {
+export async function readFolderInput(files: Iterable<File>): Promise<{ name: string; files: ProjectSource[] }> {
   const chosen = [...files].filter((file) => file.webkitRelativePath);
   if (!chosen.length) throw new Error('Choose a folder containing .d2 files.');
   const name = chosen[0].webkitRelativePath.split('/')[0];

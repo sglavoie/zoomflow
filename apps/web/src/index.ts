@@ -103,6 +103,10 @@ function context(id: PaneId): PaneContext {
     exportChanged: () => { if (active === id && panes[id]) exportMenu.updateExportLabel(); },
     setExportStatus: exportMenu.setExportStatus,
     clearFileError: () => files.setFileError(''),
+    projectChanged: (projectId) => panes[otherPane(id)]?.refreshProject(projectId),
+    adoptSaved: (key, saved) => {
+      for (const pane of Object.values(panes)) if (pane.key === key) pane.adopt(saved);
+    },
     revealSource: (pane, range) => { setActive(pane); panes[pane]?.focusSource(range); },
     lintChanged: () => {
       const source = panes[id]!.lintOptions;

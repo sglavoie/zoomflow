@@ -46,6 +46,10 @@ export type PaneContext = {
   exportChanged: () => void;
   setExportStatus: (message: string, kind?: 'info' | 'error') => void;
   clearFileError: () => void;
+  /** A canonical project source changed; other open files may import it. */
+  projectChanged: (projectId: string) => void;
+  /** A save follows its document if it moved to another pane during the write. */
+  adoptSaved: (key: string, saved: { key: string; name: string }) => void;
   /** Select a source location in the pane that shows it. */
   revealSource: (pane: PaneId, range?: { from: number; to: number }) => void;
   /** The lint options changed in this pane; other panes follow. */
@@ -230,6 +234,7 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
     changed: () => {
       invalidateSource();
       picker().updateCurrent(id, editor.source);
+      if (currentDocumentKey?.startsWith('project:')) shared.projectChanged(projectIdOf(currentDocumentKey)!);
       clearTimeout(debounce);
       debounce = setTimeout(() => void load(editor.source, documentName, true), immediate ? 0 : 350);
       immediate = false;
@@ -455,6 +460,7 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
     }
     currentDocumentKey = saved.key;
     documentName = saved.name;
+    setActivity('');
     // Identity changes do not invalidate compiled geometry or editor history.
     picker().refresh();
   }
@@ -462,7 +468,7 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
     fileHandles: shared.fileHandles, picker,
     downloaded: () => picker().markDownloadRequested(id),
     key: () => showsAtlas() ? undefined : currentDocumentKey, name: () => documentName, source: () => editor.source,
-    adopt: (saved) => { adopt(saved); setActivity(''); },
+    adopt: shared.adoptSaved,
     setActivity, activity: () => activityStatus.textContent,
   });
 
@@ -782,12 +788,22 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
     get name() { return documentName; },
     get source() { return editor.source; },
     get generation() { return generation; },
+    /** Opening and closing documents invalidates outstanding file reads. */
+    get documentOpens() { return documentOpens; },
     get documentExport() { return documentExport; },
     get sourceError() { return sourceError; },
     compileProjectFile,
     /** The preview reflects the current source, so exports and source selection are valid. */
     get current() { return mappedSource === editor.source; },
     replaceDocument,
+    adopt,
+    /** A sibling's source may be imported directly or transitively, including by a failed compile. */
+    refreshProject(projectId: string) {
+      if (!currentDocumentKey || showsAtlas() || projectIdOf(currentDocumentKey) !== projectId) return;
+      invalidateSource();
+      clearTimeout(debounce);
+      debounce = setTimeout(() => void load(editor.source, documentName, true), 350);
+    },
     save: () => { if (showsAtlas()) setActivity(atlasReadOnly); else saveFileButton.click(); },
     openAtlasMap,
     /** Name the document for its exports and downloads; returns the name it was given. */
