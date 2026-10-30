@@ -90,10 +90,10 @@ export function fileLink(fromPath: string, toPath: string): string {
  * folder's `zoomflow.d2`, which would replace the standard library for every file there that imports it. */
 export function newProjectPath(fromPath: string, label: string, taken: Iterable<string>): string {
   const folder = fromPath.split('/').slice(0, -1).map(part => `${part}/`).join('');
-  const used = new Set([...taken, `${folder}zoomflow.d2`].map(path => path.toLowerCase()));
+  const used = new Set([...taken, `${folder}zoomflow.d2`].map(path => path.normalize('NFC').toLowerCase()));
   const base = flowFilename(label.replace(/[#%]/g, '-').replace(/\s+/g, ' '), '').slice(0, -3).replace(/^[. ]+/, '') || 'Diagram';
   let path = `${folder}${base}.d2`;
-  for (let n = 2; used.has(path.toLowerCase()); n++) path = `${folder}${base} ${n}.d2`;
+  for (let n = 2; used.has(path.normalize('NFC').toLowerCase()); n++) path = `${folder}${base} ${n}.d2`;
   return path;
 }
 

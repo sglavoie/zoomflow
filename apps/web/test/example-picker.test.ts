@@ -153,3 +153,46 @@ it('adds a completed file write to its requested project after its pane switched
   expect(api.addProjectFile('removed-project', 'Detail.d2', source, true)).toBeUndefined();
   expect(api.hasProject('removed-project')).toBe(false);
 });
+
+it('keeps a newer rename when a save of the old filename finishes', () => {
+  localStorage.clear();
+  const { api, states, shown } = picker();
+  shown.a = api.initial.source;
+  const key = api.rememberFile('original.d2', 'a: Original');
+  const version = api.diskSaveVersion(key);
+  shown.a = 'a: Edited';
+  api.updateCurrent('a', shown.a);
+  api.rename('a', 'renamed');
+
+  expect(api.markDiskSaved(key, 'a: Edited', 'original.d2', version)).toBeUndefined();
+  expect(states.a).toMatchObject({ dirty: true, identity: { key, name: 'renamed.d2' } });
+  expect(new DraftStore(localStorage).load().drafts.find(draft => draft.key === key))
+    .toMatchObject({ name: 'renamed.d2', source: 'a: Edited', baseline: 'a: Original' });
+});
+
+it('invalidates pending saves even when a draft is renamed back to its old name', () => {
+  localStorage.clear();
+  const { api, shown } = picker();
+  shown.a = api.initial.source;
+  const key = api.rememberFile('original.d2', 'a: Original');
+  shown.a = 'a: Original';
+  const version = api.diskSaveVersion(key);
+  api.rename('a', 'temporary');
+  api.rename('a', 'original');
+  expect(api.markDiskSaved(key, shown.a, 'original.d2', version)).toBeUndefined();
+  expect(api.markDiskSaved(key, shown.a, 'chosen.d2', api.diskSaveVersion(key)))
+    .toEqual({ key, name: 'chosen.d2' });
+});
+
+it('does not create another copy when an example is renamed during a save', () => {
+  localStorage.clear();
+  const { api, shown } = picker();
+  const key = api.currentKey('a')!;
+  const version = api.diskSaveVersion(key);
+  shown.a = 'a: Edited';
+  api.updateCurrent('a', shown.a);
+  const renamed = api.rename('a', 'renamed');
+  expect(api.markDiskSaved(key, shown.a, 'old-save.d2', version)).toBeUndefined();
+  expect(api.currentKey('a')).toBe(renamed?.key);
+  expect(new DraftStore(localStorage).load().drafts).toHaveLength(1);
+});

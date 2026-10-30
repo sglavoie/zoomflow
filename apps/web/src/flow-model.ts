@@ -105,6 +105,8 @@ export function readFlow(source: string): Flow | undefined {
 }
 
 export function flowFilename(title: string, fallback = 'My flow') {
-  const name = title.trim().replace(/\.d2$/i, '').replace(/[<>:"/\\|?*\u0000-\u001f]/g, '-').replace(/[. ]+$/, '').slice(0, 100);
+  // Truncation can split an emoji or expose a trailing dot/space that file systems reject.
+  const name = title.trim().replace(/\.d2$/i, '').replace(/[<>:"/\\|?*\u0000-\u001f]/g, '-').slice(0, 100)
+    .replace(/[\ud800-\udbff]$/, '').replace(/[. ]+$/, '');
   return `${name || fallback}.d2`;
 }

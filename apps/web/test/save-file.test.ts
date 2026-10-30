@@ -45,7 +45,7 @@ function setup(handles: Map<string, FileSystemFileHandle>, id = 'save-file') {
   const fileHandles = Object.assign(handles, { ready: async () => {} }) as unknown as FileHandles;
   setupSaveFile(button, {
     fileHandles,
-    picker: () => ({ markDiskSaved: (key: string, _source: string, name: string) => ({ key, name }) }) as never,
+    picker: () => ({ diskSaveVersion: () => 0, markDiskSaved: (key: string, _source: string, name: string) => ({ key, name }) }) as never,
     key: () => state.key, name: () => state.name, source: () => state.source,
     downloaded: () => { state.downloaded = true; },
     adopt: () => {}, setActivity: (message) => { state.activity = message; }, activity: () => state.activity,

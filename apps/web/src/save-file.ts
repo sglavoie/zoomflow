@@ -54,6 +54,7 @@ export function setupSaveFile(button: HTMLButtonElement, target: SaveFileTarget)
     button.disabled = true;
     const source = target.source();
     const name = target.name();
+    const version = target.picker().diskSaveVersion(key);
     let saving: ReturnType<typeof setTimeout> | undefined;
     const notify = (message: string) => { notices.add(message); if (target.key() === key) target.setActivity(message); };
     async function reserveFile(handle: FileSystemFileHandle) {
@@ -133,8 +134,8 @@ export function setupSaveFile(button: HTMLButtonElement, target: SaveFileTarget)
       // Aborting an already failed stream can reject too; report the write error instead.
       catch (error) { await writable.abort().catch(() => {}); throw error; }
       await refreshDiskVersion(handle);
-      const saved = target.picker().markDiskSaved(key, source, handle.name);
-      if (!saved) return; // The draft may have been removed while the file dialog was open.
+      const saved = target.picker().markDiskSaved(key, source, handle.name, version);
+      if (!saved) return; // The draft may have been removed or renamed while saving.
       target.fileHandles.set(saved.key, handle);
       refused.delete(key);
       target.adopt(key, saved);

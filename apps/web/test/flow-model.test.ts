@@ -61,6 +61,14 @@ it('uses a portable filename without losing non-English names', () => {
   expect(flowFilename('...')).toBe('My flow.d2');
 });
 
+it('truncates long filenames without splitting emoji or leaving trailing dots and spaces', () => {
+  const emoji = flowFilename(`${'a'.repeat(99)}🌍`);
+  expect(emoji).toBe(`${'a'.repeat(99)}.d2`);
+  expect(() => encodeURIComponent(emoji)).not.toThrow();
+  expect(flowFilename(`${'a'.repeat(99)}.extra`)).toBe(`${'a'.repeat(99)}.d2`);
+  expect(flowFilename(`${'a'.repeat(99)} extra`)).toBe(`${'a'.repeat(99)}.d2`);
+});
+
 it('styles steps with library classes, so restyling a class restyles every flow', async () => {
   const flow = flowTemplate('approval');
   const source = flowSource(flow);

@@ -84,6 +84,8 @@ export function setupExamplePicker({ readSource, open, onState, forget, checkpoi
   let target: PaneId = 'a';
   let split = false;
   const downloadRequested: Record<PaneId, boolean> = { a: false, b: false };
+  // Renaming detaches a file, even when renamed back or when an example becomes a named copy.
+  const diskSaveVersions = new Map<string, number>();
   /** Opening a file or project may reuse a draft without unsaved changes that the other pane is not showing. */
   function reusable(item: Draft, pane = target) {
     return item.source === item.baseline && !(split && [...drafts.values()].some((other) =>
@@ -425,9 +427,11 @@ export function setupExamplePicker({ readSource, open, onState, forget, checkpoi
       downloadRequested[pane] = true;
       persist();
     },
-    markDiskSaved(key: string, source: string, name: string) {
+    diskSaveVersion(key: string) { return diskSaveVersions.get(key) ?? 0; },
+    markDiskSaved(key: string, source: string, name: string, version: number) {
       let draft = drafts.get(key);
-      if (!draft) return;
+      // A rename detaches the old disk file. A save already writing that file must not undo it.
+      if (!draft || (diskSaveVersions.get(key) ?? 0) !== version) return;
       const pane = panes.find((id) => current[id] === key);
       if (pane) { draft.source = readSource(pane); downloadRequested[pane] = false; }
       // Saving a built-in example creates a named file without taking over the template.
@@ -451,6 +455,7 @@ export function setupExamplePicker({ readSource, open, onState, forget, checkpoi
       const current = draft.name.replace(/\.d2$/i, '');
       name = flowFilename(name, current);
       if (name === flowFilename(draft.name, current)) return;
+      diskSaveVersions.set(draft.key, (diskSaveVersions.get(draft.key) ?? 0) + 1);
       draft.source = readSource(pane);
       if (exampleSource(draft.key) !== undefined) {
         // The copy is not on disk yet, so all of its source counts as unsaved.

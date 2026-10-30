@@ -49,6 +49,11 @@ it('names new project files after a label, beside the file they open from', () =
   expect(validProjectPath(newProjectPath('work/index.d2', '.hidden', []))).toBe(true);
 });
 
+it('avoids canonically equivalent filenames in draft projects as on disk', () => {
+  expect(newProjectPath('work/index.d2', 'Café', ['work/Cafe\u0301.d2', 'work/Cafe\u0301 2.d2']))
+    .toBe('work/Café 3.d2');
+});
+
 it('finds the project of a file, its atlas map and a recovered copy of the file', () => {
   expect(projectIdOf('project:p1:docs/index.d2')).toBe('p1');
   expect(projectIdOf('atlas:p1')).toBe('p1');

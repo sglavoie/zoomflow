@@ -311,6 +311,41 @@ test('naming a diagram names its exports, keeps examples intact and makes Save a
   expect(await page.evaluate(() => (window as typeof window & { suggested?: string }).suggested)).toBe('renamed work.d2');
 });
 
+test('renaming during a pending save keeps the new name and asks for a new file on the next save', async ({ page }) => {
+  await page.addInitScript(() => {
+    const probe = (window as any).saveProbe = { suggested: '', finish: undefined as (() => void) | undefined };
+    const handle = (name: string, slow = false) => ({ name,
+      getFile: async () => new File(['a -> b'], name, { lastModified: 1 }),
+      createWritable: async () => ({
+        write: async () => {},
+        close: () => slow ? new Promise<void>(resolve => { probe.finish = resolve; }) : Promise.resolve(),
+        abort: async () => {},
+      }),
+    });
+    (window as any).showOpenFilePicker = async () => [handle('work.d2', true)];
+    (window as any).showSaveFilePicker = async ({ suggestedName }: { suggestedName: string }) => {
+      probe.suggested = suggestedName;
+      return handle(suggestedName);
+    };
+  });
+  await page.goto('/'); await previewReady(page);
+  await page.locator('#file').click();
+  await expect(page.locator('#filename')).toHaveText('work.d2'); await previewReady(page);
+  await source(page).fill('a: Edited');
+  await page.locator('#save-file').click();
+  await expect.poll(() => page.evaluate(() => typeof (window as any).saveProbe.finish)).toBe('function');
+  await openDownloads(page);
+  await page.locator('#export-name').fill('renamed work');
+  await page.locator('#export-name').press('Enter');
+  await page.evaluate(() => (window as any).saveProbe.finish());
+  await expect(page.locator('#save-file')).toBeEnabled();
+  await expect(page.locator('#filename')).toHaveText('renamed work.d2');
+  await expect(page.locator('#draft-status')).toHaveText('File has unsaved changes');
+  await source(page).press('ControlOrMeta+s');
+  await expect(page.locator('#draft-status')).toHaveText('Saved to file');
+  expect(await page.evaluate(() => (window as any).saveProbe.suggested)).toBe('renamed work.d2');
+});
+
 test('the save shortcut applies a name still being typed before saving', async ({ page }) => {
   await page.addInitScript(() => {
     const target = window as typeof window & { suggested?: string; showOpenFilePicker?: () => Promise<unknown[]>; showSaveFilePicker?: (options: { suggestedName: string }) => Promise<unknown> };
