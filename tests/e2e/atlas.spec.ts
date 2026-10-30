@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -64,6 +64,30 @@ test('file links open other files at their boards, with breadcrumbs across files
   await crumbs(page).filter({ hasText: /^index$/ }).click();
   await showing(page, 'index.d2');
   await expect(crumbs(page)).toHaveText(['index']);
+});
+
+test('file and atlas map links open filenames containing hash characters', async ({ page }) => {
+  const temporary = mkdtempSync(join(tmpdir(), 'zoomflow-hash-links-'));
+  const folder = join(temporary, 'atlas');
+  mkdirSync(folder);
+  writeFileSync(join(folder, 'index.d2'), 'Guide: {link: "./C# guide.d2#/Notes"}\n');
+  writeFileSync(join(folder, 'C# guide.d2'), 'Home\nlayers: {Notes: {Details}}\n');
+  try {
+    await page.goto('/');
+    await openFolder(page, folder);
+    await showing(page, 'index.d2');
+    await page.locator('#viewer .zf-stage a[data-file="./C# guide.d2#/Notes"]').click();
+    await showing(page, 'C# guide.d2', 'root.layers.Notes');
+    await crumbs(page).filter({ hasText: /^index$/ }).click();
+    await showing(page, 'index.d2');
+
+    await page.locator('#example-picker > summary').click();
+    await page.getByRole('button', { name: 'Atlas map of the atlas project' }).click();
+    await expect(page.locator('#filename')).toHaveText('Atlas map');
+    await previewReady(page);
+    await page.locator('#viewer .zf-stage a[data-file="./C# guide.d2"]').click();
+    await showing(page, 'C# guide.d2');
+  } finally { rmSync(temporary, { recursive: true, force: true }); }
 });
 
 test('browser Back and Forward move across files in the first pane', async ({ page }) => {

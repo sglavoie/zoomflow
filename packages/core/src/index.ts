@@ -64,10 +64,11 @@ export type ClassifiedHref =
 
 /** D2 emits absolute board IDs; ancestor links include `_` after compilation.
  * A `./` or `../` path ending in `.d2`, optionally followed by a `#/…` board route, links to another file.
+ * Paths may contain `#`; only the first `.d2#/` starts a board route, whose names may also end in `.d2`.
  * Self-contained because the offline viewer embeds its source. */
 export function classifyHref(href: string): ClassifiedHref {
   if (href === 'root' || /^root\.(layers|scenarios|steps)\..+/.test(href)) return { kind: 'board', target: href };
-  const file = /^(\.\.?\/[^#]*\.d2)(#\/.*)?$/si.exec(href);
+  const file = /^(\.\.?\/.*?\.d2)(#\/.*)?$/si.exec(href);
   if (file) return { kind: 'file', path: file[1], hash: file[2] ?? '' };
   try {
     const url = new URL(href);

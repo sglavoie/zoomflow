@@ -20,6 +20,9 @@ describe('href classification', () => {
     ['./health.d2#/Sleep/@scenarios/Night', './health.d2', '#/Sleep/@scenarios/Night'], ['./My Life.d2', './My Life.d2', ''],
     ['./work/plan.d2#/', './work/plan.d2', '#/'], ['../../a/b.d2', '../../a/b.d2', ''],
     ['./Other.D2#/Board', './Other.D2', '#/Board'], ['../Main.d2', '../Main.d2', ''],
+    ['./C# guide.d2', './C# guide.d2', ''], ['./C# guide.d2#/Notes', './C# guide.d2', '#/Notes'],
+    ['../notes #1/plan.d2#/Next', '../notes #1/plan.d2', '#/Next'],
+    ['./a.d2#/board.d2', './a.d2', '#/board.d2'],
   ])('%s links to a file', (href, path, hash) => {
     expect(classifyHref(href)).toEqual({ kind: 'file', path, hash });
   });
@@ -53,6 +56,12 @@ steps: {first: {Started}}`, { layout: 'elk' });
     boards = indexBoards(diagram);
   });
   afterAll(async () => { await d2?.dispose(); });
+  it('keeps hash characters in file paths separate from board fragments', async () => {
+    const href = './C# guide.d2#/Notes.d2';
+    const { diagram } = await d2.compile(`Guide: {link: ${JSON.stringify(href)}}`, { layout: 'elk' });
+    expect(diagram.shapes[0].link).toBe(href);
+    expect(classifyHref(diagram.shapes[0].link)).toEqual({ kind: 'file', path: './C# guide.d2', hash: '#/Notes.d2' });
+  });
   it('classifies the actual SVG hrefs for board and external links', async () => {
     const root = boards.get('root')!;
     const svg = await d2.render(root.diagram);

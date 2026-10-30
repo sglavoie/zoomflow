@@ -66,8 +66,8 @@ it('keeps file names literal, marks files that did not compile, and leaves out l
   const source = atlasMapSource(files);
   const compiled = await compile('index', { 'My "Life" $5.d2': '', 'odd #1.d2': '' }, source);
   expect(compiled.diagram.shapes.map(labelOf).sort()).toEqual(['My "Life" $5', unlinkedLabel, 'odd #1']);
-  // A name with `#` is not a file link D2 keeps, so that shape is drawn without one.
   expect(compiled.diagram.shapes.find((shape) => labelOf(shape) === 'My "Life" $5')!.link).toBe('./My "Life" $5.d2');
+  expect(compiled.diagram.shapes.find((shape) => labelOf(shape) === 'odd #1')!.link).toBe('./odd #1.d2');
   expect(compiled.diagram.shapes.find((shape) => labelOf(shape) === 'odd #1')!.tooltip).toContain('did not compile');
   expect(compiled.diagram.connections.map((edge) => edge.label)).toEqual(['A B']);
 });

@@ -129,6 +129,20 @@ describe('offline atlas runtime', () => {
     expect(stage().dataset.file).toBe('dist/out.d2');
   });
 
+  it('opens atlas files whose names contain hashes, including a board fragment', () => {
+    load('', [{ path: 'index.d2', name: 'index', boards: [board('root', 'Root', '#/', svg(['Guide', './C# guide.d2#/Notes.d2']))] },
+      { path: 'C# guide.d2', name: 'C# guide', boards: [board('root', 'Root', '#/', svg(['Home'])),
+        board('root.layers.Notes.d2', 'Notes.d2', '#/Notes.d2', svg(['Notes']), 'root')] }]);
+    const guide = link('./C# guide.d2#/Notes.d2');
+    expect(guide).not.toBeNull();
+    expect(guide.getAttribute('href')).toBe('#/@file/C%23%20guide.d2/Notes.d2');
+    guide.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    expect([stage().dataset.file, stage().dataset.board]).toEqual(['C# guide.d2', 'root.layers.Notes.d2']);
+    pressEscape();
+    pressEscape();
+    expect(stage().dataset.file).toBe('index.d2');
+  });
+
   it('opens a file route directly, falling back to the nearest board and leading home', () => {
     load('#/@file/work%2Fplan.d2/Q%201/Gone');
     expect([stage().dataset.file, stage().dataset.board]).toEqual(['work/plan.d2', 'root.layers.Q 1']);
