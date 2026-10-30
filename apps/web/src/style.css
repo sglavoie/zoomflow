@@ -232,7 +232,8 @@ header > strong {
 .board-outline {
   position: relative;
 }
-.diagram-search-trigger {
+.diagram-search-trigger,
+.project-search-trigger {
   min-height: 32px;
   padding: 0 var(--space-3);
 }
@@ -276,6 +277,7 @@ header > strong {
 .diagram-search small {
   color: var(--muted);
   font-size: var(--font-size-sm);
+  overflow-wrap: anywhere;
 }
 .diagram-search ul {
   max-height: 45dvh;

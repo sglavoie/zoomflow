@@ -56,6 +56,14 @@ CodeMirror access through `withEditorView`, selection) and `menu.ts` (export men
   framing and selection, keyboard controls, literal labels, preview updates and errors,
   document switches, imported shapes, and narrow screens. Core search tests cover
   indexing layers, scenarios and steps with board-scoped shape IDs.
+- `project-search.spec.ts`: searching unvisited and unlinked project files, file paths
+  and board breadcrumbs, cross-file Back/Forward and Escape navigation, broken-file
+  reporting, unsaved imports changed in another pane, activating a result already
+  open there, and narrow dark layouts. Unit tests cover incremental indexing,
+  cache invalidation, cancellation, coalescing, failed-file retry and engine failures.
+- `project-search-indexing.spec.ts`: indexing progress with a held compiler request,
+  stopping queued work on close, cached results and keyboard focus during incremental
+  updates, and retry after an engine interruption.
 - `ai.spec.ts`: AI edits and undo, availability checks and timeouts, cancellation,
   transport failures, highlights of changed lines, deletions on short phone screens, the
   phone composer, sending with ⌘/Ctrl+Enter, and AI settings mirrored across split panes

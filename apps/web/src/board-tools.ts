@@ -1,4 +1,4 @@
-import { boardKey, classifyHref, resolveFilePath, type Board } from '@zoomflow/core';
+import { boardKey, classifyHref, resolveFilePath, type Board, type DiagramSearchEntry } from '@zoomflow/core';
 import type { Viewer } from '@zoomflow/viewer';
 import type { BuilderTarget } from './builder-dialog';
 import { boardSites, type BoardSites, type BuilderKind, type ShapeAction } from './board-model';
@@ -9,6 +9,7 @@ import { setupDiagramSearch } from './diagram-search';
 import { fileLinkDialog, newFileSource, type FileBoard } from './file-link-dialog';
 import { fileLink } from './project-files';
 import type { PaneScope } from './pane-scope';
+import type { ProjectSearchHost } from './project-search';
 import { setText } from './text';
 
 /** What a folder project offers for linking its files: this document's project path, the other files, a file's
@@ -32,6 +33,7 @@ type BoardToolsOptions = {
   selectSource: (shape: string, focusEditor: boolean) => void;
   /** Show a search destination in the preview, framing and selecting its shape when present. */
   revealMatch: (shape?: string) => void;
+  projectSearch?: ProjectSearchHost;
   /** Whether the shape's source is in this document, rather than an imported file. */
   inSource: (shape: string) => boolean;
   status: (message: string, kind?: 'info' | 'error') => void;
@@ -86,16 +88,17 @@ export function setupBoardTools(scope: PaneScope, viewer: Viewer, options: Board
   scope.root.append(menu);
   const outline = setupBoardOutline(toolbar, viewer, (board, focus) => edit(board, focus));
   let searchRevision = 0;
-  const search = setupDiagramSearch(toolbar, scope, viewer, async entry => {
+  const search = setupDiagramSearch(toolbar, scope, viewer, revealSearchMatch, options.projectSearch);
+  async function revealSearchMatch(entry: DiagramSearchEntry, mode: 'push' | 'replace' = 'push') {
     const revision = ++searchRevision;
     const indexed = boards;
     const board = indexed.get(entry.board);
     if (!board) return;
-    await viewer.navigate(entry.board, 'push', entry.trail);
+    await viewer.navigate(entry.board, mode, entry.trail);
     // A delayed render must not select a shape after a different document or route opened.
     if (revision === searchRevision && boards === indexed && viewer.currentBoard?.id === board.id &&
       viewer.currentBoard.diagram === board.diagram) options.revealMatch(entry.shape);
-  });
+  }
 
   /** The compiled document's boards, or only the root board's text until the current source compiles. */
   let sites: BoardSites | undefined;
@@ -361,6 +364,7 @@ export function setupBoardTools(scope: PaneScope, viewer: Viewer, options: Board
         : 'Change topics as an outline, without writing code.');
     }
     outline.render(ready() ? sites : undefined, boards, boardId());
+    search.refresh();
     toolbar.hidden = editGroup.hidden && outline.hidden && search.empty;
     const shape = selected && compiledSource === source ? selected : undefined;
     const button: Item = (label, run, { relinks, keys } = {}) => {
@@ -630,6 +634,8 @@ export function setupBoardTools(scope: PaneScope, viewer: Viewer, options: Board
 
   return {
     refresh,
+    refreshSearch: search.refresh,
+    revealSearchMatch,
     resetSearch() { ++searchRevision; search.reset(); },
     /** Whether a shape on the board on view is edited on the diagram, so clicking it keeps focus there. */
     editsOnCanvas: (shape: string) => Boolean(canvasTarget(shape)),

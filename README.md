@@ -50,6 +50,8 @@ use **Retry preview** to try again without losing your source.
    deeper. Use breadcrumbs or **Boards** to move around, hover a link to preview its
    board, or zoom and drag to inspect the diagram. **Find in diagram** (⌘⇧F / Ctrl+Shift+F)
    finds board names and shape labels across the current document and jumps to a match.
+   In an open folder, **Find in project** searches every project file, including unsaved
+   edits and unlinked diagrams; ⌘⇧F / Ctrl+Shift+F opens project search there.
    In a folder, links to other files
    open them with breadcrumbs that lead back, and **Atlas map** under the project in the
    filename menu draws every file and the links between them.
