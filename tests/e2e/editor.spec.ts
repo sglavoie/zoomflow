@@ -12,7 +12,7 @@ async function replace(page: Page, text: string) {
   await page.keyboard.insertText(text);
 }
 async function findSource(page: Page, text: string) {
-  await source(page).click();
+  await source(page).focus();
   await source(page).press('ControlOrMeta+f');
   const search = page.locator('.cm-search input[name="search"]');
   await page.getByLabel('match case', { exact: true }).check();
@@ -93,6 +93,43 @@ test('explicit reveal opens the selected source board, linked shapes still drill
   await expect(source(page)).toHaveText('new: New document');
   await expect(page.locator('.zf-stage')).toContainText('New document');
   await ready(page);
+});
+
+test('source clicks open boards from root and from undimmed nested source', async ({ page }) => {
+  await page.goto('/'); await previewReady(page);
+  await replace(page, `home: Root shape
+layers.outer: {
+  node: Outer shape
+  layers.inner: {
+    # Inner board comment
+
+    leaf: Inner shape
+  }
+}`);
+  await previewReady(page);
+  const lines = source(page).locator('.cm-line');
+  const home = lines.filter({ hasText: 'home: Root shape' }).getByText('home', { exact: true });
+  await expect(source(page).locator('.zf-outside-board')).toHaveCount(0);
+  await lines.filter({ hasText: 'layers.outer: {' }).click();
+  await ready(page, 'root.layers.outer');
+  const inner = lines.filter({ hasText: 'layers.inner: {' });
+  await expect(inner).not.toHaveClass(/zf-outside-board/);
+  await inner.click();
+  await ready(page, 'root.layers.outer.layers.inner');
+  for (const target of [
+    lines.filter({ hasText: '# Inner board comment' }),
+    lines.filter({ hasText: /^$/ }),
+    lines.filter({ hasText: 'leaf: Inner shape' }).getByText('leaf', { exact: true }),
+  ]) {
+    await home.click();
+    await ready(page);
+    await expect(page.locator('.zf-stage [data-shape-id="home"]')).toHaveClass(/zf-source-selected/);
+    await expect(source(page).locator('.zf-outside-board')).toHaveCount(0);
+    await target.click();
+    await ready(page, 'root.layers.outer.layers.inner');
+    await expect(source(page)).toBeFocused();
+  }
+  await expect(page.locator('.zf-stage [data-shape-id="leaf"]')).toHaveClass(/zf-source-selected/);
 });
 
 test('clicking dimmed source focuses its board and keeps the editor cursor and viewport', async ({ page }) => {

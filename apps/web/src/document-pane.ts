@@ -244,7 +244,7 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
       immediate = false;
     },
     selected: () => { selectionCleared = undefined; void highlightSelection(false); },
-    outsideBoardClicked: (position) => void focusSourceBoard(position),
+    sourceClicked: (position) => void focusSourceBoard(position),
     format: () => void formatSource(),
     reveal: () => void revealSelection(),
     label: id === 'a' ? 'D2 source' : 'D2 source, second diagram',
