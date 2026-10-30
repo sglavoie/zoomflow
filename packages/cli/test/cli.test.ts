@@ -478,11 +478,12 @@ describe.concurrent('zoomflow CLI', () => {
   });
 
   it('reports usage concisely and prints the version', async () => {
-    const version = await run(['--version']);
-    success(version);
     const manifest = JSON.parse(await readFile(resolve(repo, 'package.json'), 'utf8'));
-    expect(version.stdout).toBe(`zoomflow ${manifest.version}\n`);
-    expect((await run(['-v'])).stdout).toBe('zoomflow 0.0.0\n');
+    for (const flag of ['--version', '-v']) {
+      const version = await run([flag]);
+      success(version);
+      expect(version.stdout).toBe(`zoomflow ${manifest.version}\n`);
+    }
     const help = await run(['-h']);
     success(help);
     expect(help.stdout).toContain("--root bounds local imports and images (default: the input file's directory)");
@@ -791,11 +792,19 @@ require('node:module').syncBuiltinESMExports();`)]);
     await mkdir(root);
     const icon = '<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"/>';
     await Promise.all([writeFile(join(root, 'logo.d2'), 'a: {icon: ./logo.svg}'), writeFile(join(root, 'logo.svg'), icon)]);
+    // Probe before exporting: on case-sensitive disks a successful export creates LOGO.svg.
+    const ignoresCase = existsSync(join(root, 'LOGO.svg'));
     const [implied, named] = await Promise.all([run(['export', join(root, 'logo.d2')]), run(['export', join(root, 'logo.d2'), '-o', join(root, 'LOGO.svg')])]);
     expect(implied.code).toBe(2);
     expect(implied.stderr).toContain('Output must not overwrite a file the diagram uses:');
     // Where the disk ignores letter case, another spelling names the same file.
-    if (existsSync(join(root, 'LOGO.svg'))) expect(named.code).toBe(2);
+    if (ignoresCase) {
+      expect(named.code).toBe(2);
+      expect(named.stderr).toContain('Output must not overwrite a file the diagram uses:');
+    } else {
+      success(named);
+      expect(await readFile(join(root, 'LOGO.svg'), 'utf8')).toContain('<svg');
+    }
     expect(await readFile(join(root, 'logo.svg'), 'utf8')).toBe(icon);
   });
 

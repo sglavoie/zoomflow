@@ -263,7 +263,7 @@ test('saving an example creates a named copy with its history, export names and 
   await expect(source(page)).toHaveText('saved: After');
 });
 
-test('naming a diagram names its exports, keeps examples intact and makes Save ask for a new file', async ({ page }) => {
+test('naming a diagram names its exports, keeps examples intact and makes Save ask for a new file', async ({ page, browserName }) => {
   await page.addInitScript(() => {
     const target = window as typeof window & { suggested?: string; showOpenFilePicker?: () => Promise<unknown[]>; showSaveFilePicker?: (options: { suggestedName: string }) => Promise<unknown> };
     const handle = (name: string) => ({ name, getFile: async () => new File(['a -> b'], name, { lastModified: 1 }),
@@ -284,9 +284,20 @@ test('naming a diagram names its exports, keeps examples intact and makes Save a
   await expect(page.locator('#export-name')).toBeFocused();
   await expect(page.locator('#draft-status')).toHaveText('File has unsaved changes');
   await selectMenuOption(page, '#export-format', 'svg');
+  // Capture the application's request separately from the browser's download name.
+  await page.evaluate(() => {
+    document.addEventListener('click', (event) => {
+      if (event.target instanceof HTMLAnchorElement && event.target.download) {
+        document.documentElement.dataset.requestedDownload = event.target.download;
+      }
+    }, { capture: true });
+  });
   const pending = page.waitForEvent('download');
   await downloadExport(page);
-  expect((await pending).suggestedFilename()).toBe('Checkout plan-root.svg');
+  const exported = await pending;
+  await expect(page.locator('html')).toHaveAttribute('data-requested-download', 'Checkout plan-root.svg');
+  // WebKit replaces spaces in its suggested download filename.
+  expect(exported.suggestedFilename()).toBe(browserName === 'webkit' ? 'Checkout_plan-root.svg' : 'Checkout plan-root.svg');
   // The edits moved to the named draft with their history; the example is unedited.
   await source(page).press('ControlOrMeta+z');
   await expect(source(page)).not.toContainText('named: Before');
