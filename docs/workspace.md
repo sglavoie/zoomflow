@@ -260,6 +260,22 @@ browsers offer a Save dialog or source download. **Export → Download project .
 keeps all project sources and their relative paths together. Local image assets are
 not yet loaded with folder projects.
 
+In the filename menu, **Save all · N files** beside the project's unsaved count
+saves every changed project file to its existing destination, including files in
+both panes and files you are not viewing. Files save one at a time. The results
+name each saved, skipped or failed file; **Save remaining files** retries what is
+still unsaved. External disk changes ask before overwriting, as **Save .d2** does.
+An edit arriving during saving stays marked unsaved until that version is saved.
+
+Files without a destination or write permission, and files moved or deleted on
+disk, are skipped and stay marked unsaved; **Save .d2** can choose a destination
+for one file. **Download project ZIP** in the results keeps every current project
+source and its relative path, including in browsers without direct folder writes.
+Downloading does not clear the unsaved indicators. Recovered copies remain separate
+and never overwrite canonical project files through Save all. **Cancel saving**,
+Close or Escape stops queued saves; a write already running finishes and updates
+that file's saved state. Files already saved stay on disk.
+
 **Check project**, beside **Find in project** above the preview, checks every `.d2`
 file in the folder, including unlinked files and unsaved edits in either pane.
 It compiles the current sources before checking links against the target files'

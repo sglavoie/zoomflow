@@ -1,10 +1,10 @@
 import type { Draft } from './draft-store';
 import { exampleSource } from './draft-library';
 
-export type ProjectGroup = { section: HTMLElement; files: HTMLElement; toggle: HTMLButtonElement };
+export type ProjectGroup = { section: HTMLElement; files: HTMLElement; toggle: HTMLButtonElement; save: HTMLButtonElement };
 
 /** A collapsible project heading with the project's unsaved count, its Atlas map and a Remove action. */
-export function projectGroup(item: Draft, remove: () => void, atlas: () => void): ProjectGroup {
+export function projectGroup(item: Draft, remove: () => void, atlas: () => void, saveAll: () => void): ProjectGroup {
   const id = item.projectId!;
   const section = document.createElement('section');
   section.className = 'project-group';
@@ -27,7 +27,13 @@ export function projectGroup(item: Draft, remove: () => void, atlas: () => void)
   const unsaved = document.createElement('span');
   unsaved.className = 'project-unsaved';
   unsaved.setAttribute('role', 'status');
-  heading.append(title, unsaved, removeButton);
+  const save = document.createElement('button');
+  save.type = 'button';
+  save.className = 'project-save button-quiet';
+  save.setAttribute('aria-haspopup', 'dialog');
+  save.setAttribute('aria-controls', 'project-save-dialog');
+  save.addEventListener('click', saveAll);
+  heading.append(title, unsaved, save, removeButton);
   const files = document.createElement('div');
   files.id = `project-files-${id}`;
   // The map leads the project's files; file rows are appended after it.
@@ -48,7 +54,7 @@ export function projectGroup(item: Draft, remove: () => void, atlas: () => void)
     title.setAttribute('aria-expanded', String(!files.hidden));
   });
   section.append(heading, files);
-  return { section, files, toggle: title };
+  return { section, files, toggle: title, save };
 }
 
 /** One menu row: the draft's button, plus Remove for files or Restore for edited examples.

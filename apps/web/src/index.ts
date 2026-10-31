@@ -14,6 +14,7 @@ import { findEngineNotice } from './engine-notice';
 import { setupExportMenu } from './export-menu';
 import { setupFileOpen } from './file-open';
 import { DirectoryHandles, FileHandles } from './file-handles';
+import { setupProjectSave } from './project-save-dialog';
 
 const canvasStyle = document.createElement('style');
 canvasStyle.textContent = viewerStyle;
@@ -84,6 +85,10 @@ const documentRoutes = new Map<string, ViewerRoute>();
 const fileHandles = new FileHandles();
 const directoryHandles = new DirectoryHandles();
 const files = setupFileOpen({ picker: () => examplePicker, activePane, fileHandles, directoryHandles, paneRoots, setActive });
+const projectSave = setupProjectSave({
+  picker: () => examplePicker, fileHandles, directoryHandles,
+  adopt: (key, saved) => { for (const pane of Object.values(panes)) if (pane.key === key) pane.adopt(saved); },
+});
 
 /** Builders create a separate draft from the active pane's point of view. */
 const builderArgs = [(source: string, name: string) => {
@@ -147,6 +152,7 @@ const examplePicker = setupExamplePicker({
   },
   focusPane: (pane) => focusPane(pane),
   openAtlas: (pane, projectId) => void panes[pane]?.openAtlasMap(projectId),
+  saveProject: projectId => projectSave.open(projectId),
 });
 
 function showDocumentState(dirty: boolean, name?: string, project = false) {

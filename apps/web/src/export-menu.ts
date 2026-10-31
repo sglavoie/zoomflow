@@ -1,4 +1,4 @@
-import { classifyHref, exportAtlasHtml, exportAtlasZip, exportBoardsHtml, exportBoardsZip, exportGlyphSource, exportSourcesZip,
+import { classifyHref, exportAtlasHtml, exportAtlasZip, exportBoardsHtml, exportBoardsZip, exportGlyphSource,
   renderExportBoards, indexBoards, resolveFilePath, type AtlasDocument, type Diagram } from '@zoomflow/core';
 import type { RenderBoard } from '@zoomflow/viewer';
 import { prepareExportSvg, rasterizeSvg, offlineViewerScript, offlineViewerStyle } from '@zoomflow/viewer';
@@ -6,7 +6,7 @@ import type { DocumentExport, DocumentPane } from './document-pane';
 import type { setupExamplePicker } from './example-picker';
 import { compilerDiagnostics } from './diagnostics';
 import { describeError, plural, safeFilename } from './text';
-import { download, downloadSource } from './download';
+import { download, downloadSource, downloadProjectSources } from './download';
 
 /** The project paths of the files a diagram's file links open, in board order. Connections link files too, as
  * the CLI, lint and the atlas map follow them. */
@@ -90,8 +90,7 @@ export function setupExportMenu(activePane: () => DocumentPane | undefined, pick
     try {
       const { fs, inputPath } = picker().compilation(pane.id);
       fs[inputPath] = pane.source;
-      const filename = `${safeFilename(name)}.zip`;
-      download(new Blob([exportSourcesZip(fs)], { type: 'application/zip' }), filename);
+      const filename = downloadProjectSources(fs, name);
       reportExport(`Project source download started: ${filename}`);
     } catch (error) { reportExport(`Project source download failed: ${describeError(error)}`, 'error'); }
   });

@@ -59,7 +59,9 @@ use **Retry preview** to try again without losing your source.
    filename menu draws every file and the links between them.
    Click an ordinary shape to select its source. On narrow screens, switch between
    **Preview** and **Source**.
-3. **Keep and share:** use **Save .d2** (⌘S / Ctrl+S) for source. In **Export**, choose
+3. **Keep and share:** use **Save .d2** (⌘S / Ctrl+S) for source. In an open folder,
+   **Save all** beside the project's unsaved count saves changed files together.
+   In **Export**, choose
    **Interactive diagram (HTML)** for one file with offline drill-down navigation,
    **Interactive atlas (HTML)** for a project file and every file it links to,
    **Current board image** as SVG or PNG, or **All boards as SVG (ZIP)**.

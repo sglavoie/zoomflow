@@ -12,7 +12,7 @@ function picker() {
   const shown: Partial<Record<PaneId, string>> = {};
   const states: Partial<Record<PaneId, DraftState>> = {};
   const api = setupExamplePicker({ readSource: pane => shown[pane] ?? '', open: (pane, document) => { shown[pane] = document?.source; },
-    onState: (pane, state) => { states[pane] = state; }, forget() {}, checkpoint: () => () => {}, focusPane() {}, openAtlas() {} });
+    onState: (pane, state) => { states[pane] = state; }, forget() {}, checkpoint: () => () => {}, focusPane() {}, openAtlas() {}, saveProject() {} });
   return { api, states, shown };
 }
 
@@ -133,6 +133,27 @@ it('opens files and folders into their requested pane after the header target ch
   expect(api.rememberFolder('notes', [{ path: 'index.d2', source: 'b' }], undefined, true, 'a').key).toBe(folder.key);
   // Opening the same folder in b must keep the two panes on separate drafts.
   expect(api.rememberFolder('notes', [{ path: 'index.d2', source: 'b' }], undefined, true, 'b').key).not.toBe(folder.key);
+});
+
+it('project save captures both panes and unvisited dirty files while excluding recovered copies', () => {
+  localStorage.clear();
+  const files = ['index.d2', 'a.d2', 'b.d2'].map(path => ({ key: `project:p1:${path}`, name: path,
+    title: `notes/${path}`, description: 'Project file', projectId: 'p1', path, source: 'Original', baseline: 'Original' }));
+  files[1].source = 'Unvisited changes';
+  const seed = new DraftStore(localStorage, 'seed');
+  seed.load();
+  seed.save([...files, { ...files[0], key: 'file:recovered:copy:v1', source: 'Recovered changes', recoveredFrom: files[0].key }], files[0].key, files[2].key);
+  const { api, shown } = picker();
+  shown.a = api.initial.source;
+  api.setSplit(true);
+  shown.a = 'First pane changes';
+  shown.b = 'Second pane changes';
+  expect(api.projectSaveSnapshot('p1')).toEqual({ id: 'p1', name: 'notes', files: [
+    { key: files[1].key, path: 'a.d2', name: 'a.d2', source: 'Unvisited changes' },
+    { key: files[2].key, path: 'b.d2', name: 'b.d2', source: 'Second pane changes' },
+    { key: files[0].key, path: 'index.d2', name: 'index.d2', source: 'First pane changes' },
+  ] });
+  expect(api.projectSaveSnapshot('missing')).toBeUndefined();
 });
 
 it('adds a completed file write to its requested project after its pane switched projects', () => {

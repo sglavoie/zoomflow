@@ -88,6 +88,9 @@ CodeMirror access through `withEditorView`, selection) and `menu.ts` (export men
   restoring examples with cancel and undo.
 - `project.spec.ts`: opened folders with relative imports, project grouping and scoped
   removal with undo, per-project unsaved counts, and saving project file copies.
+- `project-save.spec.ts`: sequential saving across both panes, reopening saved disk
+  contents, overwrite cancellation, write failures, missing files and permissions,
+  cancellation during a write, later edits staying dirty, and source ZIP fallback.
 - `continuity.spec.ts`: concurrent-tab recovery, per-document and per-board view
   restoration, and restored selection and scroll when switching documents.
 - `split-view.spec.ts`: both split layouts, independent panes and routes, one pane per

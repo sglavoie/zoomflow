@@ -1,4 +1,5 @@
 import { safeFilename } from './text';
+import { exportSourcesZip } from '@zoomflow/core';
 
 export function download(blob: Blob, name: string) {
   const url = URL.createObjectURL(blob);
@@ -16,5 +17,12 @@ export function download(blob: Blob, name: string) {
 export function downloadSource(source: string, name: string) {
   const filename = `${safeFilename(name.replace(/\.d2$/i, ''))}.d2`;
   download(new Blob([source], { type: 'text/plain;charset=utf-8' }), filename);
+  return filename;
+}
+
+/** All project sources retain their relative paths, including files with source errors. */
+export function downloadProjectSources(sources: Record<string, string>, name: string) {
+  const filename = `${safeFilename(name)}.zip`;
+  download(new Blob([exportSourcesZip(sources)], { type: 'application/zip' }), filename);
   return filename;
 }

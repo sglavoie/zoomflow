@@ -296,8 +296,8 @@ test('naming a diagram names its exports, keeps examples intact and makes Save a
   await downloadExport(page);
   const exported = await pending;
   await expect(page.locator('html')).toHaveAttribute('data-requested-download', 'Checkout plan-root.svg');
-  // WebKit replaces spaces in its suggested download filename.
-  expect(exported.suggestedFilename()).toBe(browserName === 'webkit' ? 'Checkout_plan-root.svg' : 'Checkout plan-root.svg');
+  // WebKit can preserve spaces or replace them, depending on its platform/build.
+  expect(exported.suggestedFilename()).toMatch(browserName === 'webkit' ? /^Checkout[ _]plan-root\.svg$/ : /^Checkout plan-root\.svg$/);
   // The edits moved to the named draft with their history; the example is unedited.
   await source(page).press('ControlOrMeta+z');
   await expect(source(page)).not.toContainText('named: Before');

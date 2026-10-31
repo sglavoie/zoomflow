@@ -3,7 +3,7 @@ import { diskVersion, refreshDiskVersion, rememberDiskVersion } from './disk-ver
 const databaseName = 'zoomflow.files';
 const storeName = 'handles';
 type Stored = { handle: FileSystemFileHandle; modified?: number };
-type PermissionHandle = FileSystemFileHandle & {
+type PermissionHandle = FileSystemHandle & {
   queryPermission?: (options: { mode: 'readwrite' }) => Promise<PermissionState>;
   requestPermission?: (options: { mode: 'readwrite' }) => Promise<PermissionState>;
 };
@@ -94,7 +94,7 @@ export class FileHandles extends Map<string, FileSystemFileHandle> {
 
 /** Ask to write a handle restored after a reload; the browser prompts only during a user action such as Save.
  * Resolves `denied` only when the visitor refused: a dismissed prompt or a lost user action resolves `prompt`. */
-export async function writePermission(handle: FileSystemFileHandle): Promise<PermissionState> {
+export async function writePermission(handle: FileSystemHandle): Promise<PermissionState> {
   const permissions = handle as PermissionHandle;
   if (!permissions.queryPermission || !permissions.requestPermission) return 'granted';
   try {
@@ -105,10 +105,15 @@ export async function writePermission(handle: FileSystemFileHandle): Promise<Per
 
 /** Whether Zoomflow may write a handle now, without prompting; a visitor can grant it in site settings after refusing. */
 export async function hasWritePermission(handle: FileSystemFileHandle) {
+  return await queryWritePermission(handle) === 'granted';
+}
+
+/** Inspect an inherited folder grant without consuming another user gesture. */
+export async function queryWritePermission(handle: FileSystemHandle): Promise<PermissionState> {
   const permissions = handle as PermissionHandle;
-  if (!permissions.queryPermission) return true;
-  try { return await permissions.queryPermission({ mode: 'readwrite' }) === 'granted'; }
-  catch { return false; }
+  if (!permissions.queryPermission) return 'granted';
+  try { return await permissions.queryPermission({ mode: 'readwrite' }); }
+  catch { return 'prompt'; }
 }
 
 type DirectoryPermissions = FileSystemDirectoryHandle & {

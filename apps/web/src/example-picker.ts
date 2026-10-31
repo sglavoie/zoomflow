@@ -5,7 +5,8 @@ import { createDraftLibrary, exampleSource, isOwnDraft } from './draft-library';
 import { flowFilename } from './flow-model';
 import { atlasMapName } from './atlas-map';
 import { draftRow, projectGroup, type ProjectGroup } from './picker-rows';
-import { setText } from './text';
+import { plural, setText } from './text';
+import type { ProjectSaveSnapshot } from './project-save';
 
 import type { PaneId } from './pane-scope';
 
@@ -39,6 +40,7 @@ export type PickerHost = {
   focusPane: (pane: PaneId) => void;
   /** Draw a project's atlas map in a pane. */
   openAtlas: (pane: PaneId, projectId: string) => void;
+  saveProject: (projectId: string) => void;
 };
 
 /** The file a folder project opens at: its home board, index.d2, as an atlas starts there. */
@@ -47,7 +49,7 @@ function homePath(paths: string[]) {
     paths.find((path) => !path.includes('/')) ?? paths[0];
 }
 
-export function setupExamplePicker({ readSource, open, onState, forget, checkpoint, focusPane, openAtlas }: PickerHost) {
+export function setupExamplePicker({ readSource, open, onState, forget, checkpoint, focusPane, openAtlas, saveProject }: PickerHost) {
   const picker = document.querySelector<HTMLDetailsElement>('#example-picker')!;
   const summary = picker.querySelector('summary')!;
   const menu = picker.querySelector<HTMLElement>('.example-menu')!;
@@ -106,14 +108,19 @@ export function setupExamplePicker({ readSource, open, onState, forget, checkpoi
     }
     if (projectGroups.size) {
       const unsaved = new Map<string, number>();
+      const changedFiles = new Map<string, number>();
       for (const item of drafts.values()) {
         if (item.projectId && item.source !== item.baseline) unsaved.set(item.projectId, (unsaved.get(item.projectId) ?? 0) + 1);
+        if (item.projectId && !item.recoveredFrom && item.source !== item.baseline) changedFiles.set(item.projectId, (changedFiles.get(item.projectId) ?? 0) + 1);
       }
       for (const [id, group] of projectGroups) {
         const count = unsaved.get(id) ?? 0;
         const indicator = group.section.querySelector<HTMLElement>('.project-unsaved')!;
         setText(indicator, `${count} unsaved`);
         indicator.hidden = count === 0;
+        const changed = changedFiles.get(id) ?? 0;
+        setText(group.save, `Save all · ${plural(changed, 'file')}`);
+        group.save.disabled = changed === 0;
       }
     }
     fileHeading.hidden = fileOptions.childElementCount === 0;
@@ -218,6 +225,10 @@ export function setupExamplePicker({ readSource, open, onState, forget, checkpoi
       picker.open = false;
       summary.focus();
       openAtlas(target, id);
+    }, () => {
+      picker.open = false;
+      summary.focus();
+      saveProject(id);
     });
     fileOptions.append(group.section);
     projectGroups.set(id, group);
@@ -373,6 +384,15 @@ export function setupExamplePicker({ readSource, open, onState, forget, checkpoi
       const fs: Record<string, string> = Object.create(null);
       for (const item of drafts.values()) if (item.projectId === projectId && item.path && !item.recoveredFrom) fs[item.path] = item.source;
       return { fs, home: homePath(Object.keys(fs).sort((a, b) => a.localeCompare(b))) };
+    },
+    /** Capture both panes before saving; recovered copies never overwrite a canonical project file. */
+    projectSaveSnapshot(projectId: string): ProjectSaveSnapshot | undefined {
+      syncSources();
+      const files = [...drafts.values()].filter(item => item.projectId === projectId && item.path && !item.recoveredFrom)
+        .sort((a, b) => a.path!.localeCompare(b.path!));
+      if (!files.length) return;
+      return { id: projectId, name: files[0].title.split('/')[0], files: files.filter(item => item.source !== item.baseline)
+        .map(item => ({ key: item.key, path: item.path!, name: item.name, source: item.source })) };
     },
     /** Show a project's atlas map in the pane, drawn from `source`, or as last drawn; or report the other pane showing it.
      * A map is never saved: a reload shows the project file the pane showed before it. */

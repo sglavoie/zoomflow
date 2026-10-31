@@ -48,6 +48,16 @@ checked. Closing, cancelling or invalidating the check abandons queued work and
 late output; source or option changes clear stale results and require an explicit
 new check. Results never feed back into editor sources or live preview caches.
 
+Project saves capture changed canonical sources from both panes once, then write
+existing destinations sequentially through the single-file save service. Both
+commands share document and file-entry locks, disk-change confirmation, write
+error handling and saved baselines. A folder permission request precedes writes;
+child files query the inherited grant without additional prompts. Files without
+write access are skipped, with a source ZIP available instead of a series of save
+dialogs. Cancellation stops queued files while the current write completes.
+Saved baselines refer to the captured source, so later edits stay dirty. Recovered
+copies are excluded from the batch.
+
 To compare sustained editing with and without preview coalescing, start `pnpm dev`
 and run `node spike/preview-throughput.mjs http://127.0.0.1:5173 600` (use the actual
 Vite URL). This sends six edits 400 ms apart to a generated diagram and reports
