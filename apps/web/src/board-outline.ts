@@ -20,6 +20,33 @@ export function setupBoardOutline(host: HTMLElement, viewer: Viewer, edit: (boar
   const allLayers = showAll.querySelector('input')!;
   details.after(showAll);
   allLayers.addEventListener('change', () => void viewer.setAllLayers(allLayers.checked));
+  const depthControls = document.createElement('div');
+  depthControls.className = 'layer-depth-controls';
+  depthControls.setAttribute('role', 'group');
+  depthControls.setAttribute('aria-label', 'Layer depth controls');
+  depthControls.hidden = true;
+  depthControls.innerHTML = '<label>Depth <input type="number" min="0" step="1" inputmode="numeric" aria-label="Layer depth" placeholder="Custom" /></label><button type="button" aria-label="Decrease layer depth">−</button><button type="button" aria-label="Increase layer depth">+</button>';
+  showAll.after(depthControls);
+  const depthInput = depthControls.querySelector('input')!;
+  const [decreaseDepth, increaseDepth] = [...depthControls.querySelectorAll('button')];
+  let depthEdited = false;
+  depthInput.addEventListener('input', () => { depthEdited = true; });
+  const applyDepth = () => {
+    // Enter already commits the number. Its later blur/change must not redraw the SVG during a diagram click.
+    if (!depthEdited) return;
+    depthEdited = false;
+    const value = depthInput.valueAsNumber;
+    if (!Number.isSafeInteger(value) || value < 0) { syncLayers(); return; }
+    void viewer.setLayerDepth(Math.min(value, viewer.layerState.maxDepth));
+  };
+  depthInput.addEventListener('change', applyDepth);
+  depthInput.addEventListener('keydown', event => {
+    if (event.key === 'Enter') { event.preventDefault(); applyDepth(); }
+  });
+  for (const [button, step] of [[decreaseDepth, -1], [increaseDepth, 1]] as const) button.addEventListener('click', () => {
+    const state = viewer.layerState;
+    void viewer.setLayerDepth(Math.max(0, Math.min(state.maxDepth, (state.depth ?? state.visibleDepth) + step)));
+  });
   const summary = details.querySelector('summary')!;
   const nav = details.querySelector('nav')!;
   let shown: unknown[] = [];
@@ -29,9 +56,17 @@ export function setupBoardOutline(host: HTMLElement, viewer: Viewer, edit: (boar
     const state = viewer.layerState;
     if (!state) return;
     allLayers.checked = state.all;
-    allLayers.indeterminate = state.enabled && !state.all;
+    allLayers.indeterminate = state.enabled && state.visible.size > 1 && !state.all;
     allLayers.title = `Show all layers below ${viewer.currentBoard?.name ?? 'this board'}.`;
     const root = state.root ?? viewer.currentBoard?.id;
+    const rootName = viewer.currentBoard?.id === root ? viewer.currentBoard?.name : undefined;
+    depthInput.max = String(state.maxDepth);
+    if (!depthEdited) depthInput.value = state.depth === null ? '' : String(state.depth);
+    depthInput.title = `Levels below ${rootName ?? 'the starting board'}. 0 shows only that board.`;
+    decreaseDepth.disabled = state.depth === 0;
+    increaseDepth.disabled = state.depth !== null && state.depth >= state.maxDepth;
+    const focused = [decreaseDepth, increaseDepth].find(button => button === document.activeElement);
+    if (focused?.disabled) ([decreaseDepth, increaseDepth].find(button => !button.disabled) ?? depthInput).focus({ preventScroll: true });
     for (const [id, { input, parent }] of switches) {
       input.checked = id === root || state.enabled && state.available.has(id) && state.expanded.has(id);
       input.disabled = id === root || !state.available.has(id) || state.enabled && !state.visible.has(parent!);
@@ -56,6 +91,7 @@ export function setupBoardOutline(host: HTMLElement, viewer: Viewer, edit: (boar
     switches.clear();
     details.hidden = boards.size < 2;
     showAll.hidden = ![...boards.values()].some(board => board.kind === 'layers');
+    depthControls.hidden = showAll.hidden;
     summary.textContent = `Boards (${boards.size})`;
     const list = (parent?: string): HTMLUListElement | undefined => {
       const children = [...boards.values()].filter(board => board.parent === parent);

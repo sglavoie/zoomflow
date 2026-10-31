@@ -2,7 +2,7 @@
 import { afterEach, expect, it } from 'vitest';
 import { indexBoards, shapeClass, type Diagram } from '@zoomflow/core';
 import { Viewer } from '../src/index';
-import { composeLayers, layoutLayers, visibleLayers } from '../src/layers';
+import { composeLayers, layerDepths, layoutLayers, visibleLayers } from '../src/layers';
 
 const node = (name: string, layers: Diagram[] = []): Diagram => ({ name, shapes: [{ id: 'a', pos: { x: 10, y: 20 }, width: 80, height: 40 }],
   connections: [], layers } as unknown as Diagram);
@@ -93,6 +93,77 @@ it('collapses whole subtrees and does not overlay scenarios or steps', () => {
   const boards = indexBoards({ ...diagram, scenarios: [node('Alternative', [node('Detail')])] });
   expect(visibleLayers(boards, 'root', new Set(boards.keys())).map(board => board.name)).toEqual(['Root', 'A', 'Deep', 'B']);
   expect(visibleLayers(boards, 'root', new Set(['root.layers.A.layers.Deep', 'root.layers.B'])).map(board => board.name)).toEqual(['Root', 'B']);
+});
+
+it('counts depth by layer boundaries relative to the chosen starting board', () => {
+  const boards = indexBoards({ ...diagram, scenarios: [node('Alternative', [node('Detail')])] });
+  expect([...layerDepths(boards, 'root')]).toEqual([
+    ['root', 0], ['root.layers.A', 1], ['root.layers.A.layers.Deep', 2], ['root.layers.B', 1],
+  ]);
+  expect([...layerDepths(boards, 'root.layers.A')]).toEqual([
+    ['root.layers.A', 0], ['root.layers.A.layers.Deep', 1],
+  ]);
+});
+
+it('shows exactly the requested number of levels and keeps the depth relative when navigating', async () => {
+  const { viewer } = mount();
+  const tree = node('', [node('A', [node('Deep', [node('Leaf')])]), node('B', [node('Other')])]);
+  await viewer.setDocument(tree, async () => svg);
+  expect(viewer.layerState.maxDepth).toBe(3);
+  await viewer.setLayerDepth(0);
+  expect(viewer.layerState.visible).toEqual(new Set(['root']));
+  await viewer.setLayerDepth(1);
+  expect(viewer.layerState.visible).toEqual(new Set(['root', 'root.layers.A', 'root.layers.B']));
+  await viewer.setLayerDepth(2);
+  expect(viewer.layerState.visible.size).toBe(5);
+  expect(viewer.layerState.visible.has('root.layers.A.layers.Deep.layers.Leaf')).toBe(false);
+  expect(viewer.layerState.depth).toBe(2);
+  await viewer.navigate('root.layers.A');
+  expect(viewer.layerState.root).toBe('root.layers.A');
+  expect(viewer.layerState.visible).toEqual(new Set(['root.layers.A', 'root.layers.A.layers.Deep', 'root.layers.A.layers.Deep.layers.Leaf']));
+  await viewer.navigate('root');
+  expect(viewer.layerState.visible.size).toBe(5);
+});
+
+it('retains a chosen depth through source edits while individual switches create a custom view', async () => {
+  const { viewer } = mount();
+  const tree = node('', [node('A', [node('Deep', [node('Leaf')])]), node('B', [node('Other')])]);
+  await viewer.setDocument(tree, async () => svg);
+  await viewer.setLayerDepth(1);
+  tree.layers![0]!.layers!.push(node('New', [node('Hidden')]));
+  await viewer.setDocument(tree, async () => svg);
+  expect(viewer.layerState.depth).toBe(1);
+  expect(viewer.layerState.visible.size).toBe(3);
+  await viewer.setLayerVisible('root.layers.A.layers.Deep', true);
+  expect(viewer.layerState.depth).toBeNull();
+  expect(viewer.layerState.visibleDepth).toBe(2);
+  await viewer.setLayerDepth(2);
+  expect(viewer.layerState.depth).toBe(2);
+  expect(viewer.layerState.visible.size).toBe(6);
+  expect(viewer.layerState.visible.has('root.layers.A.layers.New.layers.Hidden')).toBe(false);
+  tree.layers![1]!.layers!.push(node('Another'));
+  await viewer.setDocument(tree, async () => svg);
+  expect(viewer.layerState.visible.has('root.layers.B.layers.Another')).toBe(true);
+  expect(viewer.layerState.visible.has('root.layers.A.layers.Deep.layers.Leaf')).toBe(false);
+});
+
+it('keeps a finite depth per document and ignores invalid depth values', async () => {
+  let key = 'first';
+  const { viewer } = mount(() => key);
+  await viewer.setDocument(diagram, async () => svg);
+  await viewer.setLayerDepth(1);
+  for (const depth of [-1, 1.5, NaN, Infinity]) await viewer.setLayerDepth(depth);
+  expect(viewer.layerState.depth).toBe(1);
+  key = 'second';
+  await viewer.setDocument(diagram, async () => svg);
+  expect(viewer.layerState.depth).toBe(0);
+  key = 'first';
+  await viewer.setDocument(diagram, async () => svg);
+  expect(viewer.layerState.depth).toBe(1);
+  await viewer.setAllLayers(true);
+  expect(viewer.layerState.depth).toBe(2);
+  await viewer.setAllLayers(false);
+  expect(viewer.layerState.depth).toBe(0);
 });
 
 it('keeps a tall expanded subtree clear of its sibling and orders branches by their parent shapes', () => {

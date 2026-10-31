@@ -20,6 +20,15 @@ export function visibleLayers(boards: ReadonlyMap<string, Board>, root: string, 
   return visible;
 }
 
+/** Depth zero is the starting board. Each layer boundary adds one; scenarios and steps stay outside the view. */
+export function layerDepths(boards: ReadonlyMap<string, Board>, root: string): Map<string, number> {
+  const depths = new Map<string, number>();
+  for (const board of visibleLayers(boards, root, new Set(boards.keys()))) {
+    depths.set(board.id, board.id === root ? 0 : depths.get(board.parent!)! + 1);
+  }
+  return depths;
+}
+
 type Size = { width: number; height: number };
 export type LayerNode = Size & { id: string; parent?: string; order: number };
 /** Place whole subtrees in separate rows, so expanding a deep branch cannot overlap its siblings. */

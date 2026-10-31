@@ -130,6 +130,14 @@ view again. Each child diagram connects to the shape that opens it, and keeps
 its own layout. Zoom and pan to explore the combined view. Scenarios and steps keep
 their separate views.
 
+Use **Depth** and its **− / +** buttons to choose how many levels below the view's
+starting board to show. **0** shows only that board, **1** includes its children,
+and **2** includes its grandchildren. You can type a number and press Enter or
+adjust one level at a time. The limit follows the starting board when you navigate
+and stays in effect as the source changes. **Show all layers** removes the limit.
+Individual switches remain available; an uneven selection reads **Custom** in the
+depth field. Choosing a depth again applies that limit to every branch.
+
 When a child board repeats the topic that opens it, the connected view shows that
 topic once, on the parent board, and connects the child's branches directly to it.
 The child's centre returns when you focus its board. Distinct entry nodes and other

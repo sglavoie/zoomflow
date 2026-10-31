@@ -243,6 +243,34 @@ header > strong {
 .layer-visibility-all[hidden] {
   display: none;
 }
+.layer-depth-controls,
+.layer-depth-controls label {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+.layer-depth-controls {
+  font-size: var(--font-size-sm);
+}
+.layer-depth-controls[hidden] {
+  display: none;
+}
+.layer-depth-controls input {
+  width: 76px;
+  min-height: 32px;
+  padding: 3px 5px;
+  border: 1px solid var(--control-border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: inherit;
+  font: inherit;
+  text-align: center;
+}
+.layer-depth-controls button {
+  min-width: 32px;
+  min-height: 32px;
+  padding: 0 6px;
+}
 .board-outline input[type="checkbox"],
 .layer-visibility-all input {
   width: 16px;
@@ -264,6 +292,11 @@ header > strong {
     min-height: 44px;
   }
   .layer-visibility-all {
+    min-height: 44px;
+  }
+  .layer-depth-controls button,
+  .layer-depth-controls input {
+    min-width: 44px;
     min-height: 44px;
   }
 }

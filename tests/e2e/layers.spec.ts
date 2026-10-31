@@ -14,6 +14,56 @@ async function open(page: Page) {
   await previewReady(page);
 }
 
+test('increases and decreases visible depth and keeps it relative to a focused board', async ({ page }) => {
+  await open(page);
+  const source = await editorText(page);
+  const depth = page.getByRole('spinbutton', { name: 'Layer depth', exact: true });
+  const less = page.getByRole('button', { name: 'Decrease layer depth', exact: true });
+  const more = page.getByRole('button', { name: 'Increase layer depth', exact: true });
+  await expect(depth).toHaveValue('0');
+  await expect(less).toBeDisabled();
+  await more.click();
+  await expect(depth).toHaveValue('1');
+  await expect(layers(page)).toHaveCount(3);
+  await expect(stage(page).locator('[data-layer-board="root.layers.Plan the launch.layers.Onboarding"]')).toHaveCount(0);
+  await more.click();
+  await expect(depth).toHaveValue('2');
+  await expect(layers(page)).toHaveCount(4);
+  await expect(more).toBeDisabled();
+  await less.click();
+  await expect(layers(page)).toHaveCount(3);
+  await depth.fill('2'); await depth.press('Enter');
+  await expect(layers(page)).toHaveCount(4);
+  await openFromBadge(page, 'Open Plan the launch board');
+  await board(page, 'root.layers.Plan the launch');
+  await expect(depth).toHaveValue('1');
+  await expect(depth).toHaveAttribute('max', '1');
+  await expect(layers(page)).toHaveCount(2);
+  await less.click();
+  await expect(depth).toHaveValue('0');
+  await expect(layers(page)).toHaveCount(1);
+  await expect(layerShape(page, 'root.layers.Plan the launch', 'n')).toContainText('Plan the launch');
+  expect(await editorText(page)).toBe(source);
+});
+
+test('a custom branch selection can return to a uniform depth', async ({ page }) => {
+  await open(page);
+  const depth = page.getByRole('spinbutton', { name: 'Layer depth', exact: true });
+  await depth.fill('2'); await depth.press('Enter');
+  await expect(layers(page)).toHaveCount(4);
+  await page.locator('.board-outline summary').click();
+  await page.getByRole('checkbox', { name: 'Show Build and test layer', exact: true }).uncheck();
+  await expect(layers(page)).toHaveCount(3);
+  await expect(depth).toHaveValue('');
+  await expect(depth).toHaveAttribute('placeholder', 'Custom');
+  await page.keyboard.press('Escape');
+  await page.getByRole('button', { name: 'Decrease layer depth', exact: true }).click();
+  await expect(depth).toHaveValue('1');
+  await expect(layers(page)).toHaveCount(3);
+  await expect(stage(page).locator('[data-layer-board="root.layers.Build and test"]')).toHaveCount(1);
+  await expect(stage(page).locator('[data-layer-board="root.layers.Plan the launch.layers.Onboarding"]')).toHaveCount(0);
+});
+
 test('shows connected nested layers and toggles branches without changing the source', async ({ page }) => {
   await open(page);
   const source = await editorText(page);
@@ -195,6 +245,9 @@ test.describe('touch', () => {
   test.use({ hasTouch: true, viewport: { width: 390, height: 844 } });
   test('expands and collapses layers on a phone without overflowing the page', async ({ page }) => {
     await open(page);
+    await page.getByRole('button', { name: 'Increase layer depth', exact: true }).tap();
+    await expect(layers(page)).toHaveCount(3);
+    await expect(page.getByRole('spinbutton', { name: 'Layer depth', exact: true })).toHaveValue('1');
     await page.getByRole('checkbox', { name: 'Show all layers', exact: true }).check();
     await expect(layers(page)).toHaveCount(4);
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
@@ -214,4 +267,5 @@ for (const theme of ['light', 'dark'] as const) test(`connected canvas appearanc
   await expect(layers(page)).toHaveCount(4);
   await page.evaluate(() => document.fonts.ready);
   await expect(stage(page)).toHaveScreenshot(`connected-layers-${theme}.png`);
+  await expect(page.locator('.flow-builder-toolbar')).toHaveScreenshot(`layer-depth-controls-${theme}.png`);
 });

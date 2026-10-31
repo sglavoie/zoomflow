@@ -5,7 +5,7 @@ import { childToward, normalizeRouteHash, renderParentContext, resolveRouteHash,
 import { setupBreadcrumbs } from './breadcrumbs';
 import { followLink, linkTo, prepareLinks, resolveLink } from './links';
 import { sanitizeSvg } from './sanitize';
-import { composeLayers, visibleLayers } from './layers';
+import { composeLayers, layerDepths, visibleLayers } from './layers';
 
 export type RenderBoard = (target: string) => Promise<string>;
 /** Compilation succeeded, but its preview could not be rendered or read as SVG. */
@@ -66,7 +66,7 @@ export class Viewer {
   private keys?: AbortController;
   private readonly history: boolean;
   private memoryRoute: ViewerRoute = { hash: '#/' };
-  private layerView: { root?: string; expanded: Set<string>; all: boolean } = { expanded: new Set(), all: false };
+  private layerView: { root?: string; expanded: Set<string>; all: boolean; depth?: number } = { expanded: new Set(), all: false };
   private readonly layerViews = new Map<string, typeof this.layerView>();
   private layerDocument?: string;
 
@@ -169,8 +169,17 @@ export class Viewer {
   get layerState() {
     const root = this.layerView.root;
     const visible = new Set(root ? visibleLayers(this.boards, root, this.layerView.expanded).map(board => board.id) : [this.current]);
-    const available = new Set(visibleLayers(this.boards, root ?? this.current, new Set(this.boards.keys())).map(board => board.id));
+    const depths = layerDepths(this.boards, root ?? this.current);
+    const available = new Set(depths.keys());
+    let maxDepth = 0;
+    let visibleDepth = 0;
+    for (const [id, depth] of depths) {
+      maxDepth = Math.max(maxDepth, depth);
+      if (visible.has(id)) visibleDepth = Math.max(visibleDepth, depth);
+    }
+    const uniform = [...depths].every(([id, depth]) => visible.has(id) === (depth <= visibleDepth));
     return { enabled: Boolean(root), root, available, expanded: this.layerView.expanded as ReadonlySet<string>, visible,
+      depth: uniform ? visibleDepth : null, visibleDepth, maxDepth,
       all: root === this.current && [...available].every(id => visible.has(id)) };
   }
 
@@ -182,13 +191,29 @@ export class Viewer {
     });
   }
 
+  /** Show the view's starting board plus a chosen number of descendant levels. */
+  async setLayerDepth(depth: number) {
+    if (!Number.isSafeInteger(depth) || depth < 0 || !this.boards.has(this.current)) return;
+    await this.changeLayers(() => {
+      this.layerView = { root: this.layerView.root ?? this.current, expanded: new Set(), all: false, depth };
+      this.refreshLayerExpansion();
+    });
+  }
+
+  private refreshLayerExpansion() {
+    if (!this.layerView.root) return;
+    if (this.layerView.all) this.layerView.expanded = new Set(this.boards.keys());
+    else if (this.layerView.depth !== undefined) this.layerView.expanded = new Set(
+      [...layerDepths(this.boards, this.layerView.root)].filter(([, depth]) => depth <= this.layerView.depth!).map(([id]) => id));
+  }
+
   /** Hiding a parent collapses its subtree but remembers the children's choices. */
   async setLayerVisible(id: string, show: boolean) {
     if (this.boards.get(id)?.kind !== 'layers') return;
     const root = this.layerView.root ?? this.current;
     if (id === root || !this.layerState.available.has(id)) return;
     await this.changeLayers(() => {
-      this.layerView = { ...this.layerView, expanded: new Set(this.layerView.expanded), all: false };
+      this.layerView = { ...this.layerView, expanded: new Set(this.layerView.expanded), all: false, depth: undefined };
       this.layerView.root ??= this.current;
       if (show) this.ensureLayerPath(id);
       else this.layerView.expanded.delete(id);
@@ -303,7 +328,7 @@ export class Viewer {
     }
     this.layerView = { ...this.layerView, expanded: new Set(this.layerView.expanded) };
     if (this.layerView.root && !boards.has(this.layerView.root)) this.layerView.root = boards.has(this.current) ? this.current : 'root';
-    if (this.layerView.all) this.layerView.expanded = new Set(boards.keys());
+    this.refreshLayerExpansion();
     this.diagnostics = diagnostics;
     this.render = render;
     this.cache = new Map();
@@ -329,7 +354,10 @@ export class Viewer {
     const byHash = new Map([...this.boards.values()].map((item) => [item.hash, item]));
     const board = byHash.get(resolveRouteHash(route.hash, (hash) => byHash.has(hash))) ?? this.boards.get('root')!;
     if (focusLayers && this.layerView.root) this.layerView.root = board.id;
+    if (this.layerView.root && this.layerView.depth !== undefined &&
+      (layerDepths(this.boards, this.layerView.root).get(board.id) ?? Infinity) > this.layerView.depth) this.layerView.root = board.id;
     this.ensureLayerPath(board.id);
+    this.refreshLayerExpansion();
     const trail = restoreTrail(route.trail, board.id, (id) => this.boards.has(id), () => this.ancestors(board.id));
     await this.showBoard(board.id, 'replace', trail, preserveViewport, routeFallbackNotice(route.hash, board.hash, board.name));
   }
@@ -409,6 +437,7 @@ export class Viewer {
       // Opening a board focuses its subtree. Selecting a shape for editing uses activateBoard instead,
       // preserving the canvas until the user chooses a different starting board.
       if (this.layerView.root) this.layerView = { ...this.layerView, root: id };
+      this.refreshLayerExpansion();
       await this.showBoard(id, mode, trail, preserveViewport, notice);
     }
     catch (error) { this.layerView = previous; this.navigationError(error); }
