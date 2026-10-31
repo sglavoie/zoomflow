@@ -279,7 +279,8 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
       // Imported shapes can be found too, even when their source is in another file.
       viewer.highlightShapes([shape]);
       boardTools.select([shape]);
-      const element = [...viewer.stage.querySelectorAll<SVGGraphicsElement>('[data-shape-id]')].find(node => node.dataset.shapeId === shape);
+      const element = [...viewer.stage.querySelectorAll<SVGGraphicsElement>('[data-shape-id]')].find(node => node.dataset.shapeId === shape &&
+        node.dataset.shapeBoard === viewer.currentBoard?.id);
       if (!element) { viewer.stage.focus({ preventScroll: true }); return; }
       const target = element.closest<SVGElement>('a') ?? element;
       if (!target.hasAttribute('tabindex')) target.setAttribute('tabindex', '-1');
@@ -531,6 +532,7 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
     if (saved.key !== currentDocumentKey) {
       editor.copyDocument(saved.key);
       viewport.copyDocument(saved.key);
+      viewer.copyLayerDocument(saved.key);
       const route = shared.documentRoutes.get(currentDocumentKey!);
       if (route) shared.documentRoutes.set(saved.key, route);
     }
@@ -714,7 +716,7 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
     viewer.stage.focus({ preventScroll: true });
   }
   revealButton.addEventListener('click', () => void revealSelection());
-  viewer.stage.addEventListener('zf-boardchange', () => {
+  const boardChanged = () => {
     // Viewer commits its URL and trail immediately after dispatching this event.
     queueMicrotask(() => {
       if (currentDocumentKey) shared.documentRoutes.set(currentDocumentKey, viewer.route);
@@ -723,7 +725,9 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
     boardTools.boardChanged();
     showBoardSource(true);
     void highlightSelection(false);
-  });
+  };
+  viewer.stage.addEventListener('zf-boardchange', boardChanged);
+  viewer.stage.addEventListener('zf-activeboardchange', boardChanged);
   function selectShape(event: MouseEvent | KeyboardEvent) {
     const shape = event.target instanceof Element ? event.target.closest<SVGElement>('[data-shape-id]')
       ?? event.target.closest('a')?.querySelector<SVGElement>('[data-shape-id]') : null;

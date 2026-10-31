@@ -13,9 +13,33 @@ export function setupBoardOutline(host: HTMLElement, viewer: Viewer, edit: (boar
   details.hidden = true;
   details.innerHTML = '<summary></summary><nav aria-label="Boards"></nav>';
   host.prepend(details);
+  const showAll = document.createElement('label');
+  showAll.className = 'layer-visibility-all';
+  showAll.hidden = true;
+  showAll.innerHTML = '<input type="checkbox" /> Show all layers';
+  const allLayers = showAll.querySelector('input')!;
+  details.after(showAll);
+  allLayers.addEventListener('change', () => void viewer.setAllLayers(allLayers.checked));
   const summary = details.querySelector('summary')!;
   const nav = details.querySelector('nav')!;
   let shown: unknown[] = [];
+  const switches = new Map<string, { input: HTMLInputElement; parent?: string }>();
+
+  function syncLayers() {
+    const state = viewer.layerState;
+    if (!state) return;
+    allLayers.checked = state.all;
+    allLayers.indeterminate = state.enabled && !state.all;
+    allLayers.title = `Show all layers below ${viewer.currentBoard?.name ?? 'this board'}.`;
+    const root = state.root ?? viewer.currentBoard?.id;
+    for (const [id, { input, parent }] of switches) {
+      input.checked = id === root || state.enabled && state.available.has(id) && state.expanded.has(id);
+      input.disabled = id === root || !state.available.has(id) || state.enabled && !state.visible.has(parent!);
+      input.title = id === root ? 'This board is the starting point of the view.'
+        : !state.available.has(id) ? 'Open this board to show its layers.'
+          : input.disabled ? 'Show the parent layer first.' : 'Show or hide this layer and its descendants.';
+    }
+  }
 
   function kind(sites: BoardSites | undefined, board: Board) {
     const owner = sites?.owner(board.id);
@@ -26,9 +50,12 @@ export function setupBoardOutline(host: HTMLElement, viewer: Viewer, edit: (boar
   }
   function render(sites: BoardSites | undefined, boards: Map<string, Board>, current: string) {
     // Edits redraw the toolbar on every keystroke; the outline changes only with the compiled boards.
-    if (shown[0] === sites && shown[1] === boards && shown[2] === current) return;
+    if (shown[0] === sites && shown[1] === boards && shown[2] === current) { syncLayers(); return; }
     shown = [sites, boards, current];
+    const focused = nav.contains(document.activeElement) && (document.activeElement as HTMLInputElement)?.dataset.layerToggle;
+    switches.clear();
     details.hidden = boards.size < 2;
+    showAll.hidden = ![...boards.values()].some(board => board.kind === 'layers');
     summary.textContent = `Boards (${boards.size})`;
     const list = (parent?: string): HTMLUListElement | undefined => {
       const children = [...boards.values()].filter(board => board.parent === parent);
@@ -36,6 +63,18 @@ export function setupBoardOutline(host: HTMLElement, viewer: Viewer, edit: (boar
       const ul = document.createElement('ul');
       for (const board of children) {
         const li = document.createElement('li');
+        if (board.kind === 'layers') {
+          const toggle = document.createElement('input');
+          toggle.type = 'checkbox';
+          toggle.dataset.layerToggle = board.id;
+          toggle.setAttribute('aria-label', `Show ${board.name} layer`);
+          toggle.addEventListener('change', () => void viewer.setLayerVisible(board.id, toggle.checked));
+          switches.set(board.id, { input: toggle, parent: board.parent });
+          const label = document.createElement('label');
+          label.className = 'board-layer-toggle';
+          label.append(toggle);
+          li.append(label);
+        }
         const open = document.createElement('button');
         open.type = 'button';
         open.className = 'board-outline-open';
@@ -68,17 +107,24 @@ export function setupBoardOutline(host: HTMLElement, viewer: Viewer, edit: (boar
       return ul;
     };
     nav.replaceChildren(list() ?? '');
+    syncLayers();
+    if (focused) switches.get(focused)?.input.focus({ preventScroll: true });
   }
-  details.addEventListener('keydown', event => {
-    if (event.key !== 'Escape' || !details.open) return;
-    event.preventDefault();
-    event.stopPropagation();
-    details.open = false;
-    summary.focus();
+  pageListeners(viewer.stage, signal => {
+    document.addEventListener('pointerdown', event => {
+      if (details.open && !details.contains(event.target as Node)) details.open = false;
+    }, { capture: true, signal });
+    // Safari does not always focus a checkbox when it is clicked. Dismiss the open outline
+    // before Escape can reach the viewer and navigate to the parent board.
+    window.addEventListener('keydown', event => {
+      if (event.defaultPrevented || event.key !== 'Escape' || !details.open ||
+        event.target instanceof Element && event.target.closest('dialog, [role="dialog"], [role="menu"]')) return;
+      event.preventDefault();
+      event.stopPropagation();
+      details.open = false;
+      summary.focus();
+    }, { capture: true, signal });
   });
-  pageListeners(viewer.stage, signal => document.addEventListener('pointerdown', event => {
-    if (details.open && !details.contains(event.target as Node)) details.open = false;
-  }, { capture: true, signal }));
   return {
     render,
     get hidden() { return details.hidden; },

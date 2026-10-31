@@ -123,6 +123,27 @@ editor.
 
 ## Find your way between boards
 
+Turn on **Show all layers** above the preview to expand the selected board and its
+descendants on one connected canvas. Ancestors and sibling boards stay out of this
+view: opening a child board focuses its subtree, and opening an ancestor broadens the
+view again. Each child diagram connects to the shape that opens it, and keeps
+its own layout. Zoom and pan to explore the combined view. Scenarios and steps keep
+their separate views.
+
+Open **Boards** to show or hide individual layers with the checkboxes beside their
+names. Hiding a parent collapses its descendants and remembers their choices; show
+the parent again to restore them. Turn off **Show all layers** to return to the
+selected board alone. Visibility choices stay with each document for the current
+workspace session and do not change its source.
+
+Selecting a shape to edit keeps the connected canvas in place. Turn on **Show all
+layers** from that selection to make its board the starting point, or open a board
+through its arrow, **Boards**, or the breadcrumbs to focus it directly.
+
+Shapes in expanded layers can still be selected, renamed and edited. The breadcrumbs
+and editing controls follow the selected shape's board. SVG and PNG downloads include
+the visible layers together; HTML and ZIP downloads still include the whole diagram.
+
 **Find in diagram** above the preview searches board names and
 shape labels throughout the current document, including nested boards, scenarios and
 steps. Results show their board breadcrumbs. Choose a match to open its board and

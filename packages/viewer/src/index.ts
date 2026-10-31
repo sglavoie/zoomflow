@@ -5,6 +5,7 @@ import { childToward, normalizeRouteHash, renderParentContext, resolveRouteHash,
 import { setupBreadcrumbs } from './breadcrumbs';
 import { followLink, linkTo, prepareLinks, resolveLink } from './links';
 import { sanitizeSvg } from './sanitize';
+import { composeLayers, visibleLayers } from './layers';
 
 export type RenderBoard = (target: string) => Promise<string>;
 /** Compilation succeeded, but its preview could not be rendered or read as SVG. */
@@ -65,6 +66,9 @@ export class Viewer {
   private keys?: AbortController;
   private readonly history: boolean;
   private memoryRoute: ViewerRoute = { hash: '#/' };
+  private layerView: { root?: string; expanded: Set<string>; all: boolean } = { expanded: new Set(), all: false };
+  private readonly layerViews = new Map<string, typeof this.layerView>();
+  private layerDocument?: string;
 
   constructor(private readonly host: HTMLElement, private readonly settings: ViewerOptions = {}) {
     this.history = settings.history ?? true;
@@ -87,6 +91,19 @@ export class Viewer {
     this.stage.setAttribute('aria-label', 'Diagram');
     host.replaceChildren(this.crumbs, this.context, this.message, this.announcement, this.stage);
     const options = { signal: this.events.signal };
+    let pointing = false;
+    this.stage.addEventListener('pointerdown', () => { pointing = true; }, options);
+    for (const type of ['pointerup', 'pointercancel']) window.addEventListener(type, () => { pointing = false; }, options);
+    // Shape IDs repeat across boards. Choose their board before the host handles a selection or edit.
+    for (const type of ['click', 'contextmenu', 'focusin', 'keydown']) this.stage.addEventListener(type, event => {
+      if (!this.layerView.root || !(event.target instanceof Element)) return;
+      // Pointer selection activates on click: changing the toolbar during focus would move the shape
+      // between the press and release and turn its click into a background click.
+      if (type === 'focusin' && pointing) return;
+      const shape = event.target.closest<SVGElement>('[data-shape-id]') ?? event.target.closest('a')?.querySelector<SVGElement>('[data-shape-id]');
+      const board = shape?.dataset.shapeBoard;
+      if (board && board !== this.current) this.activateBoard(board, 'replace');
+    }, { ...options, capture: true });
     this.stage.addEventListener('click', (event) => this.follow(event), options);
     // Only the history-owning viewer has routes that another tab can reopen. Missing links and
     // in-memory viewers still need interception instead of opening an unusable address.
@@ -101,7 +118,7 @@ export class Viewer {
       const file: unknown = history.state?.zoomflowFile;
       const owner = this.settings.document;
       if (owner && typeof file === 'string' && file !== owner.key() && owner.restore(history.state)) return;
-      void this.fromLocation().catch((error) => this.navigationError(error));
+      void this.fromLocation(false, true).catch((error) => this.navigationError(error));
     }, options);
     this.resume();
   }
@@ -149,6 +166,91 @@ export class Viewer {
 
   get currentBoard() { return this.boards.get(this.current); }
 
+  get layerState() {
+    const root = this.layerView.root;
+    const visible = new Set(root ? visibleLayers(this.boards, root, this.layerView.expanded).map(board => board.id) : [this.current]);
+    const available = new Set(visibleLayers(this.boards, root ?? this.current, new Set(this.boards.keys())).map(board => board.id));
+    return { enabled: Boolean(root), root, available, expanded: this.layerView.expanded as ReadonlySet<string>, visible,
+      all: root === this.current && [...available].every(id => visible.has(id)) };
+  }
+
+  /** Show the active board and all its descendants, or return to that board alone. */
+  async setAllLayers(show: boolean) {
+    await this.changeLayers(() => {
+      this.layerView = show ? { root: this.current, expanded: new Set(this.boards.keys()), all: true }
+        : { expanded: new Set(), all: false };
+    });
+  }
+
+  /** Hiding a parent collapses its subtree but remembers the children's choices. */
+  async setLayerVisible(id: string, show: boolean) {
+    if (this.boards.get(id)?.kind !== 'layers') return;
+    const root = this.layerView.root ?? this.current;
+    if (id === root || !this.layerState.available.has(id)) return;
+    await this.changeLayers(() => {
+      this.layerView = { ...this.layerView, expanded: new Set(this.layerView.expanded), all: false };
+      this.layerView.root ??= this.current;
+      if (show) this.ensureLayerPath(id);
+      else this.layerView.expanded.delete(id);
+    });
+  }
+
+  private ensureLayerPath(id: string) {
+    if (!this.layerView.root) return;
+    const path = this.ancestors(id);
+    const from = path.indexOf(this.layerView.root);
+    if (from < 0 || path.slice(from + 1).some(child => this.boards.get(child)?.kind !== 'layers')) this.layerView.root = id;
+    else for (const child of path.slice(from + 1)) this.layerView.expanded.add(child);
+  }
+
+  private async changeLayers(change: () => void) {
+    const before = this.layerView;
+    change();
+    const next = this.layerView;
+    this.stage.dispatchEvent(new Event('zf-layerchange'));
+    let active = this.current;
+    const visible = this.layerState.visible;
+    while (!visible.has(active) && this.boards.get(active)?.parent) active = this.boards.get(active)!.parent!;
+    try { await this.showBoard(active, 'replace', this.ancestors(active)); }
+    catch (error) {
+      if (this.layerView === next) { this.layerView = before; this.stage.dispatchEvent(new Event('zf-layerchange')); }
+      this.navigationError(error);
+    }
+  }
+
+  private cachedRender(board: Board) {
+    let rendered = this.cache.get(board.id);
+    if (!rendered) {
+      rendered = this.render(board.target);
+      const cache = this.cache;
+      cache.set(board.id, rendered);
+      void rendered.catch(() => cache.delete(board.id));
+    }
+    return rendered;
+  }
+
+  private async layerSvg() {
+    const boards = visibleLayers(this.boards, this.layerView.root!, this.layerView.expanded);
+    const items: { board: Board; svg: SVGElement }[] = [];
+    // Bound render work when a large hierarchy is expanded at once.
+    for (let i = 0; i < boards.length; i += 4) {
+      items.push(...await Promise.all(boards.slice(i, i + 4).map(async board => ({ board, svg: this.svgElement(await this.cachedRender(board), board) }))));
+    }
+    return composeLayers(items);
+  }
+
+  /** A fresh full-size SVG of the visible layers, without selection rings or viewport transforms. */
+  async renderVisibleLayers() {
+    return this.layerView.root ? new XMLSerializer().serializeToString(await this.layerSvg()) : undefined;
+  }
+
+  /** Saving a draft under a new key preserves its view and leaves the original document's choices available. */
+  copyLayerDocument(key: string) {
+    if (this.layerDocument !== undefined) this.layerViews.set(this.layerDocument, this.layerView);
+    this.layerView = { ...this.layerView, expanded: new Set(this.layerView.expanded) };
+    this.layerDocument = key;
+  }
+
   get route(): ViewerRoute {
     return this.history ? { hash: location.hash, trail: history.state?.zoomflowTrail } : { ...this.memoryRoute };
   }
@@ -164,7 +266,7 @@ export class Viewer {
 
   highlightShapes(ids: readonly string[]) {
     for (const shape of this.stage.querySelectorAll<SVGElement>('[data-shape-id]')) {
-      shape.classList.toggle('zf-source-selected', ids.includes(shape.dataset.shapeId!));
+      shape.classList.toggle('zf-source-selected', ids.includes(shape.dataset.shapeId!) && (!shape.dataset.shapeBoard || shape.dataset.shapeBoard === this.current));
     }
   }
 
@@ -190,8 +292,18 @@ export class Viewer {
   }
 
   async setDocument(diagram: Diagram, render: RenderBoard, diagnostics: readonly LintDiagnostic[] = [], preserveViewport = false) {
-    const previous = { boards: this.boards, diagnostics: this.diagnostics, render: this.render, cache: this.cache };
+    const previous = { boards: this.boards, diagnostics: this.diagnostics, render: this.render, cache: this.cache,
+      layerView: this.layerView, layerDocument: this.layerDocument };
     const boards = this.boards = indexBoards(diagram);
+    const key = this.settings.document?.key() ?? '';
+    if (key !== this.layerDocument) {
+      if (this.layerDocument !== undefined) this.layerViews.set(this.layerDocument, this.layerView);
+      this.layerView = this.layerViews.get(key) ?? { expanded: new Set(), all: false };
+      this.layerDocument = key;
+    }
+    this.layerView = { ...this.layerView, expanded: new Set(this.layerView.expanded) };
+    if (this.layerView.root && !boards.has(this.layerView.root)) this.layerView.root = boards.has(this.current) ? this.current : 'root';
+    if (this.layerView.all) this.layerView.expanded = new Set(boards.keys());
     this.diagnostics = diagnostics;
     this.render = render;
     this.cache = new Map();
@@ -211,11 +323,13 @@ export class Viewer {
     return path;
   }
 
-  private async fromLocation(preserveViewport = false) {
+  private async fromLocation(preserveViewport = false, focusLayers = false) {
     if (!this.boards.size) return;
     const route = { ...this.route, hash: normalizeRouteHash(this.route.hash) };
     const byHash = new Map([...this.boards.values()].map((item) => [item.hash, item]));
     const board = byHash.get(resolveRouteHash(route.hash, (hash) => byHash.has(hash))) ?? this.boards.get('root')!;
+    if (focusLayers && this.layerView.root) this.layerView.root = board.id;
+    this.ensureLayerPath(board.id);
     const trail = restoreTrail(route.trail, board.id, (id) => this.boards.has(id), () => this.ancestors(board.id));
     await this.showBoard(board.id, 'replace', trail, preserveViewport, routeFallbackNotice(route.hash, board.hash, board.name));
   }
@@ -251,6 +365,7 @@ export class Viewer {
       const group = groups.get(shapeClass(shape.id));
       if (group) {
         group.dataset.shapeId = shape.id;
+        group.dataset.shapeBoard = board.id;
         if (!group.closest('a') && sources.has(shape.id)) {
           group.setAttribute('tabindex', '0');
           group.setAttribute('role', 'button');
@@ -288,11 +403,43 @@ export class Viewer {
   }
 
   async navigate(id: string, mode: 'push' | 'replace' = 'push', trail?: string[], preserveViewport = false, notice = '') {
-    try { await this.showBoard(id, mode, trail, preserveViewport, notice); }
-    catch (error) { this.navigationError(error); }
+    if (!this.boards.has(id)) return;
+    const previous = this.layerView;
+    try {
+      // Opening a board focuses its subtree. Selecting a shape for editing uses activateBoard instead,
+      // preserving the canvas until the user chooses a different starting board.
+      if (this.layerView.root) this.layerView = { ...this.layerView, root: id };
+      await this.showBoard(id, mode, trail, preserveViewport, notice);
+    }
+    catch (error) { this.layerView = previous; this.navigationError(error); }
   }
 
   private navigationError(error: unknown) { this.setMessage(error instanceof Error ? error.message : String(error), true); }
+
+  /** Change the board that editing acts on without replacing the connected canvas. */
+  private activateBoard(id: string, mode: 'push' | 'replace', trail = this.ancestors(id)) {
+    if (!this.boards.has(id) || !this.layerState.visible.has(id)) return;
+    const changed = id !== this.current;
+    this.current = id;
+    this.recordRoute(mode, trail);
+    this.updateCrumbs();
+    this.stage.dataset.board = id;
+    this.announcement.textContent = `${this.boards.get(id)!.name} layer selected`;
+    renderParentContext(this.context, parentContext(this.boards.get(id)!, this.boards));
+    if (changed) this.stage.dispatchEvent(new Event('zf-activeboardchange'));
+  }
+
+  private recordRoute(mode: 'push' | 'replace', trail: string[]) {
+    const board = this.boards.get(this.current)!;
+    this.trail = simplifyTrail(trail.filter(id => this.boards.has(id)));
+    if (!this.history) this.memoryRoute = { hash: board.hash, trail: this.trail };
+    else {
+      const key = this.settings.document?.key();
+      const state = { ...history.state, zoomflowTrail: this.trail, ...key !== undefined && { zoomflowFile: key } };
+      if (mode === 'replace' || location.hash === board.hash) history.replaceState(state, '', board.hash);
+      else history.pushState(state, '', board.hash);
+    }
+  }
 
   private async showBoard(id: string, mode: 'push' | 'replace', trail?: string[], preserveViewport = false, notice = '') {
     const board = this.boards.get(id);
@@ -307,42 +454,42 @@ export class Viewer {
     this.cancelTransition();
     this.setBusy(true);
     try {
-      let rendered = this.cache.get(id);
-      if (!rendered) {
-        rendered = this.render(board.target);
-        this.cache.set(id, rendered);
-        const cache = this.cache;
-        void rendered.catch(() => cache.delete(id));
+      const combined = Boolean(this.layerView.root);
+      let content: SVGElement | HTMLElement;
+      if (combined) content = await this.layerSvg();
+      else {
+        const svg = await this.cachedRender(board);
+        content = board.diagram.shapes.length ? this.svgElement(svg, board) : document.createElement('p');
       }
-      const svg = await rendered;
       if (revision !== this.revision) return;
-      const content = board.diagram.shapes.length ? this.svgElement(svg, board) : document.createElement('p');
-      if (!board.diagram.shapes.length) content.textContent = 'This board is empty.';
+      if (!combined && !board.diagram.shapes.length) content.textContent = 'This board is empty.';
       const fade = this.stage.hasChildNodes() && id !== this.current &&
         !matchMedia('(prefers-reduced-motion: reduce)').matches;
       const keepFocus = document.activeElement === active;
       const sameBoard = id === this.current;
       const previous = this.current;
       this.stage.replaceChildren(content);
-      decorateLinks(content, this.boards, board.id, splitHitArea, (target) => boardLabel(target, this.boards), (path) => this.fileLabel(path));
+      if (combined) {
+        const layers = [...content.querySelectorAll<SVGGElement>('[data-layer-board]')];
+        for (const layer of layers) decorateLinks(layer.querySelector(':scope > svg')!, this.boards, layer.dataset.layerBoard!, splitHitArea,
+          target => boardLabel(target, this.boards), path => this.fileLabel(path));
+        content.addEventListener('zf-viewportchange', () => {
+          for (const layer of layers) layer.querySelector(':scope > svg')!.dispatchEvent(new Event('zf-viewportchange'));
+        });
+      } else decorateLinks(content, this.boards, board.id, splitHitArea, (target) => boardLabel(target, this.boards), (path) => this.fileLabel(path));
       this.syncBackground(this.stage);
       if (fade) void this.fadeIn(content);
       this.current = id;
-      this.stage.setAttribute('aria-label', `${board.name} diagram`);
+      this.stage.setAttribute('aria-label', combined ? 'Connected layers diagram' : `${board.name} diagram`);
       this.announcement.textContent = `${board.name} board`;
       // A trail kept from before a document change, including one a breadcrumb drawn then passes, can name boards the
       // new document no longer has.
       this.trail = simplifyTrail((trail ?? [...this.trail, id]).filter((entry) => this.boards.has(entry)));
       this.stage.dataset.board = id;
+      this.stage.dataset.layerRoot = this.layerView.root ?? '';
       // Viewports keep a view per board, so re-rendering the same board keeps its viewport anyway.
       this.stage.dispatchEvent(new Event('zf-boardchange'));
-      if (!this.history) this.memoryRoute = { hash: board.hash, trail: this.trail };
-      else {
-        const key = this.settings.document?.key();
-        const state = { ...history.state, zoomflowTrail: this.trail, ...key !== undefined && { zoomflowFile: key } };
-        if (mode === 'replace' || location.hash === board.hash) history.replaceState(state, '', board.hash);
-        else history.pushState(state, '', board.hash);
-      }
+      this.recordRoute(mode, this.trail);
       this.updateCrumbs();
       // Going up keeps the keyboard position: focus the link leading back down, which an
       // attached viewport reveals as it receives focus. Other crumb moves keep focus in the trail.
@@ -350,13 +497,14 @@ export class Viewer {
       const link = child && linkTo(this.stage, child);
       if (keepFocus && focusStage) {
         const shape = preserveViewport && sameBoard && focusedShape
-          ? [...this.stage.querySelectorAll<SVGElement>('[data-shape-id]')].find((node) => node.dataset.shapeId === focusedShape) : undefined;
+          ? [...this.stage.querySelectorAll<SVGElement>('[data-shape-id]')].find((node) => node.dataset.shapeId === focusedShape && node.dataset.shapeBoard === id) : undefined;
         const target = shape?.closest<SVGElement>('a') ?? (shape?.hasAttribute('tabindex') ? shape : link || this.stage);
         target.focus({ preventScroll: true });
       }
       else if (keepFocus && focusCrumb) (link || this.crumbs.querySelector<HTMLButtonElement>('button[aria-current]'))?.focus({ preventScroll: true });
       renderParentContext(this.context, parentContext(board, this.boards));
       this.setMessage(notice);
+      this.stage.dispatchEvent(new Event('zf-layerchange'));
     } catch (error) {
       if (revision === this.revision) { this.cancelTransition(); throw error; }
     } finally {

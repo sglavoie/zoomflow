@@ -310,7 +310,7 @@ export function createViewport(stage: HTMLElement, host: HTMLElement, clamp: typ
   }
   function reset() {
     remember();
-    activeKey = `${documentKey}\n${stage.dataset.board ?? 'root'}`;
+    activeKey = `${documentKey}\n${stage.dataset.layerRoot ? `layers:${stage.dataset.layerRoot}` : stage.dataset.board ?? 'root'}`;
     const previous = views.get(activeKey);
     svg = stage.querySelector<SVGSVGElement>(':scope > svg');
     const values = svg?.getAttribute('viewBox')?.trim().split(/[\s,]+/).map(Number);

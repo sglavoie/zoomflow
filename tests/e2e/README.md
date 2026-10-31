@@ -21,6 +21,11 @@ Specs are grouped by feature. Add a test to the file for the feature it exercise
 shared helpers live in `helpers.ts` (source editor, preview readiness, project fixtures,
 CodeMirror access through `withEditorView`, selection) and `menu.ts` (export menu and downloads).
 
+`layers.spec.ts` covers the connected layer view, individual and subtree visibility,
+editing shapes whose IDs repeat across boards, undo, visible-layer SVG/PNG exports,
+and phone controls. `packages/viewer/test/layers.test.ts` covers layout, fragment-ID
+isolation, per-document choices, and failed or superseded layer renders.
+
 ## Editing
 
 - `editor.spec.ts`: real CodeMirror input, retained previews and inline diagnostics on

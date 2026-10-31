@@ -133,7 +133,8 @@ export function setupBoardTools(scope: PaneScope, viewer: Viewer, options: Board
     return (found && 'label' in found && found.label) || shape;
   };
   const shapeElement = (shape: string) =>
-    [...viewer.stage.querySelectorAll<SVGElement>('[data-shape-id]')].find(node => node.dataset.shapeId === shape);
+    [...viewer.stage.querySelectorAll<SVGElement>('[data-shape-id]')].find(node => node.dataset.shapeId === shape &&
+      (!node.dataset.shapeBoard || node.dataset.shapeBoard === boardId()));
 
   /** Each target applies to the latest document, as long as `fits` finds the board it was opened on unchanged. */
   function target(mode: BuilderTarget['mode'], name: string, apply: (site: BoardSites, source: string, name: string) => string | { source: string } | { error: string },
@@ -210,8 +211,8 @@ export function setupBoardTools(scope: PaneScope, viewer: Viewer, options: Board
   }
 
   /** The shape as a step or topic of the builder board that writes the board on view. */
-  function canvasTarget(shape: string): CanvasShape | undefined {
-    const canvas = ready() ? sites!.canvas(boardId()) : undefined;
+  function canvasTarget(shape: string, board = boardId()): CanvasShape | undefined {
+    const canvas = ready() ? sites!.canvas(board) : undefined;
     if (!canvas) return;
     // Every shape on the board is looked up on each refresh, so the board's text is read once.
     const trail = canvas.trail.join('\n');
@@ -415,8 +416,9 @@ export function setupBoardTools(scope: PaneScope, viewer: Viewer, options: Board
   /** Links on steps and topics open from their arrow badge only, leaving the shape to select and rename. */
   function markLinks() {
     for (const link of viewer.stage.querySelectorAll<SVGAElement>('a[data-link-kind]')) {
-      const id = link.querySelector<SVGElement>('[data-shape-id]')?.dataset.shapeId;
-      if (id && link.querySelector('.appendix-icon') && canvasTarget(id)) link.dataset.follow = 'badge';
+      const shape = link.querySelector<SVGElement>('[data-shape-id]');
+      const id = shape?.dataset.shapeId;
+      if (id && link.querySelector('.appendix-icon') && canvasTarget(id, shape?.dataset.shapeBoard)) link.dataset.follow = 'badge';
       else delete link.dataset.follow;
     }
   }
@@ -470,6 +472,7 @@ export function setupBoardTools(scope: PaneScope, viewer: Viewer, options: Board
   }
   // Panning and zooming move the shape; the bar follows.
   viewer.stage.addEventListener('zf-viewportchange', placeBar, { capture: true });
+  viewer.stage.addEventListener('zf-layerchange', refresh);
   editBoard.addEventListener('click', () => edit(editBoard.dataset.board!, editBoard));
 
   function closeMenu(restore = true) {
@@ -529,7 +532,7 @@ export function setupBoardTools(scope: PaneScope, viewer: Viewer, options: Board
   function shapeAt(target: EventTarget | null) {
     const element = target instanceof Element ? target.closest<SVGElement>('[data-shape-id]')
       ?? target.closest('a')?.querySelector<SVGElement>('[data-shape-id]') : null;
-    return element && { id: element.dataset.shapeId!, focus: (element.closest('a') ?? element) as SVGElement };
+    return element && { id: element.dataset.shapeId!, board: element.dataset.shapeBoard, focus: (element.closest('a') ?? element) as SVGElement };
   }
   viewer.stage.addEventListener('contextmenu', event => {
     const shape = shapeAt(event.target);
@@ -556,7 +559,7 @@ export function setupBoardTools(scope: PaneScope, viewer: Viewer, options: Board
   // Selection follows keyboard focus, so the ring marks the shape that keys act on.
   viewer.stage.addEventListener('focusin', event => {
     const shape = shapeAt(event.target);
-    if (shape && ready() && shape.id !== selected) options.selectSource(shape.id, false);
+    if (shape && (!shape.board || shape.board === boardId()) && ready() && shape.id !== selected) options.selectSource(shape.id, false);
   });
   // Capture, so builder shortcuts on a focused shape run before the pane's Enter-to-select-source.
   viewer.stage.addEventListener('keydown', event => {

@@ -128,7 +128,8 @@ export function setupExportMenu(activePane: () => DocumentPane | undefined, pick
     document.querySelector('#export-scope')!.textContent = documentExport
       ? exportFormat.value === 'atlas' ? `This file and every file it links to · ${formatName}`
         : allBoards ? `Entire diagram${project && exportFormat.value === 'zip' ? ' and the files it links to' : ''} · ${plural(count, 'board')} · ${formatName}`
-          : `Current board: ${pane!.viewer.currentBoard?.name ?? 'Root'} · ${formatName}`
+          : pane!.viewer.layerState.enabled ? `Visible layers · ${plural(pane!.viewer.layerState.visible.size, 'layer')} · ${formatName}`
+            : `Current board: ${pane!.viewer.currentBoard?.name ?? 'Root'} · ${formatName}`
       : pane?.sourceError ? 'Fix source errors to export.' : 'Compile the current source to export a diagram.';
     exportButton.textContent = ({ svg: 'Download SVG', png: 'Download PNG', zip: 'Download SVG ZIP',
       html: 'Download HTML', atlas: 'Download atlas HTML' } as Record<string, string>)[exportFormat.value] ?? 'Download export';
@@ -196,9 +197,12 @@ export function setupExportMenu(activePane: () => DocumentPane | undefined, pick
       let blob: Blob;
       let name = safeFilename(exportName);
       if (format === 'svg' || format === 'png') {
-        const svg = await prepare(board.target);
+        const layers = await pane.viewer.renderVisibleLayers();
+        const prepared = layers ? await prepareExportSvg(layers, theme) : undefined;
+        if (prepared) warnings.push(...prepared.warnings);
+        const svg = prepared?.svg ?? await prepare(board.target);
         blob = format === 'png' ? await rasterizeSvg(svg) : new Blob([svg], { type: 'image/svg+xml' });
-        name += `-${board.name === 'Root' ? 'root' : safeFilename(board.name)}.${format}`;
+        name += `-${layers ? 'layers' : board.name === 'Root' ? 'root' : safeFilename(board.name)}.${format}`;
       } else if (format === 'atlas' || (format === 'zip' && isProject(pane))) {
         const documents = await atlasDocuments();
         if (!documents) {

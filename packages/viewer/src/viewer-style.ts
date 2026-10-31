@@ -28,6 +28,8 @@ export const viewerStyle = `
 .zf-stage:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
 .zf-stage > svg { display: block; width: 100%; height: 100%; max-width: 100%; max-height: 100%; }
 .zf-stage a { cursor: pointer; }
+.zf-layer-label { fill: var(--muted, #52657d); }
+.zf-layer-connectors { pointer-events: none; }
 .zf-stage a:focus-visible { outline: 2px solid var(--focus); }
 /* Chromium outlines focused SVG links by default, even when focus came from the mouse. */
 .zf-stage a:where(:focus:not(:focus-visible)) { outline: none; }
