@@ -1,4 +1,4 @@
-import type { Board } from '@zoomflow/core';
+import { shapeClass, type Board } from '@zoomflow/core';
 
 /** Only layer descendants expand together: scenarios and steps remain separate views. */
 export function visibleLayers(boards: ReadonlyMap<string, Board>, root: string, expanded: ReadonlySet<string>): Board[] {
@@ -64,9 +64,103 @@ function namespaceIds(svg: SVGElement, prefix: string) {
   }
 }
 
+type LayerItem = { board: Board; svg: SVGElement };
+type Shape = Board['diagram']['shapes'][number];
+type Merge = { center: Shape; parent: Board; anchor: Shape };
+type Point = { x: number; y: number };
+
+function shapeElement(item: LayerItem, id: string) {
+  return [...item.svg.querySelectorAll<SVGGElement>('g')].find(element =>
+    element.dataset.shapeId === id || element.classList.contains(shapeClass(id)));
+}
+function edgeElement(item: LayerItem, id: string) {
+  return [...item.svg.querySelectorAll<SVGGElement>('g')].find(element => element.classList.contains(shapeClass(id)));
+}
+
+/** Merge only a layer's central/entry topic with the one linked parent shape that represents it.
+ * Repeated labels elsewhere, multiple possible entry points, and roots with their own icons or tooltips stay intact. */
+function mergedRoots(items: LayerItem[]) {
+  const merged = new Map<string, Merge>();
+  const label = (shape: Shape) => 'label' in shape ? shape.label.replace(/\s+/g, ' ').trim() : undefined;
+  for (const item of items.slice(1)) {
+    const { board } = item;
+    const parent = items.find(item => item.board.id === board.parent)?.board;
+    if (!parent) continue;
+    const centers = board.diagram.shapes.filter(shape => shape.classes?.includes('zf-topic'));
+    const candidates = centers.length ? centers : board.diagram.shapes.filter(shape => !shape.id.includes('.') &&
+      !board.diagram.connections.some(edge => edge.dst === shape.id && edge.src !== shape.id));
+    const matches = candidates.flatMap(center => parent.diagram.shapes
+      .filter(anchor => anchor.link === board.id && label(center) && label(anchor) === label(center))
+      .map(anchor => ({ center, anchor, parent })));
+    if (matches.length !== 1) continue;
+    const merge = matches[0];
+    const { center } = merge;
+    if (center.icon || center.tooltip || board.diagram.shapes.some(shape => shape.id.startsWith(`${center.id}.`)) || !shapeElement(item, center.id)) continue;
+    const edges = board.diagram.connections.filter(edge => edge.src === center.id || edge.dst === center.id);
+    if (edges.some(edge => edge.src === edge.dst || edge.srcLabel || edge.dstLabel || !edgeElement(item, edge.id)?.querySelector('path.connection'))) continue;
+    merged.set(board.id, merge);
+  }
+  return merged;
+}
+
+/** Extend an edge's existing label mask instead of clipping the part that now reaches into its parent layer. */
+function extendMask(svg: SVGElement, path: SVGPathElement, start: Point, end: Point, move?: { x: number; y: number; dx: number; dy: number }) {
+  const id = /url\(['"]?#([^)'"\s]+)/.exec(path.getAttribute('mask') ?? '')?.[1];
+  const mask = id && [...svg.querySelectorAll('mask')].find(mask => mask.id === id);
+  if (!mask) return;
+  if (move) for (const rect of mask.querySelectorAll('rect[fill="black"]')) {
+    const [x, y, width, height] = ['x', 'y', 'width', 'height'].map(key => Number(rect.getAttribute(key)));
+    if (move.x >= x && move.x <= x + width && move.y >= y && move.y <= y + height) {
+      rect.setAttribute('x', String(x + move.dx)); rect.setAttribute('y', String(y + move.dy));
+    }
+  }
+  const x = Math.min(Number(mask.getAttribute('x')), start.x, end.x) - 32;
+  const y = Math.min(Number(mask.getAttribute('y')), start.y, end.y) - 32;
+  const right = Math.max(Number(mask.getAttribute('x')) + Number(mask.getAttribute('width')), start.x, end.x) + 32;
+  const bottom = Math.max(Number(mask.getAttribute('y')) + Number(mask.getAttribute('height')), start.y, end.y) + 32;
+  for (const element of [mask, mask.querySelector('rect[fill="white"]')].filter(Boolean) as Element[]) {
+    for (const [key, value] of Object.entries({ x, y, width: right - x, height: bottom - y })) element.setAttribute(key, String(value));
+  }
+}
+
+function redirectRootEdges(item: LayerItem, center: Shape, source: Point) {
+  for (const edge of item.board.diagram.connections) {
+    if (edge.src !== center.id && edge.dst !== center.id) continue;
+    const group = edgeElement(item, edge.id)!;
+    for (const path of group.querySelectorAll<SVGPathElement>('path.connection')) {
+      // D2 emits absolute connection paths. Keep the unchanged endpoint, including its arrowhead clearance.
+      const coordinates = (path.getAttribute('d')?.match(/-?\d*\.?\d+(?:e[-+]?\d+)?/gi) ?? []).map(Number);
+      const start = edge.src === center.id ? source : { x: coordinates[0], y: coordinates[1] };
+      const end = edge.dst === center.id ? source : { x: coordinates.at(-2)!, y: coordinates.at(-1)! };
+      const middle = { x: (start.x + end.x) / 2, y: (start.y + end.y) / 2 };
+      path.setAttribute('d', `M${start.x} ${start.y} C${middle.x} ${start.y} ${middle.x} ${end.y} ${end.x} ${end.y}`);
+      path.dataset.layerEdge = edge.id;
+      let move: { x: number; y: number; dx: number; dy: number } | undefined;
+      const texts = [...group.querySelectorAll<SVGTextElement>('text')];
+      if (edge.label && texts[0]) {
+        const x = Number(texts[0].getAttribute('x'));
+        const y = Number(texts[0].getAttribute('y'));
+        move = { x, y, dx: middle.x - x, dy: middle.y + edge.fontSize * 0.35 - y };
+        for (const text of texts) text.setAttribute('transform', `translate(${move.dx} ${move.dy}) ${text.getAttribute('transform') ?? ''}`);
+      }
+      extendMask(item.svg, path, start, end, move);
+    }
+  }
+  const element = shapeElement(item, center.id)!;
+  (element.closest('a') ?? element).remove();
+  // Unassociated link badges are siblings of shapes in D2's SVG; remove the hidden root's badge too.
+  for (const icon of item.svg.querySelectorAll<SVGGElement>('.appendix-icon')) {
+    const position = /translate\(\s*([-\d.]+)[,\s]+([-\d.]+)\s*\)/.exec(icon.getAttribute('transform') ?? '');
+    if (center.link && position && Math.abs(Number(position[1]) + 16 - center.pos.x - center.width) < 2 &&
+      Math.abs(Number(position[2]) + 16 - center.pos.y) < 2) icon.remove();
+  }
+  item.svg.setAttribute('overflow', 'visible');
+  item.svg.querySelector(':scope > svg')?.setAttribute('overflow', 'visible');
+}
+
 /** Compose the original board diagrams on one SVG, connected at the shapes that open each child.
  * All shape IDs stay board-scoped so source selection and editing keep their original meaning. */
-export function composeLayers(items: { board: Board; svg: SVGElement }[]): SVGSVGElement {
+export function composeLayers(items: LayerItem[]): SVGSVGElement {
   const ns = 'http://www.w3.org/2000/svg';
   const create = <K extends keyof SVGElementTagNameMap>(tag: K, attributes: Record<string, string | number> = {}) => {
     const element = document.createElementNS(ns, tag);
@@ -86,6 +180,18 @@ export function composeLayers(items: { board: Board; svg: SVGElement }[]): SVGSV
     return { id: board.id, parent: index ? board.parent : undefined, width: box.width, height: box.height + 28, order: anchor?.pos.y ?? index };
   });
   const placed = layoutLayers(nodes);
+  const merged = mergedRoots(items);
+  const anchorPoint = (board: Board, shape: Shape): Point => {
+    // A central topic can itself open another layer; follow shared roots through the whole visible chain.
+    while (merged.get(board.id)?.center.id === shape.id) {
+      const merge = merged.get(board.id)!;
+      board = merge.parent; shape = merge.anchor;
+    }
+    const box = placed.get(board.id)!;
+    const view = boxes.get(board.id)!;
+    return { x: box.x + shape.pos.x + shape.width - view.x,
+      y: box.y + 28 + shape.pos.y + shape.height / 2 - view.y };
+  };
   const width = Math.max(...[...placed.values()].map(box => box.x + box.width)) + 24;
   const height = Math.max(...[...placed.values()].map(box => box.y + box.height)) + 24;
   const svg = create('svg', { viewBox: `0 0 ${width} ${height}`, 'data-layer-canvas': '', preserveAspectRatio: 'xMidYMid meet' });
@@ -102,6 +208,11 @@ export function composeLayers(items: { board: Board; svg: SVGElement }[]): SVGSV
   for (const [index, { board, svg: content }] of items.entries()) {
     const box = placed.get(board.id)!;
     const view = boxes.get(board.id)!;
+    const merge = merged.get(board.id);
+    if (merge) {
+      const point = anchorPoint(merge.parent, merge.anchor);
+      redirectRootEdges({ board, svg: content }, merge.center, { x: point.x - box.x + view.x, y: point.y - box.y - 28 + view.y });
+    }
     namespaceIds(content, `layer-${index}-`);
     // One background spans the connected canvas, rather than covering adjacent branches with board backgrounds.
     content.querySelector(':scope > svg > rect')?.remove();
@@ -111,9 +222,15 @@ export function composeLayers(items: { board: Board; svg: SVGElement }[]): SVGSV
     label.textContent = board.name;
     content.setAttribute('x', '0'); content.setAttribute('y', '28');
     content.setAttribute('width', String(view.width)); content.setAttribute('height', String(view.height));
-    group.append(label, content);
+    if (!merge) group.append(label);
+    group.append(content);
     graph.append(group);
     if (!index) continue;
+    if (merge) {
+      group.dataset.mergedRoot = merge.center.id;
+      group.dataset.layerLink = board.id;
+      continue;
+    }
     const parent = items.find(item => item.board.id === board.parent)?.board;
     const parentBox = parent && placed.get(parent.id);
     const parentView = parent && boxes.get(parent.id);
@@ -123,8 +240,8 @@ export function composeLayers(items: { board: Board; svg: SVGElement }[]): SVGSV
     const end = { x: box.x + (center ? center.pos.x - view.x : 0),
       y: box.y + 28 + (center ? center.pos.y + center.height / 2 - view.y : view.height / 2) };
     for (const anchor of anchors.length ? anchors : [undefined]) {
-      const start = { x: parentBox.x + (anchor ? anchor.pos.x + anchor.width - parentView.x : parentView.width),
-        y: parentBox.y + 28 + (anchor ? anchor.pos.y + anchor.height / 2 - parentView.y : parentView.height / 2) };
+      const start = anchor ? anchorPoint(parent, anchor) : { x: parentBox.x + parentView.width,
+        y: parentBox.y + 28 + parentView.height / 2 };
       const bend = parentBox.x + parentBox.width + 48;
       connectors.append(create('path', { d: `M${start.x} ${start.y} C${bend} ${start.y} ${bend} ${end.y} ${end.x} ${end.y}`,
         fill: 'none', stroke: '#8192a4', 'stroke-width': 2, 'data-layer-link': board.id }));

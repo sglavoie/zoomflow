@@ -1,6 +1,6 @@
 import { readFile } from 'node:fs/promises';
 import { expect, test, type Page } from '@playwright/test';
-import { board, chooseExample, comparesVisuals, editorText, openFromBadge, previewReady, visualSkipReason } from './helpers';
+import { board, chooseExample, comparesVisuals, editorText, openFromBadge, previewReady, selectSource, visualSkipReason } from './helpers';
 import { downloadExport, selectMenuOption } from './menu';
 
 test.use({ viewport: { width: 1440, height: 900 }, reducedMotion: 'reduce' });
@@ -110,6 +110,56 @@ test('can make a selected child the starting board of an expanded view', async (
   await expect(stage(page).locator('[data-layer-board="root"]')).toHaveCount(0);
 });
 
+test('shares a child centre with its parent and restores it in a focused view', async ({ page }) => {
+  await open(page);
+  const source = await editorText(page);
+  const child = 'root.layers.Plan the launch';
+  const center = layerShape(page, child, 'n');
+  await page.getByRole('checkbox', { name: 'Show all layers', exact: true }).check();
+  await expect(layers(page)).toHaveCount(4);
+  await expect(center).toHaveCount(0);
+  await expect(layerShape(page, 'root', 'step_2')).toContainText('Plan the launch');
+  await expect(stage(page).locator('[data-merged-root]')).toHaveCount(1);
+  await expect(stage(page).locator('path[data-layer-edge]')).toHaveCount(4);
+  // A distinct child entry (Sign up) stays visible even though its parent topic opens that board.
+  await expect(layerShape(page, `${child}.layers.Onboarding`, 'step_1')).toContainText('Sign up');
+  await openFromBadge(page, 'Open Plan the launch board');
+  await board(page, child);
+  await expect(center).toContainText('Plan the launch');
+  await page.getByRole('navigation', { name: 'Breadcrumb' }).getByRole('button', { name: 'Root', exact: true }).click();
+  await expect(center).toHaveCount(0);
+  // Source reveal can still focus and edit a centre that is shared in the larger view.
+  await layerShape(page, child, 'n_1').click();
+  await board(page, child);
+  await selectSource(page, 'n: "Plan the launch"');
+  await page.getByRole('textbox', { name: 'D2 source', exact: true }).press('ControlOrMeta+Shift+Enter');
+  await expect(stage(page)).toHaveAttribute('data-layer-root', child);
+  await expect(center).toContainText('Plan the launch');
+  expect(await editorText(page)).toBe(source);
+});
+
+test('merges repeated centres across generated detail boards while keeping the focused centre', async ({ page }) => {
+  await open(page);
+  await page.getByRole('button', { name: 'New mind map', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: 'Create a mind map' });
+  await dialog.getByRole('textbox', { name: 'Topics' }).fill('Plan\n  Branch\n    Child\n      Leaf');
+  await dialog.getByLabel('Detail boards').selectOption('1');
+  await dialog.getByRole('button', { name: 'Create mind map', exact: true }).click();
+  await previewReady(page);
+  const source = await editorText(page);
+  await page.getByRole('checkbox', { name: 'Show all layers', exact: true }).check();
+  await expect(layers(page)).toHaveCount(3);
+  await expect(stage(page).locator('[data-merged-root]')).toHaveCount(2);
+  await expect(stage(page).locator('[data-shape-id="n"]')).toHaveCount(1);
+  await expect(layerShape(page, 'root', 'n')).toContainText('Plan');
+  await openFromBadge(page, 'Open Branch board');
+  await board(page, 'root.layers.Branch');
+  await expect(layers(page)).toHaveCount(2);
+  await expect(layerShape(page, 'root.layers.Branch', 'n')).toContainText('Branch');
+  await expect(layerShape(page, 'root.layers.Branch.layers.Child', 'n')).toHaveCount(0);
+  expect(await editorText(page)).toBe(source);
+});
+
 test('exports just the visible layers together as SVG and PNG', async ({ page }, info) => {
   await open(page);
   await page.getByRole('checkbox', { name: 'Show all layers', exact: true }).check();
@@ -128,6 +178,8 @@ test('exports just the visible layers together as SVG and PNG', async ({ page },
   const svg = await readFile(path, 'utf8');
   expect(svg).toContain('data-layer-canvas');
   expect(svg).toContain('data-layer-board="root.layers.Plan the launch"');
+  expect(svg).toContain('data-merged-root="n"');
+  expect(svg).not.toContain('data-shape-id="n"');
   expect(svg).not.toContain('data-layer-board="root.layers.Plan the launch.layers.Onboarding"');
   expect(svg).not.toContain('zf-selection-ring');
   await selectMenuOption(page, '#export-format', 'png');

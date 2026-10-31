@@ -428,7 +428,7 @@ export function setupBoardTools(scope: PaneScope, viewer: Viewer, options: Board
     for (const node of viewer.stage.querySelectorAll('.zf-selection')) node.remove();
     for (const node of viewer.stage.querySelectorAll('.zf-canvas-selected')) node.classList.remove('zf-canvas-selected');
     const element = shape && shapeElement(shape);
-    if (!(element instanceof SVGGraphicsElement)) return;
+    if (!(element instanceof SVGGraphicsElement)) { shapeGroup.hidden = true; return; }
     const box = element.getBBox();
     const pad = 7;
     // Pills, ovals and circles get a pill-shaped ring that follows them.

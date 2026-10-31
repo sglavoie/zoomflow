@@ -21,6 +21,74 @@ function mount(key = () => 'document') {
 }
 afterEach(() => { for (const viewer of viewers.splice(0)) viewer.destroy(); document.body.replaceChildren(); });
 
+function sharedRootItems(chain = false) {
+  const root = node('', [node('Detail', [node('Deep')])]);
+  const child = root.layers![0]!;
+  const deep = child.layers![0]!;
+  const shape = (id: string, label: string, x: number, link = '', center = false) => ({
+    id, label, pos: { x, y: 20 }, width: 80, height: 40, link, classes: center ? ['zf-topic'] : [],
+  });
+  const edge = { id: '(n -> branch)[0]', src: 'n', dst: 'branch', srcArrow: 'none', dstArrow: 'triangle', label: 'Next', fontSize: 16 };
+  root.shapes = [shape('entry', 'Review', 10, 'root.layers.Detail')] as unknown as Diagram['shapes'];
+  child.shapes = [shape('n', 'Review', 10, chain ? 'root.layers.Detail.layers.Deep' : '', true),
+    shape('branch', 'Review', 150, chain ? '' : 'root.layers.Detail.layers.Deep')] as unknown as Diagram['shapes'];
+  child.connections = [edge] as unknown as Diagram['connections'];
+  deep.shapes = [shape('n', 'Review', 10, '', true), shape('branch', 'Finish', 150)] as unknown as Diagram['shapes'];
+  deep.connections = [edge] as unknown as Diagram['connections'];
+  const items = [...indexBoards(root).values()].map(board => {
+    const shapes = board.diagram.shapes.map(shape => `<g class="${shapeClass(shape.id)}" data-shape-id="${shape.id}" data-shape-board="${board.id}"><rect x="${shape.pos.x}" y="20" width="80" height="40"/><text>${'label' in shape ? shape.label : ''}</text></g>`).join('');
+    const edges = board.diagram.connections.map(edge => `<g class="${shapeClass(edge.id)}"><path class="connection" d="M90 40 L150 40" stroke="#e5484d" marker-end="url(#arrow)" mask="url(#labels)"/><text x="120" y="46">Next</text></g>`).join('');
+    const markup = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 260 100"><svg viewBox="-10 -10 260 100" width="260" height="100"><rect width="260" height="100" fill="white"/>
+      <defs><marker id="arrow"/><mask id="labels" x="-10" y="-10" width="260" height="100"><rect x="-10" y="-10" width="260" height="100" fill="white"/><rect x="105" y="32" width="30" height="24" fill="black"/></mask></defs>${shapes}${edges}</svg></svg>`;
+    return { board, svg: new DOMParser().parseFromString(markup, 'image/svg+xml').documentElement as unknown as SVGElement };
+  });
+  return { root, items };
+}
+
+it('shows each shared root once, reconnects its branches, and keeps other topics with the same label', () => {
+  const { root, items } = sharedRootItems();
+  const source = JSON.stringify(root);
+  const combined = composeLayers(items);
+  expect(combined.querySelectorAll('[data-merged-root]')).toHaveLength(2);
+  expect(combined.querySelectorAll('[data-shape-id="n"]')).toHaveLength(0);
+  expect(combined.querySelectorAll('[data-shape-id="entry"]')).toHaveLength(1);
+  expect(combined.querySelector('[data-layer-board="root.layers.Detail"] [data-shape-id="branch"]')).not.toBeNull();
+  expect(combined.querySelectorAll('[data-layer-link]')).toHaveLength(2);
+  for (const path of combined.querySelectorAll('path.connection')) {
+    expect(path.getAttribute('d')).not.toBe('M90 40 L150 40');
+    expect(path.getAttribute('d')).not.toContain('NaN');
+    expect(path.getAttribute('stroke')).toBe('#e5484d');
+    expect(path.getAttribute('marker-end')).toMatch(/url\(#layer-\d-arrow\)/);
+    const mask = [...combined.querySelectorAll('mask')].find(mask => `url(#${mask.id})` === path.getAttribute('mask'))!;
+    expect(Number(mask.getAttribute('x'))).toBeLessThan(-10);
+  }
+  expect(JSON.stringify(root)).toBe(source);
+});
+
+it('restores the centre when its board is the start of a subset and preserves distinct entry nodes', () => {
+  const { items } = sharedRootItems();
+  const subset = composeLayers(items.slice(1));
+  expect(subset.querySelectorAll('[data-shape-board="root.layers.Detail"][data-shape-id="n"]')).toHaveLength(1);
+  expect(subset.querySelectorAll('[data-shape-board="root.layers.Detail.layers.Deep"][data-shape-id="n"]')).toHaveLength(0);
+  const distinct = sharedRootItems();
+  (distinct.items[1].board.diagram.shapes[0] as unknown as { label: string }).label = 'Different entry';
+  const combined = composeLayers(distinct.items);
+  expect(combined.querySelector('[data-layer-board="root.layers.Detail"][data-merged-root]')).toBeNull();
+  expect(combined.querySelector('[data-shape-board="root.layers.Detail"][data-shape-id="n"]')).not.toBeNull();
+});
+
+it('resolves a chain of shared centres to the same surviving ancestor shape', () => {
+  const { items } = sharedRootItems(true);
+  const combined = composeLayers(items);
+  const starts = [...combined.querySelectorAll<SVGGElement>('[data-merged-root]')].map(group => {
+    const position = group.getAttribute('transform')!.match(/-?\d+(?:\.\d+)?/g)!.map(Number);
+    const point = group.querySelector('path.connection')!.getAttribute('d')!.match(/-?\d+(?:\.\d+)?/g)!.map(Number);
+    return { x: position[0] + point[0] + 10, y: position[1] + 28 + point[1] + 10 };
+  });
+  expect(starts).toHaveLength(2);
+  expect(starts[0]).toEqual(starts[1]);
+});
+
 it('collapses whole subtrees and does not overlay scenarios or steps', () => {
   const boards = indexBoards({ ...diagram, scenarios: [node('Alternative', [node('Detail')])] });
   expect(visibleLayers(boards, 'root', new Set(boards.keys())).map(board => board.name)).toEqual(['Root', 'A', 'Deep', 'B']);

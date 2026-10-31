@@ -130,6 +130,12 @@ view again. Each child diagram connects to the shape that opens it, and keeps
 its own layout. Zoom and pan to explore the combined view. Scenarios and steps keep
 their separate views.
 
+When a child board repeats the topic that opens it, the connected view shows that
+topic once, on the parent board, and connects the child's branches directly to it.
+The child's centre returns when you focus its board. Distinct entry nodes and other
+topics with the same label stay separate; this changes the view without rewriting
+the source. SVG and PNG exports use the same shared-root view.
+
 Open **Boards** to show or hide individual layers with the checkboxes beside their
 names. Hiding a parent collapses its descendants and remembers their choices; show
 the parent again to restore them. Turn off **Show all layers** to return to the

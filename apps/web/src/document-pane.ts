@@ -686,7 +686,11 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
     const current = viewer.currentBoard?.id;
     const target = matches.find((entry) => entry.board === current) ?? matches[0];
     revealButton.disabled = !target;
-    if (navigate && target && target.board !== current) await viewer.navigate(target.board);
+    // A shared layer root is represented by its parent shape in the connected view. Reveal its own board
+    // when its source is requested, so it can still be selected and edited as a standalone centre.
+    const shown = target && [...viewer.stage.querySelectorAll<SVGElement>('[data-shape-id]')]
+      .some(shape => shape.dataset.shapeBoard === target.board && shape.dataset.shapeId === target.shape);
+    if (navigate && target && (target.board !== current || !shown)) await viewer.navigate(target.board);
     const shapes = selectionCleared ? [] : matches.filter((entry) => entry.board === viewer.currentBoard?.id).map((entry) => entry.shape);
     viewer.highlightShapes(shapes);
     boardTools.select([...new Set(shapes)]);
