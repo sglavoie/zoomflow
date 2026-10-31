@@ -86,9 +86,9 @@ as from Ask AI, applying the form still works when its own board is unchanged; o
 the builder asks you to reopen it so it starts from the latest version.
 
 Boards can be added to the root board and to any board declared once in the file, including
-hand-written ones. Imported boards, scenarios and steps are left alone, as are a mind map's
-detail boards: add boards from topics on the map's main board, or keep every topic on one
-board.
+hand-written ones and a mind map's generated detail boards. Flows and mind maps can open
+from each other at any depth. Attachments on detail boards follow their topics when the
+parent outline changes. Imported boards, scenarios and steps are left alone.
 
 ## Edit on the diagram
 

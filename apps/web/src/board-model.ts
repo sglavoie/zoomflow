@@ -1,12 +1,13 @@
 import { classifyHref, type Board, type SourceRange } from '@zoomflow/core';
 import { quote, readFlow, unquote } from './flow-model';
-import { boardTopics, keywords, readMindMap, uniqueBoardName, type BoardTopic, type MindTopic } from './mind-map-model';
+import { keywords, placedTopics, readMindMap, uniqueBoardName, type BoardTopic, type MindTopic } from './mind-map-model';
 
 export type BuilderKind = 'flow' | 'mind map';
 /** A board that opens from a shape, kept in a section at the end of the board it opens from. */
-export type BoardAttachment = { shape: string; name: string; body: string };
+export type BoardAttachment = { shape: string; name: string; body: string; trail?: string[] };
 /** A link from a shape to another file of the project, as authored (`./health.d2#/Sleep`), kept in the same section. */
-export type FileAttachment = { shape: string; file: string };
+export type FileAttachment = { shape: string; file: string; trail?: string[] };
+/** A generated detail board's attachments are kept with their trail from the builder's main board. */
 export type Attachment = BoardAttachment | FileAttachment;
 export const isFileAttachment = (item: Attachment): item is FileAttachment => 'file' in item;
 /** A board's own text and the boards that open from its shapes. Builders rewrite only the own text. */
@@ -16,10 +17,11 @@ const heading = '# Boards that open from shapes on this board.';
 const quoted = '"(?:[^"\\\\]|\\\\.)*"';
 const linkLine = new RegExp(`^(.+)\\.link: layers\\.(${quoted})$`);
 const fileLine = new RegExp(`^(.+)\\.link: (${quoted})$`);
+const sameTrail = (a: string[] = [], b: string[] = []) => a.length === b.length && a.every((name, i) => name === b[i]);
 
 /** The attached boards are read only in the exact form `joinBoard` writes; anything else stays own text. Of several
  * sections, the last is read: a hand-edited one stays own text, and `joinBoard` writes a new one after it. */
-export function splitBoard(text: string): BoardParts {
+function splitAttachments(text: string): BoardParts {
   const normalized = text.replaceAll('\r\n', '\n');
   const later = normalized.lastIndexOf(`\n${heading}\n`) + 1;
   const at = later || (normalized.startsWith(`${heading}\n`) ? 0 : -1);
@@ -50,6 +52,54 @@ export function splitBoard(text: string): BoardParts {
   return { own: normalized.slice(0, at), attachments };
 }
 
+/** The canonical map's detail blocks, skipping attachment sections (whose boards have independent builders).
+ * Only use this scan for builder maps; readMindMap verifies the stripped result before it can be rewritten. */
+function detailBlocks(lines: string[]) {
+  const blocks: { trail: string[]; close: number; indent: string }[] = [];
+  const sections: { trail: string[]; from: number; to: number; indent: string }[] = [];
+  const stack: { name?: string; indent: string }[] = [];
+  const layer = new RegExp(`^( *)(layers|${quoted}): \\{$`);
+  for (let i = 0; i < lines.length; i++) {
+    const indent = /^ */.exec(lines[i])![0];
+    const trail = () => stack.flatMap(item => item.name === undefined ? [] : [item.name]);
+    if (lines[i] === indent + heading) {
+      const from = i;
+      while (i + 1 < lines.length && (!lines[i + 1].trim() || lines[i + 1].startsWith(indent))) i++;
+      sections.push({ trail: trail(), from, to: i + 1, indent });
+      continue;
+    }
+    const open = layer.exec(lines[i]);
+    if (open) stack.push({ indent: open[1], ...open[2] === 'layers' ? {} : { name: unquote(open[2]) } });
+    else if (lines[i] === `${indent}}` && stack.at(-1)?.indent === indent) {
+      if (stack.at(-1)?.name !== undefined) blocks.push({ trail: trail(), close: i, indent: indent + '  ' });
+      stack.pop();
+    }
+  }
+  return { blocks, sections };
+}
+
+export function splitBoard(text: string): BoardParts {
+  const parts = splitAttachments(text);
+  const normalized = parts.own.replaceAll('\r\n', '\n');
+  if (!normalized.trimStart().startsWith('# Created with the Zoomflow mind map builder.\n')) return parts;
+  const lines = normalized.split('\n');
+  const { sections } = detailBlocks(lines);
+  if (!sections.length) return parts;
+  const attachments: Attachment[] = [];
+  for (const section of sections) {
+    if (!section.trail.length) return parts;
+    const nested = splitAttachments(lines.slice(section.from, section.to).map(line => line.slice(section.indent.length)).join('\n'));
+    if (nested.own || !nested.attachments.length) return parts;
+    attachments.push(...nested.attachments.map(item => ({ ...item, trail: section.trail })));
+  }
+  for (const section of [...sections].reverse()) {
+    const from = section.from > 0 && !lines[section.from - 1].trim() ? section.from - 1 : section.from;
+    lines.splice(from, section.to - from);
+  }
+  const own = lines.join('\n');
+  return readMindMap(own) ? { own, attachments: [...parts.attachments, ...attachments] } : parts;
+}
+
 /** A shape's identifier as D2 reports it, with single-quoted parts like `'null'` double-quoted: D2's own parser
  * accepts both, but board indexing reads only double-quoted keys. D2 reports a shape keyed `"label"` as `label`,
  * so bare parts that read as keywords are quoted too, or `label.link` would set no link. */
@@ -61,7 +111,20 @@ function shapeKey(id: string): string {
 
 export function joinBoard({ own, attachments }: BoardParts): string {
   if (!attachments.length) return own;
-  const section = attachments.map(item => isFileAttachment(item) ? `${shapeKey(item.shape)}.link: ${quote(item.file)}`
+  const main = attachments.filter(item => !item.trail?.length);
+  const details = attachments.filter(item => item.trail?.length);
+  if (details.length) {
+    const lines = own.trimEnd().split('\n');
+    const { blocks } = detailBlocks(lines);
+    for (const block of blocks.sort((a, b) => b.close - a.close)) {
+      const nested = details.filter(item => sameTrail(item.trail, block.trail));
+      if (nested.length) lines.splice(block.close, 0, '', ...joinBoard({ own: '', attachments: nested.map(({ trail: _, ...item }) => item) })
+        .trim().split('\n').map(line => line && block.indent + line));
+    }
+    own = `${lines.join('\n')}\n`;
+  }
+  if (!main.length) return own;
+  const section = main.map(item => isFileAttachment(item) ? `${shapeKey(item.shape)}.link: ${quote(item.file)}`
     : [`${shapeKey(item.shape)}.link: layers.${quote(item.name)}`, `layers.${quote(item.name)}: {`,
       ...item.body.trim().split('\n').map(line => line && `  ${line}`), '}'].join('\n'));
   return `${own.trimEnd()}\n\n${heading}\n${section.join('\n\n')}\n`;
@@ -116,8 +179,7 @@ export function reattach(before: string, after: string, attachments: Attachment[
   }
   const maps = [readMindMap(before), readMindMap(after)];
   if (!maps[0] || !maps[1]) return 'This board changed type. Delete its attached boards in the source first.';
-  const [old, next] = maps.map(map => boardTopics(map!));
-  const taken = new Map(next.filter(topic => topic.board).map(topic => [topic.board!.toLowerCase(), topic]));
+  const [old, next] = maps.map(map => placedTopics(map!));
   const sameShape = old.length === next.length && old.every((topic, i) => topic.id === next[i].id);
   // How many topics of the whole outline, detail boards included, have each label before and after, to tell a topic
   // that left this board from a removed one: a removed topic leaves fewer with its label.
@@ -130,36 +192,46 @@ export function reattach(before: string, after: string, attachments: Attachment[
   const left = (label: string) => (labels[1].get(label) ?? 0) >= (labels[0].get(label) ?? 0);
   const kept: Attachment[] = [];
   for (const item of attachments) {
-    const from = old.find(topic => topic.id === item.shape);
+    const from = old.find(topic => topic.shape === item.shape && sameTrail(topic.trail, item.trail));
     if (!from) { kept.push(item); continue; }
+    const candidates = next.filter(topic => topic.id.endsWith('@center') === from.id.endsWith('@center'));
     const label = from.path.at(-1)!;
     const path = (topic: BoardTopic) => topic.path.join('\n');
     // A topic with the labels of another topic that was already there is that topic, whatever its new identifier.
     const another = (topic: BoardTopic) => old.some(other => other !== from && path(other) === path(topic));
     // A topic moved elsewhere is found by its label when that is unique, and not on a topic that was already there.
-    const sameLabel = next.filter(topic => topic.path.at(-1) === label);
+    const sameLabel = candidates.filter(topic => topic.path.at(-1) === label);
     const elsewhere = sameLabel.length === 1 && !another(sameLabel[0]);
-    const inPlace = next.find(topic => topic.id === from.id);
+    const inPlace = candidates.find(topic => topic.id === from.id);
     // Topics with the same labels from the centre down are told apart by their place.
-    const samePath = next.filter(topic => path(topic) === path(from));
-    const to = from.id === 'n' ? next[0] : moved ? next.find(topic => topic.id === moved.get(from.id))
+    const samePath = candidates.filter(topic => path(topic) === path(from));
+    const to = from.id === 'n' ? next[0] : moved ? candidates.find(topic => topic.id === moved.get(from.id))
       : (inPlace && path(inPlace) === path(from) ? inPlace : samePath.length === 1 ? samePath[0] : undefined) ?? (elsewhere ? sameLabel[0]
         // A renamed ancestor keeps the topic in place; so does a renamed topic when no topic was added or removed.
         : inPlace && !another(inPlace) && (inPlace.path.at(-1) === label || sameShape) ? inPlace : undefined);
-    if (isFileAttachment(item)) {
-      // An edit on the diagram knows its removed topics, and never moves a topic off this board.
-      if (!to && !moved && !sameLabel.length && left(label)) return `The topic “${label}” opens the file “${item.file}” and would move to a detail board. Keep it on this board, or remove its link first.`;
-      if (!to) continue;
-      if (to.board) return `The topic “${label}” would open a detail board and the file “${item.file}”. Choose fewer detail boards, or remove its link first.`;
-      if (kept.some(other => other.shape === to.id)) return `Two topics named “${label}” open boards or files. Rename one of them first.`;
-      kept.push({ ...item, shape: to.id });
+    if (!to) {
+      if (!isFileAttachment(item)) return `The topic “${label}” opens the board “${item.name}”. Keep the topic, or delete its board in the source first.`;
+      // An edit on the diagram knows which topics were removed; an ambiguous outline edit must keep the link.
+      if (!moved && left(label)) return `The topic “${label}” opens the file “${item.file}” and cannot be matched after this edit. Keep it in place, or remove its link first.`;
       continue;
     }
-    if (!to) return `The topic “${label}” opens the board “${item.name}”. Keep the topic, or delete its board in the source first.`;
+    const { trail: _, ...attachment } = item;
+    const placed = { ...attachment, shape: to.shape, ...to.trail.length ? { trail: to.trail } : {} };
+    const samePlace = (other: Attachment) => other.shape === to.shape && sameTrail(other.trail, to.trail);
+    if (isFileAttachment(item)) {
+      if (to.board) return `The topic “${label}” would open a detail board and the file “${item.file}”. Choose fewer detail boards, or remove its link first.`;
+      if (kept.some(samePlace)) return `Two topics named “${label}” open boards or files. Rename one of them first.`;
+      kept.push(placed);
+      continue;
+    }
     if (to.board) return `The topic “${label}” would open a detail board and the board “${item.name}”. Choose fewer detail boards, or delete its board in the source first.`;
-    if (taken.has(item.name.toLowerCase())) return `The board “${item.name}” that opens from “${label}” has the same name as a detail board. Rename the topic “${taken.get(item.name.toLowerCase())!.path.at(-1)}”.`;
-    if (kept.some(other => other.shape === to.id)) return `Two topics named “${label}” open boards. Rename one of them first.`;
-    kept.push({ ...item, shape: to.id });
+    const taken = next.find(topic => topic.board?.toLowerCase() === item.name.toLowerCase() && sameTrail(topic.trail, to.trail));
+    if (taken) return `The board “${item.name}” that opens from “${label}” has the same name as a detail board. Rename the topic “${taken.path.at(-1)}”.`;
+    if (kept.some(other => !isFileAttachment(other) && other.name.toLowerCase() === item.name.toLowerCase() && sameTrail(other.trail, to.trail))) {
+      return `Two boards named “${item.name}” would share one board. Keep them on separate detail boards, or rename one in the source first.`;
+    }
+    if (kept.some(samePlace)) return `Two topics named “${label}” open boards. Rename one of them first.`;
+    kept.push(placed);
   }
   return kept;
 }
@@ -189,9 +261,18 @@ export function boardSites(source: string, blocks: Map<string, SourceRange>, boa
    * generates it, like a mind map's detail boards. Attached boards are not generated by their parent. */
   function owner(id: string): string | undefined {
     if (site(id)?.kind) return id;
+    const trail: string[] = [];
     for (let child = id, parent = boards.get(id)?.parent; parent; child = parent, parent = boards.get(parent)?.parent) {
-      const name = boards.get(child)!.name;
-      if (site(parent)?.kind && !site(parent)!.parts.attachments.some(item => !isFileAttachment(item) && item.name === name)) return parent;
+      trail.unshift(boards.get(child)!.name);
+      const candidate = site(parent);
+      if (!candidate?.kind) continue;
+      // An attachment with custom source still belongs to itself, even when its link is on a generated detail.
+      const attached = candidate.parts.attachments.some(item => {
+        if (isFileAttachment(item)) return false;
+        const path = [...item.trail ?? [], item.name];
+        return path.length <= trail.length && path.every((name, i) => name === trail[i]);
+      });
+      return attached ? undefined : parent;
     }
   }
   return {
@@ -212,19 +293,14 @@ export function boardSites(source: string, blocks: Map<string, SourceRange>, boa
     shapeAction(board: string, shape: string): ShapeAction {
       const found = boards.get(board)?.diagram.shapes.find(item => item.id === shape);
       if (!found) return { action: 'none', reason: 'This shape is not on the board.' };
-      const ownerId = owner(board);
       if (found.link && classifyHref(found.link).kind === 'file') {
-        const attached = ownerId === board || !ownerId
-          ? Boolean(site(board)?.parts.attachments.some(item => isFileAttachment(item) && shapeKey(item.shape) === shapeKey(shape))) : false;
+        const attached = Boolean(site(board)?.parts.attachments.some(item => !item.trail?.length && isFileAttachment(item) && shapeKey(item.shape) === shapeKey(shape)));
         return { action: 'file', link: found.link, attached };
       }
       if (found.link) {
         const target = boards.get(found.link);
         const kind = target?.parent === board && target.kind === 'layers' && owner(target.id) === target.id ? site(target.id)!.kind : undefined;
         return kind ? { action: 'edit', board: target!.id, kind } : { action: 'none', reason: 'This shape already opens another board or link.' };
-      }
-      if (ownerId && ownerId !== board) {
-        return { action: 'none', reason: `This board is part of the ${site(ownerId)!.kind} on “${boards.get(ownerId)!.name}”. Add boards from its main board.` };
       }
       if (!site(board)) return { action: 'none', reason: 'Boards can be added only to boards written once in this file, not to imported boards, scenarios or steps.' };
       return { action: 'add' };
@@ -233,7 +309,7 @@ export function boardSites(source: string, blocks: Map<string, SourceRange>, boa
     add(board: string, shape: string, own: string, label: string) {
       const current = site(board)!;
       const taken = new Set([...boards.values()].filter(item => item.parent === board).map(item => item.name.toLowerCase()));
-      for (const item of current.parts.attachments) if (!isFileAttachment(item)) taken.add(item.name.toLowerCase());
+      for (const item of current.parts.attachments) if (!item.trail?.length && !isFileAttachment(item)) taken.add(item.name.toLowerCase());
       const name = uniqueBoardName(label, taken);
       return { name, source: current.replace(joinBoard({ own: current.parts.own,
         attachments: [...current.parts.attachments, { shape, name, body: own }] })) };
@@ -242,7 +318,7 @@ export function boardSites(source: string, blocks: Map<string, SourceRange>, boa
     linkFile(board: string, shape: string, file: string) {
       const current = site(board)!;
       const attachments = [...current.parts.attachments];
-      const index = attachments.findIndex(item => isFileAttachment(item) && shapeKey(item.shape) === shapeKey(shape));
+      const index = attachments.findIndex(item => !item.trail?.length && isFileAttachment(item) && shapeKey(item.shape) === shapeKey(shape));
       if (index >= 0) attachments[index] = { shape: attachments[index].shape, file };
       else attachments.push({ shape, file });
       return current.replace(joinBoard({ own: current.parts.own, attachments }));
@@ -250,7 +326,7 @@ export function boardSites(source: string, blocks: Map<string, SourceRange>, boa
     /** The document without the file link `linkFile` wrote for `shape`. */
     unlinkFile(board: string, shape: string) {
       const current = site(board)!;
-      const attachments = current.parts.attachments.filter(item => !(isFileAttachment(item) && shapeKey(item.shape) === shapeKey(shape)));
+      const attachments = current.parts.attachments.filter(item => !(!item.trail?.length && isFileAttachment(item) && shapeKey(item.shape) === shapeKey(shape)));
       return current.replace(attachments.length ? joinBoard({ own: current.parts.own, attachments }) : `${current.parts.own.trimEnd()}\n`);
     },
     /** The document with a builder board's own text replaced, or why its attached boards prevent that. */

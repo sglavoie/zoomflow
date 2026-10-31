@@ -1,5 +1,5 @@
 import { cleanLabel, flowSource, readFlow } from './flow-model';
-import { boardTopics, mindMapSource, readMindMap, type BoardTopic, type MindMap } from './mind-map-model';
+import { boardTopics, mindMapSource, placedTopics, readMindMap, type BoardTopic, type MindMap } from './mind-map-model';
 
 /** Edits made on the diagram of a builder board: rename a shape, add the next step or a subtopic,
  * add a sibling topic, or remove a shape. */
@@ -7,7 +7,7 @@ export type CanvasEdit = { type: 'rename'; label: string } | { type: 'add' } | {
 /** What a shape on a builder board offers on the diagram. */
 export type CanvasShape = { kind: 'flow' | 'mind map'; label: string; add: string; sibling: boolean; remove: boolean };
 /** The builder's new text, the shape to select once it is drawn, the board's trail when a rename renames the board
- * or a remove removes it, and for a mind map, each main board topic's new identifier by its old one, so attached
+ * or a remove removes it, and for a mind map, each topic's new outline identifier by its old one, so attached
  * boards follow their topics. */
 export type CanvasResult = { own: string; select?: string; trail?: string[]; moved?: Map<string, string> };
 
@@ -69,7 +69,7 @@ export function editOnCanvas(own: string, trail: string[], shape: string, edit: 
     return { own: flowSource(flow), select: shape };
   }
   const map = readMindMap(own)!;
-  const before = boardTopics(map);
+  const before = placedTopics(map);
   const board = mapBoard(map, trail)!;
   const center = board[0].topic;
   const { topic, parent } = board.find(item => item.id === shape)!;
@@ -96,8 +96,14 @@ export function editOnCanvas(own: string, trail: string[], shape: string, edit: 
   // A subtopic added past the detail level opens on a new detail board, so its parent stays selected.
   const topics = mapBoard(map, nextTrail ?? trail);
   const select = (topics?.find(item => item.topic === selected) ?? topics?.find(item => item.topic === topic))?.id;
-  // Topics are kept as objects, so each surviving main board topic is found again whatever its new label or place.
-  const after = new Map(boardTopics(map).map(item => [item.topic, item.id]));
-  const moved = new Map(before.filter(item => after.has(item.topic)).map(item => [item.id, after.get(item.topic)!]));
+  // Topics are kept as objects, so each surviving topic is found again whatever its new label or place.
+  const after = placedTopics(map);
+  const shapes = new Map(after.filter(item => !item.id.endsWith('@center')).map(item => [item.topic, item.id]));
+  const centers = new Map(after.filter(item => item.id.endsWith('@center')).map(item => [item.topic, item.id]));
+  const moved = new Map(before.flatMap(item => {
+    // A detail centre shares its topic with the linked shape on the board above.
+    const next = (item.id.endsWith('@center') ? centers : shapes).get(item.topic);
+    return next ? [[item.id, next] as const] : [];
+  }));
   return { own: mindMapSource(map), ...select ? { select } : {}, ...nextTrail ? { trail: nextTrail } : {}, moved };
 }

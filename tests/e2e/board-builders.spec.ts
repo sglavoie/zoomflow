@@ -85,6 +85,59 @@ test('repairs missing detail imports when editing an existing attached mind map'
   await expect(shape(page, 'n_1')).toContainText('New topic');
 });
 
+test('adds flows and maps inside generated detail boards and keeps them after editing the parent outline', async ({ page }) => {
+  await page.goto('/'); await ready(page);
+  await page.getByRole('button', { name: 'New mind map', exact: true }).click();
+  const create = page.getByRole('dialog', { name: 'Create a mind map' });
+  await create.getByRole('textbox', { name: 'Topics' }).fill('Plan\n  Area\n    Detail\n      Task');
+  await create.getByLabel('Detail boards').selectOption('1');
+  await create.getByRole('button', { name: 'Create mind map', exact: true }).click();
+  await ready(page);
+  await openFromBadge(page, 'Open Area board');
+  await openFromBadge(page, 'Open Detail board');
+  await board(page, 'root.layers.Area.layers.Detail');
+  await shape(page, 'n_1').click();
+  await page.getByRole('group', { name: 'Selected: Task' }).getByRole('button', { name: 'Add board…' }).click();
+  await page.getByRole('menuitem', { name: 'Add flow board…', exact: true }).click();
+  await page.getByRole('dialog', { name: 'Add a flow board' }).getByRole('button', { name: 'Add board', exact: true }).click();
+  await ready(page);
+  await board(page, 'root.layers.Area.layers.Detail.layers.Task');
+  await expect(page.getByRole('button', { name: 'Edit flow', exact: true })).toBeVisible();
+  await shape(page, 'step_2').click({ button: 'right' });
+  await page.getByRole('menuitem', { name: 'Add mind map board…', exact: true }).click();
+  const addMap = page.getByRole('dialog', { name: 'Add a mind map board' });
+  await addMap.getByLabel('Board name').fill('More');
+  await addMap.getByRole('textbox', { name: 'Topics' }).fill('More\n  Branch\n    Leaf');
+  await addMap.getByLabel('Detail boards').selectOption('1');
+  await addMap.getByRole('button', { name: 'Add board', exact: true }).click();
+  await ready(page);
+  await openFromBadge(page, 'Open Branch board');
+  await shape(page, 'n_1').click({ button: 'right' });
+  await page.getByRole('menuitem', { name: 'Add flow board…', exact: true }).click();
+  await page.getByRole('dialog', { name: 'Add a flow board' }).getByRole('button', { name: 'Add board', exact: true }).click();
+  await ready(page);
+  const suffix = '.layers.Detail.layers.Task.layers.More.layers.Branch.layers.Leaf';
+  await board(page, `root.layers.Area${suffix}`);
+  await expect(page.getByRole('button', { name: 'Edit flow', exact: true })).toBeVisible();
+
+  await page.getByRole('navigation', { name: 'Breadcrumb' }).getByRole('button', { name: 'Root', exact: true }).click();
+  await page.getByRole('button', { name: 'Edit mind map', exact: true }).click();
+  const edit = page.getByRole('dialog', { name: 'Edit mind map' });
+  await expect(edit.getByRole('textbox', { name: 'Topics' })).toHaveValue('Plan\n  Area\n    Detail\n      Task');
+  await edit.getByRole('textbox', { name: 'Topics' }).fill('Plan\n  Renamed\n    Detail\n      Task\n  Budget');
+  await edit.getByRole('button', { name: 'Apply changes', exact: true }).click();
+  await ready(page);
+  let destination = 'root';
+  for (const name of ['Renamed', 'Detail', 'Task', 'More', 'Branch', 'Leaf']) {
+    await board(page, destination);
+    await openFromBadge(page, `Open ${name} board`);
+    destination += `.layers.${name}`;
+  }
+  await board(page, `root.layers.Renamed${suffix}`);
+  await expect(page.getByRole('button', { name: 'Edit flow', exact: true })).toBeVisible();
+  await expect(page.locator('#lint-summary')).toHaveText('No lint issues');
+});
+
 test('offers the same actions from a context menu and the keyboard', async ({ page }) => {
   await approvalFlow(page);
   await shape(page, 'step_4').click({ button: 'right' });

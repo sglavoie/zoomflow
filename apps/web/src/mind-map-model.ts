@@ -66,6 +66,23 @@ export function boardTopics(map: MindMap, center = map.root): BoardTopic[] {
   return topics;
 }
 
+/** Every appearance of a topic, including detail-board centres. `id` identifies its place in the whole
+ * outline; `shape` and `trail` locate that appearance on its board. */
+export function placedTopics(map: MindMap): (BoardTopic & { shape: string; trail: string[] })[] {
+  const topics: ReturnType<typeof placedTopics> = [];
+  const visit = (center: MindTopic, prefix: string, path: string[], trail: string[]) => {
+    for (const topic of boardTopics(map, center)) {
+      const id = prefix + topic.id.slice(1);
+      const fullPath = [...path, ...topic.path];
+      topics.push({ ...topic, id: topic.id === 'n' && trail.length ? `${id}@center` : id,
+        shape: topic.id, trail, path: fullPath });
+      if (topic.board) visit(topic.topic, id, fullPath.slice(0, -1), [...trail, topic.board]);
+    }
+  };
+  visit(map.root, 'n', [], []);
+  return topics;
+}
+
 /** An indented outline: the first line is the central topic and each deeper line belongs to the line above it.
  * Bullets (-, *, +) and Markdown heading marks are optional. */
 export function parseOutline(text: string): MindTopic | undefined {

@@ -71,6 +71,24 @@ it('adds a mind map board to a flow step and keeps the flow editable', async () 
   expect((await compile(nested.source)).diagram.layers?.[0]?.shapes.map(shape => shape.id)).toContain('n_3');
 });
 
+it('keeps every builder editable through repeated alternating attachments', async () => {
+  let source = flow;
+  let board = 'root';
+  for (let level = 0; level < 6; level++) {
+    const { sites: site } = await sites(source);
+    const kind = level % 2 ? 'mind map' : 'flow';
+    expect(site.builder(board)?.kind).toBe(kind);
+    const shape = kind === 'flow' ? 'step_3' : 'n_1';
+    expect(site.shapeAction(board, shape)).toEqual({ action: 'add' });
+    const added = site.add(board, shape, kind === 'flow' ? mindMapSource(map('Ideas\n  Topic')) : flow, `Level ${level}`);
+    source = added.source;
+    board += `.layers.${added.name}`;
+  }
+  const { sites: site } = await sites(source);
+  expect(site.builder('root')?.kind).toBe('flow');
+  expect(site.builder(board)?.kind).toBe('flow');
+});
+
 it('styles and lints every detail board of a mind map attached to an unstyled diagram', async () => {
   const source = 'triage: Review the request\n';
   const mindMap = map('Review the request\n  Ideas\n    Detail\n      Next\n        Deeper\n          Last', 2);
@@ -93,13 +111,12 @@ it('styles and lints every detail board of a mind map attached to an unstyled di
   expect('body' in attached && readMindMap(attached.body)).toEqual(mindMap);
 });
 
-it('adds boards to topics on a mind map and to its attached boards, not to its detail boards', async () => {
+it('adds boards to topics on a mind map, its attached boards and its detail boards', async () => {
   let source = mindMapSource(map('Trip\n  Places\n    Lisbon\n      Alfama\n  Budget', 2));
   let { sites: site, boards } = await sites(source);
   expect(site.shapeAction('root', 'n_1_1')).toEqual({ action: 'none', reason: 'This shape already opens another board or link.' });
   expect(site.owner('root.layers.Lisbon')).toBe('root');
-  expect(site.shapeAction('root.layers.Lisbon', 'n_1')).toEqual({ action: 'none',
-    reason: 'This board is part of the mind map on “Root”. Add boards from its main board.' });
+  expect(site.shapeAction('root.layers.Lisbon', 'n_1')).toEqual({ action: 'add' });
   // A board named like a detail board gets a distinct name.
   const added = site.add('root', 'n_2', flow, 'Lisbon');
   expect(added.name).toBe('Lisbon 2');
@@ -108,6 +125,114 @@ it('adds boards to topics on a mind map and to its attached boards, not to its d
   expect(boards.has('root.layers.Lisbon 2')).toBe(true);
   expect(site.owner('root')).toBe('root');
   expect(site.shapeAction('root.layers.Lisbon 2', 'step_1')).toEqual({ action: 'add' });
+});
+
+it('round-trips attachments on generated detail boards without absorbing their independent builders', () => {
+  const own = mindMapSource(map('Trip\n  Places\n    Lisbon\n      Alfama\n  Budget\n    Costs', 1));
+  const attachments = [
+    { shape: 'n', name: 'Overview', body: flow },
+    { trail: ['Places'], shape: 'n', file: './places.d2' },
+    { trail: ['Places', 'Lisbon'], shape: 'n_1', name: 'Walk', body: joinBoard({ own: flow,
+      attachments: [{ shape: 'step_3', name: 'Ideas', body: mindMapSource(map('Ideas\n  First\n    Next', 1)) }] }) },
+    { trail: ['Budget'], shape: 'n_1', name: 'Walk', body: flow },
+  ];
+  const source = joinBoard({ own, attachments });
+  const parts = splitBoard(source);
+  expect(parts.own.trim()).toBe(own.trim());
+  const normalize = (items: typeof parts.attachments) => items.map(item => 'body' in item ? { ...item, body: item.body.trim() } : item)
+    .sort((a, b) => JSON.stringify(a.trail ?? []).localeCompare(JSON.stringify(b.trail ?? [])));
+  expect(normalize(parts.attachments)).toEqual(normalize(attachments));
+  expect(joinBoard(parts)).toBe(source);
+  expect(splitBoard(source.replaceAll('\n', '\r\n')).own.trim()).toBe(own.trim());
+  // An edited attachment section stays source text, so a builder cannot discard it.
+  const custom = source.replace('n_1.link: layers."Walk"', '# custom\n    n_1.link: layers."Walk"');
+  expect(builderKind(splitBoard(custom).own)).toBeUndefined();
+});
+
+it('alternates flows and maps from generated detail boards at repeated depths', async () => {
+  let source = mindMapSource(map('Root\n  Branch\n    Leaf', 1));
+  let board = 'root';
+  const owners = [board];
+  for (let level = 0; level < 4; level++) {
+    let site = (await sites(source)).sites;
+    const detail = `${board}.layers.Branch`;
+    expect(site.owner(detail)).toBe(board);
+    expect(site.shapeAction(detail, 'n_1')).toEqual({ action: 'add' });
+    const added = site.add(detail, 'n_1', flow, 'Flow');
+    source = added.source;
+    site = (await sites(source)).sites;
+    const flowBoard = `${detail}.layers.Flow`;
+    expect(site.shapeAction(detail, 'n_1')).toEqual({ action: 'edit', board: flowBoard, kind: 'flow' });
+    expect(site.canvas(detail)).toMatchObject({ owner: board, trail: ['Branch'] });
+    owners.push(flowBoard);
+    source = site.add(flowBoard, 'step_3', mindMapSource(map('More\n  Branch\n    Leaf', 1)), 'Map').source;
+    board = `${flowBoard}.layers.Map`;
+    owners.push(board);
+  }
+  const { sites: site } = await sites(source);
+  for (const owner of owners) expect(site.owner(owner)).toBe(owner);
+  expect(lint(await compile(source)).diagnostics).toEqual([]);
+});
+
+it('keeps custom attached source independent of the map that generates its parent detail board', async () => {
+  const { sites: site } = await sites(mindMapSource(map('Plan\n  Branch\n    Leaf', 1)));
+  const source = site.add('root.layers.Branch', 'n_1', 'a -> b', 'Custom').source;
+  const { sites: added } = await sites(source);
+  expect(added.owner('root.layers.Branch')).toBe('root');
+  expect(added.owner('root.layers.Branch.layers.Custom')).toBeUndefined();
+  expect(added.canvas('root.layers.Branch.layers.Custom')).toBeUndefined();
+  expect(added.shapeAction('root.layers.Branch.layers.Custom', 'b')).toEqual({ action: 'add' });
+});
+
+it('keeps detail attachments through canvas renames and removals, and rejects stranding them', async () => {
+  const own = mindMapSource(map('Trip\n  Places\n    Lisbon\n      First\n      Walk', 1));
+  let site = (await sites(own)).sites;
+  let source = site.add('root.layers.Places.layers.Lisbon', 'n_2', flow, 'Tour').source;
+  site = (await sites(source)).sites;
+  expect(site.builder('root')?.own.trim()).toBe(own.trim());
+  const rename = editOnCanvas(site.builder('root')!.own, ['Places'], 'n', { type: 'rename', label: 'Destinations' })!;
+  let updated = site.update('root', rename.own, rename.moved);
+  if (!('source' in updated)) throw new Error(updated.error);
+  source = updated.source;
+  site = (await sites(source)).sites;
+  const board = 'root.layers.Destinations.layers.Lisbon';
+  expect(site.shapeAction(board, 'n_2')).toEqual({ action: 'edit', board: `${board}.layers.Tour`, kind: 'flow' });
+  const remove = editOnCanvas(site.builder('root')!.own, ['Destinations', 'Lisbon'], 'n_1', { type: 'remove' })!;
+  updated = site.update('root', remove.own, remove.moved);
+  if (!('source' in updated)) throw new Error(updated.error);
+  site = (await sites(updated.source)).sites;
+  expect(site.shapeAction(board, 'n_1')).toEqual({ action: 'edit', board: `${board}.layers.Tour`, kind: 'flow' });
+  const gone = editOnCanvas(site.builder('root')!.own, [], 'n_1', { type: 'remove' })!;
+  expect(site.update('root', gone.own, gone.moved)).toEqual({ error: 'The topic “Walk” opens the board “Tour”. Keep the topic, or delete its board in the source first.' });
+});
+
+it('keeps file links scoped to their own board when generated details reuse shape identifiers', async () => {
+  const own = mindMapSource(map('Plan\n  Team\n    Hiring\n    Recruiting\n  Money', 1));
+  let site = (await sites(own)).sites;
+  let source = site.linkFile('root.layers.Team', 'n_2', './recruiting.d2');
+  site = (await sites(source)).sites;
+  source = site.linkFile('root', 'n_2', './money.d2');
+  site = (await sites(source)).sites;
+  expect(site.shapeAction('root', 'n_2')).toEqual({ action: 'file', link: './money.d2', attached: true });
+  expect(site.shapeAction('root.layers.Team', 'n_2')).toEqual({ action: 'file', link: './recruiting.d2', attached: true });
+  site = (await sites(site.unlinkFile('root', 'n_2'))).sites;
+  expect(site.shapeAction('root', 'n_2')).toEqual({ action: 'add' });
+  expect(site.shapeAction('root.layers.Team', 'n_2')).toEqual({ action: 'file', link: './recruiting.d2', attached: true });
+});
+
+it('preserves boards across split changes and rejects merging boards with the same name', async () => {
+  const outline = 'Plan\n  People\n    Hiring\n  Money\n    Budget';
+  const own = mindMapSource(map(outline, 1));
+  let site = (await sites(own)).sites;
+  let source = site.add('root.layers.People', 'n_1', flow, 'Work').source;
+  site = (await sites(source)).sites;
+  const unsplit = site.update('root', mindMapSource(map(outline)));
+  if (!('source' in unsplit)) throw new Error(unsplit.error);
+  expect((await sites(unsplit.source)).sites.shapeAction('root', 'n_1_1')).toEqual({ action: 'edit', board: 'root.layers.Work', kind: 'flow' });
+  source = site.add('root.layers.Money', 'n_1', flow, 'Work').source;
+  site = (await sites(source)).sites;
+  expect(site.update('root', mindMapSource(map(outline)))).toEqual({
+    error: 'Two boards named “Work” would share one board. Keep them on separate detail boards, or rename one in the source first.' });
 });
 
 it('adds boards to hand-written boards declared once in the file', async () => {
@@ -282,8 +407,14 @@ it('keeps the link of a topic that moves to a detail board rather than dropping 
   const outline = 'Plan\n  People\n    Hiring\n  Money';
   const { sites: site } = await sites(mindMapSource(map(outline)));
   const { sites: linked } = await sites(site.linkFile('root', 'n_1_1', './hiring.d2'));
-  expect(linked.update('root', mindMapSource(map(outline, 1)))).toEqual({
-    error: 'The topic “Hiring” opens the file “./hiring.d2” and would move to a detail board. Keep it on this board, or remove its link first.' });
+  const updated = linked.update('root', mindMapSource(map(outline, 1)));
+  if (!('source' in updated)) throw new Error(updated.error);
+  const { sites: moved } = await sites(updated.source);
+  expect(moved.shapeAction('root.layers.People', 'n_1')).toEqual({ action: 'file', link: './hiring.d2', attached: true });
+  expect(moved.builder('root')?.kind).toBe('mind map');
+  const unsplit = moved.update('root', mindMapSource(map(outline)));
+  if (!('source' in unsplit)) throw new Error(unsplit.error);
+  expect((await sites(unsplit.source)).sites.shapeAction('root', 'n_1_1')).toEqual({ action: 'file', link: './hiring.d2', attached: true });
   // A removed topic still takes its link along.
   expect(linked.update('root', mindMapSource(map('Plan\n  People\n  Money')))).not.toHaveProperty('error');
 });
@@ -307,6 +438,6 @@ it('drops the file link of a removed topic when a detail board has a topic with 
   expect(reattach(before, removed.own, links, removed.moved)).toEqual([]);
   // Removed in the outline: fewer topics have its label, so it did not move to a detail board.
   expect(reattach(before, mindMapSource(map('Plan\n  Team\n    Hiring', 1)), links)).toEqual([]);
-  // Moved there, it is still refused.
-  expect(reattach(before, mindMapSource(map('Plan\n  Team\n    Hiring\n    Hiring', 1)), links)).toMatch(/would move to a detail board/);
+  // Two indistinguishable destinations cannot silently take or drop the link.
+  expect(reattach(before, mindMapSource(map('Plan\n  Team\n    Hiring\n    Hiring', 1)), links)).toMatch(/cannot be matched after this edit/);
 });
