@@ -5,7 +5,8 @@ import { createDraftLibrary, exampleSource, isOwnDraft } from './draft-library';
 import { flowFilename } from './flow-model';
 import { atlasMapName } from './atlas-map';
 import { draftRow, projectGroup, type ProjectGroup } from './picker-rows';
-import { plural, setText } from './text';
+import { plural, safeFilename, setText } from './text';
+import type { ProjectArchive } from '@zoomflow/core';
 import type { ProjectSaveSnapshot } from './project-save';
 import { parseDocumentView, serializeDocumentView, type DocumentView } from '@zoomflow/viewer';
 
@@ -396,6 +397,28 @@ export function setupExamplePicker({ readSource, open, onState, forget, checkpoi
       for (const item of drafts.values()) if (item.projectId === projectId && item.path && !item.recoveredFrom) fs[item.path] = item.source;
       return { fs, home: homePath(Object.keys(fs).sort((a, b) => a.localeCompare(b))) };
     },
+    /** Capture every canonical project file, including unlinked files and both panes' current edits.
+     * A selected recovered copy replaces only its own path in this backup, never the live project. */
+    archiveSnapshot(pane: PaneId): ProjectArchive | undefined {
+      syncSources();
+      const draft = draftOf(pane);
+      if (!draft) return;
+      const projectId = draft.projectId ?? draft.atlasOf;
+      if (!projectId) {
+        const name = safeFilename(draft.name.replace(/\.d2$/i, ''));
+        const path = `${name}.d2`;
+        return { name, entry: path, files: [{ path, source: draft.source, view: draft.view }] };
+      }
+      const files = [...drafts.values()].filter(item => item.projectId === projectId && item.path && !item.recoveredFrom)
+        .map(item => ({ path: item.path!, source: item.source, view: item.view })).sort((a, b) => a.path.localeCompare(b.path));
+      if (draft.recoveredFrom && draft.path) {
+        const index = files.findIndex(file => file.path === draft.path);
+        const file = { path: draft.path, source: draft.source, view: draft.view };
+        if (index < 0) files.push(file); else files[index] = file;
+      }
+      const entry = draft.path ?? (draft.opener && drafts.get(draft.opener)?.path) ?? homePath(files.map(file => file.path));
+      return { name: draft.title.split('/')[0], entry, files };
+    },
     /** Capture both panes before saving; recovered copies never overwrite a canonical project file. */
     projectSaveSnapshot(projectId: string): ProjectSaveSnapshot | undefined {
       syncSources();
@@ -525,8 +548,8 @@ export function setupExamplePicker({ readSource, open, onState, forget, checkpoi
     },
     /** Reopening an unchanged project reuses its drafts; see `rememberFile` for `match`. An unsaved project, such as
      * a draft atlas in a browser that cannot write to folders, is not on disk, so all of its source counts as unsaved. */
-    rememberFolder(folderName: string, files: { path: string; source: string }[], match: (key: string) => boolean | undefined = () => undefined,
-      saved = true, pane = target) {
+    rememberFolder(folderName: string, files: { path: string; source: string; view?: string }[], match: (key: string) => boolean | undefined = () => undefined,
+      saved = true, pane = target, entry?: string) {
       syncSources();
       const sources = new Map(files.map((file) => [file.path, file.source]));
       const project = saved ? [...projectGroups.keys()].find((id) => {
@@ -547,17 +570,22 @@ export function setupExamplePicker({ readSource, open, onState, forget, checkpoi
         }
         const name = file.path.split('/').at(-1)!;
         const item: Draft = { key, name, title: `${folderName}/${file.path}`, description: 'Project file',
-          source: file.source, baseline: saved ? file.source : '', projectId, path: file.path, updatedAt: Date.now() };
+          source: file.source, baseline: saved ? file.source : '', projectId, path: file.path, updatedAt: Date.now(), view: file.view };
         keys[file.path] = key;
         drafts.set(key, item);
         addOption(item);
       }
-      const home = homePath(files.map((file) => file.path));
+      const home = entry ?? homePath(files.map((file) => file.path));
       const first = files.find((file) => file.path === home)!;
       activate(keys[first.path], pane);
       picker.open = false;
       persist();
       return { key: keys[first.path], name: first.path.split('/').at(-1)!, source: first.source, keys, projectId };
+    },
+    /** Archives always open as independent copies without file or directory write handles. */
+    rememberArchive(project: ProjectArchive, pane = target) {
+      const files = project.files.map(file => ({ ...file, view: serializeDocumentView(parseDocumentView(file.view)) }));
+      return this.rememberFolder(project.name, files, () => false, true, pane, project.entry);
     },
     /** Add a new file to its requested project, even if its pane switched during the write. `saved` when it is
      * on disk already, otherwise Save asks where to put it. A removed project stays removed. */

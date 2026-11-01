@@ -283,6 +283,36 @@ The source lives in `apps/web/src/examples/`, with the catalog in `examples.ts`.
 
 ## Projects
 
+### Keep an editable project with its view settings
+
+Choose **Export → Download Zoomflow project** to download a `.zoomflow.zip` archive.
+For one diagram it contains that diagram; for a project it contains every `.d2`
+file, including unlinked files, files with source errors, and unsaved edits from
+both panes. Each file keeps its relative path, hidden-node choices and connected-layer
+settings, including custom branch selections. The selected file is the entry file.
+Downloading while viewing the generated atlas map includes the project's sources
+and opens at the file the map was opened from.
+
+Use **Open Zoomflow project** in the filename menu, or drop the archive onto a pane,
+to restore a separate editable project copy. It opens at the saved entry file with
+its view settings; other files restore their own settings when opened. Existing
+projects and disk files are kept. Relative imports and links continue to work.
+The archive has no write access to the original folder: use **Save .d2** to choose
+individual file destinations, or download an updated Zoomflow project to keep
+subsequent edits and view changes together.
+
+**This is an editable backup and includes hidden content.** Use SVG, PNG or
+interactive HTML exports to share only the curated diagram. The source-only `.d2`
+and project `.zip` downloads still omit view settings.
+
+The archive is an ordinary ZIP with a versioned `zoomflow.json` manifest and D2
+files under `sources/`. Archives support up to 10,000 files and 64 MiB of
+uncompressed content. Invalid archives leave the open document intact; damaged or
+unknown view metadata is ignored so its source can still be opened. Undo history,
+temporary selection, zoom and pan are not included.
+
+### Work with a folder
+
 Open a project with **Open folder** (also in the filename menu on narrow screens).
 Zoomflow loads its `.d2` files into a shared virtual filesystem, so relative imports
 resolve from each file's folder. Pick another project file from the filename menu to
@@ -598,8 +628,9 @@ Choices for deleted shapes and boards have no effect while those items are absen
 undoing the source deletion restores their curation. Reset also clears these inactive
 choices. A missing layer starting board falls back to an existing board. Restoring
 an example clears its curation, and undoing the restore brings it back.
-View settings stay in this browser: saving or downloading `.d2` source does not
-include them, and clearing browser storage removes them.
+Saving or downloading `.d2` source does not include view settings, and clearing
+browser storage removes their browser backup. **Download Zoomflow project** keeps
+the editable source and view settings together so they can be restored elsewhere.
 
 Export presents four choices by outcome, each with an explanation:
 **Interactive diagram (HTML)** for one navigable file with every board, **Current

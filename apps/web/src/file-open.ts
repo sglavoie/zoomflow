@@ -6,6 +6,7 @@ import { createProjectFile, type DirectoryHandles, type FileHandles } from './fi
 import { plainLook } from './flow-model';
 import { mindMapSource } from './mind-map-model';
 import { describeError } from './text';
+import { projectArchiveLimit, readProjectArchive } from '@zoomflow/core';
 
 type PickerWindow = Window & {
   showOpenFilePicker?: (options?: object) => Promise<FileSystemFileHandle[]>;
@@ -71,6 +72,18 @@ export function setupFileOpen({ picker, activePane, fileHandles, directoryHandle
   async function openFile(file: File, handle: FileSystemFileHandle | undefined, request: Opening) {
     const { pane, current } = request;
     try {
+      if (/\.zip$/i.test(file.name)) {
+        if (file.size > projectArchiveLimit) throw new Error('Project archives support downloads up to 64 MiB.');
+        const bytes = new Uint8Array(await file.arrayBuffer());
+        if (!current()) return false;
+        const archive = readProjectArchive(bytes);
+        const selected = picker().rememberArchive(archive, pane.id);
+        setFileError('', pane);
+        picker().refresh();
+        const opened = await request.show(selected.source, selected.name, selected.key);
+        if (opened) pane.setActivity(`Opened ${archive.name} as a separate project copy. Export → Download Zoomflow project keeps its files and view settings together.`);
+        return opened;
+      }
       if (!/\.d2$/i.test(file.name)) throw new Error('Choose a .d2 file.');
       const source = await readSourceText(file);
       // A file a draft came from before a reload opens that draft again.
@@ -100,6 +113,13 @@ export function setupFileOpen({ picker, activePane, fileHandles, directoryHandle
   fileInput.addEventListener('change', () => {
     const file = fileInput.files?.[0];
     fileInput.value = '';
+    if (file) void openFile(file, undefined, beginOpen());
+  });
+  const archiveInput = document.querySelector<HTMLInputElement>('#project-archive')!;
+  document.querySelector<HTMLButtonElement>('#open-archive-picker')!.addEventListener('click', () => archiveInput.click());
+  archiveInput.addEventListener('change', () => {
+    const file = archiveInput.files?.[0];
+    archiveInput.value = '';
     if (file) void openFile(file, undefined, beginOpen());
   });
   async function openFolder(folder: { name: string; files: { path: string; source: string }[];

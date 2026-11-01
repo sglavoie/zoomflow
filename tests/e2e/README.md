@@ -96,6 +96,11 @@ isolation, per-document choices, and failed or superseded layer renders.
 - `project-save.spec.ts`: sequential saving across both panes, reopening saved disk
   contents, overwrite cancellation, write failures, missing files and permissions,
   cancellation during a write, later edits staying dirty, and source ZIP fallback.
+- `project-archive.spec.ts`: fresh-browser round trips of editable source, export
+  visibility and layer depth, relative imports and links, unlinked source errors,
+  unvisited file settings, entry-file restoration, independent copies and invalid
+  archives. Core tests cover archive validation and expansion limits; picker tests
+  cover snapshotting both panes and ignoring damaged view metadata.
 - `continuity.spec.ts`: concurrent-tab recovery, per-document and per-board view
   restoration, and restored selection and scroll when switching documents.
 - `curation.spec.ts`: visibility and layer settings surviving reloads, unedited

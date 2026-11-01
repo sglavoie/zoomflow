@@ -1,20 +1,14 @@
 import standardLibrary from '../../../stdlib/zoomflow.d2?raw';
 import { rememberDiskVersion } from './disk-version';
 import { flowFilename } from './flow-model';
+import { validProjectPath } from '@zoomflow/core';
+export { validProjectPath } from '@zoomflow/core';
 
 export type ProjectSource = { path: string; source: string };
 
 /** The editor keeps `\n` line breaks; a file read with CRLF or CR breaks would otherwise differ from its own baseline
  * as soon as the editor's text is read back, showing unsaved changes that were never made. */
 export const readSourceText = async (file: Blob) => (await file.text()).replace(/\r\n?/g, '\n');
-
-/** Paths in D2's virtual filesystem always use forward slashes and stay in the chosen folder. */
-export function validProjectPath(path: string): boolean {
-  const parts = path.split('/');
-  return parts.length > 0 && parts.every((part, index) => part && part !== '.' && part !== '..' &&
-    (index === parts.length - 1 || !part.startsWith('.')) && !['node_modules', 'dist', 'coverage'].includes(part)) &&
-    path.toLowerCase().endsWith('.d2') && !path.includes('\\') && !path.includes('\0') && !/^[A-Za-z]:/.test(path);
-}
 
 export function projectFileSystem(inputPath: string, sources: Record<string, string>, source: string) {
   const fs: Record<string, string> = Object.create(null);

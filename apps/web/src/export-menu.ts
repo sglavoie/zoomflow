@@ -1,4 +1,4 @@
-import { classifyHref, exportAtlasHtml, exportAtlasZip, exportBoardsHtml, exportBoardsZip, exportGlyphSource,
+import { classifyHref, exportAtlasHtml, exportAtlasZip, exportBoardsHtml, exportBoardsZip, exportGlyphSource, exportProjectArchive,
   renderExportBoards, indexBoards, resolveFilePath, type AtlasDocument, type Diagram } from '@zoomflow/core';
 import type { RenderBoard } from '@zoomflow/viewer';
 import { prepareExportSvg, rasterizeSvg, offlineViewerScript, offlineViewerStyle } from '@zoomflow/viewer';
@@ -95,6 +95,18 @@ export function setupExportMenu(activePane: () => DocumentPane | undefined, pick
       reportExport(`Project source download started: ${filename}`);
     } catch (error) { reportExport(`Project source download failed: ${describeError(error)}`, 'error'); }
   });
+  const archiveButton = document.querySelector<HTMLButtonElement>('#save-archive')!;
+  archiveButton.addEventListener('click', () => {
+    const pane = activePane();
+    if (!pane?.key) return;
+    try {
+      const project = picker().archiveSnapshot(pane.id);
+      if (!project) return;
+      const filename = `${safeFilename(project.name)}.zoomflow.zip`;
+      download(new Blob([exportProjectArchive(project)], { type: 'application/zip' }), filename);
+      reportExport(`Zoomflow project download started: ${filename}`, 'info', pane);
+    } catch (error) { reportExport(`Project download failed: ${describeError(error)}`, 'error', pane); }
+  });
 
   const exportButton = document.querySelector<HTMLButtonElement>('#export')!;
   const resetVisibility = document.querySelector<HTMLButtonElement>('#reset-export-visibility')!;
@@ -124,6 +136,7 @@ export function setupExportMenu(activePane: () => DocumentPane | undefined, pick
     const pane = activePane();
     if (document.activeElement !== nameField) showName();
     const documentExport = pane?.documentExport;
+    archiveButton.disabled = !pane?.key;
     exportButton.disabled = !canExport();
     resetVisibility.hidden = !pane?.viewer.hasExportVisibilityChoices;
     resetVisibility.disabled = exporting || !documentExport || !pane?.viewer.hasExportVisibilityChoices;

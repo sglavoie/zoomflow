@@ -3,8 +3,46 @@ import { EditorState } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';
 import { expect, it, vi } from 'vitest';
 import { sameEntries, setupFileOpen } from '../src/file-open';
+import { exportProjectArchive } from '@zoomflow/core';
 
 const handle = (id: string) => ({ id, isSameEntry: async (other: { id?: string }) => other.id === id }) as unknown as FileSystemFileHandle;
+
+it.each(['focus', 'newer-file', 'document-switch'] as const)('a delayed archive respects %s while it is being read', async (change) => {
+  document.body.innerHTML = '<p id="file-status" hidden></p><input id="file" type="file"><input id="project-archive" type="file"><button id="open-archive-picker"></button><input id="folder" type="file"><button id="open-folder"></button><button id="open-folder-picker"></button><button id="new-atlas-picker"></button><div id="pane-a"></div>';
+  const a = { id: 'a', documentOpens: 0, replaceDocument: vi.fn(async () => { a.documentOpens++; }), setActivity: vi.fn() };
+  const b = { id: 'b', documentOpens: 0, replaceDocument: vi.fn(async () => {}), setActivity: vi.fn() };
+  let active = a;
+  const rememberArchive = vi.fn(() => ({ source: 'backup', name: 'entry.d2', key: 'project:new:entry.d2' }));
+  const rememberFile = vi.fn(() => 'file:new');
+  setupFileOpen({ picker: () => ({ rememberArchive, rememberFile, refresh() {} }), activePane: () => active,
+    fileHandles: { ready: async () => {}, *[Symbol.iterator]() {}, set() {} }, directoryHandles: {},
+    paneRoots: { a: document.querySelector('#pane-a'), b: document.createElement('div') }, setActive() {} } as never);
+  const bytes = exportProjectArchive({ name: 'Backup', entry: 'entry.d2', files: [{ path: 'entry.d2', source: 'backup' }] });
+  const archive = new File([bytes], 'backup.zoomflow.zip');
+  let finish!: (buffer: ArrayBuffer) => void;
+  archive.arrayBuffer = () => new Promise(resolve => { finish = resolve; });
+  const input = document.querySelector<HTMLInputElement>('#project-archive')!;
+  Object.defineProperty(input, 'files', { value: [archive] });
+  input.dispatchEvent(new Event('change'));
+  await vi.waitFor(() => expect(finish).toBeTypeOf('function'));
+  if (change === 'focus') active = b;
+  else if (change === 'document-switch') a.documentOpens++;
+  else {
+    const sourceInput = document.querySelector<HTMLInputElement>('#file')!;
+    Object.defineProperty(sourceInput, 'files', { value: [new File(['Latest'], 'latest.d2')] });
+    sourceInput.dispatchEvent(new Event('change'));
+    await vi.waitFor(() => expect(rememberFile).toHaveBeenCalled());
+  }
+  finish(bytes.buffer);
+  if (change === 'focus') {
+    await vi.waitFor(() => expect(a.replaceDocument).toHaveBeenCalledWith('backup', 'entry.d2', 'project:new:entry.d2'));
+    expect(rememberArchive).toHaveBeenCalledWith(expect.objectContaining({ name: 'Backup' }), 'a');
+  } else {
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(rememberArchive).not.toHaveBeenCalled();
+  }
+  expect(b.replaceDocument).not.toHaveBeenCalled();
+});
 
 it('matches drafts by file handle and never reuses a handled draft for a file without one', async () => {
   const handles = new Map([['file:a', handle('a')], ['file:b', handle('b')]]);
@@ -16,7 +54,7 @@ it('matches drafts by file handle and never reuses a handled draft for a file wi
 });
 
 it('opens a file dropped on the editor without also inserting its text there', async () => {
-  document.body.innerHTML = '<p id="file-status"></p><input id="file" type="file"><input id="folder" type="file"><button id="open-folder"></button><button id="open-folder-picker"></button><button id="new-atlas-picker"></button><div id="pane-a"></div>';
+  document.body.innerHTML = '<p id="file-status"></p><input id="file" type="file"><input id="project-archive" type="file"><button id="open-archive-picker"></button><input id="folder" type="file"><button id="open-folder"></button><button id="open-folder-picker"></button><button id="new-atlas-picker"></button><div id="pane-a"></div>';
   const root = document.querySelector<HTMLElement>('#pane-a')!;
   const view = new EditorView({ parent: root, state: EditorState.create({ doc: 'a: A\n' }) });
   // happy-dom has no layout, so drop at the start of the document.
@@ -35,7 +73,7 @@ it('opens a file dropped on the editor without also inserting its text there', a
 });
 
 it('opens a file with CRLF line breaks as the editor will show it, so it is not unsaved before any edit', async () => {
-  document.body.innerHTML = '<p id="file-status"></p><input id="file" type="file"><input id="folder" type="file"><button id="open-folder"></button><button id="open-folder-picker"></button><button id="new-atlas-picker"></button><div id="pane-a"></div>';
+  document.body.innerHTML = '<p id="file-status"></p><input id="file" type="file"><input id="project-archive" type="file"><button id="open-archive-picker"></button><input id="folder" type="file"><button id="open-folder"></button><button id="open-folder-picker"></button><button id="new-atlas-picker"></button><div id="pane-a"></div>';
   const root = document.querySelector<HTMLElement>('#pane-a')!;
   const remembered: string[][] = [];
   const opened: string[] = [];
@@ -53,7 +91,7 @@ it('opens a file with CRLF line breaks as the editor will show it, so it is not 
 });
 
 it.each(['file', 'folder'] as const)('keeps a slow %s open in its original pane when focus changes', async (kind) => {
-  document.body.innerHTML = '<p id="file-status"></p><input id="file" type="file"><input id="folder" type="file"><button id="open-folder"></button><button id="open-folder-picker"></button><button id="new-atlas-picker"></button><div id="pane-a"></div>';
+  document.body.innerHTML = '<p id="file-status"></p><input id="file" type="file"><input id="project-archive" type="file"><button id="open-archive-picker"></button><input id="folder" type="file"><button id="open-folder"></button><button id="open-folder-picker"></button><button id="new-atlas-picker"></button><div id="pane-a"></div>';
   const root = document.querySelector<HTMLElement>('#pane-a')!;
   const a = { id: 'a', replaceDocument: vi.fn(async () => {}), setActivity: vi.fn() };
   const b = { id: 'b', replaceDocument: vi.fn(async () => {}), setActivity: vi.fn() };
@@ -81,7 +119,7 @@ it.each(['file', 'folder'] as const)('keeps a slow %s open in its original pane 
 it.each([
   ['file', 'file'], ['file', 'folder'], ['folder', 'file'], ['folder', 'folder'],
 ] as const)('keeps the newer %s/%s selection when the older read finishes last', async (older, newer) => {
-  document.body.innerHTML = '<p id="file-status" hidden></p><input id="file" type="file"><input id="folder" type="file"><button id="open-folder"></button><button id="open-folder-picker"></button><button id="new-atlas-picker"></button><div id="pane-a"></div>';
+  document.body.innerHTML = '<p id="file-status" hidden></p><input id="file" type="file"><input id="project-archive" type="file"><button id="open-archive-picker"></button><input id="folder" type="file"><button id="open-folder"></button><button id="open-folder-picker"></button><button id="new-atlas-picker"></button><div id="pane-a"></div>';
   const pane = { id: 'a', documentOpens: 0, replaceDocument: vi.fn(async () => { pane.documentOpens++; }), setActivity: vi.fn() };
   const rememberFile = vi.fn(() => 'file:new');
   const rememberFolder = vi.fn(() => ({ key: 'project:new:latest.d2', name: 'latest.d2', source: 'Latest', keys: {}, projectId: 'new' }));
@@ -111,7 +149,7 @@ it.each([
 });
 
 it.each(['success', 'error'] as const)('ignores an outstanding file read completing with %s after the pane changes documents', async (result) => {
-  document.body.innerHTML = '<p id="file-status" hidden></p><input id="file" type="file"><input id="folder" type="file"><button id="open-folder"></button><button id="open-folder-picker"></button><button id="new-atlas-picker"></button><div id="pane-a"></div>';
+  document.body.innerHTML = '<p id="file-status" hidden></p><input id="file" type="file"><input id="project-archive" type="file"><button id="open-archive-picker"></button><input id="folder" type="file"><button id="open-folder"></button><button id="open-folder-picker"></button><button id="new-atlas-picker"></button><div id="pane-a"></div>';
   const pane = { id: 'a', documentOpens: 0, replaceDocument: vi.fn(async () => {}), setActivity: vi.fn() };
   const rememberFile = vi.fn(() => 'file:new');
   setupFileOpen({ picker: () => ({ rememberFile, refresh() {} }), activePane: () => pane,

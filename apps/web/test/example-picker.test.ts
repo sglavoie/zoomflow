@@ -16,6 +16,60 @@ function picker() {
   return { api, states, shown };
 }
 
+it('captures both panes and unlinked files, then imports views and the entry before opening an independent copy', () => {
+  localStorage.clear();
+  const { api, shown } = picker();
+  shown.a = api.initial.source;
+  const original = api.rememberFolder('Atlas', [
+    { path: 'index.d2', source: 'home: Home' }, { path: 'nested/detail.d2', source: 'topic: Topic' },
+    { path: 'unlinked.d2', source: 'broken: {' },
+  ]);
+  shown.a = 'home: Unsaved edit';
+  api.setSplit(true);
+  api.setTarget('b');
+  document.querySelector<HTMLButtonElement>('.example-option[title="Atlas/nested/detail.d2"]')!.click();
+  const detailKey = api.currentKey('b')!;
+  api.writeView(detailKey, { hidden: [['root', ['topic']]], layers: { root: 'root', all: false, depth: 2, expanded: [] } });
+  shown.b = 'topic: Latest detail';
+  const snapshot = api.archiveSnapshot('b')!;
+  expect(snapshot.entry).toBe('nested/detail.d2');
+  expect(snapshot.files.map(file => [file.path, file.source])).toEqual([
+    ['index.d2', 'home: Unsaved edit'], ['nested/detail.d2', 'topic: Latest detail'], ['unlinked.d2', 'broken: {'],
+  ]);
+  const imported = api.rememberArchive(snapshot, 'a');
+  shown.a = imported.source;
+  expect(imported.projectId).not.toBe(original.projectId);
+  expect(imported.name).toBe('detail.d2');
+  expect(api.readView(imported.key)).toEqual(api.readView(detailKey));
+  api.writeView(imported.key, { hidden: [] });
+  expect(api.readView(detailKey).hidden).toEqual([['root', ['topic']]]);
+  const second = api.rememberArchive(snapshot, 'a');
+  shown.a = second.source;
+  expect(second.projectId).not.toBe(imported.projectId);
+  api.flush();
+  const restored = picker();
+  restored.shown.a = restored.api.initial.source;
+  expect(restored.api.initial.key).toBe(second.key);
+  expect(restored.api.readView(second.key).layers?.depth).toBe(2);
+  expect(restored.api.archiveSnapshot('a')?.files).toEqual(snapshot.files);
+});
+
+it('backs up standalone source with curation and ignores damaged or future view settings on import', () => {
+  localStorage.clear();
+  const { api, shown } = picker();
+  shown.a = api.initial.source;
+  api.writeView(api.initial.key, { hidden: [['root', ['Browse']]] });
+  const snapshot = api.archiveSnapshot('a')!;
+  expect(snapshot.entry).toBe('order.d2');
+  expect(snapshot.files[0].source).toBe(api.initial.source);
+  const imported = api.rememberArchive({ ...snapshot, files: [
+    { ...snapshot.files[0], view: '{bad' }, { path: 'future.d2', source: 'a', view: '{"version":99,"hidden":[]}' },
+  ] });
+  shown.a = imported.source;
+  expect(api.readView(imported.key)).toEqual({});
+  expect(api.readView(imported.keys['future.d2'])).toEqual({});
+});
+
 it('backs up curation on an unedited example, copies it on rename and resets it without dirtying source', () => {
   localStorage.clear();
   const { api, states, shown } = picker();
@@ -144,6 +198,10 @@ it('returns to a recovered copy of a project file by its key, not to the file it
   const { api, shown } = picker();
   expect(api.currentKey('a')).toBe(recovered);
   shown.a = api.initial.source;
+  api.writeView(recovered, { hidden: [['root', ['x']]] });
+  const backup = api.archiveSnapshot('a')!;
+  expect(backup.files.find(item => item.path === 'index.d2')).toMatchObject({ source: 'x: {link: ./other.d2}\n', view: expect.stringContaining('"x"') });
+  expect(backup.files.find(item => item.path === 'other.d2')?.source).toBe('o');
   // Following a link from the copy, then going back the way it came.
   const path = api.inputPath('a');
   expect(api.selectProjectPath('a', 'other.d2')?.key).toBe(other.key);
@@ -151,6 +209,19 @@ it('returns to a recovered copy of a project file by its key, not to the file it
   expect(api.selectProjectPath('a', path, recovered)).toMatchObject({ key: recovered, source: 'x: {link: ./other.d2}\n' });
   // A copy removed since falls back to the file at that path.
   expect(api.selectProjectPath('a', path, 'file:recovered:gone:v1')?.key).toBe(file.key);
+});
+
+it('backs up the project behind an atlas map and preserves its opener instead of the generated source', () => {
+  localStorage.clear();
+  const { api, shown } = picker();
+  shown.a = api.initial.source;
+  const project = api.rememberFolder('Maps', [{ path: 'main.d2', source: 'home: Home' }, { path: 'other.d2', source: 'other: Other' }]);
+  shown.a = project.source;
+  const atlas = api.showAtlas('a', project.projectId, 'generated: Map')!;
+  shown.a = atlas.source;
+  expect(api.archiveSnapshot('a')).toEqual({ name: 'Maps', entry: 'main.d2', files: [
+    { path: 'main.d2', source: 'home: Home', view: undefined }, { path: 'other.d2', source: 'other: Other', view: undefined },
+  ] });
 });
 
 it('opens files and folders into their requested pane after the header target changes', () => {

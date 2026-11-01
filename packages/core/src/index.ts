@@ -1,4 +1,5 @@
 import type { Diagram } from '@d2lang/d2';
+export { exportProjectArchive, readProjectArchive, validProjectPath, projectArchiveLimit, type ProjectArchive } from './project-archive';
 export { parentContext, type ParentContext } from './context';
 export { indexDiagramSearch, searchDiagram, type DiagramSearchEntry } from './search';
 export { normalizeRouteHash, resolveRouteHash } from './routes';

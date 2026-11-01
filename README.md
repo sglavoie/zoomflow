@@ -67,6 +67,10 @@ use **Retry preview** to try again without losing your source.
    reloads. **Reset export visibility** in Export includes every shape again.
 3. **Keep and share:** use **Save .d2** (⌘S / Ctrl+S) for source. In an open folder,
    **Save all** beside the project's unsaved count saves changed files together.
+   **Export → Download Zoomflow project** keeps editable D2 files and view settings
+   together in a `.zoomflow.zip` archive. Use **Open Zoomflow project** in the
+   filename menu, or drop the archive, to open a separate project copy on any computer.
+   This backup includes hidden content; diagram exports below omit it.
    In **Export**, choose
    **Interactive diagram (HTML)** for one file with offline drill-down navigation,
    **Interactive atlas (HTML)** for a project file and every file it links to,
@@ -74,7 +78,7 @@ use **Retry preview** to try again without losing your source.
    Interactive HTML includes offline search for boards and shapes, across every
    bundled file in an atlas.
 
-Edits have browser recovery backups, but save a disk copy to keep them. Browsers
+Edits have browser recovery backups, but save a disk copy or download a Zoomflow project to keep them. Browsers
 without direct file access offer **Download .d2**. Syntax errors retain the last
 good preview; **Go to error** and **Diagnostics** lead back to the relevant source.
 

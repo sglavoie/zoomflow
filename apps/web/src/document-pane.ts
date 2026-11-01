@@ -142,6 +142,8 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
   let ai: ReturnType<typeof setupAiAssistant> | undefined;
   let documentName = '';
   let currentDocumentKey: string | undefined;
+  /** A newly imported document has saved layer settings but no session navigation route yet. */
+  let initialLayerRoot: string | undefined;
   let sourceMap: ShapeSource[] = [];
   /** Where each board's block is in the compiled source. */
   let blocks = new Map<string, SourceRange>();
@@ -558,7 +560,9 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
     boardTools.resetSearch();
     ai?.documentSwitched();
     sourceError = false;
-    viewer.setRoute(reset ? undefined : route ?? shared.documentRoutes.get(key));
+    const rememberedRoute = reset ? undefined : route ?? shared.documentRoutes.get(key);
+    initialLayerRoot = !reset && !rememberedRoute ? picker().readView(key).layers?.root : undefined;
+    viewer.setRoute(rememberedRoute);
     // The first pane's history entry now shows this document, so a reload or Back here restores its own files on the way.
     if (id === 'a') history.replaceState({ ...history.state, zoomflowFile: key, zoomflowFiles: stack }, '');
     viewport.setDocument(key, reset);
@@ -814,6 +818,12 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
       const { diagnostics } = linted;
       const compiledSources = indexShapeSources(compiled.diagram, compiled.graph, source, compiled.inputPath);
       viewer.setSourceShapes(compiledSources);
+      if (initialLayerRoot) {
+        // Resolve the saved ID through the compiled boards, including quoted names. Starting at Root
+        // would otherwise broaden a saved subtree and change its custom branch selection.
+        viewer.setRoute({ hash: indexBoards(diagram).get(initialLayerRoot)?.hash ?? '#/' });
+        initialLayerRoot = undefined;
+      }
       await viewer.setDocument(diagram, render, diagnostics, preserveViewport);
       if (request === generation) {
         sourceMap = compiledSources;

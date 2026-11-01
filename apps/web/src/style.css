@@ -970,6 +970,12 @@ header > strong {
 .export-sources button {
   font-size: var(--font-size-sm);
 }
+#archive-hint {
+  flex-basis: 100%;
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--font-size-sm);
+}
 #export-status {
   font-size: var(--font-size-sm);
   line-height: 1.4;
@@ -1255,12 +1261,14 @@ select:focus-visible {
   margin-left: var(--space-2);
 }
 #open-folder-picker,
+#open-archive-picker,
 #new-atlas-picker,
 #new-mind-map-picker {
   margin: var(--space-2);
   width: calc(100% - 16px);
   text-align: left;
 }
+#open-archive-picker,
 #new-atlas-picker,
 #new-mind-map-picker {
   margin-top: 0;

@@ -103,6 +103,18 @@ Layer settings are saved after a successful render; invalid metadata is ignored
 without blocking source recovery. Missing shapes and boards are ignored for visibility
 while retaining their choices for undo; a missing layer root falls back to an existing board.
 
+Editable project archives (`.zoomflow.zip`) contain a `zoomflow.json` manifest with
+`format: "zoomflow-project"`, `version: 1`, a project `name`, an `entry` file path,
+and `files: [{ path, view? }]`. Each source is stored as UTF-8 at `sources/<path>`;
+`view` is the viewer's versioned serialized string. Core validates the whole archive,
+relative paths, uniqueness, required sources and entry before the host changes drafts.
+ZIP expansion is bounded to 64 MiB and projects to 10,000 files. The web host normalizes
+view metadata with the existing viewer parser and installs it before the first render.
+Imports always create an independent project without disk handles. Snapshots synchronize
+both panes and include all canonical sources; a selected recovered copy replaces only
+its own path in the archive. The generated atlas map is replaced by its opener.
+Source ZIPs and `.d2` disk saves retain their source-only contract.
+
 ## File links and atlas routes
 
 A file link is classified by `classifyHref` as `{ kind: 'file', path, hash }` when it is
