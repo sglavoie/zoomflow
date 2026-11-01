@@ -121,6 +121,27 @@ can be edited on the main board or as the centre of its own board; renaming it r
 the board too. Other shapes keep their usual behaviour: clicking one selects its source in the
 editor.
 
+### Connect flow steps on the diagram
+
+Select a step of a builder-created flow and choose **Connect to…** in its action bar,
+or from its right-click / Shift+F10 menu. Enter an optional label, then click the
+destination step on the same board. For keyboard use, choose **Destination step**
+and press **Add connection**. You can make branches, loops back to an earlier step,
+and more than one arrow between the same steps. Escape or **Cancel** leaves the flow
+unchanged.
+
+Click an arrow to select its connection. Change **Connection label** and press Enter
+or **Apply label**, or choose **Delete connection**. A blank label removes the text;
+Yes and No labels get the flow's usual branch colours. With an arrow focused, Enter
+or F2 edits its label and Delete or Backspace removes the arrow. Arrow keys move
+between steps and connections; Tab leaves the diagram. **Done** or Escape closes
+the connection controls.
+
+Each change supports the diagram's undo and redo keys, keeps attached boards and
+the flow builder editable, and is saved in the D2 source. Connection editing also
+works on flow boards in the connected layer view; both ends must be on the same
+board. Mind map and custom D2 connections keep their existing behaviour.
+
 ## Find your way between boards
 
 Turn on **Show all layers** above the preview to expand the selected board and its

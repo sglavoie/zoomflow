@@ -208,7 +208,7 @@ export function createViewport(stage: HTMLElement, host: HTMLElement, clamp: typ
       Math.abs(y - box.y) * Math.abs(matrix.d) > 0.25) setBox({ x, y, width, height });
   }
   function focusTargets() {
-    return [...stage.querySelectorAll<SVGGraphicsElement>('a[tabindex], [data-shape-id][tabindex]')]
+    return [...stage.querySelectorAll<SVGGraphicsElement>('a[tabindex], [data-shape-id][tabindex], [data-flow-connection][tabindex]')]
       .filter((node) => node.localName === 'a' || !node.closest('a'));
   }
   function resetFocus() {
@@ -216,7 +216,7 @@ export function createViewport(stage: HTMLElement, host: HTMLElement, clamp: typ
     const focused = targets.find((node) => node === document.activeElement);
     stage.tabIndex = focused ? -1 : 0;
     stage.setAttribute('aria-description', (targets.length
-      ? 'Use arrow keys to move between shapes. Enter activates a shape. Plus and minus zoom; 0 fits the diagram. While zoomed, Shift plus arrow keys pan.'
+      ? `Use arrow keys to move between shapes${stage.querySelector('[data-flow-connection]') ? ' and connections' : ''}. Enter activates a shape. Plus and minus zoom; 0 fits the diagram. While zoomed, Shift plus arrow keys pan.`
       : 'Plus and minus zoom; 0 fits the diagram. While zoomed, arrow keys pan.') + ' Tab leaves the diagram.');
     for (const node of targets) node.setAttribute('tabindex', node === focused ? '0' : '-1');
   }
@@ -354,7 +354,7 @@ export function createViewport(stage: HTMLElement, host: HTMLElement, clamp: typ
   stage.addEventListener('pointerdown', (event) => {
     const forcePan = event.pointerType === 'mouse' && Math.abs(scale() - 1) > zoomEpsilon && (spaceHeld || event.button === 1);
     if (!svg || !(event.target instanceof Element) || !svg.contains(event.target) ||
-      (event.pointerType === 'mouse' && !forcePan && (event.button !== 0 || event.target.closest('a, [data-shape-id]')))) return;
+      (event.pointerType === 'mouse' && !forcePan && (event.button !== 0 || event.target.closest('a, [data-shape-id], [data-flow-connection]')))) return;
     if (!pointers.size) { moved = false; panGesture = forcePan; }
     if (forcePan) event.preventDefault();
     pointers.set(event.pointerId, { x: event.clientX, y: event.clientY, startX: event.clientX, startY: event.clientY });

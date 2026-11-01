@@ -3,6 +3,7 @@ import type { Viewer } from '@zoomflow/viewer';
 import type { BuilderTarget } from './builder-dialog';
 import { boardSites, type BoardSites, type BuilderKind, type ShapeAction } from './board-model';
 import { canvasShapes, editOnCanvas, type CanvasEdit, type CanvasShape } from './canvas-model';
+import { setupCanvasConnections } from './canvas-connections';
 import { pageListeners } from './canvas-guidance';
 import { setupBoardOutline } from './board-outline';
 import { setupDiagramSearch } from './diagram-search';
@@ -135,6 +136,26 @@ export function setupBoardTools(scope: PaneScope, viewer: Viewer, options: Board
   const shapeElement = (shape: string) =>
     [...viewer.stage.querySelectorAll<SVGElement>('[data-shape-id]')].find(node => node.dataset.shapeId === shape &&
       (!node.dataset.shapeBoard || node.dataset.shapeBoard === boardId()));
+
+  const connections = setupCanvasConnections(viewer, {
+    source: options.source,
+    own(board) {
+      if (!ready() || options.readOnly?.()) return;
+      const canvas = sites!.canvas(board);
+      return canvas && !canvas.trail.length ? canvas.own : undefined;
+    },
+    update(own) {
+      const canvas = ready() && !options.readOnly?.() ? sites!.canvas(boardId()) : undefined;
+      if (!canvas || canvas.trail.length) return;
+      const updated = sites!.update(canvas.owner, own);
+      if ('error' in updated) { options.status(updated.error, 'error'); return; }
+      options.update(updated.source);
+      return updated.source;
+    },
+    clearShapes() { selected = undefined; viewer.highlightShapes([]); refresh(); },
+    selectShape,
+    status: options.status,
+  });
 
   /** Each target applies to the latest document, as long as `fits` finds the board it was opened on unchanged. */
   function target(mode: BuilderTarget['mode'], name: string, apply: (site: BoardSites, source: string, name: string) => string | { source: string } | { error: string },
@@ -347,6 +368,7 @@ export function setupBoardTools(scope: PaneScope, viewer: Viewer, options: Board
       items.push(item('Rename', () => startRename(shape), { keys: 'F2' }),
         item(canvas.add, () => applyCanvas(shape, [{ type: 'add' }]), { keys: 'Control+Enter Meta+Enter Insert' }));
       if (canvas.sibling) items.push(item('Add sibling topic', () => applyCanvas(shape, [{ type: 'sibling' }]), { keys: 'Enter' }));
+      if (canvas.kind === 'flow') items.push(item('Connect to…', () => connections.start(shape)));
       if (canvas.remove) items.push(item('Delete', () => applyCanvas(shape, [{ type: 'remove' }]), { keys: 'Delete Backspace' }));
     }
     const action = shapeAction(shape);
@@ -428,6 +450,7 @@ export function setupBoardTools(scope: PaneScope, viewer: Viewer, options: Board
     }
     drawSelection(shape);
     markLinks();
+    connections.refresh();
   }
   /** Links on steps and topics open from their arrow badge only, leaving the shape to select and rename. */
   function markLinks() {
@@ -591,7 +614,7 @@ export function setupBoardTools(scope: PaneScope, viewer: Viewer, options: Board
     const key = event.key.toLowerCase();
     if ((event.metaKey || event.ctrlKey) && !event.altKey && (key === 'z' || key === 'y' && event.ctrlKey && !event.metaKey)) {
       event.preventDefault();
-      if (key === 'y' || event.shiftKey) options.redo(); else options.undo();
+      connections.history(key === 'y' || event.shiftKey ? options.redo : options.undo);
       return;
     }
     const shape = shapeAt(event.target);
@@ -679,6 +702,8 @@ export function setupBoardTools(scope: PaneScope, viewer: Viewer, options: Board
     editsOnCanvas: (shape: string) => Boolean(canvasTarget(shape)),
     /** The diagram keys for the step or topic at `target`, for keyboard guidance. */
     canvasKeys(target: Element) {
+      const edgeKeys = connections.keys(target);
+      if (edgeKeys) return edgeKeys;
       const shape = shapeAt(target);
       const canvas = shape && canvasTarget(shape.id);
       if (!canvas) return shape ? `${options.inSource(shape.id) ? 'Enter selects source · ' : ''}H hides or unhides from export` : undefined;
@@ -690,7 +715,7 @@ export function setupBoardTools(scope: PaneScope, viewer: Viewer, options: Board
       return keys.join(' · ');
     },
     /** The source changed: board actions wait for it to compile, except editing the root board. */
-    invalidate() { closeMenu(false); stopRename(false); pressed = undefined; followHistory(); refresh(); },
+    invalidate() { closeMenu(false); stopRename(false); connections.invalidate(); pressed = undefined; followHistory(); refresh(); },
     /** The document compiled: index its boards. */
     compiled(source: string, next: BoardSites, nextBoards: Map<string, Board>) {
       sites = next;
@@ -710,11 +735,13 @@ export function setupBoardTools(scope: PaneScope, viewer: Viewer, options: Board
       const focused = document.activeElement;
       const stayed = !focused || focused === document.body || viewer.stage.contains(focused) || shapeGroup.contains(focused);
       if (show?.shape && stayed) selectShape(show.shape, show.rename);
+      connections.settled();
     },
     /** Another board is on view. Going up selects the shape that leads back down, with its actions. */
     boardChanged() {
       closeMenu(false);
       stopRename(false);
+      connections.clear();
       const board = boardId();
       const previous = lastBoard;
       lastBoard = board;
@@ -726,6 +753,7 @@ export function setupBoardTools(scope: PaneScope, viewer: Viewer, options: Board
     },
     /** The shapes the source selection maps to on the board on view. */
     select(shapes: readonly string[]) {
+      if (shapes.length) connections.selectShape();
       selected = shapes.length === 1 ? shapes[0] : undefined;
       refresh();
     },

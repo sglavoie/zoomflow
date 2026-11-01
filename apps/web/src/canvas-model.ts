@@ -1,4 +1,4 @@
-import { cleanLabel, flowSource, readFlow } from './flow-model';
+import { cleanLabel, flowSource, readFlow, type Flow } from './flow-model';
 import { boardTopics, mindMapSource, placedTopics, readMindMap, type BoardTopic, type MindMap } from './mind-map-model';
 
 /** Edits made on the diagram of a builder board: rename a shape, add the next step or a subtopic,
@@ -10,6 +10,40 @@ export type CanvasShape = { kind: 'flow' | 'mind map'; label: string; add: strin
  * or a remove removes it, and for a mind map, each topic's new outline identifier by its old one, so attached
  * boards follow their topics. */
 export type CanvasResult = { own: string; select?: string; trail?: string[]; moved?: Map<string, string> };
+
+/** The pinned compiler numbers parallel arrows independently for each directed pair. */
+export function flowConnectionIds(flow: Flow): string[] {
+  const counts = new Map<string, number>();
+  return flow.connections.map(edge => {
+    const pair = `(${edge.from} -> ${edge.to})`;
+    const ordinal = counts.get(pair) ?? 0;
+    counts.set(pair, ordinal + 1);
+    return `${pair}[${ordinal}]`;
+  });
+}
+
+export type ConnectionEdit = { type: 'add'; from: string; to: string; label: string }
+  | { type: 'label'; index: number; label: string } | { type: 'remove'; index: number };
+
+/** Connection edits use the same lossless builder subset as step edits, including loops and parallel arrows. */
+export function editConnection(own: string, edit: ConnectionEdit): { own: string; index?: number; from: string } | undefined {
+  const flow = readFlow(own);
+  if (!flow) return;
+  const label = 'label' in edit ? cleanLabel(edit.label).replace(/\s+/g, ' ').trim() : '';
+  if (edit.type === 'add') {
+    if (![edit.from, edit.to].every(id => flow.steps.some(step => step.id === id))) return;
+    flow.connections.push({ from: edit.from, to: edit.to, label });
+    return { own: flowSource(flow), index: flow.connections.length - 1, from: edit.from };
+  }
+  const edge = flow.connections[edit.index];
+  if (!Number.isInteger(edit.index) || !edge) return;
+  if (edit.type === 'remove') flow.connections.splice(edit.index, 1);
+  else {
+    if (label === edge.label || edit.label === edge.label) return;
+    edge.label = label;
+  }
+  return { own: flowSource(flow), ...edit.type === 'label' ? { index: edit.index } : {}, from: edge.from };
+}
 
 /** The topics on the board that `trail`, a list of detail board names from the main board, leads to. */
 function mapBoard(map: MindMap, trail: string[]): BoardTopic[] | undefined {

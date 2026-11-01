@@ -220,6 +220,73 @@ header > strong {
 .canvas-rename[hidden] {
   display: none;
 }
+.canvas-connections {
+  position: absolute;
+  top: var(--space-2);
+  right: var(--space-2);
+  z-index: var(--z-raised);
+  display: grid;
+  gap: var(--space-2);
+  width: 280px;
+  max-width: calc(100% - 2 * var(--space-2));
+  max-height: calc(100% - 2 * var(--space-2));
+  overflow: auto;
+  padding: var(--space-3);
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  color: var(--text);
+  background: var(--surface);
+  box-shadow: 0 4px 16px var(--menu-shadow);
+}
+.canvas-connections[hidden], .canvas-connections [hidden] {
+  display: none;
+}
+.canvas-connections strong {
+  overflow-wrap: anywhere;
+}
+.canvas-connections p {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--font-size-sm);
+}
+.canvas-connections label {
+  display: grid;
+  gap: var(--space-1);
+}
+.canvas-connections input, .canvas-connections select {
+  width: 100%;
+  min-width: 0;
+  min-height: 36px;
+  padding: var(--space-1) var(--space-2);
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  color: var(--text);
+  background: var(--surface);
+  font: inherit;
+}
+.canvas-connections > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+.zf-connection-hit {
+  fill: none;
+  stroke: transparent;
+  stroke-width: 14px;
+  vector-effect: non-scaling-stroke;
+  pointer-events: stroke;
+  cursor: pointer;
+}
+[data-flow-connection]:focus {
+  outline: none;
+}
+.zf-connection-selected path.connection, [data-flow-connection]:focus path.connection {
+  stroke: var(--focus);
+  stroke-width: 3px;
+}
+.zf-connecting [data-shape-id] {
+  cursor: crosshair;
+}
 .flow-builder-toolbar > div {
   display: flex;
   align-items: center;

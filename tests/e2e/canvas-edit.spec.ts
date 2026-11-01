@@ -72,7 +72,7 @@ test('renames, adds and removes flow steps on the diagram, and undoes there', as
   await page.getByRole('textbox', { name: 'Rename Launched' }).press('Escape');
   await expect(stage(page)).toContainText('Launched');
   await expect(page.getByRole('group', { name: 'Selected: Launched' }).getByRole('button'))
-    .toHaveText(['Rename', 'Add next step', 'Delete', 'Hide from export', 'Add board…']);
+    .toHaveText(['Rename', 'Add next step', 'Connect to…', 'Delete', 'Hide from export', 'Add board…']);
   // Keyboard guidance names the keys that edit steps.
   await shape(page, 'step_5').focus();
   await page.keyboard.press('Home');

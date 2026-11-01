@@ -1,11 +1,36 @@
 import { expect, it } from 'vitest';
-import { canvasShape, editOnCanvas } from '../src/canvas-model';
+import { canvasShape, editOnCanvas, editConnection, flowConnectionIds } from '../src/canvas-model';
 import { flowSource, flowTemplate, plainLook, readFlow } from '../src/flow-model';
 import { mindMapSource, outlineText, parseOutline, readMindMap, type MindMap } from '../src/mind-map-model';
 
 const flow = flowSource(flowTemplate('approval'));
 const map = (outline: string, split = 0): MindMap => ({ direction: 'right', split, look: plainLook(), root: parseOutline(outline)! });
 const outline = (own: string) => outlineText(readMindMap(own)!.root);
+
+it('edits individual parallel connections and loops while keeping a losslessly editable flow', () => {
+  const original = flowSource(flowTemplate('simple'));
+  const yes = editConnection(original, { type: 'label', index: 1, label: 'Yes' })!;
+  const parallel = editConnection(yes.own, { type: 'add', from: 'step_2', to: 'step_3', label: 'No' })!;
+  const loop = editConnection(parallel.own, { type: 'add', from: 'step_2', to: 'step_2', label: 'Try again' })!;
+  const parsed = readFlow(loop.own)!;
+  expect(flowConnectionIds(parsed)).toEqual([
+    '(step_1 -> step_2)[0]', '(step_2 -> step_3)[0]', '(step_2 -> step_3)[1]', '(step_2 -> step_2)[0]',
+  ]);
+  expect(loop.own).toContain('step_2 -> step_3: "Yes" {class: zf-yes}');
+  expect(loop.own).toContain('step_2 -> step_3: "No" {class: zf-no}');
+  const changed = editConnection(loop.own, { type: 'label', index: 2, label: '  Rework\u0007  "this" $step\nnow  ' })!;
+  expect(readFlow(changed.own)!.connections.map(edge => edge.label)).toEqual(['', 'Yes', 'Rework "this" $step now', 'Try again']);
+  const blank = editConnection(changed.own, { type: 'label', index: 2, label: '  ' })!;
+  expect(readFlow(blank.own)!.connections[2].label).toBe('');
+  const removed = editConnection(loop.own, { type: 'remove', index: 1 })!;
+  expect(readFlow(removed.own)!.connections.map(edge => edge.label)).toEqual(['', 'No', 'Try again']);
+  expect(removed.from).toBe('step_2');
+  expect(readFlow(removed.own)!.steps).toEqual(parsed.steps);
+  expect(editConnection(original, { type: 'add', from: 'missing', to: 'step_1', label: '' })).toBeUndefined();
+  expect(editConnection(original, { type: 'label', index: -1, label: 'Bad' })).toBeUndefined();
+  expect(editConnection(original, { type: 'label', index: 0, label: '' })).toBeUndefined();
+  expect(editConnection(original + '\nstep_1.style.fill: red', { type: 'remove', index: 0 })).toBeUndefined();
+});
 
 it('renames, adds after and removes flow steps', () => {
   expect(canvasShape(flow, [], 'step_2')).toEqual({ kind: 'flow', label: 'Approved?', add: 'Add next step', sibling: false, remove: true });

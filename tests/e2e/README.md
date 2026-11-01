@@ -28,6 +28,10 @@ isolation, per-document choices, and failed or superseded layer renders.
 
 ## Editing
 
+- `canvas-connections.spec.ts`: creating Yes/No branches, keyboard and pointer target
+  selection, parallel arrows and loops, labels and deletion, undo/redo, save/reopen,
+  cancellation and stale-source guards, nested connected boards, phone controls, and
+  exports without editing overlays.
 - `editor.spec.ts`: real CodeMirror input, retained previews and inline diagnostics on
   syntax errors, startup edits, exact source selections (including Unicode and container
   names), keyboard isolation, file replacement, D2 typing with indentation and folding,

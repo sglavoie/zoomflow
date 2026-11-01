@@ -75,6 +75,22 @@ describe('D2 0.1.34-zoomflow.1 compiler and SVG contract', () => {
     await d2?.dispose();
   });
 
+  it('numbers parallel directed connections per endpoint pair, including loops, and renders their wrappers', async () => {
+    const result = await d2.compile('step_1 -> step_2: Yes\nstep_1 -> step_2: No\nstep_2 -> step_1\nstep_1 -> step_1', { layout: 'elk' });
+    expect(result.diagram.connections.map(({ id, src, dst, label }) => ({ id, src, dst, label }))).toEqual([
+      { id: '(step_1 -> step_2)[0]', src: 'step_1', dst: 'step_2', label: 'Yes' },
+      { id: '(step_1 -> step_2)[1]', src: 'step_1', dst: 'step_2', label: 'No' },
+      { id: '(step_2 -> step_1)[0]', src: 'step_2', dst: 'step_1', label: '' },
+      { id: '(step_1 -> step_1)[0]', src: 'step_1', dst: 'step_1', label: '' },
+    ]);
+    const rendered = await d2.render(result.diagram, result.renderOptions);
+    for (const edge of result.diagram.connections) {
+      // These identifiers use only ASCII; D2 HTML-escapes the arrow's greater-than before base64 encoding it.
+      const wrapper = Buffer.from(edge.id.replaceAll('>', '&gt;')).toString('base64').replaceAll('+', '-').replaceAll('/', '_');
+      expect(rendered).toContain(wrapper);
+    }
+  });
+
   it('loads the audited WebKit compatibility build', () => {
     const entry = createRequire(import.meta.url).resolve('@d2lang/d2');
     const packageRoot = resolve(dirname(entry), '../..');

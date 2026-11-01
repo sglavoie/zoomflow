@@ -110,7 +110,7 @@ export class Viewer {
       // between the press and release and turn its click into a background click.
       if (type === 'focusin' && pointing) return;
       const shape = event.target.closest<SVGElement>('[data-shape-id]') ?? event.target.closest('a')?.querySelector<SVGElement>('[data-shape-id]');
-      const board = shape?.dataset.shapeBoard;
+      const board = shape?.dataset.shapeBoard ?? event.target.closest<SVGElement>('[data-connection-board]')?.dataset.connectionBoard;
       if (board && board !== this.current) this.activateBoard(board, 'replace');
     }, { ...options, capture: true });
     this.stage.addEventListener('click', (event) => this.follow(event), options);
@@ -531,6 +531,13 @@ export class Viewer {
           group.setAttribute('role', 'button');
           group.setAttribute('aria-label', `Select ${sources.has(shape.id) ? 'source for ' : ''}${group.querySelector('text')?.textContent || shape.id}`);
         }
+      }
+    }
+    for (const edge of board.diagram.connections) {
+      const group = groups.get(shapeClass(edge.id));
+      if (group) {
+        group.dataset.connectionId = edge.id;
+        group.dataset.connectionBoard = board.id;
       }
     }
     this.applyTheme(element);

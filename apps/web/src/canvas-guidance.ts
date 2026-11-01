@@ -22,6 +22,7 @@ export function setupCanvasGuidance(stage: HTMLElement, setGuidance: (text: stri
     const target = input === 'keyboard' ? focused : hovered?.isConnected ? hovered : null;
     const link = target?.closest('a[data-link-kind]');
     const shape = target?.closest('[data-shape-id]');
+    const connection = target?.closest('[data-flow-connection]');
     const source = canSelectSource();
     const activate = input === 'touch' ? 'Tap' : 'Click';
     let text: string;
@@ -39,6 +40,8 @@ export function setupCanvasGuidance(stage: HTMLElement, setGuidance: (text: stri
     } else if (link) {
       const action = link.getAttribute('aria-label') ?? 'Open link';
       text = `${activate} to ${action[0].toLowerCase()}${action.slice(1)}${source && input === 'mouse' ? ' · Alt+click selects source' : ''}`;
+    } else if (connection) {
+      text = `${activate} to edit this connection’s label or delete it`;
     } else if (shape && source) {
       text = `${activate} to select this shape’s source`;
     } else {
