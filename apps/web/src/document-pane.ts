@@ -732,6 +732,7 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
   };
   viewer.stage.addEventListener('zf-boardchange', boardChanged);
   viewer.stage.addEventListener('zf-activeboardchange', boardChanged);
+  viewer.stage.addEventListener('zf-visibilitychange', () => shared.exportChanged());
   function selectShape(event: MouseEvent | KeyboardEvent) {
     const shape = event.target instanceof Element ? event.target.closest<SVGElement>('[data-shape-id]')
       ?? event.target.closest('a')?.querySelector<SVGElement>('[data-shape-id]') : null;

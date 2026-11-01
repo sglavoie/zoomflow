@@ -572,6 +572,23 @@ theme; see [stdlib conventions and examples](../stdlib/README.md).
 
 ## Export
 
+To leave a node out of downloads, right-click it and choose **Hide from export**,
+use the same button in its selection bar, or focus it and press **H**. Repeat to
+unhide it. Hidden nodes remain dimmed and labeled **Hidden from export** in the
+workspace, so they can still be selected and restored. Hiding a node also hides
+its contained nodes, downstream children, and attached detail layers recursively.
+Unhiding a descendant clears the parent choices hiding it too.
+Other explicit visibility choices are preserved.
+
+SVG, PNG, ZIP and interactive HTML downloads omit hidden nodes and their incident
+connections, including from offline search. Downloads fit the remaining content
+with a small margin, and combined-layer exports close gaps left by fully hidden
+layers. The editor keeps its current layout and viewport.
+The export menu reports the omitted count for the current file and scope. Visibility
+is remembered per document and board for the current workspace session and does not
+change the D2 source. Atlas and project ZIP exports also respect choices made in
+other visited files in the same pane.
+
 Export presents four choices by outcome, each with an explanation:
 **Interactive diagram (HTML)** for one navigable file with every board, **Current
 board image (SVG)** and **Current board image (PNG)** for the board on screen, and
@@ -601,6 +618,8 @@ use `@scenarios/` and `@steps/` directories. Links between exported boards open 
 SVG files; atlas file links keep their target board, including board fragments.
 PNG uses the board's native dimensions
 and has a 64 megapixel limit.
+Static SVG and PNG images, including those in ZIP downloads, omit link glyphs.
+Interactive HTML keeps its navigation badges.
 
 The viewer and browser/CLI exports use the same shipped Source Sans Pro Regular,
 Bold, Italic and Semibold fonts, with embedded font subsets in SVG and HTML.

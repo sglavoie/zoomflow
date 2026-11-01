@@ -7,6 +7,7 @@ import { decorateLinks, splitHitArea } from './link-cues';
 import { setupBreadcrumbs } from './breadcrumbs';
 import { followLink, linkTo, prepareLinks, resolveLink } from './links';
 import { sanitizeSvg } from './sanitize';
+import { fitExportBounds } from './export-bounds';
 
 const placeholder = 'data:image/svg+xml;base64,' + btoa('<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64"><rect width="64" height="64" fill="#eee"/><path d="M8 8L56 56M56 8L8 56" stroke="#999" stroke-width="3"/></svg>');
 
@@ -21,10 +22,17 @@ function dataUrl(blob: Blob): Promise<string> {
 
 /** Embed resources before downloading or drawing onto a canvas. A `dark` boolean freezes the theme;
  * leaving it undefined keeps D2's `prefers-color-scheme` rules so the SVG follows its reader. */
-export async function prepareExportSvg(svg: string, dark?: boolean): Promise<{ svg: string; warnings: string[] }> {
+export async function prepareExportSvg(svg: string, dark?: boolean, { interactive = false }: { interactive?: boolean } = {}): Promise<{ svg: string; warnings: string[] }> {
   const doc = new DOMParser().parseFromString(svg, 'image/svg+xml');
   const root = doc.documentElement;
   if (doc.querySelector('parsererror') || !sanitizeSvg(root)) throw new Error('Invalid SVG from renderer');
+  let removedLinks = false;
+  if (!interactive) for (const badge of root.querySelectorAll('.appendix-icon')) {
+    // Tooltip badges have titles; navigation glyphs add no information to static images.
+    if (badge.querySelector('title')) continue;
+    badge.remove();
+    removedLinks = true;
+  }
   const warnings: string[] = [];
   const resources = new Map<string, Promise<string>>();
   function embed(url: string): Promise<string> {
@@ -62,6 +70,10 @@ export async function prepareExportSvg(svg: string, dark?: boolean): Promise<{ s
       } else if (attribute.value.includes('url(')) attribute.value = await css(attribute.value);
     }
     if (node.localName === 'style') node.textContent = await css(node.textContent ?? '');
+  }
+  if (removedLinks || root.hasAttribute('data-export-trim')) {
+    await fitExportBounds(root as unknown as SVGSVGElement);
+    root.removeAttribute('data-export-trim');
   }
   return { svg: new XMLSerializer().serializeToString(root), warnings: [...new Set(warnings)] };
 }

@@ -142,7 +142,7 @@ test('offers the same actions from a context menu and the keyboard', async ({ pa
   await approvalFlow(page);
   await shape(page, 'step_4').click({ button: 'right' });
   const menu = page.getByRole('menu', { name: 'Actions for Request changes' });
-  await expect(menu.getByRole('menuitem')).toHaveText(['Rename', 'Add next step', 'Delete', 'Add flow board…', 'Add mind map board…', 'Select in source']);
+  await expect(menu.getByRole('menuitem')).toHaveText(['Rename', 'Add next step', 'Delete', 'Add flow board…', 'Add mind map board…', 'Hide from export', 'Select in source']);
   await expect(menu.getByRole('menuitem', { name: 'Rename' })).toBeFocused();
   await page.keyboard.press('ArrowUp');
   await expect(menu.getByRole('menuitem', { name: 'Select in source' })).toBeFocused();
@@ -173,7 +173,7 @@ test('offers boards on hand-written diagrams, and selects a shape\'s source from
   await ready(page);
   await shape(page, 'b').click({ button: 'right' });
   const menu = page.getByRole('menu', { name: 'Actions for b' });
-  await expect(menu.getByRole('menuitem')).toHaveText(['Add flow board…', 'Add mind map board…', 'Select in source']);
+  await expect(menu.getByRole('menuitem')).toHaveText(['Add flow board…', 'Add mind map board…', 'Hide from export', 'Select in source']);
   await menu.getByRole('menuitem', { name: 'Select in source' }).click();
   await expect(menu).toBeHidden();
   await expect(page.getByRole('textbox', { name: 'D2 source', exact: true })).toBeFocused();

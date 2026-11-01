@@ -28,6 +28,7 @@ it('follows each of several board-moving edits on the diagram back through undo 
   let boards = new Map<string, Board>();
   let source = mindMapSource({ direction: 'right', split: 1, look: plainLook(), root: parseOutline('Root\n  A\n    a1')! });
   const viewer = { stage, currentBoard: undefined as Board | undefined,
+    isShapeHidden: () => false,
     async navigate(id: string) { viewer.currentBoard = boards.get(id); } };
   const tools = setupBoardTools(paneScope('a', document.getElementById('pane')!), viewer as never, {
     builders: {} as never, source: () => source, update: next => { source = next; tools.invalidate(); },

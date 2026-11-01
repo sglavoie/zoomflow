@@ -7,6 +7,7 @@ import type { setupExamplePicker } from './example-picker';
 import { compilerDiagnostics } from './diagnostics';
 import { describeError, plural, safeFilename } from './text';
 import { download, downloadSource, downloadProjectSources } from './download';
+import { projectIdOf } from './project-files';
 
 /** The project paths of the files a diagram's file links open, in board order. Connections link files too, as
  * the CLI, lint and the atlas map follow them. */
@@ -131,6 +132,10 @@ export function setupExportMenu(activePane: () => DocumentPane | undefined, pick
           : pane!.viewer.layerState.enabled ? `Visible layers · ${plural(pane!.viewer.layerState.visible.size, 'layer')} · ${formatName}`
             : `Current board: ${pane!.viewer.currentBoard?.name ?? 'Root'} · ${formatName}`
       : pane?.sourceError ? 'Fix source errors to export.' : 'Compile the current source to export a diagram.';
+    if (documentExport) {
+      const hidden = pane!.viewer.hiddenShapeCount(allBoards || exportFormat.value === 'atlas' ? undefined : pane!.viewer.layerState.visible);
+      if (hidden) document.querySelector('#export-scope')!.textContent += ` · ${plural(hidden, 'hidden shape')} omitted`;
+    }
     exportButton.textContent = ({ svg: 'Download SVG', png: 'Download PNG', zip: 'Download SVG ZIP',
       html: 'Download HTML', atlas: 'Download atlas HTML' } as Record<string, string>)[exportFormat.value] ?? 'Download export';
   }
@@ -152,6 +157,7 @@ export function setupExportMenu(activePane: () => DocumentPane | undefined, pick
     const board = pane.viewer.currentBoard;
     if (!loaded || !board || !canExport()) return;
     const exportRevision = pane.generation;
+    const view = pane.viewer.exportView(loaded.diagram, loaded.render);
     exporting = true;
     exportButton.disabled = true;
     const format = exportFormat.value;
@@ -160,13 +166,14 @@ export function setupExportMenu(activePane: () => DocumentPane | undefined, pick
     const exportName = pane.name.replace(/\.d2$/i, '');
     const warnings: string[] = [];
     // Interactive HTML follows its reader's color scheme; images keep the theme shown here.
-    const theme = format === 'html' || format === 'atlas' ? undefined : dark;
+    const interactive = format === 'html' || format === 'atlas';
+    const theme = interactive ? undefined : dark;
     const prepareWith = (render: RenderBoard) => async (target: string) => {
-      const result = await prepareExportSvg(await render(target), theme);
+      const result = await prepareExportSvg(await render(target), theme, { interactive });
       warnings.push(...result.warnings);
       return result.svg;
     };
-    const prepare = prepareWith(loaded.render);
+    const prepare = prepareWith(view.render);
     const canceled = () => exportRevision !== pane.generation || pane.documentExport !== loaded;
     /** This file and every project file its file links reach, breadth first, each once. */
     async function atlasDocuments(): Promise<AtlasDocument[] | undefined> {
@@ -176,7 +183,7 @@ export function setupExportMenu(activePane: () => DocumentPane | undefined, pick
       const documents: AtlasDocument[] = [];
       for (const [index, path] of queue.entries()) {
         reportExport(`Preparing ${format === 'atlas' ? 'atlas' : 'SVG ZIP'}: ${path} (${index + 1} of ${queue.length})…`, 'info', pane);
-        let file: Pick<DocumentExport, 'diagram' | 'render' | 'diagnostics'> = loaded!;
+        let file: Pick<DocumentExport, 'diagram' | 'render' | 'diagnostics'> = { ...loaded!, ...view };
         if (index) {
           try { file = await pane.compileProjectFile(path, fs); }
           catch (error) {
@@ -184,6 +191,7 @@ export function setupExportMenu(activePane: () => DocumentPane | undefined, pick
             warnings.push(`Left out ${path}: ${compilerDiagnostics(error, fs[path] ?? '', path).map((item) => item.message).join(' ')}`);
             continue;
           }
+          file = { ...file, ...pane.viewer.exportView(file.diagram, file.render, `project:${projectIdOf(pane.key!)}:${path}`) };
         }
         if (canceled()) return undefined;
         const boards = await renderExportBoards(file.diagram, prepareWith(file.render), file.diagnostics);
@@ -221,7 +229,7 @@ export function setupExportMenu(activePane: () => DocumentPane | undefined, pick
           name += '-atlas.html';
         }
       } else {
-        const boards = await renderExportBoards(loaded.diagram, prepare, loaded.diagnostics);
+        const boards = await renderExportBoards(view.diagram, prepare, loaded.diagnostics);
         // Shared font subsets are an optimization; each board keeps its own fonts without them.
         const glyphSource = format === 'html' ? exportGlyphSource(boards) : undefined;
         const glyphs = glyphSource ? await loaded.renderSource(glyphSource).catch(() => undefined) : undefined;

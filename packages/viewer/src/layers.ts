@@ -1,4 +1,5 @@
 import { shapeClass, type Board } from '@zoomflow/core';
+import { associateShapeBadges } from './shape-badges';
 
 /** Only layer descendants expand together: scenarios and steps remain separate views. */
 export function visibleLayers(boards: ReadonlyMap<string, Board>, root: string, expanded: ReadonlySet<string>): Board[] {
@@ -157,12 +158,7 @@ function redirectRootEdges(item: LayerItem, center: Shape, source: Point) {
   }
   const element = shapeElement(item, center.id)!;
   (element.closest('a') ?? element).remove();
-  // Unassociated link badges are siblings of shapes in D2's SVG; remove the hidden root's badge too.
-  for (const icon of item.svg.querySelectorAll<SVGGElement>('.appendix-icon')) {
-    const position = /translate\(\s*([-\d.]+)[,\s]+([-\d.]+)\s*\)/.exec(icon.getAttribute('transform') ?? '');
-    if (center.link && position && Math.abs(Number(position[1]) + 16 - center.pos.x - center.width) < 2 &&
-      Math.abs(Number(position[2]) + 16 - center.pos.y) < 2) icon.remove();
-  }
+  for (const icon of item.svg.querySelectorAll('[data-badge-shape]')) if (icon.getAttribute('data-badge-shape') === center.id) icon.remove();
   item.svg.setAttribute('overflow', 'visible');
   item.svg.querySelector(':scope > svg')?.setAttribute('overflow', 'visible');
 }
@@ -170,6 +166,7 @@ function redirectRootEdges(item: LayerItem, center: Shape, source: Point) {
 /** Compose the original board diagrams on one SVG, connected at the shapes that open each child.
  * All shape IDs stay board-scoped so source selection and editing keep their original meaning. */
 export function composeLayers(items: LayerItem[]): SVGSVGElement {
+  for (const item of items) associateShapeBadges(item.svg, item.board);
   const ns = 'http://www.w3.org/2000/svg';
   const create = <K extends keyof SVGElementTagNameMap>(tag: K, attributes: Record<string, string | number> = {}) => {
     const element = document.createElementNS(ns, tag);
@@ -253,7 +250,8 @@ export function composeLayers(items: LayerItem[]): SVGSVGElement {
         y: parentBox.y + 28 + parentView.height / 2 };
       const bend = parentBox.x + parentBox.width + 48;
       connectors.append(create('path', { d: `M${start.x} ${start.y} C${bend} ${start.y} ${bend} ${end.y} ${end.x} ${end.y}`,
-        fill: 'none', stroke: '#8192a4', 'stroke-width': 2, 'data-layer-link': board.id }));
+        fill: 'none', stroke: '#8192a4', 'stroke-width': 2, 'data-layer-link': board.id,
+        ...anchor ? { 'data-layer-source': anchor.id, 'data-layer-parent': parent.id } : {} }));
     }
   }
   svg.append(graph);

@@ -32,6 +32,23 @@ describe('rasterSize', () => {
 });
 
 describe('prepareExportSvg', () => {
+  it('omits navigation glyphs from static images while preserving shapes, hyperlinks and tooltips', async () => {
+    const input = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 100">
+      <a href="https://example.com"><g><rect width="100" height="50"/><text>Node</text></g>
+        <g class="appendix-icon"><circle r="12"/></g></a>
+      <g class="appendix-icon"><path d="M0 0L10 10"/></g>
+      <g class="appendix-icon"><title>Helpful tooltip</title><circle r="12"/></g>
+    </svg>`;
+    const prepared = await prepareExportSvg(input);
+    const root = new DOMParser().parseFromString(prepared.svg, 'image/svg+xml');
+    expect(root.querySelectorAll('.appendix-icon')).toHaveLength(1);
+    expect(root.querySelector('.appendix-icon title')!.textContent).toBe('Helpful tooltip');
+    expect(root.querySelector('a')!.getAttribute('href')).toBe('https://example.com');
+    expect(root.querySelector('text')!.textContent).toBe('Node');
+    const interactive = await prepareExportSvg(input, undefined, { interactive: true });
+    expect(new DOMParser().parseFromString(interactive.svg, 'image/svg+xml').querySelectorAll('.appendix-icon')).toHaveLength(3);
+  });
+
   it('rewrites each CSS url once, keeping `$` patterns and escaping quotes', async () => {
     const inner = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg"/%3E';
     const { svg } = await prepareExportSvg(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><style>.a{fill:url('${inner}')} .b{fill:url(data:image/png;base64,QUJD$&amp;)} .c{fill:url(#g)} .d{fill:url(#g)}</style></svg>`);

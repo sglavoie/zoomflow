@@ -2010,6 +2010,14 @@ footer {
   outline: 3px solid var(--token-source-selected);
   outline-offset: 4px;
 }
+.zf-stage [data-export-hidden] {
+  opacity: 0.3;
+}
+.zf-stage .zf-hidden-label {
+  fill: var(--muted);
+  font: 11px sans-serif;
+  pointer-events: none;
+}
 /* Steps and topics open their board from the arrow badge alone. */
 .zf-stage a[data-follow="badge"] .appendix-icon {
   cursor: pointer;

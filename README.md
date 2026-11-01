@@ -59,6 +59,11 @@ use **Retry preview** to try again without losing your source.
    filename menu draws every file and the links between them.
    Click an ordinary shape to select its source. On narrow screens, switch between
    **Preview** and **Source**.
+   To curate an export, right-click a node and choose **Hide from export**, or focus it
+   and press **H** to toggle. Hidden nodes stay dimmed and labeled in the editor;
+   exports omit them, their connected children, linked detail layers, and connections.
+   Downloads fit the visible content and close gaps left by hidden layers.
+   Choices are remembered per document and board while the app is open.
 3. **Keep and share:** use **Save .d2** (⌘S / Ctrl+S) for source. In an open folder,
    **Save all** beside the project's unsaved count saves changed files together.
    In **Export**, choose

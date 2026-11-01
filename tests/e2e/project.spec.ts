@@ -293,7 +293,7 @@ test('the shape menu offers Select in source only for shapes this file defines',
   }
 });
 
-test('a linked shape from an imported file opens no empty shape menu', async ({ page }) => {
+test('a linked shape from an imported file offers export visibility without source actions', async ({ page }) => {
   const project = test.info().outputPath('linked-import');
   await mkdir(project, { recursive: true });
   await writeFile(`${project}/main.d2`, '...@shared\n');
@@ -305,9 +305,12 @@ test('a linked shape from an imported file opens no empty shape menu', async ({ 
   await previewReady(page);
   const imported = page.locator('.zf-stage [data-shape-id="Imported"]');
   await imported.click({ button: 'right' });
-  await expect(page.getByRole('menu')).toHaveCount(0);
-  await imported.focus();
+  await expect(page.getByRole('menuitem', { name: 'Hide from export' })).toBeVisible();
+  await expect(page.getByRole('menuitem', { name: 'Select in source' })).toHaveCount(0);
+  await page.keyboard.press('Escape');
+  await imported.locator('..').focus();
   await page.keyboard.press('Shift+F10');
-  await expect(page.getByRole('menu')).toHaveCount(0);
+  await page.getByRole('menuitem', { name: 'Hide from export' }).click();
+  await expect(imported.locator('..')).toHaveAttribute('data-export-hidden', '');
   expect(errors).toEqual([]);
 });

@@ -322,13 +322,25 @@ export function setupBoardTools(scope: PaneScope, viewer: Viewer, options: Board
     if (shape !== renaming.shape) pressed = shape;
   }, { capture: true });
 
+  function toggleVisibility(shape: string) {
+    const refocusShape = shapeGroup.contains(document.activeElement);
+    viewer.toggleShapeHidden(shape);
+    options.status(`“${shapeLabel(boardId(), shape)}” ${viewer.isShapeHidden(shape) ? 'hidden from' : 'included in'} exports.`);
+    if (refocusShape) {
+      const element = shapeElement(shape);
+      (element?.closest<SVGElement>('a') ?? element)?.focus({ preventScroll: true });
+    }
+  }
+
   /** The actions for a shape, as buttons for the selection bar or items in the menu. */
   function actions(shape: string, item: Item, boardsOnly = false) {
     const items: HTMLButtonElement[] = [];
+    const visibility = boardsOnly ? [] : [item(viewer.isShapeHidden(shape) ? 'Unhide from export' : 'Hide from export', () => toggleVisibility(shape), { keys: 'H' })];
     if (options.readOnly?.()) {
       const action = shapeAction(shape);
       const files = options.files?.();
-      return action.action === 'file' && files ? [item('Open diagram', () => files.open(action.link))] : [];
+      if (action.action === 'file' && files) items.push(item('Open diagram', () => files.open(action.link)));
+      return [...items, ...visibility];
     }
     const canvas = boardsOnly ? undefined : canvasTarget(shape);
     if (canvas) {
@@ -354,7 +366,7 @@ export function setupBoardTools(scope: PaneScope, viewer: Viewer, options: Board
           item('Remove link', () => applyLink(board, shape), { relinks: true }));
       }
     }
-    return items;
+    return [...items, ...visibility];
   }
 
   function refresh() {
@@ -408,6 +420,10 @@ export function setupBoardTools(scope: PaneScope, viewer: Viewer, options: Board
       shapeGroup.setAttribute('aria-label', label);
       const caption = document.createElement('span');
       caption.append('Selected: ', Object.assign(document.createElement('strong'), { textContent: shapeLabel(boardId(), shape) }));
+      if (viewer.isShapeHidden(shape)) {
+        caption.append(' · Hidden from export');
+        shapeGroup.setAttribute('aria-label', `${label} · Hidden from export`);
+      }
       shapeGroup.replaceChildren(caption, ...buttons);
     }
     drawSelection(shape);
@@ -473,6 +489,7 @@ export function setupBoardTools(scope: PaneScope, viewer: Viewer, options: Board
   // Panning and zooming move the shape; the bar follows.
   viewer.stage.addEventListener('zf-viewportchange', placeBar, { capture: true });
   viewer.stage.addEventListener('zf-layerchange', refresh);
+  viewer.stage.addEventListener('zf-visibilitychange', refresh);
   editBoard.addEventListener('click', () => edit(editBoard.dataset.board!, editBoard));
 
   function closeMenu(restore = true) {
@@ -485,12 +502,13 @@ export function setupBoardTools(scope: PaneScope, viewer: Viewer, options: Board
     menuReturn = undefined;
   }
   function openMenu(shape: string, element: HTMLElement | SVGElement, x: number, y: number, boardsOnly = false) {
-    const item: Item = (label, run) => {
+    const item: Item = (label, run, { keys } = {}) => {
       const button = document.createElement('button');
       button.type = 'button';
       button.setAttribute('role', 'menuitem');
       button.tabIndex = -1;
       button.textContent = label;
+      if (keys) button.setAttribute('aria-keyshortcuts', keys);
       button.addEventListener('click', () => {
         closeMenu();
         // The menu is gone when the builder closes, so focus returns to the diagram.
@@ -503,7 +521,7 @@ export function setupBoardTools(scope: PaneScope, viewer: Viewer, options: Board
     // A menu holds only its items: the heading repeats its name, and the note is its description.
     const text = (content: string, className?: string) => Object.assign(document.createElement('p'),
       { textContent: content, ...className ? { className, id: scope.id('board-menu-note') } : {} });
-    const heading = text(shapeLabel(boardId(), shape));
+    const heading = text(`${shapeLabel(boardId(), shape)}${viewer.isShapeHidden(shape) ? ' · Hidden from export' : ''}`);
     const parts: HTMLElement[] = [heading, ...items];
     const note = action.action === 'none' && !canvasTarget(shape) ? text(action.reason, 'board-menu-note') : undefined;
     if (note) parts.push(note);
@@ -539,6 +557,8 @@ export function setupBoardTools(scope: PaneScope, viewer: Viewer, options: Board
     if (!shape || !ready()) return;
     // The menu acts on the shape it opened from, so that shape is the selected one.
     options.selectSource(shape.id, false);
+    selected = shape.id;
+    refresh();
     if (openMenu(shape.id, shape.focus, event.clientX, event.clientY)) event.preventDefault();
   });
   // A press focuses its shape, which shows the selection bar, and on a fitted diagram the bar can cover the shape.
@@ -559,7 +579,11 @@ export function setupBoardTools(scope: PaneScope, viewer: Viewer, options: Board
   // Selection follows keyboard focus, so the ring marks the shape that keys act on.
   viewer.stage.addEventListener('focusin', event => {
     const shape = shapeAt(event.target);
-    if (shape && (!shape.board || shape.board === boardId()) && ready() && shape.id !== selected) options.selectSource(shape.id, false);
+    if (shape && (!shape.board || shape.board === boardId()) && ready() && shape.id !== selected) {
+      options.selectSource(shape.id, false);
+      selected = shape.id;
+      refresh();
+    }
   });
   // Capture, so builder shortcuts on a focused shape run before the pane's Enter-to-select-source.
   viewer.stage.addEventListener('keydown', event => {
@@ -579,6 +603,12 @@ export function setupBoardTools(scope: PaneScope, viewer: Viewer, options: Board
         event.preventDefault();
         event.stopImmediatePropagation();
       }
+      return;
+    }
+    if (key === 'h' && !event.altKey && !event.ctrlKey && !event.metaKey && !event.shiftKey) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      if (!event.repeat) toggleVisibility(shape.id);
       return;
     }
     if (event.key === 'ContextMenu' || event.shiftKey && event.key === 'F10') {
@@ -651,11 +681,12 @@ export function setupBoardTools(scope: PaneScope, viewer: Viewer, options: Board
     canvasKeys(target: Element) {
       const shape = shapeAt(target);
       const canvas = shape && canvasTarget(shape.id);
-      if (!canvas) return;
+      if (!canvas) return shape ? `${options.inSource(shape.id) ? 'Enter selects source · ' : ''}H hides or unhides from export` : undefined;
       const keys = ['F2 renames', `${addKeys} ${canvas.add.replace('Add', 'adds')}`];
       // Enter on a topic that opens a board opens it instead.
       if (canvas.kind === 'mind map' && shape.focus.localName !== 'a') keys.push(`Enter adds ${canvas.sibling ? 'a sibling' : 'a branch'}`);
       if (canvas.remove) keys.push('Delete removes');
+      keys.push('H hides or unhides from export');
       return keys.join(' · ');
     },
     /** The source changed: board actions wait for it to compile, except editing the root board. */
