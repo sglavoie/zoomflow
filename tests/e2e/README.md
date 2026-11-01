@@ -28,6 +28,10 @@ isolation, per-document choices, and failed or superseded layer renders.
 
 ## Editing
 
+- `canvas-branches.spec.ts`: dragging mind map subtrees, keyboard and diagram parent
+  selection, duplicate labels, generated detail boards, attached boards, undo/redo
+  with selection, invalid drops, Escape, stale sources, phone controls, and held-touch
+  dragging alongside ordinary touch panning.
 - `canvas-connections.spec.ts`: creating Yes/No branches, keyboard and pointer target
   selection, parallel arrows and loops, labels and deletion, undo/redo, save/reopen,
   cancellation and stale-source guards, nested connected boards, phone controls, and

@@ -1,11 +1,45 @@
 import { expect, it } from 'vitest';
-import { canvasShape, editOnCanvas, editConnection, flowConnectionIds } from '../src/canvas-model';
+import { branchChoices, canvasShape, editOnCanvas, editConnection, flowConnectionIds, moveBranch } from '../src/canvas-model';
 import { flowSource, flowTemplate, plainLook, readFlow } from '../src/flow-model';
 import { mindMapSource, outlineText, parseOutline, readMindMap, type MindMap } from '../src/mind-map-model';
 
 const flow = flowSource(flowTemplate('approval'));
 const map = (outline: string, split = 0): MindMap => ({ direction: 'right', split, look: plainLook(), root: parseOutline(outline)! });
 const outline = (own: string) => outlineText(readMindMap(own)!.root);
+
+it('moves whole branches by identity, including duplicate labels, and rejects cycles and no-ops', () => {
+  const own = mindMapSource(map('Plan\n  Launch\n    Interviews\n      Notes\n  Research\n    Interviews'));
+  expect(branchChoices(own, [], 'n')).toBeUndefined();
+  expect(branchChoices(own, [], 'n_1')!.destinations.map(item => item.id)).toEqual(['n_2', 'n_2_1']);
+  for (const id of ['n', 'n_1', 'n_1_1', 'n_1_1_1', 'missing']) expect(moveBranch(own, [], 'n_1', id)).toBeUndefined();
+  const moved = moveBranch(own, [], 'n_1_1', 'n_2')!;
+  expect(outline(moved.own)).toBe('Plan\n  Launch\n  Research\n    Interviews\n    Interviews\n      Notes');
+  expect(moved.select).toBe('n_2_2');
+  expect(moved.trail).toEqual([]);
+  expect(moved.moved!.get('n_1_1_1')).toBe('n_2_2_1');
+  expect(moved.moved!.get('n_2_1')).toBe('n_2_1');
+  const promoted = moveBranch(moved.own, [], 'n_2_2', 'n')!;
+  expect(promoted.select).toBe('n_3');
+  expect(outline(promoted.own)).toBe('Plan\n  Launch\n  Research\n    Interviews\n  Interviews\n    Notes');
+  expect(moveBranch(flow, [], 'step_1', 'step_2')).toBeUndefined();
+  expect(branchChoices(own + '\nn.style.fill: red', [], 'n_1')).toBeUndefined();
+});
+
+it('moves across generated detail boards and follows a branch from its repeated centre', () => {
+  const own = mindMapSource(map('Plan\n  A\n    Task\n      Notes\n  B\n    Task', 1));
+  const moved = moveBranch(own, ['A'], 'n_1', 'n_2')!;
+  expect(outline(moved.own)).toBe('Plan\n  A\n  B\n    Task\n    Task\n      Notes');
+  expect(moved.trail).toEqual(['B']);
+  expect(moved.select).toBe('n_2');
+  expect(moved.moved!.get('n_1_1_1')).toBe('n_2_2_1');
+  // A disappeared centre follows the surviving topic, rather than a different topic that inherited its board name.
+  expect(moved.moved!.get('n_1@center')).toBe('n_1');
+  const centre = moveBranch(own, ['A'], 'n', 'n_2')!;
+  expect(outline(centre.own)).toBe('Plan\n  B\n    Task\n    A\n      Task\n        Notes');
+  expect(centre.trail).toEqual(['B']);
+  expect(centre.select).toBe('n_2');
+  expect(moveBranch(own, ['A'], 'n', 'n_1_1')).toBeUndefined();
+});
 
 it('edits individual parallel connections and loops while keeping a losslessly editable flow', () => {
   const original = flowSource(flowTemplate('simple'));

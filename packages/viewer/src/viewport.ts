@@ -395,6 +395,13 @@ export function createViewport(stage: HTMLElement, host: HTMLElement, clamp: typ
   }
   stage.addEventListener('pointerup', finish, { signal });
   stage.addEventListener('pointercancel', finish, { signal });
+  // The workspace can turn a held touch into a branch move. Release its pending pan before that drag begins.
+  stage.addEventListener('zf-cancelgesture', () => {
+    for (const id of pointers.keys()) if (stage.hasPointerCapture(id)) stage.releasePointerCapture(id);
+    pointers.clear();
+    moved = panGesture = false;
+    stage.classList.remove('zf-panning');
+  }, { signal });
   stage.addEventListener('click', (event) => {
     if (!suppressClick) return;
     event.preventDefault();

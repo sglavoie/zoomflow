@@ -194,7 +194,7 @@ export function reattach(before: string, after: string, attachments: Attachment[
   for (const item of attachments) {
     const from = old.find(topic => topic.shape === item.shape && sameTrail(topic.trail, item.trail));
     if (!from) { kept.push(item); continue; }
-    const candidates = next.filter(topic => topic.id.endsWith('@center') === from.id.endsWith('@center'));
+    const candidates = moved ? next : next.filter(topic => topic.id.endsWith('@center') === from.id.endsWith('@center'));
     const label = from.path.at(-1)!;
     const path = (topic: BoardTopic) => topic.path.join('\n');
     // A topic with the labels of another topic that was already there is that topic, whatever its new identifier.

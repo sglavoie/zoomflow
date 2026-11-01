@@ -76,6 +76,52 @@ export function canvasShapes(own: string, trail: string[]): (shape: string) => C
 }
 export const canvasShape = (own: string, trail: string[], shape: string) => canvasShapes(own, trail)(shape);
 
+/** Logical topics have one destination even when a detail board repeats its centre. */
+export function branchChoices(own: string, trail: string[], shape: string) {
+  const map = readMindMap(own);
+  if (!map) return;
+  const topics = placedTopics(map);
+  const from = topics.find(item => item.shape === shape && item.trail.length === trail.length && item.trail.every((name, i) => name === trail[i]));
+  if (!from || from.topic === map.root) return;
+  const logical = topics.filter(item => !item.id.endsWith('@center'));
+  const origin = logical.find(item => item.topic === from.topic)!;
+  // Whole-outline identifiers describe ancestry independently of labels, including duplicate labels.
+  const choices = logical.filter(item => item.topic !== origin.parent && item.id !== origin.id && !item.id.startsWith(`${origin.id}_`));
+  const labels = new Map<string, number>();
+  return { from: origin.id, label: origin.topic.label, destinations: choices.map(item => {
+    const path = item.path.join(' › ');
+    const count = (labels.get(path) ?? 0) + 1;
+    labels.set(path, count);
+    return { id: item.id, label: path + (count > 1 ? ` (${count})` : ''), shape: item.shape, trail: item.trail };
+  }) };
+}
+
+/** Move a complete subtree, returning exact topic identities for attachment remapping and its new selection. */
+export function moveBranch(own: string, trail: string[], shape: string, destination: string): CanvasResult | undefined {
+  const choices = branchChoices(own, trail, shape);
+  if (!choices?.destinations.some(item => item.id === destination)) return;
+  const map = readMindMap(own)!;
+  const before = placedTopics(map);
+  const from = before.find(item => item.id === choices.from)!;
+  const to = before.find(item => item.id === destination)!;
+  from.parent!.children.splice(from.parent!.children.indexOf(from.topic), 1);
+  to.topic.children.push(from.topic);
+  const after = placedTopics(map);
+  const location = after.find(item => item.topic === from.topic && !item.id.endsWith('@center'))!;
+  const moved = topicMoves(before, after);
+  return { own: mindMapSource(map), select: location.shape, trail: location.trail, moved };
+}
+
+function topicMoves(before: ReturnType<typeof placedTopics>, after: ReturnType<typeof placedTopics>) {
+  const shapes = new Map(after.filter(item => !item.id.endsWith('@center')).map(item => [item.topic, item.id]));
+  const centers = new Map(after.filter(item => item.id.endsWith('@center')).map(item => [item.topic, item.id]));
+  return new Map(before.flatMap(item => {
+    // When a move changes detail-board boundaries, a former centre follows its topic's ordinary appearance.
+    const next = (item.id.endsWith('@center') ? centers.get(item.topic) : undefined) ?? shapes.get(item.topic);
+    return next ? [[item.id, next] as const] : [];
+  }));
+}
+
 export function editOnCanvas(own: string, trail: string[], shape: string, edit: CanvasEdit): CanvasResult | undefined {
   const target = canvasShape(own, trail, shape);
   if (!target || edit.type === 'sibling' && !target.sibling || edit.type === 'remove' && !target.remove) return;
@@ -132,12 +178,6 @@ export function editOnCanvas(own: string, trail: string[], shape: string, edit: 
   const select = (topics?.find(item => item.topic === selected) ?? topics?.find(item => item.topic === topic))?.id;
   // Topics are kept as objects, so each surviving topic is found again whatever its new label or place.
   const after = placedTopics(map);
-  const shapes = new Map(after.filter(item => !item.id.endsWith('@center')).map(item => [item.topic, item.id]));
-  const centers = new Map(after.filter(item => item.id.endsWith('@center')).map(item => [item.topic, item.id]));
-  const moved = new Map(before.flatMap(item => {
-    // A detail centre shares its topic with the linked shape on the board above.
-    const next = (item.id.endsWith('@center') ? centers : shapes).get(item.topic);
-    return next ? [[item.id, next] as const] : [];
-  }));
+  const moved = topicMoves(before, after);
   return { own: mindMapSource(map), ...select ? { select } : {}, ...nextTrail ? { trail: nextTrail } : {}, moved };
 }

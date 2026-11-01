@@ -2,7 +2,7 @@ import { D2 } from '@d2lang/d2';
 import { afterAll, beforeAll, expect, it } from 'vitest';
 import { boardBlocks, indexBoards, lint } from '@zoomflow/core';
 import { blockText, boardSites, builderKind, joinBoard, reattach, splitBoard } from '../src/board-model';
-import { editOnCanvas } from '../src/canvas-model';
+import { editOnCanvas, moveBranch } from '../src/canvas-model';
 import { flowSource, flowTemplate, readFlow } from '../src/flow-model';
 import { mindMapSource, parseOutline, readMindMap, type MindMap } from '../src/mind-map-model';
 import { plainLook } from '../src/flow-model';
@@ -20,6 +20,38 @@ async function sites(source: string) {
 }
 const flow = flowSource(flowTemplate('approval'));
 const map = (outline: string, split = 0): MindMap => ({ direction: 'right', split, look: plainLook(), root: parseOutline(outline)! });
+
+it('moves branches across details without mixing duplicate topics, file links or attached boards', async () => {
+  let source = mindMapSource(map('Plan\n  A\n    Task\n      Notes\n  B\n    Task', 1));
+  let site = (await sites(source)).sites;
+  source = site.add('root.layers.A.layers.Task', 'n_1', flow, 'Tour').source;
+  site = (await sites(source)).sites;
+  source = site.add('root.layers.A', 'n', flow, 'Overview').source;
+  site = (await sites(source)).sites;
+  source = site.linkFile('root.layers.B', 'n_1', './task.d2');
+  site = (await sites(source)).sites;
+  const moved = moveBranch(site.builder('root')!.own, ['A'], 'n_1', 'n_2')!;
+  const updated = site.update('root', moved.own, moved.moved);
+  if (!('source' in updated)) throw new Error(updated.error);
+  const compiled = await compile(updated.source);
+  site = (await sites(updated.source)).sites;
+  expect(site.builder('root')?.kind).toBe('mind map');
+  expect(site.shapeAction('root.layers.B.layers.Task', 'n_1')).toEqual({ action: 'edit', kind: 'flow', board: 'root.layers.B.layers.Task.layers.Tour' });
+  expect(site.shapeAction('root.layers.B', 'n_1')).toEqual({ action: 'file', link: './task.d2', attached: true });
+  // A centre whose generated board disappeared follows its actual topic onto the main board.
+  expect(site.shapeAction('root', 'n_1')).toEqual({ action: 'edit', kind: 'flow', board: 'root.layers.Overview' });
+  expect(indexBoards(compiled.diagram).has('root.layers.A')).toBe(false);
+});
+
+it('explains a move that would give one topic both a generated detail and an attached board', async () => {
+  const own = mindMapSource(map('Plan\n  A\n  B', 1));
+  let site = (await sites(own)).sites;
+  const source = site.add('root', 'n_2', flow, 'Work').source;
+  site = (await sites(source)).sites;
+  const moved = moveBranch(site.builder('root')!.own, [], 'n_1', 'n_2')!;
+  expect(site.update('root', moved.own, moved.moved)).toEqual({ error: 'The topic “B” would open a detail board and the board “Work”. Choose fewer detail boards, or delete its board in the source first.' });
+  expect(site.builder('root')!.own.trim()).toBe(own.trim());
+});
 
 it('keeps attached boards apart from the own text, and reads only the exact form it writes', () => {
   const parts = { own: flow, attachments: [{ shape: 'step_3', name: 'Ideas "1"', body: 'a -> b\n\nc: {\n  d\n}' }] };

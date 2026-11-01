@@ -121,6 +121,31 @@ can be edited on the main board or as the centre of its own board; renaming it r
 the board too. Other shapes keep their usual behaviour: clicking one selects its source in the
 editor.
 
+### Move mind map branches
+
+Drag a topic onto another topic to make it a child of that topic. The whole branch
+moves, including its subtopics, attached boards and file links. A highlighted topic
+and the message beside the pointer show the new parent before you release. On touch
+screens, hold the topic briefly before dragging; dragging immediately still pans.
+Space + drag and middle-button dragging keep their usual pan behaviour.
+
+For a list of parents, select a topic and choose **Move branch…** from its action bar
+or right-click / Shift+F10 menu. Choose **New parent topic** and **Move branch**, or
+click the new parent on the diagram. The list includes topics on other generated
+detail boards of this mind map; topic paths distinguish similarly named branches.
+Choose the central topic to make a subtopic a main branch.
+
+Moves append the branch after the new parent's existing subtopics and preserve the
+editable outline. Generated detail boards adjust to the new hierarchy, and the moved
+topic stays selected. Undo and redo restore both the hierarchy and the topic's board.
+In the connected layer view, you can drag between visible boards of the same mind map.
+
+The central topic cannot move, and a branch cannot move into itself, its descendants
+or its existing parent. Drops outside a valid topic and Escape cancel the drag.
+Moves stay within one mind map. If a move would make a topic open both a generated
+detail board and an attached board or file, an explanation appears and the source
+stays unchanged; adjust **Detail boards** in the outline before trying that move.
+
 ### Connect flow steps on the diagram
 
 Select a step of a builder-created flow and choose **Connect to…** in its action bar,
