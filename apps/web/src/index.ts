@@ -106,6 +106,10 @@ function context(id: PaneId): PaneContext {
     isActive: () => active === id,
     tabbed: () => narrow.matches || workspace.dataset.layout === 'tabs',
     exportChanged: () => { if (active === id && panes[id]) exportMenu.updateExportLabel(); },
+    viewChanged: (key, patch) => {
+      examplePicker.writeView(key, patch);
+      if (patch.hidden) panes[otherPane(id)]?.viewer.refreshVisibility(key);
+    },
     setExportStatus: exportMenu.setExportStatus,
     clearFileError: () => files.setFileError(''),
     projectChanged: (projectId) => panes[otherPane(id)]?.refreshProject(projectId),

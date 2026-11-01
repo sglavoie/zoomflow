@@ -93,6 +93,16 @@ handles keep them for the page session only. The CLI resolves
 local D2 imports within its project root. Markdown labels render as native SVG text, but
 Markdown images are dropped and rich HTML labels (`foreignObject`) remain unsupported.
 
+Drafts also carry versioned, serialized view metadata: explicit export visibility
+choices and connected-layer settings. Keeping it as a primitive makes the draft
+store's shallow revision snapshots independent. Metadata-only changes participate
+in browser backup and concurrent recovery without dirtying D2 source. The viewer's
+injected view adapter reads canonical draft choices for every exported project file,
+so atlas exports include choices from either pane and files not mounted since reload.
+Layer settings are saved after a successful render; invalid metadata is ignored
+without blocking source recovery. Missing shapes and boards are ignored for visibility
+while retaining their choices for undo; a missing layer root falls back to an existing board.
+
 ## File links and atlas routes
 
 A file link is classified by `classifyHref` as `{ kind: 'file', path, hash }` when it is

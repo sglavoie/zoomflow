@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { indexBoards, renderExportBoards, shapeClass, type Diagram } from '@zoomflow/core';
 import { afterEach, expect, it } from 'vitest';
-import { Viewer } from '../src/index';
+import { Viewer, parseDocumentView, serializeDocumentView, type DocumentView, type ViewerOptions } from '../src/index';
 import { diagramHiddenShapes, filterHiddenSvg, hiddenShapeIds, markHiddenShapes, removeHiddenShapes, visibleDiagram } from '../src/visibility';
 import { associateShapeBadges } from '../src/shape-badges';
 
@@ -14,13 +14,120 @@ const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 100"><svg 
   <g class="${shapeClass(diagram.connections[0].id)}"><path/><text>Incident edge</text></g></svg></svg>`;
 const viewers: Viewer[] = [];
 afterEach(() => { for (const viewer of viewers.splice(0)) viewer.destroy(); document.body.replaceChildren(); });
-function mount(key = () => 'one') {
+function mount(key = () => 'one', view?: ViewerOptions['view']) {
   const host = document.createElement('div');
   document.body.append(host);
-  const viewer = new Viewer(host, { history: false, document: { key, restore: () => false } });
+  const viewer = new Viewer(host, { history: false, document: { key, restore: () => false }, view });
   viewers.push(viewer);
   return viewer;
 }
+
+function sharedViews() {
+  const records = new Map<string, string | undefined>();
+  const view = {
+    read: (key: string) => parseDocumentView(records.get(key)),
+    write: (key: string, patch: DocumentView) => {
+      records.set(key, serializeDocumentView({ ...view.read(key), ...patch }));
+    },
+  };
+  return view;
+}
+
+it('synchronizes canonical visibility between live viewers while keeping their current layer layouts', async () => {
+  const saved = sharedViews();
+  const siblings: Viewer[] = [];
+  const adapter = { read: saved.read, write: (key: string, patch: DocumentView) => {
+    saved.write(key, patch);
+    if (patch.hidden) for (const viewer of siblings) viewer.refreshVisibility(key);
+  } };
+  const first = mount(() => 'one', adapter), second = mount(() => 'one', adapter);
+  siblings.push(first, second);
+  const tree = { ...diagram, layers: [{ ...diagram, name: 'Detail' }] };
+  await first.setDocument(tree, async () => svg);
+  await second.setDocument(tree, async () => svg);
+  await first.setAllLayers(true);
+  first.toggleShapeHidden('group');
+  expect(second.isShapeHidden('group.child')).toBe(true);
+  expect(first.layerState.enabled).toBe(true);
+  expect(second.layerState.enabled).toBe(false);
+  second.resetExportVisibility();
+  expect(first.hiddenShapeCount()).toBe(0);
+  expect(first.layerState.enabled).toBe(true);
+});
+
+it('restores explicit visibility across viewers, resets every board and preserves layer settings', async () => {
+  const views = sharedViews();
+  const tree = { ...diagram, layers: [{ ...diagram, name: 'Detail' }] };
+  const first = mount(() => 'one', views);
+  await first.setDocument(tree, async () => svg);
+  await first.setLayerDepth(1);
+  first.toggleShapeHidden('group');
+  first.toggleShapeHidden('grouping', 'root.layers.Detail');
+  const restored = mount(() => 'one', views);
+  await restored.setDocument(tree, async () => svg);
+  expect(restored.layerState.depth).toBe(1);
+  expect(restored.hiddenShapeCount()).toBe(6);
+  restored.resetExportVisibility();
+  first.refreshVisibility('one');
+  expect(first.hiddenShapeCount()).toBe(0);
+  expect(restored.hiddenShapeCount()).toBe(0);
+  expect(restored.layerState.visible.size).toBe(2);
+  expect(views.read('one').hidden).toBeUndefined();
+});
+
+it('exports canonical choices from an unvisited document, snapshots them, and copies choices independently', async () => {
+  const views = sharedViews();
+  const first = mount(() => 'one', views);
+  await first.setDocument(diagram, async () => svg);
+  first.toggleShapeHidden('group');
+  const other = mount(() => 'other', views);
+  await other.setDocument(diagram, async () => svg);
+  const exported = other.exportView(diagram, async () => svg, 'one');
+  first.copyLayerDocument('copy');
+  first.resetExportVisibility();
+  expect(views.read('copy').hidden).toBeUndefined();
+  expect(views.read('one').hidden).toEqual([['root', ['group']]]);
+  expect(exported.diagram.shapes).toHaveLength(2);
+  expect(await exported.render('')).not.toContain('Incident edge');
+  expect(other.hiddenShapeCount()).toBe(0);
+});
+
+it('ignores removed shapes and boards while retaining choices for source undo', async () => {
+  const views = sharedViews();
+  const first = mount(() => 'one', views);
+  const tree = { ...diagram, layers: [{ ...diagram, name: 'Detail' }] };
+  await first.setDocument(tree, async () => svg);
+  first.toggleShapeHidden('group');
+  first.toggleShapeHidden('grouping', 'root.layers.Detail');
+  const removed = { ...diagram, shapes: diagram.shapes.filter(shape => !shape.id.startsWith('group')), layers: [] };
+  await first.setDocument(removed, async () => svg);
+  expect(first.hiddenShapeCount()).toBe(0);
+  expect(first.hasExportVisibilityChoices).toBe(true);
+  const restored = mount(() => 'one', views);
+  await restored.setDocument(tree, async () => svg);
+  expect(restored.hiddenShapeCount()).toBe(6);
+});
+
+it.each(['all', 'depth', 'custom'])('restores a %s layer selection and tolerates deleted layers', async mode => {
+  const views = sharedViews();
+  const tree = { ...diagram, layers: [{ ...diagram, name: 'A', layers: [{ ...diagram, name: 'Deep' }] }, { ...diagram, name: 'B' }] };
+  const first = mount(() => 'one', views);
+  await first.setDocument(tree, async () => svg);
+  if (mode === 'depth') await first.setLayerDepth(1);
+  else {
+    await first.setAllLayers(true);
+    if (mode === 'custom') await first.setLayerVisible('root.layers.B', false);
+  }
+  const restored = mount(() => 'one', views);
+  await restored.setDocument(tree, async () => svg);
+  expect(restored.layerState.visible).toEqual(first.layerState.visible);
+  expect(restored.layerState.depth).toEqual(first.layerState.depth);
+  await restored.navigate('root.layers.A');
+  const missingRoot = mount(() => 'one', views);
+  await missingRoot.setDocument(diagram, async () => svg);
+  expect(missingRoot.layerState.visible).toEqual(new Set(['root']));
+  expect(missingRoot.currentBoard?.id).toBe('root');
+});
 
 it('hides a container and descendants without matching sibling prefixes or quoted literal dots', () => {
   const hidden = hiddenShapeIds(board, new Set(['group']));

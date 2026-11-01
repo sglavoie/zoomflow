@@ -122,7 +122,7 @@ export function draftRow(item: Draft, actions: { choose: () => void; remove: () 
     modified.hidden = !changed;
     unsaved.hidden = original !== undefined || item.source === item.baseline;
     const restore = row.querySelector<HTMLButtonElement>('.example-restore');
-    if (restore) restore.hidden = !changed;
+    if (restore) restore.hidden = !changed && !item.view;
     timestamp.hidden = !item.updatedAt || Boolean(item.projectId);
     timestamp.textContent = item.updatedAt ? `Edited ${new Date(item.updatedAt).toLocaleDateString()}` : '';
     button.title = item.projectId ? item.title : [item.title, item.updatedAt ? `Edited ${new Date(item.updatedAt).toLocaleString()}` : ''].filter(Boolean).join('\n');

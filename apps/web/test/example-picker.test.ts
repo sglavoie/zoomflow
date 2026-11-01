@@ -16,6 +16,44 @@ function picker() {
   return { api, states, shown };
 }
 
+it('backs up curation on an unedited example, copies it on rename and resets it without dirtying source', () => {
+  localStorage.clear();
+  const { api, states, shown } = picker();
+  shown.a = api.initial.source;
+  api.writeView(api.initial.key, { hidden: [['root', ['Browse']]], layers: { root: 'root', expanded: [], all: true } });
+  api.flush();
+  expect(states.a?.dirty).toBe(false);
+  expect(states.a?.hasDraft).toBe(false);
+  expect(document.querySelector<HTMLButtonElement>('.example-restore')!.hidden).toBe(false);
+  const loaded = picker();
+  loaded.shown.a = loaded.api.initial.source;
+  expect(loaded.api.readView(api.initial.key).hidden).toEqual([['root', ['Browse']]]);
+  const renamed = loaded.api.rename('a', 'Curated')!;
+  loaded.api.writeView(renamed.key, { hidden: [] });
+  loaded.api.flush();
+  expect(loaded.api.readView(renamed.key).hidden).toBeUndefined();
+  expect(loaded.api.readView(renamed.key).layers?.all).toBe(true);
+  expect(loaded.api.readView(api.initial.key).hidden).toEqual([['root', ['Browse']]]);
+  const stored = new DraftStore(localStorage).load().drafts;
+  expect(stored.find(item => item.key === api.initial.key)?.source).toBe(api.initial.source);
+  expect(stored.find(item => item.key === renamed.key)?.view).toContain('"all":true');
+});
+
+it('reports failed view backups through the existing browser recovery status', () => {
+  localStorage.clear();
+  const { api, states, shown } = picker();
+  shown.a = api.initial.source;
+  api.writeView(api.initial.key, { hidden: [['root', ['Browse']]] });
+  const write = vi.spyOn(localStorage, 'setItem').mockImplementation(() => { throw new Error('Full'); });
+  try {
+    api.flush();
+    expect(states.a?.recoveryAvailable).toBe(false);
+    expect(api.readView(api.initial.key).hidden).toEqual([['root', ['Browse']]]);
+  } finally { write.mockRestore(); }
+  api.flush();
+  expect(states.a?.recoveryAvailable).toBe(true);
+});
+
 it('keeps the page open when backing up edits before a conflict reload fails, and allows retrying', () => {
   localStorage.clear();
   const { api, states, shown } = picker();

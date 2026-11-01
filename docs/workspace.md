@@ -147,8 +147,9 @@ the source. SVG and PNG exports use the same shared-root view.
 Open **Boards** to show or hide individual layers with the checkboxes beside their
 names. Hiding a parent collapses its descendants and remembers their choices; show
 the parent again to restore them. Turn off **Show all layers** to return to the
-selected board alone. Visibility choices stay with each document for the current
-workspace session and do not change its source.
+selected board alone. Layer settings, including depth and custom branch selections,
+are backed up with each document in this browser and restored after a reload when
+browser storage is available. They do not change the D2 source.
 
 Selecting a shape to edit keeps the connected canvas in place. Turn on **Show all
 layers** from that selection to make its board the starting point, or open a board
@@ -584,10 +585,21 @@ SVG, PNG, ZIP and interactive HTML downloads omit hidden nodes and their inciden
 connections, including from offline search. Downloads fit the remaining content
 with a small margin, and combined-layer exports close gaps left by fully hidden
 layers. The editor keeps its current layout and viewport.
-The export menu reports the omitted count for the current file and scope. Visibility
-is remembered per document and board for the current workspace session and does not
-change the D2 source. Atlas and project ZIP exports also respect choices made in
-other visited files in the same pane.
+The export menu reports the omitted count for the current file and scope.
+**Reset export visibility** includes every shape on every board of the current
+document again, including choices on boards you are not viewing. It keeps the
+current layer layout. Visibility choices are backed up per document and board in
+this browser and survive reloads when browser storage is available. They do not
+change the D2 source or mark it as unsaved. Atlas and project ZIP exports respect
+choices made in either pane, including saved choices for files not opened since
+the last reload. Named copies keep independent choices.
+
+Choices for deleted shapes and boards have no effect while those items are absent;
+undoing the source deletion restores their curation. Reset also clears these inactive
+choices. A missing layer starting board falls back to an existing board. Restoring
+an example clears its curation, and undoing the restore brings it back.
+View settings stay in this browser: saving or downloading `.d2` source does not
+include them, and clearing browser storage removes them.
 
 Export presents four choices by outcome, each with an explanation:
 **Interactive diagram (HTML)** for one navigable file with every board, **Current

@@ -147,9 +147,9 @@ test('closing the split releases the second pane\'s page-level listeners until i
   await expect(page.locator('#pane-b')).toBeHidden();
   // The second viewer's Escape/Backspace key, its viewport's Space pan keys (keydown, keyup, blur),
   // fullscreen's Escape key, canvas guidance's input tracking (keydown, pointerdown), the link preview's
-  // Escape key, the board menu's and boards outline's outside presses (pointerdown),
+  // Escape key, the board menu's outside press, the boards outline's outside press and Escape key,
   // diagram search's shortcut and modal keys (keydown), and project check's modal keys (keydown).
-  expect(await keyListeners()).toBe(open - 12);
+  expect(await keyListeners()).toBe(open - 13);
 
   await page.selectOption('#layout', 'tabs');
   expect(await keyListeners()).toBe(open);

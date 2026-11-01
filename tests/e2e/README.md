@@ -98,6 +98,12 @@ isolation, per-document choices, and failed or superseded layer renders.
   cancellation during a write, later edits staying dirty, and source ZIP fallback.
 - `continuity.spec.ts`: concurrent-tab recovery, per-document and per-board view
   restoration, and restored selection and scroll when switching documents.
+- `curation.spec.ts`: visibility and layer settings surviving reloads, unedited
+  examples retaining settings without dirtying source, cross-pane atlas exports and
+  saved choices for unvisited files, document-wide visibility reset, deleted shapes,
+  and restoring examples with undo. Viewer unit tests cover damaged metadata,
+  custom layer selections, independent copies and export snapshots; draft tests cover
+  metadata-only concurrent recovery and unavailable browser storage.
 - `split-view.spec.ts`: both split layouts, independent panes and routes, one pane per
   draft, header commands following the active pane, narrower fallbacks, one main landmark
   with distinctly labelled editors, per-pane divider sizes, and releasing the hidden

@@ -14,6 +14,14 @@ for (const theme of ['light', 'dark'] as const) test(`polished controls in ${the
   await page.locator('#header-more-toggle').click();
   await expect(page.locator('#header-more-content')).toHaveScreenshot(`export-${theme}.png`);
   await page.locator('#header-more-toggle').click();
+  await page.locator('#viewer [data-shape-id="Browse"]').focus();
+  await page.keyboard.press('h');
+  await expect(page.locator('#viewer [data-shape-id="Browse"]')).toHaveAttribute('data-export-hidden', '');
+  await page.locator('#header-more-toggle').click();
+  await expect(page.locator('#header-more-content')).toHaveScreenshot(`curated-export-${theme}.png`);
+  await page.getByRole('button', { name: 'Reset export visibility', exact: true }).click();
+  await expect(page.locator('#export')).toBeFocused();
+  await page.locator('#header-more-toggle').click();
   await openFolder(page, 'fixtures/browser-project');
   await expect(page.locator('.zf-stage')).toContainText('From a local import');
   await page.locator('#example-picker summary').click();

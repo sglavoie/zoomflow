@@ -1,5 +1,5 @@
 import { boardBlocks, classifyHref, indexBoards, indexDiagramSearch, indexShapeSources, parseSourceRange, lint, rebaseFileLinks, resolveFilePath, type CompileResponse, type ShapeSource, type SourceRange, type Diagram, type DiagramSearchEntry, type LintDiagnostic, type LintResult } from '@zoomflow/core';
-import { Viewer, ViewerRenderError, openFolderMessage, setupViewport, type RenderBoard, type ViewerRoute } from '@zoomflow/viewer';
+import { Viewer, ViewerRenderError, openFolderMessage, setupViewport, type DocumentView, type RenderBoard, type ViewerRoute } from '@zoomflow/viewer';
 import { SourceEditor } from './editor';
 import { compilerDiagnostics, lintDiagnostics, type SourceDiagnostic } from './diagnostics';
 import { CompilerStartupError, isEngineUnavailable, type createCompiler } from './compiler';
@@ -57,6 +57,7 @@ export type PaneContext = {
   revealMatch: (pane: PaneId, entry: DiagramSearchEntry) => Promise<void>;
   /** The lint options changed in this pane; other panes follow. */
   lintChanged: () => void;
+  viewChanged: (key: string, patch: DocumentView) => void;
 };
 
 /** A visible status line announced through polite and assertive live regions that keep their roles.
@@ -125,6 +126,7 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
       return true;
     },
     document: { key: () => currentDocumentKey, restore: restoreFromHistory },
+    view: { read: key => picker().readView(key), write: shared.viewChanged },
   });
   const viewport = setupViewport(viewer.stage, setupFullscreen(viewer.stage, root));
   const compileError = setupCompileError(scope, viewer.stage, () => {
@@ -1003,10 +1005,10 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
       if (draftStatus.textContent !== status) draftStatus.textContent = status;
       draftStatus.dataset.kind = recoveryAvailable ? 'info' : 'error';
       draftStatus.dataset.recovery = !recoveryAvailable ? 'unavailable' : savePending ? 'pending' : 'saved';
-      draftStatus.title = `${recovery}. ${canSave ? 'Save keeps a copy on disk.' : 'Download keeps a separate file copy.'} Browser drafts can be cleared.`;
+      draftStatus.title = `${recovery}. ${canSave ? 'Save keeps a source copy on disk.' : 'Download keeps a separate source copy.'} View settings stay in this browser. Browser storage can be cleared.`;
       part('recovery-info').textContent = recoveryAvailable
-        ? 'Edits are backed up in this browser. Save a disk copy to keep them; browser storage can be cleared.'
-        : 'Browser recovery is unavailable. Save or download a disk copy to keep your edits.';
+        ? 'Source edits and view settings are backed up in this browser. Save a disk copy of your source to keep it; view settings stay in this browser.'
+        : 'Browser recovery is unavailable. Save or download your source to keep it; view settings may be lost on reload.';
       // Rewriting an unchanged label under the pointer cancels the click in WebKit.
       const label = root.querySelector('.pane-document-name')!;
       if (label.textContent !== documentName) label.textContent = documentName;

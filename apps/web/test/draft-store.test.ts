@@ -20,6 +20,17 @@ class LimitedStorage extends MemoryStorage {
 }
 const draft = (key: string, source: string): Draft => ({ key, name: `${key}.d2`, title: key, description: '', source, baseline: 'original' });
 describe('draft recovery across tabs', () => {
+  test('recovers concurrent curation changes even when the source is identical', () => {
+    const storage = new MemoryStorage();
+    const a = new DraftStore(storage, 'a'), b = new DraftStore(storage, 'b');
+    a.load(); b.load();
+    a.save([{ ...draft('diagram', 'same'), view: '{"version":1,"hidden":[["root",["a"]]]}' }], 'diagram');
+    b.save([{ ...draft('diagram', 'same'), view: '{"version":1,"hidden":[["root",["b"]]]}' }], 'diagram');
+    const loaded = new DraftStore(storage, 'reader').load().drafts;
+    expect(loaded).toHaveLength(2);
+    expect(new Set(loaded.map(item => item.view)).size).toBe(2);
+    expect(loaded.every(item => item.source === 'same')).toBe(true);
+  });
   test('independent documents and concurrent edits both survive reload', () => {
     const storage = new MemoryStorage();
     const a = new DraftStore(storage, 'a'), b = new DraftStore(storage, 'b');

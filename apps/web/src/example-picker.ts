@@ -7,6 +7,7 @@ import { atlasMapName } from './atlas-map';
 import { draftRow, projectGroup, type ProjectGroup } from './picker-rows';
 import { plural, setText } from './text';
 import type { ProjectSaveSnapshot } from './project-save';
+import { parseDocumentView, serializeDocumentView, type DocumentView } from '@zoomflow/viewer';
 
 import type { PaneId } from './pane-scope';
 
@@ -290,6 +291,7 @@ export function setupExamplePicker({ readSource, open, onState, forget, checkpoi
         const original = examples.find((example) => example.name === item.key)!;
         item.source = original.source;
         item.baseline = original.source;
+        item.view = undefined;
         item.updatedAt = undefined;
         forget(item.key);
         refreshRows.get(item.key)?.();
@@ -349,6 +351,15 @@ export function setupExamplePicker({ readSource, open, onState, forget, checkpoi
 
   return {
     initial: { source: draftOf('a')!.source, name: draftOf('a')!.name, key: current.a! },
+    readView: (key: string) => parseDocumentView(drafts.get(key)?.view),
+    writeView(key: string, patch: DocumentView) {
+      const draft = drafts.get(key);
+      if (!draft || draft.atlasOf) return;
+      const view = serializeDocumentView({ ...parseDocumentView(draft.view), ...patch });
+      if (draft.view === view) return;
+      draft.view = view;
+      schedulePersist();
+    },
     hasDraft: (key: string) => drafts.has(key),
     hasProject: (projectId: string) => [...drafts.values()].some((item) => item.projectId === projectId),
     /** Show the second pane: it reopens the draft it showed before a reload, or starts empty. */

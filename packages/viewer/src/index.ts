@@ -9,6 +9,8 @@ import { composeLayers, layerDepths, visibleLayers } from './layers';
 import { diagramHiddenShapes, filterHiddenSvg, markHiddenShapes, removeHiddenShapes, visibleDiagram } from './visibility';
 import { associateShapeBadges } from './shape-badges';
 import { fitExportBounds } from './export-bounds';
+import type { DocumentView } from './document-view';
+export { parseDocumentView, serializeDocumentView, type DocumentView } from './document-view';
 
 export type RenderBoard = (target: string) => Promise<string>;
 /** Compilation succeeded, but its preview could not be rendered or read as SVG. */
@@ -33,6 +35,8 @@ export type ViewerOptions = {
    * Forward reaches another document's entry, `restore` gets that entry's state and returns true when it opens
    * the document; otherwise the entry's board opens in this one. */
   document?: { key(): string | undefined; restore(state: { zoomflowFile: string } & Record<string, unknown>): boolean };
+  /** The host owns persistence and shares explicit visibility choices across viewers and exports. */
+  view?: { read(key: string): DocumentView; write(key: string, patch: DocumentView): void };
 };
 export type TrailPrefixEntry = { name: string; activate(): void };
 export const openFolderMessage = 'Open the folder that contains this file to follow links to other diagrams.';
@@ -170,6 +174,7 @@ export class Viewer {
   setSourceShapes(sources: readonly ShapeSource[]) { this.sourceShapes = sources; }
 
   get currentBoard() { return this.boards.get(this.current); }
+  get hasExportVisibilityChoices() { return [...this.hiddenShapes.values()].some(ids => ids.size > 0); }
 
   isShapeHidden(shape: string, board = this.current) {
     return diagramHiddenShapes(this.boards, this.hiddenShapes).get(board)?.has(shape) ?? false;
@@ -187,7 +192,34 @@ export class Viewer {
     } else choices.add(shape);
     this.hiddenShapes.set(board, choices);
     this.applyVisibility();
+    this.saveVisibility();
     this.stage.dispatchEvent(new Event('zf-visibilitychange'));
+  }
+
+  /** Restore every board in this document without changing its source or layer layout. */
+  resetExportVisibility() {
+    this.hiddenShapes = new Map();
+    this.applyVisibility();
+    this.saveVisibility();
+    this.stage.dispatchEvent(new Event('zf-visibilitychange'));
+  }
+
+  private saveVisibility() {
+    if (this.layerDocument !== undefined) this.settings.view?.write(this.layerDocument,
+      { hidden: [...this.hiddenShapes].map(([board, ids]) => [board, [...ids]]) });
+  }
+
+  /** A sibling viewer changed this document's canonical visibility choices. */
+  refreshVisibility(key: string) {
+    if (key !== this.layerDocument || !this.settings.view) return;
+    this.hiddenShapes = new Map((this.settings.view.read(key).hidden ?? []).map(([board, ids]) => [board, new Set(ids)]));
+    this.applyVisibility();
+    this.stage.dispatchEvent(new Event('zf-visibilitychange'));
+  }
+
+  private saveLayers() {
+    if (this.layerDocument !== undefined) this.settings.view?.write(this.layerDocument,
+      { layers: { ...this.layerView, expanded: [...this.layerView.expanded] } });
   }
 
   private applyVisibility(root: Element = this.stage) {
@@ -206,7 +238,9 @@ export class Viewer {
 
   /** Snapshot choices so an asynchronous export uses one consistent view, including search metadata. */
   exportView(diagram: Diagram, render: RenderBoard, key = this.layerDocument) {
-    const choices = key === this.layerDocument ? this.hiddenShapes : this.hiddenDocuments.get(key ?? '') ?? new Map<string, Set<string>>();
+    const choices = this.settings.view && key !== undefined
+      ? new Map((this.settings.view.read(key).hidden ?? []).map(([board, ids]) => [board, new Set(ids)]))
+      : key === this.layerDocument ? this.hiddenShapes : this.hiddenDocuments.get(key ?? '') ?? new Map<string, Set<string>>();
     const boards = indexBoards(diagram);
     const hidden = diagramHiddenShapes(boards, choices);
     const byTarget = new Map([...boards.values()].map(board => [board.target, board]));
@@ -362,6 +396,8 @@ export class Viewer {
     if (this.layerDocument !== undefined) this.hiddenDocuments.set(this.layerDocument, this.hiddenShapes);
     this.hiddenShapes = new Map([...this.hiddenShapes].map(([board, shapes]) => [board, new Set(shapes)]));
     this.layerDocument = key;
+    this.saveVisibility();
+    this.saveLayers();
   }
 
   get route(): ViewerRoute {
@@ -415,6 +451,11 @@ export class Viewer {
       this.hiddenShapes = this.hiddenDocuments.get(key) ?? new Map();
       this.layerView = this.layerViews.get(key) ?? { expanded: new Set(), all: false };
       this.layerDocument = key;
+    }
+    if (this.settings.view) {
+      const saved = this.settings.view.read(key);
+      this.hiddenShapes = new Map((saved.hidden ?? []).map(([board, ids]) => [board, new Set(ids)]));
+      this.layerView = saved.layers ? { ...saved.layers, expanded: new Set(saved.layers.expanded) } : { expanded: new Set(), all: false };
     }
     this.layerView = { ...this.layerView, expanded: new Set(this.layerView.expanded) };
     if (this.layerView.root && !boards.has(this.layerView.root)) this.layerView.root = boards.has(this.current) ? this.current : 'root';
@@ -626,6 +667,7 @@ export class Viewer {
       renderParentContext(this.context, parentContext(board, this.boards));
       this.setMessage(notice);
       this.stage.dispatchEvent(new Event('zf-layerchange'));
+      this.saveLayers();
     } catch (error) {
       if (revision === this.revision) { this.cancelTransition(); throw error; }
     } finally {

@@ -97,6 +97,14 @@ export function setupExportMenu(activePane: () => DocumentPane | undefined, pick
   });
 
   const exportButton = document.querySelector<HTMLButtonElement>('#export')!;
+  const resetVisibility = document.querySelector<HTMLButtonElement>('#reset-export-visibility')!;
+  resetVisibility.addEventListener('click', () => {
+    const pane = activePane();
+    if (!pane?.key) return;
+    pane.viewer.resetExportVisibility();
+    reportExport('Export visibility reset for every board in this diagram.');
+    exportButton.focus();
+  });
   const exportChoices = document.querySelector<HTMLFieldSetElement>('#export-format')!;
   const exportFormat = { get value() { return exportChoices.querySelector<HTMLInputElement>('input:checked')!.value; } };
   let explicitExportFormat = false;
@@ -117,6 +125,9 @@ export function setupExportMenu(activePane: () => DocumentPane | undefined, pick
     if (document.activeElement !== nameField) showName();
     const documentExport = pane?.documentExport;
     exportButton.disabled = !canExport();
+    resetVisibility.hidden = !pane?.viewer.hasExportVisibilityChoices;
+    resetVisibility.disabled = exporting || !documentExport || !pane?.viewer.hasExportVisibilityChoices;
+    resetVisibility.title = 'Include every shape on every board of this diagram; keep the current layer layout.';
     const count = documentExport ? indexBoards(documentExport.diagram).size : 0;
     if (documentExport && !explicitExportFormat) {
       exportChoices.querySelector<HTMLInputElement>(`input[value="${count > 1 ? 'html' : 'svg'}"]`)!.checked = true;

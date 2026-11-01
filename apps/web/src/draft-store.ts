@@ -1,5 +1,7 @@
 export type Draft = { key: string; name: string; title: string; description: string; source: string; baseline: string;
   updatedAt?: number; projectId?: string; path?: string; recoveredFrom?: string; number?: number; template?: string;
+  /** Versioned, serialized view metadata; a primitive keeps revision snapshots independent. */
+  view?: string;
   /** A generated, read-only atlas map of this project; it is never stored, and `opener` is the project file a reload
    * shows instead. */
   atlasOf?: string; opener?: string };
@@ -97,7 +99,8 @@ export class DraftStore {
       if (selected.draft) canonical.set(key, selected.draft);
       else deleted.add(key);
       for (const alternative of live.slice(1)) {
-        if (alternative.draft!.source === selected.draft!.source && alternative.draft!.baseline === selected.draft!.baseline) continue;
+        if (alternative.draft!.source === selected.draft!.source && alternative.draft!.baseline === selected.draft!.baseline &&
+          alternative.draft!.view === selected.draft!.view) continue;
         const recoveredKey = `file:recovered:${encodeURIComponent(key)}:${alternative.id}`;
         drafts.set(recoveredKey, { ...alternative.draft!, key: recoveredKey, recoveredFrom: key,
           title: `${alternative.draft!.title} (recovered)`, description: 'Concurrent edits preserved from another tab' });

@@ -90,10 +90,10 @@ export function createDraftLibrary(changed: () => void) {
     }
     location.reload();
   });
-  // Without a browser backup, leaving the page would lose edits that were not saved to disk.
+  // Without a browser backup, leaving can lose source edits or view choices (which are never in D2 files).
   window.addEventListener('beforeunload', (event) => {
     if (savePending || !recoveryAvailable) persist();
-    if (recoveryAvailable || ![...drafts.values()].some((item) => item.source !== item.baseline)) return;
+    if (recoveryAvailable || ![...drafts.values()].some((item) => item.source !== item.baseline || item.view)) return;
     event.preventDefault();
     event.returnValue = '';
   });
@@ -104,7 +104,7 @@ export function createDraftLibrary(changed: () => void) {
       if (!store) store = new DraftStore(localStorage);
       // A reload shows the project file an atlas map was opened from; the map itself is generated again on request.
       const stored = (key: string | undefined) => key && drafts.get(key)?.atlasOf ? drafts.get(key)!.opener : key;
-      store.save([...drafts.values()].filter(isOwnDraft), stored(current.a)!, stored(current.b));
+      store.save([...drafts.values()].filter(item => !item.atlasOf && (isOwnDraft(item) || Boolean(item.view))), stored(current.a)!, stored(current.b));
       // Only another tab's writes, announced by storage events, start a conflict; a save can end one.
       if (conflictShown) checkConflicts();
       recoveryAvailable = true;
