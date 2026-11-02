@@ -277,6 +277,17 @@ export function boardSites(source: string, blocks: Map<string, SourceRange>, boa
   }
   return {
     owner,
+    /** Append connection overrides inside the nearest local board. Keeping them inside an attached board's
+     * body preserves its parent's lossless builder section, even for imported/inherited descendant boards. */
+    append(board: string, text: string): string {
+      let id = board;
+      while (!site(id) && boards.get(id)?.parent) id = boards.get(id)!.parent!;
+      const current = site(id)!;
+      if (id !== board) text = `${board.slice(id.length + 1)}: {\n${text.split('\n').map(line => `  ${line}`).join('\n')}\n}`;
+      const newline = current.parts.own.includes('\r\n') ? '\r\n' : '\n';
+      const own = current.parts.own + (current.parts.own.endsWith('\n') ? newline : newline + newline) + text.replaceAll('\n', newline) + newline;
+      return current.replace(joinBoard({ own, attachments: current.parts.attachments }));
+    },
     /** The builder board that writes `board`, its own text, and the detail board names from it down to `board`. */
     canvas(board: string) {
       const id = owner(board);

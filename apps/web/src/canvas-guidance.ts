@@ -53,7 +53,7 @@ export function setupCanvasGuidance(stage: HTMLElement, setGuidance: (text: stri
       if (input === 'touch') text += ' · Pinch to zoom';
     }
     if (input !== 'keyboard' && shape?.classList.contains('zf-branch-draggable')) {
-      text += input === 'touch' ? ' · Hold, then drag onto a topic to move this branch' : ' · Drag onto a topic to move this branch';
+      text += input === 'touch' ? ' · Hold, then drag onto a new parent to move this branch' : ' · Drag onto a new parent to move this branch';
     }
     if (!stage.querySelector('svg')) text = '';
     setGuidance(text, input === 'keyboard' && Boolean(focused));

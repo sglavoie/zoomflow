@@ -118,8 +118,8 @@ like any other step or topic. Hand-written diagrams keep whole-shape links.
 Edits keep the builder's form, so **Edit flow** and **Edit mind map** still open, and
 boards attached to steps and topics stay on them. A topic that opens a detail board
 can be edited on the main board or as the centre of its own board; renaming it renames
-the board too. Other shapes keep their usual behaviour: clicking one selects its source in the
-editor.
+the board too. On other shapes without a link, a click selects the source and keeps
+focus on the diagram for branch moves. Enter or Alt+click focuses the source editor.
 
 ### Move mind map branches
 
@@ -138,13 +138,63 @@ Choose the central topic to make a subtopic a main branch.
 Moves append the branch after the new parent's existing subtopics and preserve the
 editable outline. Generated detail boards adjust to the new hierarchy, and the moved
 topic stays selected. Undo and redo restore both the hierarchy and the topic's board.
-In the connected layer view, you can drag between visible boards of the same mind map.
+In the connected layer view, you can drag between visible boards, including from a
+mind map to a flow or from a flow to a mind map. See [Move between boards](#move-between-boards).
 
-The central topic cannot move, and a branch cannot move into itself, its descendants
+The document's central topic cannot move. An attached mind map's central topic can
+move its entire board to another parent. A branch cannot move into itself, its descendants
 or its existing parent. Drops outside a valid topic and Escape cancel the drag.
-Moves stay within one mind map. If a move would make a topic open both a generated
+Within one mind map, if a move would make a topic open both a generated
 detail board and an attached board or file, an explanation appears and the source
 stays unchanged; adjust **Detail boards** in the outline before trying that move.
+
+### Move branches in flows and other diagrams
+
+Drag a node onto another node to make the drop target its new upstream parent.
+For example, dropping **Review** onto **Triage** replaces Review's incoming arrows
+with arrows from Triage. Review's outgoing arrows, downstream nodes, groups, detail
+boards and file links stay attached. The diagram lays out the changed connections
+automatically. This works in builder flows and hand-written D2, including containers,
+imported relationships, scenarios and steps.
+
+Select a node and choose **Move branch…** from its action bar or right-click /
+Shift+F10 menu to choose **New parent node** from a list. You can also click the new
+parent on the diagram. Hold before dragging on touch screens; dragging immediately
+still pans. Escape and invalid drops cancel, and undo/redo restores the connections
+and selection. Builder flows remain editable with **Edit flow**.
+
+When a node has several upstream parents, they all change to the new parent. Parallel
+arrows retain their labels, styling and arrowheads; feedback loops inside the downstream
+branch stay in place. A node with no upstream arrow gains one from its new parent. A drop
+onto the node itself or its downstream branch is rejected to avoid a new cycle.
+Left-pointing arrows follow their direction. Undirected and bidirectional connections
+use the order in which their endpoints were written to identify the upstream parent.
+
+Builder flow branches can also move to another flow or mind map as described below.
+In hand-written D2, parents belong to the same board, and moves act on the board
+containing the dragged node, even when another board has nodes with the same IDs.
+Scenarios and steps keep D2's normal inheritance rules. In hand-written D2, the source
+keeps its original declarations and adds connection overrides inside the relevant
+local board. The new connection copies its current label and styling; edit that
+override when changing it later. Imports themselves stay unchanged.
+
+### Move between boards
+
+Drop a flow step or mind-map topic onto a parent on another board. For example,
+move **Pricing** and its subtopics under **Sign up**, or move the **Launched** flow
+step under the **Short videos** topic. The drop target becomes the upstream parent.
+The parent picker includes destinations on other local boards, so the same moves
+are available from the keyboard or on touch screens.
+
+The branch leaves its old owner and opens as an attached board under the new parent,
+keeping its flow or mind-map editor, shapes, subtopics, internal connections and
+attached boards or files. Moving the centre of an attached mind map, or an entire
+attached flow, relocates the whole board. If the parent already opens another board
+or file, a new child holds the moved branch while preserving the existing link.
+
+Hidden-export choices follow their shapes, and the connected canvas reveals the
+moved branch. Undo and redo restore the source, selection and view choices. Moves
+into a branch's own topics, downstream steps or attached boards are rejected.
 
 ### Connect flow steps on the diagram
 

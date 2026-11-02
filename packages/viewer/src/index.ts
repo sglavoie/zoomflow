@@ -222,6 +222,31 @@ export class Viewer {
       { layers: { ...this.layerView, expanded: [...this.layerView.expanded] } });
   }
 
+  /** A copy of explicit view choices, for source transactions that move shapes between boards. */
+  get documentView(): DocumentView {
+    return { hidden: [...this.hiddenShapes].map(([board, ids]) => [board, [...ids]]),
+      layers: { ...this.layerView, expanded: [...this.layerView.expanded] } };
+  }
+
+  /** Apply relocated choices after the replacement source has compiled under its document key. */
+  async restoreDocumentView(view: DocumentView, focusBoard = this.current) {
+    this.hiddenShapes = new Map((view.hidden ?? []).map(([board, ids]) => [board, new Set(ids)]));
+    this.layerView = view.layers ? { ...view.layers, expanded: new Set(view.layers.expanded) } : { expanded: new Set(), all: false };
+    if (this.layerView.root && !this.boards.has(this.layerView.root)) this.layerView.root = 'root';
+    this.refreshLayerExpansion();
+    if (this.layerView.root && this.boards.has(focusBoard) && !this.layerState.visible.has(focusBoard)) {
+      this.layerView.depth = undefined;
+      this.layerView.all = false;
+      this.ensureLayerPath(focusBoard);
+    }
+    this.saveVisibility();
+    this.saveLayers();
+    const active = this.boards.has(focusBoard) ? focusBoard : 'root';
+    await this.showBoard(active, 'replace', this.ancestors(active));
+    this.stage.dispatchEvent(new Event('zf-visibilitychange'));
+    this.stage.dispatchEvent(new Event('zf-layerchange'));
+  }
+
   private applyVisibility(root: Element = this.stage) {
     const hidden = diagramHiddenShapes(this.boards, this.hiddenShapes);
     for (const node of root.querySelectorAll('.zf-hidden-label')) node.remove();

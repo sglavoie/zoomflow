@@ -1,11 +1,13 @@
 import { boardKey, classifyHref, resolveFilePath, type Board, type DiagramSearchEntry } from '@zoomflow/core';
-import type { Viewer } from '@zoomflow/viewer';
+import type { DocumentView, Viewer } from '@zoomflow/viewer';
 import type { BuilderTarget } from './builder-dialog';
 import { boardSites, type BoardSites, type BuilderKind, type ShapeAction } from './board-model';
 import { branchChoices, canvasShapes, editOnCanvas, moveBranch, type CanvasEdit, type CanvasShape } from './canvas-model';
 import { setupCanvasConnections } from './canvas-connections';
 import { setupCanvasBranches } from './canvas-branches';
 import { placedTopics, readMindMap } from './mind-map-model';
+import { graphBranches, type GraphBranches } from './graph-branches';
+import { boardTransfers, transferView, type BoardTransfers } from './board-transfers';
 import { pageListeners } from './canvas-guidance';
 import { setupBoardOutline } from './board-outline';
 import { setupDiagramSearch } from './diagram-search';
@@ -113,7 +115,7 @@ export function setupBoardTools(scope: PaneScope, viewer: Viewer, options: Board
   let compiledSource: string | undefined;
   let selected: string | undefined;
   /** What to show once `source` compiles: a board just added or renamed, and a shape to select or rename. */
-  let pending: { source: string; board?: string; replace?: boolean; shape?: string; rename?: boolean } | undefined;
+  let pending: { source: string; board?: string; replace?: boolean; shape?: string; rename?: boolean; view?: DocumentView } | undefined;
   /** The shape, or the background as null, that a press on the diagram finishing a rename landed on. */
   let pressed: string | null | undefined;
   let menuReturn: HTMLElement | SVGElement | undefined;
@@ -121,9 +123,17 @@ export function setupBoardTools(scope: PaneScope, viewer: Viewer, options: Board
   let lastBoard: string | undefined;
   /** The recent edits on the diagram that moved the board on view, by the source and board before and after each,
    * so undoing or redoing several of them in turn follows each one. */
-  let boardMoves: { before: { source: string; board: string; shape?: string }; after: { source: string; board: string; shape?: string } }[] = [];
+  type MoveState = { source: string; board: string; shape?: string; view?: DocumentView };
+  let boardMoves: { before: MoveState; after: MoveState }[] = [];
   let shapeCache: { own: string; trail: string; find: (shape: string) => CanvasShape | undefined } | undefined;
   const branchLocations = new Map<string, Map<string, string>>();
+  let graphMoves: GraphBranches | undefined;
+  let transfers: BoardTransfers | undefined;
+  const mapCanvas = (board: string) => {
+    const canvas = ready() ? sites!.canvas(board) : undefined;
+    return canvas && sites!.builder(canvas.owner)?.kind === 'mind map' ? canvas : undefined;
+  };
+  const branchOwner = (board: string) => ready() && !options.readOnly?.() && boards.has(board) ? mapCanvas(board)?.owner ?? board : undefined;
 
   const ready = () => Boolean(sites) && compiledSource === options.source();
   const current = () => {
@@ -161,30 +171,71 @@ export function setupBoardTools(scope: PaneScope, viewer: Viewer, options: Board
   });
   const branches = setupCanvasBranches(viewer, {
     source: options.source,
-    owner: board => ready() ? sites!.canvas(board)?.owner : undefined,
+    owner: branchOwner,
     topic(board, shape) {
-      const canvas = ready() && !options.readOnly?.() ? sites!.canvas(board) : undefined;
-      if (!canvas) return;
+      if (!branchOwner(board)) return;
+      const transfer = transfers?.key(board, shape);
+      const canvas = mapCanvas(board);
+      if (!canvas) return graphMoves?.has(board, shape) || transfer ? { id: shape, owner: board, transfer } : undefined;
       if (!branchLocations.has(canvas.own)) {
         const map = readMindMap(canvas.own);
         branchLocations.set(canvas.own, new Map(map && placedTopics(map).map(item =>
           [JSON.stringify([...item.trail, item.shape]), item.id.replace(/@center$/, '')])));
       }
       const id = branchLocations.get(canvas.own)!.get(JSON.stringify([...canvas.trail, shape]));
-      return id ? { id, owner: canvas.owner } : undefined;
+      return id ? { id, owner: canvas.owner, transfer } : undefined;
     },
     branch(board, shape) {
-      const canvas = ready() && !options.readOnly?.() ? sites!.canvas(board) : undefined;
-      const choices = canvas && branchChoices(canvas.own, canvas.trail, shape);
-      return choices && { ...choices, board, shape, owner: canvas!.owner, source: options.source() };
+      const owner = branchOwner(board);
+      if (!owner) return;
+      const canvas = mapCanvas(board);
+      const choices = canvas ? branchChoices(canvas.own, canvas.trail, shape) : graphMoves?.branch(board, shape);
+      const cross = transfers?.choices(board, shape) ?? [];
+      if (!choices && !cross.length) return;
+      return { from: choices?.from ?? shape, label: choices?.label ?? transfers?.label(board, shape) ?? shape,
+        destinations: [...choices?.destinations ?? [], ...cross], board, shape, owner, source: options.source(),
+        acrossBoards: Boolean(cross.length), parentKind: canvas ? 'topic' as const : 'node' as const };
     },
     canDrag(board, shape) {
-      if (options.readOnly?.() || canvasTarget(shape, board)?.kind !== 'mind map') return false;
-      return shape !== 'n' || Boolean(sites!.canvas(board)?.trail.length);
+      if (!branchOwner(board)) return false;
+      const canvas = mapCanvas(board);
+      return Boolean(transfers?.canMove(board, shape)) || (canvas ? shape !== 'n' || Boolean(canvas.trail.length) : Boolean(graphMoves?.has(board, shape)));
     },
     move(branch, destination) {
-      const canvas = ready() && !options.readOnly?.() && branch.source === options.source() ? sites!.canvas(branch.board) : undefined;
-      if (!canvas || canvas.owner !== branch.owner) return false;
+      if (branch.source !== options.source() || branchOwner(branch.board) !== branch.owner) return false;
+      if (destination.startsWith('@board:')) {
+        const result = transfers?.move(branch.board, branch.shape, destination);
+        if (!result) return false;
+        const beforeView = viewer.documentView;
+        const view = transferView(beforeView, result);
+        boardMoves = [...boardMoves.slice(-49), {
+          before: { source: options.source(), board: branch.board, shape: branch.shape, view: beforeView },
+          after: { source: result.source, board: result.board, shape: result.shape, view },
+        }];
+        pending = { source: result.source, board: result.board, shape: result.shape, replace: true, view };
+        options.update(result.source);
+        viewer.stage.focus({ preventScroll: true });
+        options.status(`Moved “${branch.label}”. ${undoHint}`);
+        return true;
+      }
+      const canvas = mapCanvas(branch.board);
+      if (!canvas) {
+        const builder = sites!.canvas(branch.board);
+        const result = graphMoves?.move(branch.board, branch.shape, destination, builder?.own);
+        if (!result) return false;
+        const updated = result.own !== undefined && builder ? sites!.update(builder.owner, result.own)
+          : { source: result.additions ? sites!.append(branch.board, result.additions) : result.source };
+        if ('error' in updated) { options.status(updated.error, 'error'); return false; }
+        boardMoves = [...boardMoves.slice(-49), {
+          before: { source: options.source(), board: branch.board, shape: branch.shape },
+          after: { source: updated.source, board: branch.board, shape: branch.shape },
+        }];
+        pending = { source: updated.source, board: branch.board, replace: true, shape: branch.shape };
+        options.update(updated.source);
+        viewer.stage.focus({ preventScroll: true });
+        options.status(`Moved “${branch.label}”. ${undoHint}`);
+        return true;
+      }
       const result = moveBranch(canvas.own, canvas.trail, branch.shape, destination);
       if (!result) return false;
       const updated = sites!.update(canvas.owner, result.own, result.moved);
@@ -329,9 +380,9 @@ export function setupBoardTools(scope: PaneScope, viewer: Viewer, options: Board
     const source = options.source();
     if (pending?.source === source) return;
     // The latest move that leads from the board on view to this source.
-    const move = [...boardMoves].reverse().map(({ before, after }) => source === before.source && boardId() === after.board ? before
-      : source === after.source && boardId() === before.board ? after : undefined).find(Boolean);
-    if (move) pending = { source, board: move.board, shape: move.shape, replace: true };
+    const move = [...boardMoves].reverse().map(({ before, after }) => source === before.source && (after.view || boardId() === after.board) ? before
+      : source === after.source && (before.view || boardId() === before.board) ? after : undefined).find(Boolean);
+    if (move) pending = { source, board: move.board, shape: move.shape, replace: true, view: move.view };
   }
 
   function startRename(shape: string) {
@@ -417,9 +468,11 @@ export function setupBoardTools(scope: PaneScope, viewer: Viewer, options: Board
         item(canvas.add, () => applyCanvas(shape, [{ type: 'add' }]), { keys: 'Control+Enter Meta+Enter Insert' }));
       if (canvas.sibling) items.push(item('Add sibling topic', () => applyCanvas(shape, [{ type: 'sibling' }]), { keys: 'Enter' }));
       if (canvas.kind === 'flow') items.push(item('Connect to…', () => connections.start(shape)));
-      if (canvas.kind === 'mind map' && (shape !== 'n' || sites!.canvas(boardId())?.trail.length)) items.push(item('Move branch…', () => branches.start(shape)));
-      if (canvas.remove) items.push(item('Delete', () => applyCanvas(shape, [{ type: 'remove' }]), { keys: 'Delete Backspace' }));
     }
+    if (!boardsOnly && branchOwner(boardId()) && (!mapCanvas(boardId()) || shape !== 'n' || mapCanvas(boardId())!.trail.length || transfers?.canMove(boardId(), shape))) {
+      items.push(item('Move branch…', () => branches.start(shape)));
+    }
+    if (canvas?.remove) items.push(item('Delete', () => applyCanvas(shape, [{ type: 'remove' }]), { keys: 'Delete Backspace' }));
     const action = shapeAction(shape);
     const board = boardId();
     const files = options.files?.();
@@ -767,10 +820,12 @@ export function setupBoardTools(scope: PaneScope, viewer: Viewer, options: Board
     /** The source changed: board actions wait for it to compile, except editing the root board. */
     invalidate() { closeMenu(false); stopRename(false); connections.invalidate(); branches.clear(); branchLocations.clear(); pressed = undefined; followHistory(); refresh(); },
     /** The document compiled: index its boards. */
-    compiled(source: string, next: BoardSites, nextBoards: Map<string, Board>) {
+    compiled(source: string, next: BoardSites, nextBoards: Map<string, Board>, graph: unknown = {}) {
       sites = next;
       boards = nextBoards;
       compiledSource = source;
+      graphMoves = graphBranches(source, boards.get('root')!.diagram, graph);
+      transfers = boardTransfers(source, boards, graph);
       ++searchRevision;
       search.update(boards);
       refresh();
@@ -781,6 +836,10 @@ export function setupBoardTools(scope: PaneScope, viewer: Viewer, options: Board
       // An edit belongs to the source it made; another document or a later edit drops it.
       const show = pending?.source === compiledSource ? pending : undefined;
       pending = undefined;
+      if (show?.view) {
+        await viewer.restoreDocumentView(show.view, show.board);
+        if (show.source !== options.source()) return;
+      }
       if (show?.board && boards.has(show.board) && show.board !== boardId()) {
         // Focusing a visible layer activates it without narrowing the connected canvas to its subtree.
         const visible = show.shape && viewer.stage.dataset.layerRoot ? shapeElement(show.shape, show.board) : undefined;

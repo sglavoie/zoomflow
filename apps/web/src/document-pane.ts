@@ -765,7 +765,8 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
     }
     if (linked && event.altKey) { event.preventDefault(); event.stopImmediatePropagation(); }
     // Steps and topics of a builder board are edited on the diagram, so selecting one keeps focus there.
-    const onCanvas = !linked && !event.altKey && boardTools.editsOnCanvas(entry.shape);
+    const onCanvas = !linked && !event.altKey && (boardTools.editsOnCanvas(entry.shape) ||
+      event instanceof MouseEvent && shape.classList.contains('zf-branch-draggable'));
     if (onCanvas) shape.focus({ preventScroll: true });
     else if (!linked || event.altKey) showView('source');
     selectionCleared = undefined;
@@ -836,7 +837,7 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
         if (currentDocumentKey?.startsWith('project:')) compiledBoards.set(currentDocumentKey, new Set([...boards.values()].map((board) => board.hash)));
         blocks = boardBlocks(compiled.graph, source, compiled.inputPath);
         const sites = boardSites(source, blocks, boards);
-        boardTools.compiled(source, sites, boards);
+        boardTools.compiled(source, sites, boards, compiled.graph);
         linkPreview.compiled(boards, sites, render);
         showBoardSource(false);
         void highlightSelection(false);

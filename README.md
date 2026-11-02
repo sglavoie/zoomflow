@@ -40,8 +40,11 @@ use **Retry preview** to try again without losing your source.
    each other. On those boards, rename, add and remove steps and topics right on the
    diagram with F2, ⌘/Ctrl+Enter, Enter and Delete. On flow boards, **Connect to…**
    adds an arrow to another step; select an arrow to edit its label or delete it.
-   On mind maps, drag a topic onto a new parent to move its whole branch, or use
-   **Move branch…** to choose a parent from a list.
+   Drag a node onto a new parent, or use **Move branch…** to choose from a list.
+   Mind maps move the whole topic branch; flows and custom D2 diagrams change the
+   node's incoming connections and keep its downstream branch attached.
+   Move flow or mind-map branches onto parents on other boards too; each branch
+   keeps its own editor, including when moving between flows and mind maps.
    Or change the D2 source on the right and watch
    the preview update. Use the
    filename menu for built-in examples, **Open .d2** for a file, or **Open folder** for

@@ -115,6 +115,35 @@ both panes and include all canonical sources; a selected recovered copy replaces
 its own path in the archive. The generated atlas map is replaced by its opener.
 Source ZIPs and `.d2` disk saves retain their source-only contract.
 
+## Upstream branch moves
+
+Builder flows reparent through their lossless flow model. Other graphs preserve the
+original source and append native D2 edge deletions and new connections, inside the
+nearest local board block. `BoardSites.append` keeps overrides inside attachment
+bodies so their parents remain editable builders. Imported and inherited boards can
+receive local overrides. Source revisions guard both the picker and active drags.
+
+`graph-branches.ts` pairs compiled diagram connections with serialized graph edges
+in compiler order. It reads raw arrow-direction booleans, authored style values,
+arrowhead attributes and SQL-column indexes there. Copied class names remain, while
+style values and labels are snapshots of the resolved connection. Theme defaults
+are left to the compiler. File links use the host's rebased hrefs. Parallel D2
+selectors count each column endpoint pair separately, whereas rendered connection
+IDs count all arrows between those tables; deletions therefore use column-aware
+ordinals in descending order. Compiler tests cover these contracts, along with
+quoted names, Markdown, imports, merges, loops and board inheritance.
+
+`board-transfers.ts` owns cross-board transactions for builder flows and mind maps.
+It cuts model objects by identity, moves their attachment trees, and serializes the
+document once. A transferred branch retains its builder in an attached board; an
+occupied destination gets a new child without replacing its existing link. Physical
+board declaration ranges also allow moving builders nested in hand-written layers.
+Generated detail centres resolve to their logical topic, and destination checks walk
+attachment ownership to reject cycles across boards. Shape and board remaps carry
+export visibility and layer choices through renumbering and relocation. The viewer
+applies those choices after compilation, under the replacement document's draft key;
+undo and redo retain view snapshots with the source transaction.
+
 ## File links and atlas routes
 
 A file link is classified by `classifyHref` as `{ kind: 'file', path, hash }` when it is

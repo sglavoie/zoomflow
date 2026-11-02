@@ -653,11 +653,11 @@ export function rebaseFileLinks(compiled: { diagram: Diagram; graph: unknown; fs
 
 // The serialized AST of the main file, with UTF-16 ranges like object references.
 interface AstMap { range?: string; nodes?: { map_key?: AstMapKey }[] }
-interface AstMapKey { key?: { path?: AstKeySegment[] }; value?: { map?: AstMap } }
+interface AstMapKey { range?: string; key?: { path?: AstKeySegment[] }; value?: { map?: AstMap } }
 
 /** The text between the braces of each board's block in the main file; the whole file for the root board.
  * Boards declared in more than one place, imported, or under scenarios and steps have no single block, so they are left out. */
-export function boardBlocks(graph: unknown, source: string, filename = 'index'): Map<string, SourceRange> {
+export function boardBlocks(graph: unknown, source: string, filename = 'index', statements?: Map<string, SourceRange>): Map<string, SourceRange> {
   const blocks = new Map<string, SourceRange>([['root', { from: 0, to: source.length }]]);
   // Keyed in lower case, as D2 matches board names.
   const declarations = new Map<string, number>();
@@ -665,12 +665,12 @@ export function boardBlocks(graph: unknown, source: string, filename = 'index'):
   const keyword = (part: AstKeySegment | undefined) => part !== undefined && 'unquoted_string' in part && keyText(part)?.toLowerCase() === 'layers';
   // D2 merges `LAYERS` into an existing `layers` board but, written alone, also makes root shapes of it,
   // so another casing counts as a declaration without giving a board its block.
-  function declare(path: AstKeySegment[], value: AstMapKey['value'], board: string, editable: boolean) {
+  function declare(path: AstKeySegment[], value: AstMapKey['value'], board: string, editable: boolean, statement?: string) {
     if (!keyword(path[0]) || path.length < 2) {
       if (path.length === 1 && keyword(path[0]) && value?.map) {
         for (const node of value.map.nodes ?? []) {
           const child = node.map_key?.key?.path;
-          if (child) declare([path[0], ...child], node.map_key!.value, board, editable);
+          if (child) declare([path[0], ...child], node.map_key!.value, board, editable, node.map_key!.range);
         }
       }
       return;
@@ -680,19 +680,23 @@ export function boardBlocks(graph: unknown, source: string, filename = 'index'):
     const id = `${board}.layers.${boardKey(name)}`;
     const exact = editable && keyText(path[0]) === 'layers';
     declarations.set(id.toLowerCase(), (declarations.get(id.toLowerCase()) ?? 0) + 1);
-    if (path.length > 2) { declare(path.slice(2), value, id, exact); return; }
+    if (path.length > 2) { declare(path.slice(2), value, id, exact, statement); return; }
     const range = value?.map?.range && parseSourceRange(value.map.range, source, filename);
-    if (exact && range && source[range.from] === '{' && source[range.to - 1] === '}') blocks.set(id, { from: range.from + 1, to: range.to - 1 });
+    if (exact && range && source[range.from] === '{' && source[range.to - 1] === '}') {
+      blocks.set(id, { from: range.from + 1, to: range.to - 1 });
+      const span = statement && parseSourceRange(statement, source, filename);
+      if (span) statements?.set(id, span);
+    }
     if (value?.map) visit(value.map, id, exact);
   }
   function visit(map: AstMap, board: string, editable: boolean) {
     for (const node of map.nodes ?? []) {
       const path = node.map_key?.key?.path;
-      if (path) declare(path, node.map_key!.value, board, editable);
+      if (path) declare(path, node.map_key!.value, board, editable, node.map_key!.range);
     }
   }
   const ast = (graph as { ast?: AstMap }).ast;
   if (ast) visit(ast, 'root', true);
-  for (const id of blocks.keys()) if ((declarations.get(id.toLowerCase()) ?? 0) > 1) blocks.delete(id);
+  for (const id of blocks.keys()) if ((declarations.get(id.toLowerCase()) ?? 0) > 1) { blocks.delete(id); statements?.delete(id); }
   return blocks;
 }

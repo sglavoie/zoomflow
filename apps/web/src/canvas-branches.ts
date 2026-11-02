@@ -1,11 +1,11 @@
 import type { Viewer } from '@zoomflow/viewer';
-import type { branchChoices } from './canvas-model';
 import { pageListeners } from './canvas-guidance';
 
-type Branch = NonNullable<ReturnType<typeof branchChoices>> & { board: string; shape: string; owner: string; source: string };
+type Destination = { id: string; label: string; shape: string; trail: string[]; board?: string; owner?: string };
+type Branch = { from: string; label: string; destinations: Destination[]; board: string; shape: string; owner: string; source: string; parentKind?: 'topic' | 'node'; acrossBoards?: boolean };
 type BranchHost = {
   branch: (board: string, shape: string) => Branch | undefined;
-  topic: (board: string, shape: string) => { owner: string; id: string } | undefined;
+  topic: (board: string, shape: string) => { owner: string; id: string; transfer?: string } | undefined;
   canDrag: (board: string, shape: string) => boolean;
   owner: (board: string) => string | undefined;
   source: () => string;
@@ -23,7 +23,6 @@ export function setupCanvasBranches(viewer: Viewer, host: BranchHost) {
   panel.hidden = true;
   const heading = document.createElement('strong');
   const help = document.createElement('p');
-  help.textContent = 'Choose a new parent on the diagram or from the list. The whole branch moves with it. Escape cancels.';
   const field = document.createElement('label');
   field.append('New parent');
   const destination = document.createElement('select');
@@ -57,6 +56,7 @@ export function setupCanvasBranches(viewer: Viewer, host: BranchHost) {
     const board = element.dataset.shapeBoard ?? boardId();
     // The destination may be a repeated detail-board centre. Its global identity is the branch's origin.
     const topic = host.topic(board, element.dataset.shapeId!);
+    if (topic?.transfer && branch.destinations.some(item => item.id === topic.transfer)) return topic.transfer;
     return topic?.owner === branch.owner ? branch.destinations.find(item => item.id === topic.id)?.id : undefined;
   }
   function unmark() {
@@ -70,7 +70,7 @@ export function setupCanvasBranches(viewer: Viewer, host: BranchHost) {
       if (board === branch.board && element.dataset.shapeId === branch.shape) element.classList.add('zf-branch-origin');
       if (dest) {
         const topic = host.topic(board, element.dataset.shapeId!);
-        if (topic?.owner === branch.owner && topic.id === dest.id) element.classList.add('zf-branch-target');
+        if (topic && (topic.transfer === dest.id || topic.owner === branch.owner && topic.id === dest.id)) element.classList.add('zf-branch-target');
       }
     }
   }
@@ -211,11 +211,17 @@ export function setupCanvasBranches(viewer: Viewer, host: BranchHost) {
     start(shape: string) {
       const branch = host.branch(boardId(), shape);
       if (!branch) return;
-      if (!branch.destinations.length) { host.status('This branch has no other parent topic. Add another branch first.'); return; }
+      if (!branch.destinations.length) { host.status('This branch has no other parent. Add another branch first.'); return; }
       clear();
       choosing = branch;
       host.clearShapes();
       heading.textContent = `Move “${branch.label}”`;
+      help.textContent = branch.acrossBoards
+        ? 'Choose a new upstream parent anywhere on the connected diagram or from the list. The whole branch moves with its editor. Escape cancels.'
+        : branch.parentKind === 'node'
+        ? 'Choose a new upstream parent on this board. Incoming connections change; downstream connections stay attached. Escape cancels.'
+        : 'Choose a new parent on the diagram or from the list. The whole branch moves with it. Escape cancels.';
+      destination.setAttribute('aria-label', branch.parentKind === 'node' ? 'New parent node' : 'New parent topic');
       panel.setAttribute('aria-label', heading.textContent);
       destination.replaceChildren(...branch.destinations.map(item => new Option(item.label, item.id)));
       panel.hidden = false;
@@ -225,11 +231,23 @@ export function setupCanvasBranches(viewer: Viewer, host: BranchHost) {
     clear,
     boardChanged() {
       const branch = choosing ?? drag?.branch;
-      if (branch && (!valid(branch) || host.owner(boardId()) !== branch.owner)) clear();
+      const owner = host.owner(boardId());
+      if (branch && (!valid(branch) || owner !== branch.owner && !branch.destinations.some(item => item.owner === owner))) clear();
     },
     refresh() {
       for (const element of viewer.stage.querySelectorAll<SVGElement>('[data-shape-id]')) {
-        element.classList.toggle('zf-branch-draggable', host.canDrag(element.dataset.shapeBoard ?? boardId(), element.dataset.shapeId!));
+        const draggable = host.canDrag(element.dataset.shapeBoard ?? boardId(), element.dataset.shapeId!);
+        element.classList.toggle('zf-branch-draggable', draggable);
+        // Imported nodes have no local source-selection control, but can still gain a local upstream override.
+        if (draggable && !element.closest('a') && !element.hasAttribute('tabindex')) {
+          element.dataset.branchFocus = '';
+          element.setAttribute('tabindex', '-1');
+          element.setAttribute('role', 'button');
+          element.setAttribute('aria-label', `Select ${element.querySelector('text')?.textContent ?? element.dataset.shapeId}`);
+        } else if (!draggable && element.hasAttribute('data-branch-focus')) {
+          delete element.dataset.branchFocus;
+          for (const attr of ['tabindex', 'role', 'aria-label']) element.removeAttribute(attr);
+        }
       }
       if (choosing && !valid(choosing)) clear();
     },

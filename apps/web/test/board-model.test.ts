@@ -7,6 +7,7 @@ import { flowSource, flowTemplate, readFlow } from '../src/flow-model';
 import { mindMapSource, parseOutline, readMindMap, type MindMap } from '../src/mind-map-model';
 import { plainLook } from '../src/flow-model';
 import { projectFileSystem } from '../src/project-files';
+import { graphBranches } from '../src/graph-branches';
 
 let d2: D2;
 beforeAll(() => { d2 = new D2(); });
@@ -20,6 +21,24 @@ async function sites(source: string) {
 }
 const flow = flowSource(flowTemplate('approval'));
 const map = (outline: string, split = 0): MindMap => ({ direction: 'right', split, look: plainLook(), root: parseOutline(outline)! });
+
+it('keeps the parent builder editable when reparenting on a custom attached board and its inherited scenario', async () => {
+  const own = mindMapSource(map('Plan\n  Work\n  Other'));
+  let site = (await sites(own)).sites;
+  const source = site.add('root', 'n_1', 'a -> child -> leaf\nb\nscenarios: {alternate: {b}}', 'Custom').source;
+  const compiled = await compile(source);
+  site = (await sites(source)).sites;
+  const moves = graphBranches(source, compiled.diagram, compiled.graph);
+  for (const board of ['root.layers.Custom', 'root.layers.Custom.scenarios.alternate']) {
+    const change = moves.move(board, 'child', 'b')!;
+    const result = site.append(board, change.additions!);
+    const next = await sites(result);
+    expect(next.sites.builder('root')?.kind).toBe('mind map');
+    expect(next.sites.builder('root')?.own.trim()).toBe(own.trim());
+    expect(next.boards.get(board)!.diagram.connections.map(edge => [edge.src, edge.dst])).toContainEqual(['b', 'child']);
+    expect(next.sites.shapeAction('root', 'n_1')).toEqual({ action: 'none', reason: 'This shape already opens another board or link.' });
+  }
+});
 
 it('moves branches across details without mixing duplicate topics, file links or attached boards', async () => {
   let source = mindMapSource(map('Plan\n  A\n    Task\n      Notes\n  B\n    Task', 1));

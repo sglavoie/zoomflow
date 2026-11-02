@@ -5,7 +5,7 @@ export { indexDiagramSearch, searchDiagram, type DiagramSearchEntry } from './se
 export { normalizeRouteHash, resolveRouteHash } from './routes';
 export { renderExportBoards, exportBoardsZip, exportSourcesZip, exportBoardsHtml, exportGlyphSource, exportAtlasHtml, exportAtlasZip, type ExportBoard, type AtlasDocument } from './export';
 export type { Diagram, CompileResponse, RenderOptions } from '@d2lang/d2';
-export { boardBlocks, indexShapeSources, linkSources, parseSourceRange, rebaseFileHref, rebaseFileLinks, shapeRanges, type SourceRange, type ShapeSource } from './source';
+export { boardBlocks, idSegments, indexShapeSources, linkSources, parseSourceRange, rebaseFileHref, rebaseFileLinks, shapeRanges, type SourceRange, type ShapeSource } from './source';
 export { lint, boardLabel, type LintRule, type LintDiagnostic, type LintOptions, type LintResult, type BoundaryEvaluation } from './lint';
 
 export interface Board {

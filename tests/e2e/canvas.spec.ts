@@ -402,7 +402,7 @@ test('canvas guidance follows navigation, mouse, keyboard and zoom context', asy
   await expect(page.locator('.zf-stage a[href="https://d2lang.com/tour/intro/"]')).toBeVisible();
   const browse = page.locator('.zf-stage [data-shape-id="Browse"]');
   await browse.hover();
-  await expect(hint).toHaveText('Click to select this shape’s source');
+  await expect(hint).toHaveText('Click to select this shape’s source · Drag onto a new parent to move this branch');
   await page.getByRole('link', { name: 'Open checkout board', exact: true }).click();
   await page.mouse.move(0, 0);
   await expect(hint).toHaveText('Click Charge to explore');

@@ -28,6 +28,14 @@ isolation, per-document choices, and failed or superseded layer renders.
 
 ## Editing
 
+- `canvas-board-transfers.spec.ts`: the three flow/mind-map transfers from the
+  reported connected canvas, attached-root moves, cross-board parent pickers,
+  occupied targets, cycle rejection, save/reopen, export-visibility remapping,
+  layer-depth reveal, undo/redo, phone controls and real touch dragging.
+- `canvas-graph-branches.spec.ts`: upstream moves in builder flows and custom D2,
+  retained outgoing arrows and attached boards, merges and styling, keyboard parent
+  selection, cycle rejection, undo/redo, save/reopen, connected boards with repeated
+  IDs, stale pickers, phone controls, and real touch dragging.
 - `canvas-branches.spec.ts`: dragging mind map subtrees, keyboard and diagram parent
   selection, duplicate labels, generated detail boards, attached boards, undo/redo
   with selection, invalid drops, Escape, stale sources, phone controls, and held-touch
