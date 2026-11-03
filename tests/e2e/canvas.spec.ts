@@ -460,6 +460,43 @@ for (const offline of [false, true]) test(`link badges keep their screen size th
   await expect(page.locator('.zf-stage')).toHaveAttribute('data-board', 'root.layers.checkout');
 });
 
+for (const mode of ['live', 'connected layers', 'offline'] as const) test(`link badge edges remain clickable while zooming out in ${mode}`, async ({ page, context }, info) => {
+  await page.goto('/'); await previewReady(page);
+  await page.locator('#file').setInputFiles({ name: 'badge-edges.d2', mimeType: 'text/plain',
+    buffer: Buffer.from('entry: Open detail {link: layers.detail}\nlayers: {detail: {back: Back {link: _}}}') });
+  await previewReady(page);
+  if (mode === 'connected layers') {
+    await page.getByRole('checkbox', { name: 'Show all layers', exact: true }).check();
+    await expect(page.locator('[data-layer-board]')).toHaveCount(2);
+  } else if (mode === 'offline') {
+    const path = info.outputPath('badge-edges.html');
+    const pending = page.waitForEvent('download');
+    await downloadExport(page);
+    await (await pending).saveAs(path);
+    await context.setOffline(true);
+    await page.goto(pathToFileURL(path).href);
+  }
+  const link = page.getByRole('link', { name: mode === 'connected layers' ? 'Return to Root' : 'Open detail board', exact: true });
+  const circle = link.locator('.appendix-icon circle');
+  const out = page.getByRole('button', { name: 'Zoom out', exact: true });
+  for (let i = 0; i <= 6; i++) {
+    // Bounding boxes include clipped content. Hit-test near the circle's top, right and
+    // bottom edges to verify it is actually painted beyond the shrinking SVG viewports.
+    await expect.poll(() => circle.evaluate(node => {
+      const box = node.getBoundingClientRect();
+      const x = box.x + box.width / 2;
+      const y = box.y + box.height / 2;
+      return [[x, y - 14], [x + 14, y], [x, y + 14]].every(([px, py]) =>
+        document.elementFromPoint(px, py)?.closest('a') === node.closest('a'));
+    }), { timeout: 5000 }).toBe(true);
+    if (i < 6) await out.click();
+  }
+  await expect(page.locator('.zf-zoom-controls span')).toHaveText('10%');
+  const box = (await circle.boundingBox())!;
+  await page.mouse.click(box.x + box.width / 2 + 14, box.y + box.height / 2);
+  await expect(page.locator('.zf-stage')).toHaveAttribute('data-board', mode === 'connected layers' ? 'root' : 'root.layers.detail');
+});
+
 test('appearance is separate from export and desktop canvas controls stay outside the diagram', async ({ page }) => {
   await page.goto('/');
   await previewReady(page);

@@ -27,6 +27,8 @@ export const viewerStyle = `
 .zf-stage { grid-column: 1 / -1; position: relative; flex: 1; min-height: 0; overflow: hidden; display: grid; place-items: center; border: 1px solid #8192a433; border-radius: 10px; background: var(--surface); }
 .zf-stage:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
 .zf-stage > svg { display: block; width: 100%; height: 100%; max-width: 100%; max-height: 100%; }
+/* Badges keep their screen size while board viewports shrink with zoom. Clip at the stage only. */
+.zf-stage svg svg { overflow: visible; }
 .zf-stage a { cursor: pointer; }
 .zf-layer-label { fill: var(--muted, #52657d); }
 .zf-layer-connectors { pointer-events: none; }
