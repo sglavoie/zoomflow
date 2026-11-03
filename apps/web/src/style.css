@@ -1807,6 +1807,22 @@ footer {
 .ai-settings {
   font-size: var(--font-size-sm);
 }
+.ai-query-history {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.ai-query-history[hidden] {
+  display: none;
+}
+.ai-query-history select {
+  flex: 1;
+  min-width: 0;
+  width: 0;
+}
+.ai-query-history button {
+  flex-shrink: 0;
+}
 .ai-settings summary {
   width: max-content;
   cursor: pointer;

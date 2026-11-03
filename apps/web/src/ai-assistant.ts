@@ -1,5 +1,6 @@
 import type { PaneScope } from './pane-scope';
 import { AiError, aiFailure, readAiResponse } from './ai-errors';
+import { setupAiQueryHistory } from './ai-query-history';
 type Snapshot = { source: string; name: string; board: string; revision: number };
 const switchedDocument = Symbol('switched document');
 
@@ -60,6 +61,7 @@ export function setupAiAssistant({ root, part }: PaneScope, { read, validate, ap
   const workingConfig = part<HTMLElement>('ai-working-config');
   const workingDirectory = part<HTMLInputElement>('ai-working-directory');
   const prompt = part<HTMLTextAreaElement>('ai-prompt');
+  const history = setupAiQueryHistory({ part }, prompt);
   const button = part<HTMLButtonElement>('ai-send');
   const status = part<HTMLElement>('ai-status');
   const panel = part<HTMLDetailsElement>('ai-assistant');
@@ -106,6 +108,7 @@ export function setupAiAssistant({ root, part }: PaneScope, { read, validate, ap
     button.disabled = checking || !available || Boolean(active);
     button.hidden = Boolean(active);
     prompt.disabled = !available || Boolean(active);
+    history.setDisabled(prompt.disabled);
     provider.disabled = Boolean(active);
     cancel.hidden = !active;
   }
@@ -189,6 +192,7 @@ export function setupAiAssistant({ root, part }: PaneScope, { read, validate, ap
     const question = prompt.value.trim();
     if (!question || button.disabled) return;
     const snapshot = read();
+    history.remember(question);
     const unchanged = () => read().revision === snapshot.revision;
     const controller = active = new AbortController();
     responseDetails();
@@ -293,6 +297,6 @@ export function setupAiAssistant({ root, part }: PaneScope, { read, validate, ap
     sourceChanged() { undoRevision = undefined; undoButton.hidden = true; changeFeedback.hidden = true; },
     /** Abandon a running request, for example when its document closes. */
     cancel() { active?.abort(); },
-    dispose() { active?.abort(); health?.abort(); resize.disconnect(); tools.removeEventListener('scroll', updateOverflow); },
+    dispose() { active?.abort(); health?.abort(); history.dispose(); resize.disconnect(); tools.removeEventListener('scroll', updateOverflow); },
   };
 }

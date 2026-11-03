@@ -23,6 +23,12 @@ source editor stays visible. The prompt and Send/Cancel share a compact row abov
 availability and settings, including on phones. Additional settings scroll below
 the composer; a bottom shadow indicates more content.
 
+Submitted prompts are saved in this browser's local storage, with the 50 most
+recent distinct queries first. Use **Previous queries** below the prompt to load
+one, edit it, and click **Send** when ready. History is shared across diagrams and
+panes and survives reloading; failed and canceled requests are included.
+**Clear history** removes the saved queries without changing the current prompt.
+
 Applied edits highlight the affected source lines and show a clickable change count
 beside **Undo AI change**. This feedback scrolls into view within the tools on
 short screens without moving the editor or keyboard focus. Deletions highlight

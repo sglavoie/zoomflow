@@ -6,6 +6,41 @@ test.beforeEach(async ({ page }) => {
     contentType: 'application/json', body: JSON.stringify({ available: true }) }));
 });
 
+test('query history survives reload and loads a previous query for editing before submission', async ({ page }) => {
+  const submitted: string[] = [];
+  await page.route('**/api/ai', async route => {
+    submitted.push(route.request().postDataJSON().prompt);
+    await route.fulfill({ json: { reply: 'Explained.', source: null } });
+  });
+  await page.goto('/'); await previewReady(page);
+  await page.locator('#ai-assistant > summary').click();
+  await expect(page.getByRole('combobox', { name: 'Previous queries' })).toBeHidden();
+  const query = 'Explain this diagram\nand suggest improvements';
+  await page.locator('#ai-prompt').fill(query);
+  await page.locator('#ai-send').click();
+  await expect(page.locator('#ai-prompt')).toHaveValue('');
+  await page.reload(); await previewReady(page);
+  if (!await page.locator('#ai-assistant').evaluate((node: HTMLDetailsElement) => node.open)) {
+    await page.locator('#ai-assistant > summary').click();
+  }
+  const history = page.getByRole('combobox', { name: 'Previous queries' });
+  await expect(history).toBeEnabled();
+  await history.selectOption('0');
+  await expect(page.locator('#ai-prompt')).toHaveValue(query);
+  await expect(page.locator('#ai-prompt')).toBeFocused();
+  expect(submitted).toEqual([query]);
+  await page.locator('#ai-prompt').fill(query + '\nFocus on the database.');
+  await page.locator('#ai-prompt').press('ControlOrMeta+Enter');
+  await expect(page.locator('#ai-prompt')).toHaveValue('');
+  expect(submitted).toEqual([query, query + '\nFocus on the database.']);
+  await expect(history.locator('option')).toHaveCount(3);
+  await history.selectOption('0');
+  await page.getByRole('button', { name: 'Clear history', exact: true }).click();
+  await expect(history).toBeHidden();
+  await expect(page.locator('#ai-prompt')).toHaveValue(query + '\nFocus on the database.');
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('zoomflow.ai-query-history.v1')!))).toEqual([]);
+});
+
 test('AI updates the current diagram and keeps the edit undoable', async ({ page }) => {
   await page.route('**/api/ai', async (route) => {
     const request = route.request().postDataJSON();
@@ -134,6 +169,8 @@ test('CLI failures are shown beside the prompt', async ({ page }) => {
   await expect(page.locator('#ai-status')).toHaveAttribute('role', 'alert');
   await expect(page.locator('#ai-status')).toContainText('codex is not installed');
   await expect(page.getByRole('button', { name: 'Send' })).toBeEnabled();
+  await page.getByRole('combobox', { name: 'Previous queries' }).selectOption('0');
+  await expect(page.locator('#ai-prompt')).toHaveValue('Add a node');
 });
 
 test('AI availability is checked before composing a prompt and can be retried', async ({ page }) => {
@@ -184,6 +221,7 @@ test('cancel keeps the prompt and ignores a late AI response', async ({ page }) 
   await page.locator('#ai-prompt').fill('Make a change');
   await page.locator('#ai-send').click();
   await expect(page.locator('#ai-elapsed')).toHaveText(/[1-9]\d*s elapsed/);
+  await expect(page.getByRole('combobox', { name: 'Previous queries' })).toBeDisabled();
   await page.getByRole('button', { name: 'Cancel', exact: true }).click();
   await expect(page.locator('#ai-status')).toContainText('canceled');
   release();

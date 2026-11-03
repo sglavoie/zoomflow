@@ -213,6 +213,10 @@
               <textarea id="ai-prompt" aria-label="Ask AI about this diagram" placeholder="Describe a change or ask about this diagram…" rows="2" maxlength="8000" required disabled></textarea>
               <div class="ai-actions"><span id="ai-elapsed" data-part="ai-elapsed" aria-live="off"></span><button id="ai-cancel" type="button" hidden>Cancel</button><button id="ai-send" data-part="ai-send" type="submit" aria-keyshortcuts="Meta+Enter Control+Enter" title="Send (⌘Enter or Ctrl+Enter)" disabled>Send</button></div>
             </div>
+            <div id="ai-query-history" class="ai-query-history" hidden>
+              <select id="ai-previous-queries" aria-label="Previous queries" title="Choose a previous query to edit" disabled><option value="">Previous queries…</option></select>
+              <button id="ai-clear-history" class="button-quiet" type="button">Clear history</button>
+            </div>
             <p id="ai-availability" data-part="ai-availability" role="status">Checking local AI availability…</p>
             <button id="ai-retry" data-part="ai-retry" type="button" hidden>Check again</button>
             <details class="ai-settings"><summary>AI settings</summary>
