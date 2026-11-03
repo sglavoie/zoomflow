@@ -132,6 +132,28 @@ it('runs Claude Code and reads structured output', async () => {
   await expect(runAi({ ...request, provider: 'claude' })).resolves.toEqual({ reply: 'Renamed.', source: 'new: New' });
 });
 
+it.each(['claude', 'codex'] as const)('supplies diagram diagnostics to %s, including locations and rule names', async (provider) => {
+  fakeBin = await mkdtemp(join(tmpdir(), 'zoomflow-ai-test-'));
+  const output = provider === 'claude' ? '{ structured_output: { reply: prompt, source: null } }' : '{ reply: prompt, source: null }';
+  const command = join(fakeBin, provider);
+  await writeFile(command, `#!/usr/bin/env node\nlet prompt = '';\nprocess.stdin.setEncoding('utf8');\nprocess.stdin.on('data', chunk => prompt += chunk);\nprocess.stdin.on('end', () => process.stdout.write(JSON.stringify(${output})));\n`);
+  await chmod(command, 0o755);
+  process.env.PATH = `${fakeBin}:${originalPath}`;
+  const diagnostics = [
+    { severity: 'error' as const, source: 'Zoomflow dangling-link', filename: 'lib/detail.d2', line: 4, column: 7,
+      message: 'root.layers.detail: Link targets missing board "root.layers.missing".' },
+    { severity: 'warning' as const, source: 'Zoomflow orphan-board', message: 'root.layers.unused: Board is unreachable.' },
+    { severity: 'error' as const, filename: 'example.d2', line: 2, column: 1, message: 'maps must be terminated with }' },
+  ];
+  const result = await runAi({ ...request, provider, prompt: 'Fix the diagnostics issues', diagnostics });
+  const section = result.reply.split('<diagnostics>\n')[1].split('\n</diagnostics>')[0];
+  expect(JSON.parse(section)).toEqual(diagnostics);
+  expect(result.reply).toContain('source and diagnostics');
+  expect(result.reply).toContain('Fix the diagnostics issues');
+  expect((await runAi({ ...request, provider, diagnostics: [] })).reply).toContain('No diagnostics reported.');
+  expect((await runAi({ ...request, provider })).reply).toContain('Diagnostics were not supplied.');
+});
+
 it('accepts a large source although Claude Code prints the reply twice', async () => {
   const source = Array.from({ length: 5_000 }, (_, i) => `\t"node ${i}": "a \\"quoted\\" label"`).join('\n');
   expect(source.length).toBeLessThan(180_000);
@@ -295,6 +317,18 @@ it('accepts deeply nested board ids and names the limit a request breaks', () =>
   expect(requestProblem({ ...request, provider: 'claude', claudeConfigDir: 'x'.repeat(4_001) })).toContain('CLAUDE_CONFIG_DIR field is too long');
   expect(requestProblem({ ...request, provider: 'codex', workingDirectory: 'x'.repeat(4_001) })).toContain('Working directory field is too long');
   expect(requestProblem({ ...request, provider: 'codex', name: 7 })).toBe('Invalid AI request.');
+});
+
+it('validates diagnostic context before passing it to a provider', () => {
+  const check = (diagnostics: unknown) => requestProblem({ ...request, provider: 'codex', diagnostics });
+  expect(check([])).toBeUndefined();
+  expect(check([{ severity: 'warning', message: 'Board is unreachable.' }])).toBeUndefined();
+  for (const diagnostics of [null, 'error', [null], [{}], [{ severity: 'info', message: 'Unknown' }],
+    [{ severity: 'error', message: 1 }], [{ severity: 'error', message: 'Bad', filename: 1 }],
+    [{ severity: 'error', message: 'Bad', line: 0 }], [{ severity: 'error', message: 'Bad', column: 1.5 }]]) {
+    expect(check(diagnostics)).toBe('Invalid diagram diagnostics.');
+  }
+  expect(check([{ severity: 'error', message: 'x'.repeat(180_001) }])).toContain('diagnostics are too large');
 });
 
 it('names the settings field over its limit when checking a provider', async () => {

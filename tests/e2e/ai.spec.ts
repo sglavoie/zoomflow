@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { source, previewReady, stubAiStatus, selectSource, withEditorView } from './helpers';
+import { source, previewReady, stubAiStatus, selectSource, withEditorView, chooseExample } from './helpers';
 
 test.beforeEach(async ({ page }) => {
   await page.route('**/api/ai/status', (route) => route.fulfill({ status: 200,
@@ -64,6 +64,83 @@ test('AI updates the current diagram and keeps the edit undoable', async ({ page
   await source(page).focus();
   await source(page).press('ControlOrMeta+z');
   await expect(page.locator('.zf-stage')).toContainText('Checkout');
+});
+
+test('asking AI to fix diagnostics includes all current lint issues and enabled checks', async ({ page }) => {
+  await page.route('**/api/ai', async route => {
+    const request = route.request().postDataJSON();
+    expect(request.prompt).toBe('Fix the diagnostics issues');
+    expect(request.diagnostics).toEqual(expect.arrayContaining([
+      expect.objectContaining({ severity: 'error', source: 'Zoomflow dangling-link', filename: 'diagnostics.d2',
+        line: 7, message: expect.stringContaining('missing') }),
+      expect.objectContaining({ severity: 'warning', source: 'Zoomflow orphan-board', message: expect.stringContaining('root.layers.details') }),
+      expect.objectContaining({ severity: 'warning', source: 'Zoomflow missing-backlink', message: expect.stringContaining('root.layers.details') }),
+    ]));
+    expect(request.diagnostics).toHaveLength(3);
+    await route.fulfill({ json: { reply: 'Repaired the link and parent backlink.',
+      source: request.source.replace('link: layers.missing', 'link: layers.details').replace('validate -> save', 'validate -> save\n    back.link: _') } });
+  });
+  await page.goto('/'); await previewReady(page);
+  await chooseExample(page, /Find & fix a broken link/);
+  // Remove the example's existing backlink so the optional check adds a third issue.
+  await withEditorView(page, view => {
+    const text = view.state.doc.toString().replace('link: _;', '');
+    view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: text } });
+  });
+  await page.locator('#lint-details > summary').click();
+  await page.getByLabel('Check parent backlinks').check();
+  await expect(page.locator('#lint-summary')).toHaveText('1 lint error, 2 warnings');
+  await page.locator('#ai-assistant > summary').click();
+  await page.locator('#ai-prompt').fill('Fix the diagnostics issues');
+  await page.locator('#ai-send').click();
+  await expect(page.locator('#ai-status')).toContainText('Diagram updated.');
+  await expect(page.locator('#lint-summary')).toHaveText('No lint issues');
+});
+
+test('AI checks diagnostics for edits submitted before the preview debounce', async ({ page }) => {
+  await page.route('**/api/ai', async route => {
+    const request = route.request().postDataJSON();
+    expect(request.source).toBe('a.link: layers.missing');
+    expect(request.diagnostics).toEqual([
+      expect.objectContaining({ severity: 'error', source: 'Zoomflow dangling-link', line: 1,
+        message: expect.stringContaining('missing') }),
+    ]);
+    await route.fulfill({ json: { reply: 'Found the broken link.', source: null } });
+  });
+  await page.goto('/'); await previewReady(page);
+  await page.locator('#ai-assistant > summary').click();
+  await expect(page.locator('#ai-send')).toBeEnabled();
+  await page.clock.install();
+  await page.clock.pauseAt(new Date());
+  await source(page).fill('a.link: layers.missing');
+  await page.locator('#ai-prompt').fill('Explain the diagnostics');
+  await page.locator('#ai-send').click();
+  await expect(page.locator('#ai-status')).toHaveText('Found the broken link.');
+});
+
+test('AI receives compiler errors and clears them after a repair', async ({ page }) => {
+  const requests: any[] = [];
+  await page.route('**/api/ai', async route => {
+    requests.push(route.request().postDataJSON());
+    await route.fulfill({ json: requests.length === 1
+      ? { reply: 'Closed the map.', source: 'broken: {}' }
+      : { reply: 'No diagnostics remain.', source: null } });
+  });
+  await page.goto('/'); await previewReady(page);
+  await source(page).fill('broken: {');
+  await expect(page.locator('#compile-error')).toBeVisible();
+  await page.locator('#ai-assistant > summary').click();
+  await page.locator('#ai-prompt').fill('Fix the diagnostics issues');
+  await page.locator('#ai-send').click();
+  await expect(page.locator('#ai-status')).toContainText('Closed the map.');
+  expect(requests[0].diagnostics).toEqual([
+    expect.objectContaining({ severity: 'error', line: 1, message: expect.stringContaining('maps must be terminated') }),
+  ]);
+  await previewReady(page);
+  await page.locator('#ai-prompt').fill('Explain the diagnostics');
+  await page.locator('#ai-send').click();
+  await expect(page.locator('#ai-status')).toHaveText('No diagnostics remain.');
+  expect(requests[1].diagnostics).toEqual([]);
 });
 
 test('opening Ask AI before the app starts still checks availability', async ({ page }) => {

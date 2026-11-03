@@ -620,6 +620,19 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
   });
   ai = setupAiAssistant(scope, {
     read: () => ({ source: editor.source, name: documentName, board: viewer.currentBoard?.id ?? 'root', revision: documentRevision }),
+    diagnostics: async (source) => {
+      if (lintDocument && mappedSource === source) return activeDiagnostics;
+      const context = picker().compilation(id);
+      const options = { missingBacklink: missingBacklink.checked, boundaryPorts: boundaryPorts.checked, files: lintFiles(context.inputPath) };
+      try {
+        const compiled = await compileSource(source, context);
+        const sources = indexShapeSources(compiled.diagram, compiled.graph, source, compiled.inputPath);
+        return lintDiagnostics(lint(compiled, options).diagnostics, source, sources, compiled.inputPath);
+      } catch (error) {
+        if (isEngineUnavailable(error)) throw new AiError('The diagram engine is unavailable, so diagnostics could not be checked. Retry the preview, then send again.', describeError(error));
+        return compilerDiagnostics(error, source, context.inputPath);
+      }
+    },
     validate: async (source) => {
       try { await compileSource(source); }
       catch (error) {

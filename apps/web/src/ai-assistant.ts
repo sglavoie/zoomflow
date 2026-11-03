@@ -1,6 +1,7 @@
 import type { PaneScope } from './pane-scope';
 import { AiError, aiFailure, readAiResponse } from './ai-errors';
 import { setupAiQueryHistory } from './ai-query-history';
+import type { SourceDiagnostic } from './diagnostics';
 type Snapshot = { source: string; name: string; board: string; revision: number };
 const switchedDocument = Symbol('switched document');
 
@@ -37,6 +38,8 @@ function requestStatus(body: string) {
 
 export type AiAssistantHost = {
   read: () => Snapshot;
+  /** Diagnostics for the submitted source, including edits whose preview is still pending. */
+  diagnostics: (source: string) => Promise<SourceDiagnostic[]>;
   /** Rejects when the proposed source does not compile; an `AiError` rejection reports its own message,
    * for example when the diagram engine cannot check the source at all. */
   validate: (source: string) => Promise<void>;
@@ -50,7 +53,7 @@ export type AiAssistantHost = {
   dismissHighlights?: () => void;
 };
 
-export function setupAiAssistant({ root, part }: PaneScope, { read, validate, apply, readOnly = () => undefined, onStatus = () => {}, undo = () => false,
+export function setupAiAssistant({ root, part }: PaneScope, { read, diagnostics, validate, apply, readOnly = () => undefined, onStatus = () => {}, undo = () => false,
   revealChange = () => {}, dismissHighlights = () => {} }: AiAssistantHost) {
   const form = part<HTMLFormElement>('ai-form');
   const provider = part<HTMLSelectElement>('ai-provider');
@@ -205,12 +208,19 @@ export function setupAiAssistant({ root, part }: PaneScope, { read, validate, ap
     const timer = setInterval(() => { elapsed.textContent = `${Math.floor((Date.now() - started) / 1000)}s elapsed`; }, 1000);
     status.setAttribute('role', 'status');
     status.dataset.kind = 'pending';
-    status.textContent = `Waiting for ${provider.selectedOptions[0]?.textContent ?? 'AI'}…`;
+    status.textContent = 'Checking diagram diagnostics…';
     onStatus(status.textContent, 'info');
     try {
+      const items = await diagnostics(snapshot.source);
+      controller.signal.throwIfAborted();
+      if (!unchanged()) throw new Error('The diagram changed while AI was working. Your edits were kept; send the prompt again.');
+      const context = items.map(({ severity, message, source, filename, line, column }) => ({ severity, message, source,
+        filename: filename === 'index' ? snapshot.name : filename, line, column }));
+      status.textContent = `Waiting for ${provider.selectedOptions[0]?.textContent ?? 'AI'}…`;
+      onStatus(status.textContent, 'info');
       const response = await fetch('/api/ai', { method: 'POST', signal: controller.signal, headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ provider: provider.value, prompt: question, source: snapshot.source, name: snapshot.name,
-          board: snapshot.board, environment: environment.value, claudeConfigDir: claudeConfigDir.value,
+          board: snapshot.board, diagnostics: context, environment: environment.value, claudeConfigDir: claudeConfigDir.value,
           fullAccess: fullAccess.checked, workingDirectory: workingDirectory.value }) });
       const data = await readAiResponse(response);
       controller.signal.throwIfAborted();

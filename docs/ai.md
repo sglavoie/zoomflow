@@ -1,6 +1,6 @@
 # Ask AI about a diagram
 
-The collapsed **Ask AI** panel above the editor can send the current source, active board, and
+The collapsed **Ask AI** panel above the editor can send the current source, active board, diagnostics, and
 your prompt to either Claude Code or Codex. Start the local app with `pnpm dev`,
 install and sign in to the chosen CLI, select it under **AI settings**, and click **Send** or press ⌘Enter (Ctrl+Enter on Windows and
 Linux) in the prompt. Zoomflow
@@ -22,6 +22,13 @@ documents; the normal editor undo history remains available. The AI panel and op
 source editor stays visible. The prompt and Send/Cancel share a compact row above
 availability and settings, including on phones. Additional settings scroll below
 the composer; a bottom shadow indicates more content.
+
+Compiler errors and enabled lint checks across the current document's boards are
+included automatically, with severity, rule names, and file locations when available.
+Ask **"Fix the diagnostics issues"** without copying the diagnostics into your prompt.
+Zoomflow checks pending source edits before sending so the diagnostics match the
+submitted source. Imported-file locations are included, though a replacement of
+the current document cannot edit those files.
 
 Submitted prompts are saved in this browser's local storage, with the 50 most
 recent distinct queries first. Use **Previous queries** below the prompt to load
@@ -61,7 +68,7 @@ sign-in still applies.
 
 ## Full access
 
-By default the AI answers only from the diagram source, so it can't answer
+By default the AI answers from the diagram source and diagnostics, so it can't answer
 requests that need your files, such as "diagram the latest five features in this
 repository". Check **Full access (bypass permissions)** under **AI settings** to let
 it read and change files and run commands without asking: Zoomflow starts Claude

@@ -1,15 +1,10 @@
 import { parseSourceRange, type SourceRange, type LintDiagnostic, type ShapeSource } from '@zoomflow/core';
 import { describeError } from './text';
+import type { AiDiagnostic } from './ai-context';
 
-export type SourceDiagnostic = {
-  severity: 'error' | 'warning';
-  message: string;
-  source?: string;
-  filename?: string;
+export type SourceDiagnostic = AiDiagnostic & {
   rawRange?: string;
   range?: SourceRange;
-  line?: number;
-  column?: number;
 };
 
 function location(rawRange: string | undefined, source: string, filename: string): Partial<SourceDiagnostic> {
