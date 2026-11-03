@@ -27,6 +27,18 @@ export function setupBoardOutline(host: HTMLElement, viewer: Viewer, edit: (boar
   depthControls.hidden = true;
   depthControls.innerHTML = '<label>Depth <input type="number" min="0" step="1" inputmode="numeric" aria-label="Layer depth" placeholder="Custom" /></label><button type="button" aria-label="Decrease layer depth">−</button><button type="button" aria-label="Increase layer depth">+</button>';
   showAll.after(depthControls);
+  const focusBoard = document.createElement('button');
+  focusBoard.type = 'button';
+  focusBoard.textContent = 'Focus this board';
+  focusBoard.hidden = true;
+  depthControls.after(focusBoard);
+  focusBoard.addEventListener('click', () => {
+    const id = viewer.currentBoard?.id;
+    if (!id || !viewer.layerState.root || viewer.layerState.root === id) return;
+    // Navigation redraws the canvas and hides this button. Keep keyboard focus in the diagram.
+    viewer.stage.focus({ preventScroll: true });
+    void viewer.navigate(id);
+  });
   const depthInput = depthControls.querySelector('input')!;
   const [decreaseDepth, increaseDepth] = [...depthControls.querySelectorAll('button')];
   let depthEdited = false;
@@ -59,6 +71,8 @@ export function setupBoardOutline(host: HTMLElement, viewer: Viewer, edit: (boar
     allLayers.indeterminate = state.enabled && state.visible.size > 1 && !state.all;
     allLayers.title = `Show all layers below ${viewer.currentBoard?.name ?? 'this board'}.`;
     const root = state.root ?? viewer.currentBoard?.id;
+    focusBoard.hidden = !state.enabled || root === viewer.currentBoard?.id;
+    focusBoard.title = `Open ${viewer.currentBoard?.name ?? 'this board'} and its visible descendants as the starting point of the view.`;
     const rootName = viewer.currentBoard?.id === root ? viewer.currentBoard?.name : undefined;
     depthInput.max = String(state.maxDepth);
     if (!depthEdited) depthInput.value = state.depth === null ? '' : String(state.depth);

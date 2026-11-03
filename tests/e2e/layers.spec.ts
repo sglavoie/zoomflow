@@ -160,6 +160,70 @@ test('can make a selected child the starting board of an expanded view', async (
   await expect(stage(page).locator('[data-layer-board="root"]')).toHaveCount(0);
 });
 
+test('focuses the selected board and its descendants directly from the connected canvas', async ({ page }) => {
+  await open(page);
+  const source = await editorText(page);
+  const focus = page.getByRole('button', { name: 'Focus this board', exact: true });
+  await expect(focus).toBeHidden();
+  await page.getByRole('checkbox', { name: 'Show all layers', exact: true }).check();
+  await expect(layers(page)).toHaveCount(4);
+  await expect(focus).toBeHidden();
+  const child = 'root.layers.Plan the launch';
+  await layerShape(page, child, 'n_1').click();
+  await board(page, child);
+  await expect(layers(page)).toHaveCount(4);
+  await expect(focus).toBeVisible();
+  await focus.click();
+  await expect(stage(page)).toHaveAttribute('data-layer-root', child);
+  await expect(layers(page)).toHaveCount(2);
+  await expect(layerShape(page, child, 'n')).toContainText('Plan the launch');
+  await expect(stage(page).locator('[data-layer-board="root"]')).toHaveCount(0);
+  await expect(stage(page).locator('[data-layer-board="root.layers.Build and test"]')).toHaveCount(0);
+  await expect(focus).toBeHidden();
+  await expect(stage(page)).toBeFocused();
+  // A leaf board can also become the starting point without returning to its parent first.
+  const leaf = `${child}.layers.Onboarding`;
+  await layerShape(page, leaf, 'step_1').focus();
+  await board(page, leaf);
+  await focus.focus();
+  await focus.press('Enter');
+  await expect(stage(page)).toHaveAttribute('data-layer-root', leaf);
+  await expect(layers(page)).toHaveCount(1);
+  await expect(stage(page)).toBeFocused();
+  await page.keyboard.press('Escape');
+  await board(page, child);
+  await expect(layers(page)).toHaveCount(2);
+  await page.getByRole('navigation', { name: 'Breadcrumb' }).getByRole('button', { name: 'Root', exact: true }).click();
+  await board(page, 'root');
+  await expect(layers(page)).toHaveCount(4);
+  expect(await editorText(page)).toBe(source);
+});
+
+test('focusing a selected board keeps the chosen depth and custom branch visibility', async ({ page }) => {
+  await open(page);
+  const child = 'root.layers.Plan the launch';
+  const depth = page.getByRole('spinbutton', { name: 'Layer depth', exact: true });
+  const focus = page.getByRole('button', { name: 'Focus this board', exact: true });
+  await depth.fill('1'); await depth.press('Enter');
+  await expect(layers(page)).toHaveCount(3);
+  await layerShape(page, child, 'n_1').click();
+  await focus.click();
+  await expect(stage(page)).toHaveAttribute('data-layer-root', child);
+  await expect(layers(page)).toHaveCount(2);
+  await expect(depth).toHaveValue('1');
+  await page.getByRole('navigation', { name: 'Breadcrumb' }).getByRole('button', { name: 'Root', exact: true }).click();
+  await expect(layers(page)).toHaveCount(3);
+  await page.getByRole('checkbox', { name: 'Show all layers', exact: true }).check();
+  await page.locator('.board-outline summary').click();
+  await page.getByRole('checkbox', { name: 'Show Onboarding layer', exact: true }).uncheck();
+  await page.keyboard.press('Escape');
+  await layerShape(page, child, 'n_1').click();
+  await focus.click();
+  await expect(stage(page)).toHaveAttribute('data-layer-root', child);
+  await expect(layers(page)).toHaveCount(1);
+  await expect(depth).toHaveValue('0');
+});
+
 test('shares a child centre with its parent and restores it in a focused view', async ({ page }) => {
   await open(page);
   const source = await editorText(page);
@@ -251,6 +315,16 @@ test.describe('touch', () => {
     await page.getByRole('checkbox', { name: 'Show all layers', exact: true }).check();
     await expect(layers(page)).toHaveCount(4);
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
+    const child = 'root.layers.Plan the launch';
+    await layerShape(page, child, 'n_1').tap();
+    const focus = page.getByRole('button', { name: 'Focus this board', exact: true });
+    await expect(focus).toBeVisible();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
+    await focus.tap();
+    await expect(stage(page)).toHaveAttribute('data-layer-root', child);
+    await expect(layers(page)).toHaveCount(2);
+    await page.getByRole('navigation', { name: 'Breadcrumb' }).getByRole('button', { name: 'Root', exact: true }).tap();
+    await expect(layers(page)).toHaveCount(4);
     await page.locator('.board-outline summary').tap();
     await page.getByRole('checkbox', { name: 'Show Plan the launch layer', exact: true }).uncheck();
     await expect(layers(page)).toHaveCount(2);
