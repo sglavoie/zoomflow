@@ -11,6 +11,8 @@ async function replace(page: Page, text: string) {
   await source(page).press('ControlOrMeta+a');
   await page.keyboard.insertText(text);
 }
+/** Source edits disable branch dragging on the retained SVG; its diagram markup stays the same. */
+const previewMarkup = async (page: Page) => (await page.locator('.zf-stage').innerHTML()).replaceAll(' zf-branch-draggable', '');
 async function findSource(page: Page, text: string) {
   await source(page).focus();
   await source(page).press('ControlOrMeta+f');
@@ -28,7 +30,7 @@ test('live edits retain the last good render on syntax errors and recover with d
   await ready(page);
   await page.locator('.zf-stage a[data-board="root.layers.checkout"]').click();
   await ready(page, 'root.layers.checkout');
-  const before = await page.locator('.zf-stage').innerHTML();
+  const before = await previewMarkup(page);
   await source(page).focus();
   await source(page).press('ControlOrMeta+End');
   // Appending by keyboard exercises CodeMirror input and the debounce path.
@@ -36,7 +38,7 @@ test('live edits retain the last good render on syntax errors and recover with d
   await expect(page.locator('#compile-error')).toContainText('maps must be terminated');
   await expect(page.locator('.cm-lintRange-error')).toBeVisible();
   await expect(page.locator('.cm-lint-marker-error')).toBeVisible();
-  expect(await page.locator('.zf-stage').innerHTML()).toBe(before);
+  expect(await previewMarkup(page)).toBe(before);
   await ready(page, 'root.layers.checkout');
   // Editing keys must stay inside CodeMirror, even while a nested board is open.
   await source(page).press('Backspace');
@@ -266,12 +268,12 @@ test('formats nested boards with D2 rules, refreshes navigation, and supports un
 test('format errors leave source and last good preview intact', async ({ page }) => {
   await page.goto('/');
   await ready(page);
-  const before = await page.locator('.zf-stage').innerHTML();
+  const before = await previewMarkup(page);
   await replace(page, 'broken: {');
   await page.getByRole('button', { name: 'Format', exact: true }).click();
   await expect(page.locator('#format-status')).toContainText('Formatting failed:');
   expect(await editorSource(page)).toBe('broken: {');
-  expect(await page.locator('.zf-stage').innerHTML()).toBe(before);
+  expect(await previewMarkup(page)).toBe(before);
   await expect(page.getByRole('button', { name: 'Format', exact: true })).toBeEnabled();
 });
 

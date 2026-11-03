@@ -1,6 +1,7 @@
 import type { setupExamplePicker } from './example-picker';
 import { changedOnDisk, refreshDiskVersion } from './disk-version';
 import { hasWritePermission, queryWritePermission, writePermission, type FileHandles } from './file-handles';
+import { withDiskWriteLock } from './disk-write-lock';
 import { describeError } from './text';
 import { downloadSource } from './download';
 
@@ -46,7 +47,7 @@ export type SaveFileResult = { status: 'saved' | 'skipped' | 'failed' | 'downloa
 export async function saveFile(target: SaveFileTarget, options: { existingOnly?: boolean; requestPermission?: boolean } = {}): Promise<SaveFileResult> {
   /** Save notices cleared once a save succeeds. */
   const notices = new Set([moved, inProgress, fileInProgress]);
-  const key = target.key();
+  const key = target.key() ?? '';
   if (!key) return { status: 'skipped', message: 'The draft is no longer available.' };
   const pending = pendingSaves.get(target.fileHandles) ?? new Set<PendingSave>();
   pendingSaves.set(target.fileHandles, pending);
@@ -71,6 +72,40 @@ export async function saveFile(target: SaveFileTarget, options: { existingOnly?:
     }
     return true;
   }
+  async function writeHandle(handle: FileSystemFileHandle, existing: boolean): Promise<SaveFileResult | 'moved'> {
+    // The disk check must run after any earlier tab's write completes, while this lock still
+    // protects our write. A different tab has its own in-memory pendingSaves set.
+    return withDiskWriteLock(async () => {
+      if (await changedOnDisk(handle)) {
+        const focused = document.activeElement;
+        const overwrite = await target.picker().confirm('File changed on disk — overwrite?',
+          `${handle.name} changed outside Zoomflow since it was opened or last saved. Saving replaces those changes with the source shown here.`,
+          'Overwrite file', () => { if (focused instanceof HTMLElement && focused.isConnected) focused.focus({ preventScroll: true }); });
+        if (!overwrite) {
+          if (target.key() === key) target.setActivity('Save canceled. The file on disk is unchanged.');
+          return { status: 'skipped', message: 'Overwrite cancelled. The file on disk is unchanged.' };
+        }
+      }
+      let writable: FileSystemWritableFileStream;
+      try { writable = await handle.createWritable(); }
+      catch (error) {
+        if (existing && error instanceof DOMException && error.name === 'NotFoundError') return 'moved';
+        throw error;
+      }
+      saving = setTimeout(() => { if (target.key() === key) target.setActivity('Saving file…'); }, 700);
+      try { await writable.write(source); await writable.close(); }
+      // Aborting an already failed stream can reject too; report the write error instead.
+      catch (error) { await writable.abort().catch(() => {}); throw error; }
+      await refreshDiskVersion(handle);
+      const saved = target.picker().markDiskSaved(key, source, handle.name, version);
+      if (!saved) return { status: 'skipped', message: 'The draft was removed or renamed during saving; its saved state was not changed.' };
+      target.fileHandles.set(saved.key, handle);
+      refused.delete(key);
+      target.adopt(key, saved);
+      if (target.key() === key && notices.has(target.activity() ?? '')) target.setActivity('');
+      return { status: 'saved', message: 'Saved to file.' };
+    });
+  }
   try {
     await target.fileHandles.ready();
     let handle = target.fileHandles.get(key);
@@ -91,28 +126,15 @@ export async function saveFile(target: SaveFileTarget, options: { existingOnly?:
       }
     }
     if (handle && !await reserveFile(handle)) return { status: 'skipped', message: fileInProgress };
-    if (handle && await changedOnDisk(handle)) {
-      const focused = document.activeElement;
-      const overwrite = await target.picker().confirm('File changed on disk — overwrite?',
-        `${handle.name} changed outside Zoomflow since it was opened or last saved. Saving replaces those changes with the source shown here.`,
-        'Overwrite file', () => { if (focused instanceof HTMLElement && focused.isConnected) focused.focus({ preventScroll: true }); });
-      if (!overwrite) {
-        if (target.key() === key) target.setActivity('Save canceled. The file on disk is unchanged.');
-        return { status: 'skipped', message: 'Overwrite cancelled. The file on disk is unchanged.' };
-      }
-    }
-    let writable: FileSystemWritableFileStream | undefined;
     if (handle) {
-      try { writable = await handle.createWritable(); }
-      catch (error) {
-        // The file was moved or deleted on disk: forget it and ask where to save instead.
-        if (!(error instanceof DOMException && error.name === 'NotFoundError')) throw error;
-        target.fileHandles.delete(key);
-        handle = undefined;
-        request.handle = undefined;
-        notify(moved);
-        unavailable = moved;
-      }
+      const result = await writeHandle(handle, true);
+      if (result !== 'moved') return result;
+      // The file was moved or deleted on disk: forget it and ask where to save instead.
+      target.fileHandles.delete(key);
+      handle = undefined;
+      request.handle = undefined;
+      notify(moved);
+      unavailable = moved;
     }
     if (!handle && options.existingOnly) return { status: 'skipped', message: unavailable };
     if (!handle && pickerWindow.showSaveFilePicker) {
@@ -125,6 +147,9 @@ export async function saveFile(target: SaveFileTarget, options: { existingOnly?:
         notify('Click Save again to choose where to save.');
         return { status: 'skipped', message: 'Click Save again to choose where to save.' };
       }
+      // The picker may have selected an existing file. Its own overwrite prompt covers the choice;
+      // this snapshot catches a different tab changing it while we wait for the disk lock.
+      await refreshDiskVersion(handle);
       if (!await reserveFile(handle)) return { status: 'skipped', message: fileInProgress };
     }
     if (!handle) {
@@ -135,19 +160,9 @@ export async function saveFile(target: SaveFileTarget, options: { existingOnly?:
       }
       return { status: 'downloaded', message: `Source download started: ${filename}` };
     }
-    saving = setTimeout(() => { if (target.key() === key) target.setActivity('Saving file…'); }, 700);
-    writable ??= await handle.createWritable();
-    try { await writable.write(source); await writable.close(); }
-    // Aborting an already failed stream can reject too; report the write error instead.
-    catch (error) { await writable.abort().catch(() => {}); throw error; }
-    await refreshDiskVersion(handle);
-    const saved = target.picker().markDiskSaved(key, source, handle.name, version);
-    if (!saved) return { status: 'skipped', message: 'The draft was removed or renamed during saving; its saved state was not changed.' };
-    target.fileHandles.set(saved.key, handle);
-    refused.delete(key);
-    target.adopt(key, saved);
-    if (target.key() === key && notices.has(target.activity() ?? '')) target.setActivity('');
-    return { status: 'saved', message: 'Saved to file.' };
+    const result = await writeHandle(handle, false);
+    if (result === 'moved') throw new Error(moved);
+    return result;
   } catch (error) {
     if (error instanceof DOMException && error.name === 'AbortError') return { status: 'skipped', message: 'Save cancelled.' };
     // Name the file when another document is open by now, so the failure is not mistaken for this one's.

@@ -59,23 +59,28 @@ it('keeps each project\'s folder, and drops folders of removed projects when res
 });
 
 /** A folder in memory with the parts of the File System Access API that creating a file uses. */
-function memoryFolder(files: Map<string, string>, permission: PermissionState = 'granted', prefix = ''): FileSystemDirectoryHandle {
+function memoryFolder(files: Map<string, string>, permission: PermissionState = 'granted', prefix = '',
+  fault?: { step?: 'open' | 'write' | 'close' }): FileSystemDirectoryHandle {
   const notFound = () => Promise.reject(new DOMException('Not found', 'NotFoundError'));
   return {
     kind: 'directory',
     queryPermission: async () => permission === 'granted' ? 'granted' : 'prompt',
     requestPermission: async () => permission,
-    getDirectoryHandle: async (name: string) => memoryFolder(files, permission, `${prefix}${name}/`),
+    getDirectoryHandle: async (name: string) => memoryFolder(files, permission, `${prefix}${name}/`, fault),
+    removeEntry: async (name: string) => { files.delete(`${prefix}${name}`); },
     getFileHandle: async (name: string, options?: { create?: boolean }) => {
       const path = `${prefix}${name}`;
       if (!files.has(path) && !options?.create) return notFound();
       if (!files.has(path)) files.set(path, '');
       return {
-        kind: 'file', name,
+        kind: 'file', name, path,
+        isSameEntry: async (other: { path?: string }) => other.path === path,
         getFile: async () => ({ lastModified: 1, text: async () => files.get(path) }),
         createWritable: async () => {
+          if (fault?.step === 'open') throw new Error('Cannot open stream');
           let text = '';
-          return { write: async (chunk: string) => { text += chunk; }, close: async () => { files.set(path, text); }, abort: async () => {} };
+          return { write: async (chunk: string) => { if (fault?.step === 'write') throw new Error('Disk full'); text += chunk; },
+            close: async () => { if (fault?.step === 'close') throw new Error('Cannot close stream'); files.set(path, text); }, abort: async () => {} };
         },
       };
     },
@@ -91,6 +96,17 @@ it('creates new project files in their folder, without overwriting or writing wi
   expect(files.get('index.d2')).toBe('a');
   await expect(createProjectFile(memoryFolder(files, 'denied'), 'New.d2', 'c')).resolves.toBe('refused');
   expect(files.has('New.d2')).toBe(false);
+});
+
+it.each(['open', 'write', 'close'] as const)('removes an incomplete new file after a %s failure so the same name can be retried', async (step) => {
+  const files = new Map<string, string>();
+  const fault: { step?: 'open' | 'write' | 'close' } = { step };
+  const folder = memoryFolder(files, 'granted', '', fault);
+  await expect(createProjectFile(folder, 'Plan.d2', 'first attempt')).rejects.toThrow();
+  expect(files.has('Plan.d2')).toBe(false);
+  fault.step = undefined;
+  await expect(createProjectFile(folder, 'Plan.d2', 'retry')).resolves.toMatchObject({ name: 'Plan.d2' });
+  expect(files.get('Plan.d2')).toBe('retry');
 });
 
 it.each(['work/Plan.d2', 'work/plan.d2'])('does not overwrite a project file another creation is still writing (%s)', async (path) => {

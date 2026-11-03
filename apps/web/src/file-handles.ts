@@ -1,4 +1,5 @@
 import { diskVersion, refreshDiskVersion, rememberDiskVersion } from './disk-version';
+import { withDiskWriteLock } from './disk-write-lock';
 
 const databaseName = 'zoomflow.files';
 const storeName = 'handles';
@@ -195,23 +196,37 @@ export async function createProjectFile(folder: FileSystemDirectoryHandle, path:
       const state = await permissions.queryPermission({ mode: 'readwrite' }).catch(() => 'prompt' as const);
       if (state !== 'granted' && await permissions.requestPermission({ mode: 'readwrite' }).catch(() => 'denied' as const) !== 'granted') return 'refused';
     }
-    const parts = path.split('/');
-    let directory = folder;
-    for (const part of parts.slice(0, -1)) directory = await directory.getDirectoryHandle(part, { create: true });
-    const name = parts.at(-1)!;
-    try {
-      await directory.getFileHandle(name);
-      return 'exists';
-    } catch (error) {
-      if (error instanceof DOMException && error.name === 'TypeMismatchError') return 'exists';
-      if (!(error instanceof DOMException && error.name === 'NotFoundError')) throw error;
-    }
-    const handle = await directory.getFileHandle(name, { create: true });
-    const writable = await handle.createWritable();
-    try { await writable.write(source); await writable.close(); }
-    catch (error) { await writable.abort().catch(() => {}); throw error; }
-    await refreshDiskVersion(handle);
-    return handle;
+    return await withDiskWriteLock(async () => {
+      const parts = path.split('/');
+      let directory = folder;
+      for (const part of parts.slice(0, -1)) directory = await directory.getDirectoryHandle(part, { create: true });
+      const name = parts.at(-1)!;
+      try {
+        await directory.getFileHandle(name);
+        return 'exists';
+      } catch (error) {
+        if (error instanceof DOMException && error.name === 'TypeMismatchError') return 'exists';
+        if (!(error instanceof DOMException && error.name === 'NotFoundError')) throw error;
+      }
+      const handle = await directory.getFileHandle(name, { create: true });
+      try {
+        const writable = await handle.createWritable();
+        try { await writable.write(source); await writable.close(); }
+        catch (error) { await writable.abort().catch(() => {}); throw error; }
+        await refreshDiskVersion(handle);
+        return handle;
+      } catch (error) {
+        // getFileHandle({ create: true }) has already created an empty entry. A failed write must not
+        // strand that name and cause the next attempt to create "Name 2.d2" instead.
+        try {
+          if (await (await directory.getFileHandle(name)).isSameEntry(handle)) await directory.removeEntry(name);
+        } catch (cleanupError) {
+          const detail = (value: unknown) => value instanceof Error ? value.message : String(value);
+          throw new Error(`${detail(error)} An incomplete ${name} could not be removed: ${detail(cleanupError)}`, { cause: error });
+        }
+        throw error;
+      }
+    });
   } finally {
     creatingFiles.delete(request);
   }

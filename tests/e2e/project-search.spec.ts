@@ -43,7 +43,7 @@ async function chooseSecond(page: Page, path: string) {
   await page.getByRole('region', { name: 'atlas project', exact: true }).getByRole('button', { name: 'atlas', exact: true }).click();
   await page.locator(`.example-option[title="atlas/${path}"]`).click();
   await previewReady(page, 'b');
-  await page.locator('#pane-document').click();
+  await page.locator('#viewer').click({ position: { x: 5, y: 5 } });
 }
 
 test('finds a shape in an unvisited, unlinked file, frames it and returns through browser history', async ({ page }) => {

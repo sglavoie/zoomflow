@@ -74,6 +74,10 @@ write access are skipped, with a source ZIP available instead of a series of sav
 dialogs. Cancellation stops queued files while the current write completes.
 Saved baselines refer to the captured source, so later edits stay dirty. Recovered
 copies are excluded from the batch.
+Where browser Web Locks are available, the disk-change check and write hold one lock across tabs, including
+new linked-file creation, so a second tab checks the file after the first tab's
+write. Permission prompts and file pickers happen before that lock. A failed write
+to a newly created linked file removes its incomplete disk entry when possible.
 
 To compare sustained editing with and without preview coalescing, start `pnpm dev`
 and run `node spike/preview-throughput.mjs http://127.0.0.1:5173 600` (use the actual

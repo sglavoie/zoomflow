@@ -744,6 +744,57 @@ test('saving asks before overwriting a file that changed on disk since it was op
   expect(await page.evaluate(() => (window as any).disk.text)).toBe('disk: Mine');
 });
 
+test('a second tab checks the disk again after the first tab finishes saving', async ({ page, context }) => {
+  await context.addInitScript(() => {
+    const read = () => JSON.parse(localStorage.getItem('test-shared-disk') ?? '{"source":"shared: Original","modified":1}') as
+      { source: string; modified: number };
+    (window as any).showOpenFilePicker = async () => [{
+      kind: 'file', name: 'shared.d2', isSameEntry: async () => true,
+      queryPermission: async () => 'granted',
+      getFile: async () => {
+        const disk = read();
+        return new File([disk.source], 'shared.d2', { lastModified: disk.modified });
+      },
+      createWritable: async () => {
+        let source = '';
+        return {
+          write: async (text: string) => {
+            source = text;
+            if ((window as any).holdCrossTabSave) {
+              (window as any).crossTabSaveStarted = true;
+              await new Promise<void>(resolve => { (window as any).releaseCrossTabSave = resolve; });
+            }
+          },
+          close: async () => {
+            const disk = read();
+            localStorage.setItem('test-shared-disk', JSON.stringify({ source, modified: disk.modified + 1 }));
+          },
+          abort: async () => {},
+        };
+      },
+    }];
+  });
+  const second = await context.newPage();
+  await page.goto('/'); await second.goto('/');
+  await page.locator('#file').click(); await second.locator('#file').click();
+  await previewReady(page); await previewReady(second);
+  await source(page).fill('shared: First tab');
+  await source(second).fill('shared: Second tab');
+  await page.evaluate(() => { (window as any).holdCrossTabSave = true; });
+  await page.locator('#save-file').click();
+  await expect.poll(() => page.evaluate(() => Boolean((window as any).crossTabSaveStarted))).toBe(true);
+  await second.locator('#save-file').click();
+  await expect(second.locator('#save-file')).toBeDisabled();
+  await page.evaluate(() => (window as any).releaseCrossTabSave());
+  await expect(page.locator('#draft-status')).toHaveText('Saved to file');
+  const overwrite = second.getByRole('dialog', { name: 'File changed on disk — overwrite?' });
+  await expect(overwrite).toContainText('shared.d2 changed outside Zoomflow');
+  expect(await second.evaluate(() => JSON.parse(localStorage.getItem('test-shared-disk')!).source)).toBe('shared: First tab');
+  await overwrite.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await expect(second.locator('#save-file')).toBeEnabled();
+  expect(await second.evaluate(() => JSON.parse(localStorage.getItem('test-shared-disk')!).source)).toBe('shared: First tab');
+});
+
 test('simultaneous saves in both panes each ask before overwriting externally changed files', async ({ page }) => {
   await page.setViewportSize({ width: 1600, height: 900 });
   await page.addInitScript(() => {

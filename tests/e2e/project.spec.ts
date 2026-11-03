@@ -111,6 +111,7 @@ test('saving uses a file handle after the user chooses a destination', async ({ 
   await source(page).fill('saved: Second');
   await expect(page.locator('#draft-status')).toContainText('File has unsaved changes');
   await page.locator('#save-file').click();
+  await expect(page.locator('#draft-status')).toContainText('Saved to file');
   expect(await page.evaluate(() => (window as typeof window & { savedSource?: string }).savedSource)).toBe('saved: Second');
 });
 
@@ -128,8 +129,8 @@ test('an opened file can be saved back to its original handle', async ({ page })
   await expect(page.locator('#filename')).toHaveText('original.d2');
   await source(page).fill('original: After');
   await page.locator('#save-file').click();
-  expect(await page.evaluate(() => (window as typeof window & { savedOriginal?: string }).savedOriginal)).toBe('original: After');
   await expect(page.locator('#draft-status')).toContainText('Saved to file');
+  expect(await page.evaluate(() => (window as typeof window & { savedOriginal?: string }).savedOriginal)).toBe('original: After');
 });
 
 test('directory access opens nested imports and saves an edited file back to its handle', async ({ page }) => {

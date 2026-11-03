@@ -172,6 +172,7 @@ header > strong {
 }
 .board-selection {
   position: absolute;
+  pointer-events: none;
   top: var(--space-2);
   left: var(--space-2);
   max-width: calc(100% - 2 * var(--space-2));
@@ -186,6 +187,9 @@ header > strong {
   border-radius: 10px;
   background: var(--surface);
   box-shadow: 0 4px 16px var(--menu-shadow);
+}
+.board-selection button {
+  pointer-events: auto;
 }
 .board-selection[hidden] {
   display: none;

@@ -754,9 +754,18 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
   viewer.stage.addEventListener('zf-boardchange', boardChanged);
   viewer.stage.addEventListener('zf-activeboardchange', boardChanged);
   viewer.stage.addEventListener('zf-visibilitychange', () => shared.exportChanged());
+  // WebKit dispatches a MouseEvent for a touch-generated click, so remember the pointer that began it.
+  let touchDown: { shape: SVGElement; at: number } | undefined;
+  viewer.stage.addEventListener('pointerdown', (event) => {
+    const shape = event.target instanceof Element ? event.target.closest<SVGElement>('[data-shape-id]') : null;
+    touchDown = event.pointerType === 'touch' && shape ? { shape, at: event.timeStamp } : undefined;
+  }, { capture: true });
   function selectShape(event: MouseEvent | KeyboardEvent) {
     const shape = event.target instanceof Element ? event.target.closest<SVGElement>('[data-shape-id]')
       ?? event.target.closest('a')?.querySelector<SVGElement>('[data-shape-id]') : null;
+    const touch = touchDown;
+    const touchClick = event instanceof MouseEvent && touch !== undefined && shape === touch.shape && event.timeStamp - touch.at < 1000;
+    touchDown = undefined;
     // A click on the background clears the selection on the diagram, even before it updates; the source cursor
     // stays where it is.
     if (!shape && event instanceof MouseEvent) {
@@ -781,7 +790,10 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
     if (linked && event.altKey) { event.preventDefault(); event.stopImmediatePropagation(); }
     // Steps and topics of a builder board are edited on the diagram, so selecting one keeps focus there.
     const onCanvas = !linked && !event.altKey && (boardTools.editsOnCanvas(entry.shape) ||
-      event instanceof MouseEvent && shape.classList.contains('zf-branch-draggable'));
+      // A touch tap keeps a draggable branch on the diagram so its branch controls remain available.
+      // Mouse clicks still reveal an ordinary shape's source, including at a narrow viewport.
+      shared.tabbed() && touchClick &&
+      shape.classList.contains('zf-branch-draggable'));
     if (onCanvas) shape.focus({ preventScroll: true });
     else if (!linked || event.altKey) showView('source');
     selectionCleared = undefined;
