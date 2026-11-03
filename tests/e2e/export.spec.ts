@@ -1,8 +1,13 @@
 import { expect, test, type Page, type TestInfo } from '@playwright/test';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { readFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { createRequire } from 'node:module';
 import { selectMenuOption, downloadExport } from './menu';
 import { source, previewReady, stubAiStatus, board, drill, comparesVisuals, regularFont, openFolder } from './helpers';
+
+const { unzipSync } = createRequire(new URL('../../packages/core/package.json', import.meta.url))('fflate') as {
+  unzipSync: (data: Uint8Array) => Record<string, Uint8Array>;
+};
 
 async function download(page: Page, format: string, info: TestInfo) {
   await selectMenuOption(page, '#export-format', format);
@@ -16,6 +21,93 @@ async function download(page: Page, format: string, info: TestInfo) {
 }
 
 test.use({ colorScheme: 'light', reducedMotion: 'reduce' });
+
+test('fits the exported root canvas around every shape and label without clipping', async ({ page, context }, info) => {
+  await page.goto('/'); await previewReady(page);
+  const path = await download(page, 'svg', info);
+  const exported = await context.newPage();
+  await exported.goto(pathToFileURL(path).href);
+  const bounds = await exported.locator('svg').first().evaluate((root: SVGSVGElement) => {
+    const graph = root.querySelector('svg')!;
+    const inverse = root.getScreenCTM()!.inverse();
+    const boxes = [...graph.querySelectorAll<SVGGraphicsElement>('g rect, g path, g text')]
+      .filter(node => !node.closest('defs'))
+      .flatMap(node => {
+        const box = node.getBBox();
+        const transform = inverse.multiply(node.getScreenCTM()!);
+        return [new DOMPoint(box.x, box.y).matrixTransform(transform),
+          new DOMPoint(box.x + box.width, box.y + box.height).matrixTransform(transform)];
+      });
+    return { width: root.viewBox.baseVal.width, height: root.viewBox.baseVal.height,
+      left: Math.min(...boxes.map(point => point.x)), top: Math.min(...boxes.map(point => point.y)),
+      right: Math.max(...boxes.map(point => point.x)), bottom: Math.max(...boxes.map(point => point.y)) };
+  });
+  expect(bounds.left).toBeGreaterThanOrEqual(20);
+  expect(bounds.top).toBeGreaterThanOrEqual(20);
+  expect(bounds.right).toBeLessThanOrEqual(bounds.width - 20);
+  expect(bounds.bottom).toBeLessThanOrEqual(bounds.height - 20);
+  await exported.close();
+});
+
+test('downloads every board as PNG in a ZIP with nested folders and remembers the format', async ({ page }, info) => {
+  await page.goto('/'); await previewReady(page);
+  await page.locator('#file').setInputFiles({ name: 'boards.d2', mimeType: 'text/plain', buffer: Buffer.from(`
+Public: Share this
+Secret: Private detail
+layers: {
+  Details: {a: Detail; layers: {Nested: {b: Nested detail}}}
+  Empty: {}
+  "Details.png": {c: Another detail}
+}
+scenarios: {Alternative: {d: Alternative}}
+steps: {Later: {e: Later}}
+`) });
+  await previewReady(page);
+  const secret = page.locator('.zf-stage [data-shape-id="Secret"]');
+  await secret.click({ button: 'right' });
+  await page.getByRole('menuitem', { name: 'Hide from export', exact: true }).click();
+  await expect(secret).toHaveAttribute('data-export-hidden', '');
+  await selectMenuOption(page, '#theme', 'dark');
+  const root = await readFile(await download(page, 'png', info));
+  await selectMenuOption(page, '#export-format', 'png-zip');
+  await expect(page.locator('#export')).toHaveText('Download PNG ZIP');
+  await expect(page.locator('#export-scope')).toHaveText('Entire diagram · 7 boards · PNG ZIP · 1 hidden shape omitted');
+  const path = await download(page, 'png-zip', info);
+  expect(path).toMatch(/boards-png\.zip$/);
+  const files = unzipSync(await readFile(path));
+  expect(Object.keys(files).sort()).toEqual([
+    'root.png', 'Details.png', 'Details/Nested.png', 'Empty.png', '@Details.png.png',
+    '@scenarios/Alternative.png', '@steps/Later.png',
+  ].sort());
+  for (const png of Object.values(files)) {
+    expect(Buffer.from(png.subarray(0, 8)).toString('hex')).toBe('89504e470d0a1a0a');
+    expect(new DataView(png.buffer, png.byteOffset).getUint32(16)).toBeGreaterThan(0);
+    expect(new DataView(png.buffer, png.byteOffset).getUint32(20)).toBeGreaterThan(0);
+  }
+  // The ZIP root uses the same theme and hidden-shape choices as a current-board PNG.
+  expect(Buffer.from(files['root.png'])).toEqual(root);
+  expect(Buffer.from(files['Details.png'])).not.toEqual(root);
+  await page.reload(); await previewReady(page);
+  await expect(page.locator('#export-format input[value="png-zip"]')).toBeChecked();
+});
+
+test('PNG ZIP includes every linked project file once and keeps repeated board IDs separate', async ({ page }, info) => {
+  const folder = info.outputPath('png-project');
+  await mkdir(folder, { recursive: true });
+  await writeFile(`${folder}/index.d2`, 'Start: {link: ./other.d2}\nlayers: {"@files": {a: Reserved name}}');
+  await writeFile(`${folder}/other.d2`, 'Back: {link: ./index.d2}\nlayers: {Detail: {b: Linked detail}}');
+  await writeFile(`${folder}/unused.d2`, 'Unused');
+  await page.goto('/'); await previewReady(page);
+  await openFolder(page, folder); await previewReady(page);
+  await selectMenuOption(page, '#export-format', 'png-zip');
+  await expect(page.locator('#export-scope')).toHaveText('Entire diagram and the files it links to · 2 boards · PNG ZIP');
+  const path = await download(page, 'png-zip', info);
+  expect(path).toMatch(/index-png\.zip$/);
+  const files = unzipSync(await readFile(path));
+  expect(Object.keys(files)).toEqual(['root.png', '@files.png', '@@files/other.d2/root.png', '@@files/other.d2/Detail.png']);
+  for (const png of Object.values(files)) expect(Buffer.from(png.subarray(0, 8)).toString('hex')).toBe('89504e470d0a1a0a');
+  expect(files['root.png']).not.toEqual(files['@@files/other.d2/root.png']);
+});
 
 test('downloads the current SVG and PNG and matches the root PNG snapshot', { tag: '@visual' }, async ({ page, browserName }, info) => {
   const fonts = new Set<string>();

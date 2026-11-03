@@ -18,7 +18,12 @@ export async function fitExportBounds(root: SVGSVGElement) {
     for (const rect of measured.querySelectorAll(':scope > rect')) rect.remove();
     measured.getBBox();
     await document.fonts?.ready;
-    const screen = measured.getScreenCTM();
+    // Firefox's nested <svg> CTM omits its own viewBox transform. A child group reports
+    // the content's user coordinates consistently, including negative viewBox origins.
+    const origin = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+    measured.append(origin);
+    const screen = origin.getScreenCTM();
+    origin.remove();
     if (!screen) throw new Error('Could not measure the export.');
     const inverse = screen.inverse();
     const definitions = new Set(['defs', 'clippath', 'mask', 'marker', 'pattern', 'filter', 'symbol']);

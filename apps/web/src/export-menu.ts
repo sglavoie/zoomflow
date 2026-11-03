@@ -1,5 +1,5 @@
 import { classifyHref, exportAtlasHtml, exportAtlasZip, exportBoardsHtml, exportBoardsZip, exportGlyphSource, exportProjectArchive,
-  renderExportBoards, indexBoards, resolveFilePath, type AtlasDocument, type Diagram } from '@zoomflow/core';
+  renderExportBoards, indexBoards, resolveFilePath, type AtlasDocument, type Diagram, type ExportBoard } from '@zoomflow/core';
 import type { RenderBoard } from '@zoomflow/viewer';
 import { prepareExportSvg, rasterizeSvg, offlineViewerScript, offlineViewerStyle } from '@zoomflow/viewer';
 import type { DocumentExport, DocumentPane } from './document-pane';
@@ -148,11 +148,12 @@ export function setupExportMenu(activePane: () => DocumentPane | undefined, pick
     const project = isProject(pane);
     atlasChoice.closest('label')!.hidden = !project;
     if (wantsAtlas) (project ? atlasChoice : exportChoices.querySelector<HTMLInputElement>('input[value="html"]')!).checked = true;
-    const allBoards = exportFormat.value === 'zip' || exportFormat.value === 'html';
-    const formatName = ({ svg: 'SVG', png: 'PNG', zip: 'SVG ZIP', html: 'Interactive HTML', atlas: 'Interactive atlas HTML' } as Record<string, string>)[exportFormat.value];
+    const zip = exportFormat.value === 'zip' || exportFormat.value === 'png-zip';
+    const allBoards = zip || exportFormat.value === 'html';
+    const formatName = ({ svg: 'SVG', png: 'PNG', zip: 'SVG ZIP', 'png-zip': 'PNG ZIP', html: 'Interactive HTML', atlas: 'Interactive atlas HTML' } as Record<string, string>)[exportFormat.value];
     document.querySelector('#export-scope')!.textContent = documentExport
       ? exportFormat.value === 'atlas' ? `This file and every file it links to · ${formatName}`
-        : allBoards ? `Entire diagram${project && exportFormat.value === 'zip' ? ' and the files it links to' : ''} · ${plural(count, 'board')} · ${formatName}`
+        : allBoards ? `Entire diagram${project && zip ? ' and the files it links to' : ''} · ${plural(count, 'board')} · ${formatName}`
           : pane!.viewer.layerState.enabled ? `Visible layers · ${plural(pane!.viewer.layerState.visible.size, 'layer')} · ${formatName}`
             : `Current board: ${pane!.viewer.currentBoard?.name ?? 'Root'} · ${formatName}`
       : pane?.sourceError ? 'Fix source errors to export.' : 'Compile the current source to export a diagram.';
@@ -160,7 +161,7 @@ export function setupExportMenu(activePane: () => DocumentPane | undefined, pick
       const hidden = pane!.viewer.hiddenShapeCount(allBoards || exportFormat.value === 'atlas' ? undefined : pane!.viewer.layerState.visible);
       if (hidden) document.querySelector('#export-scope')!.textContent += ` · ${plural(hidden, 'hidden shape')} omitted`;
     }
-    exportButton.textContent = ({ svg: 'Download SVG', png: 'Download PNG', zip: 'Download SVG ZIP',
+    exportButton.textContent = ({ svg: 'Download SVG', png: 'Download PNG', zip: 'Download SVG ZIP', 'png-zip': 'Download PNG ZIP',
       html: 'Download HTML', atlas: 'Download atlas HTML' } as Record<string, string>)[exportFormat.value] ?? 'Download export';
   }
   function rememberExportFormat() {
@@ -185,7 +186,11 @@ export function setupExportMenu(activePane: () => DocumentPane | undefined, pick
     exporting = true;
     exportButton.disabled = true;
     const format = exportFormat.value;
-    reportExport(`Preparing ${format === 'atlas' ? 'atlas' : format.toUpperCase()} download…`, 'info', pane);
+    const pngZip = format === 'png-zip';
+    const zip = format === 'zip' || pngZip;
+    const formatName = pngZip ? 'PNG ZIP' : format === 'zip' ? 'SVG ZIP' : format === 'atlas' ? 'atlas' : format.toUpperCase();
+    const renderOptions = { extension: pngZip ? 'png' as const : 'svg' as const };
+    reportExport(`Preparing ${formatName} download…`, 'info', pane);
     const dark = document.documentElement.dataset.theme === 'dark';
     const exportName = pane.name.replace(/\.d2$/i, '');
     const warnings: string[] = [];
@@ -199,6 +204,21 @@ export function setupExportMenu(activePane: () => DocumentPane | undefined, pick
     };
     const prepare = prepareWith(view.render);
     const canceled = () => exportRevision !== pane.generation || pane.documentExport !== loaded;
+    /** Rasterize one board at a time; board IDs repeat across project files. */
+    async function zipDownload(documents: AtlasDocument[], project = false): Promise<Blob> {
+      const images = new Map<string, Uint8Array>();
+      const key = (file: string, id: string) => JSON.stringify([file, id]);
+      if (pngZip) {
+        for (const document of documents) {
+          for (const board of document.boards) {
+            reportExport(`Preparing PNG ZIP: ${document.path ? `${document.path} · ` : ''}${board.path}…`, 'info', pane);
+            images.set(key(project ? document.path : '', board.id), new Uint8Array(await (await rasterizeSvg(board.svg)).arrayBuffer()));
+          }
+        }
+      }
+      const contents = pngZip ? (board: ExportBoard) => images.get(key(board.file ?? '', board.id))! : undefined;
+      return new Blob([project ? exportAtlasZip(documents, contents) : exportBoardsZip(documents[0].boards, contents)], { type: 'application/zip' });
+    }
     /** This file and every project file its file links reach, breadth first, each once. */
     async function atlasDocuments(): Promise<AtlasDocument[] | undefined> {
       const { fs, inputPath } = picker().compilation(pane.id);
@@ -206,7 +226,7 @@ export function setupExportMenu(activePane: () => DocumentPane | undefined, pick
       const queue = [inputPath];
       const documents: AtlasDocument[] = [];
       for (const [index, path] of queue.entries()) {
-        reportExport(`Preparing ${format === 'atlas' ? 'atlas' : 'SVG ZIP'}: ${path} (${index + 1} of ${queue.length})…`, 'info', pane);
+        reportExport(`Preparing ${formatName}: ${path} (${index + 1} of ${queue.length})…`, 'info', pane);
         let file: Pick<DocumentExport, 'diagram' | 'render' | 'diagnostics'> = { ...loaded!, ...view };
         if (index) {
           try { file = await pane.compileProjectFile(path, fs); }
@@ -218,7 +238,7 @@ export function setupExportMenu(activePane: () => DocumentPane | undefined, pick
           file = { ...file, ...pane.viewer.exportView(file.diagram, file.render, `project:${projectIdOf(pane.key!)}:${path}`) };
         }
         if (canceled()) return undefined;
-        const boards = await renderExportBoards(file.diagram, prepareWith(file.render), file.diagnostics);
+        const boards = await renderExportBoards(file.diagram, prepareWith(file.render), file.diagnostics, renderOptions);
         if (canceled()) return undefined;
         documents.push({ path, name: path.replace(/\.d2$/i, ''), boards });
         for (const linked of linkedFiles(file.diagram, path)) if (Object.hasOwn(fs, linked) && !queue.includes(linked)) queue.push(linked);
@@ -235,15 +255,15 @@ export function setupExportMenu(activePane: () => DocumentPane | undefined, pick
         const svg = prepared?.svg ?? await prepare(board.target);
         blob = format === 'png' ? await rasterizeSvg(svg) : new Blob([svg], { type: 'image/svg+xml' });
         name += `-${layers ? 'layers' : board.name === 'Root' ? 'root' : safeFilename(board.name)}.${format}`;
-      } else if (format === 'atlas' || (format === 'zip' && isProject(pane))) {
+      } else if (format === 'atlas' || (zip && isProject(pane))) {
         const documents = await atlasDocuments();
         if (!documents) {
           reportExport('Export canceled because the source changed.', 'info', pane);
           return;
         }
-        if (format === 'zip') {
-          blob = new Blob([exportAtlasZip(documents)], { type: 'application/zip' });
-          name += '.zip';
+        if (zip) {
+          blob = await zipDownload(documents, true);
+          name += pngZip ? '-png.zip' : '.zip';
         } else {
           const boards = documents.flatMap((document) => document.boards);
           const glyphSource = exportGlyphSource(boards);
@@ -253,14 +273,14 @@ export function setupExportMenu(activePane: () => DocumentPane | undefined, pick
           name += '-atlas.html';
         }
       } else {
-        const boards = await renderExportBoards(view.diagram, prepare, loaded.diagnostics);
+        const boards = await renderExportBoards(view.diagram, prepare, loaded.diagnostics, renderOptions);
         // Shared font subsets are an optimization; each board keeps its own fonts without them.
         const glyphSource = format === 'html' ? exportGlyphSource(boards) : undefined;
         const glyphs = glyphSource ? await loaded.renderSource(glyphSource).catch(() => undefined) : undefined;
-        blob = format === 'zip' ? new Blob([exportBoardsZip(boards)], { type: 'application/zip' })
+        blob = zip ? await zipDownload([{ path: '', name: exportName, boards }])
           : new Blob([exportBoardsHtml(boards, { title: exportName, script: offlineViewerScript(),
             style: offlineViewerStyle, glyphs })], { type: 'text/html' });
-        name += `.${format}`;
+        name += pngZip ? '-png.zip' : `.${format}`;
       }
       if (canceled()) {
         reportExport('Export canceled because the source changed.', 'info', pane);

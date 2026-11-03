@@ -138,7 +138,7 @@ export function exportAtlasZip(documents: readonly AtlasDocument[],
   contents: (board: ExportBoard) => string | Uint8Array = (board) => board.svg): Uint8Array<ArrayBuffer> {
   const taken = documents[0].boards.map((board) => board.path.normalize('NFC').toLowerCase());
   let folder = '@files';
-  while (taken.some((path) => path === `${folder}.svg` || path.startsWith(`${folder}/`))) folder = `@${folder}`;
+  while (taken.some((path) => path === `${folder}.svg` || path === `${folder}.png` || path.startsWith(`${folder}/`))) folder = `@${folder}`;
   // Folders compare case-insensitively (Windows, macOS), so `A.d2` and `a.d2` would merge; mark the later one as boards are.
   const used = new Set<string>();
   // Folders are named after project paths, made safe the way board names are, as in `aux.d2` or `a:b.d2`.
