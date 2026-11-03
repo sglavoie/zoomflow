@@ -1,7 +1,8 @@
 {
   "$schema": "./node_modules/@biomejs/biome/configuration_schema.json",
   "vcs": { "enabled": true, "clientKind": "git", "useIgnoreFile": true },
-  "files": { "includes": ["**", "!**/dist", "!vendor"] },
+  // D2-generated SVGs contain CDATA that Biome's SVG/CSS parser cannot read.
+  "files": { "includes": ["**", "!**/dist", "!vendor", "!apps/web/src/order-preview.svg", "!apps/web/src/order-preview-dark.svg"] },
   // Lint only, apart from JSON (see overrides). The formatter would rewrite most source
   // files: the code keeps related statements on one line and uses lines beyond any fixed width.
   "formatter": { "enabled": false },

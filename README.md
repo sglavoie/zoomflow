@@ -82,6 +82,8 @@ use **Retry preview** to try again without losing your source.
    **Interactive diagram (HTML)** for one file with offline drill-down navigation,
    **Interactive atlas (HTML)** for a project file and every file it links to,
    **Current board image** as SVG or PNG, or **All boards as SVG or PNG (ZIP)**.
+   With **Current board image (PNG)** selected, **Copy PNG** puts the image on your
+   clipboard for pasting into another app.
    Interactive HTML includes offline search for boards and shapes, across every
    bundled file in an atlas.
 

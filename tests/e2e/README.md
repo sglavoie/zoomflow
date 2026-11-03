@@ -155,7 +155,8 @@ isolation, per-document choices, and failed or superseded layer renders.
 
 ## Export
 
-- `export.spec.ts`: real SVG, PNG, ZIP and HTML downloads, HTML opened over `file://`
+- `export.spec.ts`: real SVG, PNG, ZIP and HTML downloads, PNG clipboard copies,
+  HTML opened over `file://`
   offline with nested and cyclic navigation, remote-image embedding and fallback, export
   defaults and remembered choices, progress, cancellation when the source changes, and an
   export button that stays disabled until the running export finishes.

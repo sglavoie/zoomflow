@@ -12,6 +12,7 @@ test('the production build compiles, navigates, edits and exports offline HTML',
   page.on('console', (message) => { if (message.type() === 'error') errors.push(message.text()); });
   await page.goto('/');
   await previewReady(page);
+  await expect(page.locator('.zf-stage')).not.toHaveClass(/zf-starter-preview/);
   await page.locator('.zf-stage a[data-board="root.layers.checkout"]').click();
   await expect(page.locator('.zf-stage')).toHaveAttribute('data-board', 'root.layers.checkout');
 

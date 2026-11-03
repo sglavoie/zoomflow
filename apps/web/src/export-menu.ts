@@ -77,6 +77,13 @@ export function setupExportMenu(activePane: () => DocumentPane | undefined, pick
     setExportStatus(message, kind);
   }
 
+  /** Downloads and clipboard copies use the same visible board, theme and hidden-shape choices. */
+  async function boardImage(pane: DocumentPane, render: RenderBoard, target: string, dark: boolean) {
+    const layers = await pane.viewer.renderVisibleLayers();
+    const prepared = await prepareExportSvg(layers ?? await render(target), dark);
+    return { ...prepared, layers: Boolean(layers) };
+  }
+
   document.querySelector<HTMLButtonElement>('#save-source')!.addEventListener('click', () => {
     const pane = activePane()!;
     if (!pane.key) return;
@@ -109,6 +116,7 @@ export function setupExportMenu(activePane: () => DocumentPane | undefined, pick
   });
 
   const exportButton = document.querySelector<HTMLButtonElement>('#export')!;
+  const copyPngButton = document.querySelector<HTMLButtonElement>('#copy-board-png')!;
   const resetVisibility = document.querySelector<HTMLButtonElement>('#reset-export-visibility')!;
   resetVisibility.addEventListener('click', () => {
     const pane = activePane();
@@ -163,6 +171,8 @@ export function setupExportMenu(activePane: () => DocumentPane | undefined, pick
     }
     exportButton.textContent = ({ svg: 'Download SVG', png: 'Download PNG', zip: 'Download SVG ZIP', 'png-zip': 'Download PNG ZIP',
       html: 'Download HTML', atlas: 'Download atlas HTML' } as Record<string, string>)[exportFormat.value] ?? 'Download export';
+    copyPngButton.hidden = exportFormat.value !== 'png';
+    copyPngButton.disabled = !canExport();
   }
   function rememberExportFormat() {
     explicitExportFormat = true;
@@ -176,6 +186,49 @@ export function setupExportMenu(activePane: () => DocumentPane | undefined, pick
     if (event.target instanceof HTMLInputElement && event.target.checked) rememberExportFormat();
   });
 
+  copyPngButton.addEventListener('click', async () => {
+    const pane = activePane();
+    const loaded = pane?.documentExport;
+    const board = pane?.viewer.currentBoard;
+    if (!pane || !loaded || !board || !canExport()) return;
+    if (!navigator.clipboard?.write || typeof ClipboardItem === 'undefined') {
+      reportExport('Clipboard unavailable. Use Download PNG.', 'error', pane);
+      return;
+    }
+    const revision = pane.generation;
+    const view = pane.viewer.exportView(loaded.diagram, loaded.render);
+    const dark = document.documentElement.dataset.theme === 'dark';
+    const canceled = () => pane.generation !== revision || pane.documentExport !== loaded ||
+      pane.viewer.currentBoard?.id !== board.id || activePane() !== pane;
+    exporting = true;
+    updateExportLabel();
+    reportExport('Preparing PNG to copy…', 'info', pane);
+    let warnings: string[] = [];
+    let preparationError: unknown;
+    // Start the clipboard write during the click's user activation. The browser
+    // awaits this promise while rendering and PNG encoding finish.
+    const image = (async () => {
+      try {
+        const prepared = await boardImage(pane, view.render, board.target, dark);
+        warnings = prepared.warnings;
+        const png = await rasterizeSvg(prepared.svg);
+        if (canceled()) throw new Error('The diagram changed while copying.');
+        return png;
+      } catch (error) { preparationError = error; throw error; }
+    })();
+    void image.catch(() => {});
+    try {
+      await navigator.clipboard.write([new ClipboardItem({ 'image/png': image })]);
+      reportExport(warnings.length ? `PNG copied. ${[...new Set(warnings)].join(' ')}` : 'PNG copied to clipboard.',
+        warnings.length ? 'error' : 'info', pane);
+    } catch (error) {
+      const changed = canceled();
+      reportExport(changed ? 'Copy canceled because the diagram changed.'
+        : `Could not copy PNG: ${describeError(preparationError ?? error)}. Use Download PNG.`,
+      changed ? 'info' : 'error', pane);
+    } finally { exporting = false; updateExportLabel(); }
+  });
+
   exportButton.addEventListener('click', async () => {
     const pane = activePane()!;
     const loaded = pane.documentExport;
@@ -185,6 +238,7 @@ export function setupExportMenu(activePane: () => DocumentPane | undefined, pick
     const view = pane.viewer.exportView(loaded.diagram, loaded.render);
     exporting = true;
     exportButton.disabled = true;
+    copyPngButton.disabled = true;
     const format = exportFormat.value;
     const pngZip = format === 'png-zip';
     const zip = format === 'zip' || pngZip;
@@ -249,12 +303,10 @@ export function setupExportMenu(activePane: () => DocumentPane | undefined, pick
       let blob: Blob;
       let name = safeFilename(exportName);
       if (format === 'svg' || format === 'png') {
-        const layers = await pane.viewer.renderVisibleLayers();
-        const prepared = layers ? await prepareExportSvg(layers, theme) : undefined;
-        if (prepared) warnings.push(...prepared.warnings);
-        const svg = prepared?.svg ?? await prepare(board.target);
-        blob = format === 'png' ? await rasterizeSvg(svg) : new Blob([svg], { type: 'image/svg+xml' });
-        name += `-${layers ? 'layers' : board.name === 'Root' ? 'root' : safeFilename(board.name)}.${format}`;
+        const prepared = await boardImage(pane, view.render, board.target, dark);
+        warnings.push(...prepared.warnings);
+        blob = format === 'png' ? await rasterizeSvg(prepared.svg) : new Blob([prepared.svg], { type: 'image/svg+xml' });
+        name += `-${prepared.layers ? 'layers' : board.name === 'Root' ? 'root' : safeFilename(board.name)}.${format}`;
       } else if (format === 'atlas' || (zip && isProject(pane))) {
         const documents = await atlasDocuments();
         if (!documents) {

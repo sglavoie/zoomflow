@@ -1078,6 +1078,17 @@ header > strong {
   line-height: 1.4;
   overflow-wrap: anywhere;
 }
+.export-actions {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--space-2);
+}
+.export-actions button[hidden] {
+  display: none;
+}
+#copy-board-png {
+  white-space: nowrap;
+}
 #export-status[data-kind="error"] {
   color: var(--danger-text);
 }
@@ -1484,6 +1495,28 @@ body.diagram-fullscreen {
 }
 .zf-stage {
   background: var(--stage);
+}
+.zf-stage.zf-starter-preview {
+  background-image: url('./order-preview.svg');
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: contain;
+}
+[data-theme="dark"] .zf-stage.zf-starter-preview {
+  background-image: url('./order-preview-dark.svg');
+}
+.zf-stage.zf-starter-preview::after {
+  content: "Example preview · loading diagram engine…";
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  padding: 5px var(--space-2);
+  border-radius: var(--radius);
+  color: var(--muted);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  font-size: var(--font-size-sm);
+  pointer-events: none;
 }
 footer {
   color: var(--muted);

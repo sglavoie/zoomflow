@@ -18,6 +18,23 @@ tests run against the Vite dev server locally. In CI, and locally with
 The app build is written to `apps/web/dist`. D2 is loaded lazily, but its bundled
 compiler is still a large download (roughly 8.5 MB gzip).
 
+The untouched `order.d2` starter shows a small, static root-board SVG while D2
+downloads. It is labelled as an example preview and is removed when the live
+preview arrives, the source changes, or startup fails. Other documents, saved
+export choices and non-root routes do not show it. The light and dark SVG assets
+in `apps/web/src/order-preview*.svg` were generated from `fixtures/order.d2`
+with native D2 v0.9.0 at themes 0 and 200; regenerate both if that example changes.
+
+To measure cold loading, see `spike/first-preview.mjs`. On this Mac, against the
+local production preview at 10 Mbps and 40 ms latency, the pre-change median of
+three fresh-context runs was 8.36 seconds to a live preview. The D2 chunk ended
+near 7.26 seconds and fonts near 8.06 seconds. With the starter image, the image
+transfer ended near 0.40 seconds and a screenshot at 1 second showed the diagram;
+the live preview still took 8.33 seconds. These figures describe this test setup,
+not a guarantee for the public site. Fetching fonts in parallel with D2 increased
+the live-preview median to 9.08 seconds under the same throttle because the requests
+shared bandwidth, so that experiment was not retained.
+
 Preview requests run serially with one replaceable pending request. Source changes
 invalidate pending requests immediately, including during debounce; an already-running
 compilation finishes but cannot publish stale output. Formatting and AI validation

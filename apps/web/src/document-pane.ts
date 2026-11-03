@@ -18,6 +18,7 @@ import { atlasMapName, atlasMapSource, fileLinks as linksOfFile, type AtlasFile 
 import type { setupFlowBuilder } from './flow-builder';
 import type { setupMindMapBuilder } from './mind-map-builder';
 import type { DraftState, setupExamplePicker } from './example-picker';
+import { exampleSource } from './draft-library';
 import { paneScope, type PaneId } from './pane-scope';
 import { paneNotice, type EngineNotice } from './engine-notice';
 import { setupCompileError } from './compile-error';
@@ -213,6 +214,7 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
   /** Lint with default options, computed once per compile for the viewer and exports. */
   let defaultLint: LintResult | undefined;
   function invalidateSource() {
+    viewer.stage.classList.remove('zf-starter-preview');
     boardTools.invalidate();
     // Invalidate immediately, including requests still awaiting WASM/render startup.
     ++generation;
@@ -802,6 +804,11 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
     const attempt = previewAttempt = Symbol();
     let slowTimer: ReturnType<typeof setTimeout> | undefined;
     const request = ++generation;
+    const view = currentDocumentKey === 'order.d2' ? picker().readView('order.d2') : undefined;
+    viewer.stage.classList.toggle('zf-starter-preview', id === 'a' && !shared.compiler.ready &&
+      currentDocumentKey === 'order.d2' && source === exampleSource('order.d2') &&
+      (!location.hash || location.hash === '#/') && !view?.hidden?.length && !view?.layers?.root &&
+      !viewer.stage.querySelector('svg'));
     viewer.setBusy(true);
     viewer.setMessage('');
     setPreviewState(viewer.stage.querySelector('svg') ? 'updating' : 'loading');
@@ -840,6 +847,7 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
       }
       await viewer.setDocument(diagram, render, diagnostics, preserveViewport);
       if (request === generation) {
+        viewer.stage.classList.remove('zf-starter-preview');
         sourceMap = compiledSources;
         mappedSource = source;
         lintDocument = compiled;
@@ -868,6 +876,7 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
       }
     } catch (error) {
       if (request === generation) {
+        viewer.stage.classList.remove('zf-starter-preview');
         if (error instanceof CompilerStartupError || error instanceof ViewerRenderError) {
           setEditorDiagnostics([]);
           compileError.hide();
@@ -955,6 +964,7 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
     },
     /** Show a document restored on startup, keeping its board from the page URL. */
     open(document: { key: string; name: string; source: string }) {
+      viewer.stage.classList.remove('zf-starter-preview');
       ++documentOpens;
       boardTools.resetSearch();
       ai?.documentSwitched();
@@ -973,6 +983,7 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
     },
     /** Leave the pane without a document, for example when its draft is removed. */
     close() {
+      viewer.stage.classList.remove('zf-starter-preview');
       ++documentOpens;
       boardTools.resetSearch();
       sourceError = false;

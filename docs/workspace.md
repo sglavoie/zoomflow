@@ -728,13 +728,15 @@ Saving or downloading `.d2` source does not include view settings, and clearing
 browser storage removes their browser backup. **Download Zoomflow project** keeps
 the editable source and view settings together so they can be restored elsewhere.
 
-Export presents four choices by outcome, each with an explanation:
-**Interactive diagram (HTML)** for one navigable file with every board, **Current
-board image (SVG)** and **Current board image (PNG)** for the board on screen, and
-**All boards as SVG (ZIP)** for every board as a separate SVG. The button names the
-download: **Download HTML**, **Download SVG**, **Download PNG** or **Download SVG
-ZIP**. The HTML opens directly from disk without a server or network connection
-and includes every board, including cyclic links.
+Export offers **Interactive diagram (HTML)** for one navigable file with every
+board, **Current board image (SVG)** and **Current board image (PNG)** for the
+board on screen, and **All boards as SVG or PNG (ZIP)** for separate images. Project
+files also offer **Interactive atlas (HTML)**. The main button names the download.
+When PNG is selected, **Copy PNG** puts the same current board image on the clipboard
+for pasting into another app. It uses the shown theme, export visibility and visible
+layer layout. If clipboard access fails, use **Download PNG**. The HTML opens directly
+from disk without a server or network connection and includes every board, including
+cyclic links.
 **Find in diagram** beside the zoom controls (⌘⇧F / Ctrl+Shift+F) searches board names
 and shape labels across the exported diagram. Atlas exports offer **Find in atlas**
 across every bundled file, with file paths and board breadcrumbs to distinguish matches.

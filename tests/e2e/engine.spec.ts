@@ -52,6 +52,7 @@ test('startup failure offers retry without source diagnostics or lost edits', as
   });
   await page.goto('/');
   await expect(page.locator('#retry-engine')).toBeVisible();
+  await expect(page.locator('.zf-stage')).not.toHaveClass(/zf-starter-preview/);
   await expect(page.locator('#engine-message')).toContainText('could not start');
   await expect(page.locator('#compile-error')).toBeHidden();
   await expect(page.locator('.cm-lint-marker-error')).toHaveCount(0);
@@ -74,8 +75,10 @@ test('slow initial download explains the wait while source remains editable', as
   await page.route(d2Module, async (route) => { await gate; await route.continue(); });
   try {
     await page.goto('/', { waitUntil: 'domcontentloaded' });
+    await expect(page.locator('.zf-stage')).toHaveClass(/zf-starter-preview/);
     await expect(page.locator('#engine-message')).toContainText('first download');
     await source(page).fill('a: Edited during startup');
+    await expect(page.locator('.zf-stage')).not.toHaveClass(/zf-starter-preview/);
   } finally { release(); }
   await previewReady(page);
   await expect(page.locator('.zf-stage')).toContainText('Edited during startup');

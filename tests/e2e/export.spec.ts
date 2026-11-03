@@ -134,6 +134,42 @@ test('downloads the current SVG and PNG and matches the root PNG snapshot', { ta
   expect(zip.subarray(0, 2).toString()).toBe('PK');
 });
 
+test('copies the same curated board PNG as Download PNG and reports clipboard failure', async ({ page }, info) => {
+  await page.goto('/'); await previewReady(page);
+  await page.locator('.zf-stage [data-shape-id="Browse"]').click({ button: 'right' });
+  await page.getByRole('menuitem', { name: 'Hide from export', exact: true }).click();
+  await selectMenuOption(page, '#theme', 'dark');
+  await page.evaluate(() => {
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: {
+      write: async (items: ClipboardItem[]) => {
+        const png = await items[0].getType('image/png');
+        (window as any).copiedPng = Array.from(new Uint8Array(await png.arrayBuffer()));
+      },
+    } });
+  });
+  await selectMenuOption(page, '#export-format', 'png');
+  const copy = page.locator('#copy-board-png');
+  await expect(copy).toBeVisible();
+  await copy.click();
+  await expect(page.locator('#export-status')).toHaveText('PNG copied to clipboard.');
+  const copied = Buffer.from(await page.evaluate(() => (window as any).copiedPng as number[]));
+  expect(copied.subarray(0, 8).toString('hex')).toBe('89504e470d0a1a0a');
+  expect(copied).toEqual(await readFile(await download(page, 'png', info)));
+
+  await page.evaluate(() => {
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: {
+      write: async (items: ClipboardItem[]) => {
+        await items[0].getType('image/png');
+        throw new Error('Permission denied');
+      },
+    } });
+  });
+  await selectMenuOption(page, '#export-format', 'png');
+  await copy.click();
+  await expect(page.locator('#export-status')).toContainText('Permission denied. Use Download PNG.');
+  await expect(page.locator('#export')).toBeEnabled();
+});
+
 test('uses the shipped font bytes for compilation instead of silently falling back', async ({ page }) => {
   await page.route(regularFont, (route) => route.fulfill({
     contentType: 'font/ttf', body: 'invalid font bytes',
@@ -447,6 +483,7 @@ test('export stays disabled until the running export finishes', async ({ page })
   await expect.poll(() => Boolean(release)).toBe(true);
   // Changing the format refreshes the export label but must not re-enable the running export.
   await page.locator('#export-format input[value="png"]').check();
+  await expect(page.locator('#copy-board-png')).toBeDisabled();
   await page.locator('#export-format input[value="svg"]').check();
   await expect(exportButton).toBeDisabled();
   release!();
