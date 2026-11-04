@@ -1514,7 +1514,7 @@ body.diagram-fullscreen {
   position: absolute;
   top: 12px;
   right: 12px;
-  padding: 5px var(--space-2);
+  padding: 5px 34px 5px var(--space-2);
   border-radius: var(--radius);
   color: var(--muted);
   background: var(--surface);
@@ -2138,18 +2138,77 @@ footer {
   font-size: var(--font-size-sm);
   pointer-events: none;
 }
-.zf-stage[data-preview-state="updating"]:has(> svg)::after {
-  content: "Updating preview…";
+.zf-stage[data-preview-state="loading"]::before,
+.zf-stage[data-preview-state="updating"]:has(> svg)::before {
+  content: "";
+  position: absolute;
+  z-index: 1;
+  top: 18px;
+  right: 18px;
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: preview-spin 0.8s linear infinite;
+  pointer-events: none;
+}
+.zf-stage[data-preview-state="loading"]::after {
+  content: "Loading preview…";
   position: absolute;
   top: 12px;
   right: 12px;
-  padding: 5px var(--space-2);
+  padding: 5px 34px 5px var(--space-2);
   border-radius: var(--radius);
   color: var(--accent);
   background: var(--accent-surface);
   border: 1px solid var(--accent-border);
   font-size: var(--font-size-sm);
   pointer-events: none;
+}
+.zf-stage.zf-starter-preview[data-preview-state="loading"]::after {
+  content: "Example preview · loading diagram engine…";
+}
+.zf-stage[data-preview-state="loading"]:not(.zf-starter-preview):not(:has(> svg))::before {
+  top: calc(50% - 29px);
+  left: calc(50% - 16px);
+  right: auto;
+  width: 32px;
+  height: 32px;
+  border-width: 3px;
+}
+.zf-stage[data-preview-state="loading"]:not(.zf-starter-preview):not(:has(> svg))::after {
+  content: "Loading diagram…";
+  top: calc(50% + 22px);
+  left: 50%;
+  right: auto;
+  transform: translateX(-50%);
+  padding: 0;
+  border: 0;
+  background: transparent;
+  white-space: nowrap;
+}
+.zf-stage[data-preview-state="updating"]:has(> svg)::after {
+  content: "Updating preview…";
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  padding: 5px 34px 5px var(--space-2);
+  border-radius: var(--radius);
+  color: var(--accent);
+  background: var(--accent-surface);
+  border: 1px solid var(--accent-border);
+  font-size: var(--font-size-sm);
+  pointer-events: none;
+}
+@keyframes preview-spin {
+  to { transform: rotate(360deg); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .zf-stage[data-preview-state="loading"]::before,
+  .zf-stage[data-preview-state="updating"]:has(> svg)::before {
+    animation: none;
+  }
 }
 .zf-stage [data-shape-id] {
   cursor: pointer;

@@ -192,6 +192,7 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
     setText(previewStatus, { loading: 'Loading preview…',
       ready: 'Preview ready', error: 'Preview out of date', unavailable: 'Preview unavailable' }[state]);
     if (state === 'error' || state === 'unavailable') viewer.stage.dataset.previewState = 'stale';
+    else if (state === 'loading') viewer.stage.dataset.previewState = 'loading';
     else delete viewer.stage.dataset.previewState;
     viewer.stage.dispatchEvent(new Event('zf-sourcechange'));
   }
@@ -231,7 +232,7 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
     viewer.highlightShapes([]);
     documentExport = undefined;
     shared.exportChanged();
-    setPreviewState('updating');
+    setPreviewState(viewer.stage.querySelector('svg') ? 'updating' : 'loading');
     setActivity('');
     shared.clearFileError();
     shared.setExportStatus('');
