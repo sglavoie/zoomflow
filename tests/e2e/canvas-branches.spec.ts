@@ -37,6 +37,56 @@ async function dragTo(page: Page, from: Locator, to: Locator) {
   await page.mouse.move(end.x + end.width / 2, end.y + end.height / 2, { steps: 12 });
 }
 
+for (const modifier of ['Control', 'Meta']) {
+  test(`${modifier} + left-drag pans over shapes, links and background without editing`, async ({ page }) => {
+    await createMap(page, initial, '2');
+    const stage = page.locator('.zf-stage');
+    const svg = stage.locator(':scope > svg');
+    const original = await editorText(page);
+    await shape(page, 'n_2').click();
+    const fitted = await svg.getAttribute('viewBox');
+    for (const zoomed of [false, true]) {
+      for (const target of [shape(page, 'n_1'), stage.locator('a .appendix-icon').first(), stage]) {
+        if (zoomed) {
+          // Zoom about the target so an edge badge stays inside the canvas.
+          await target.hover();
+          await page.mouse.wheel(0, -220);
+          await expect(svg).not.toHaveAttribute('viewBox', fitted!);
+        }
+        const before = (await svg.getAttribute('viewBox'))!.split(/\s+/).map(Number);
+        const bounds = (await target.boundingBox())!;
+        const x = bounds.x + (target === stage ? 4 : bounds.width / 2);
+        const y = bounds.y + (target === stage ? 4 : bounds.height / 2);
+        await page.mouse.move(x, y);
+        await page.keyboard.down(modifier);
+        await page.mouse.down();
+        await page.mouse.move(x + 40, y + 30, { steps: 6 });
+        await expect(stage).toHaveClass(/zf-panning/);
+        await expect(stage).not.toHaveClass(/zf-branch-dragging/);
+        // Releasing the modifier first keeps the gesture a pan until the mouse is released.
+        await page.keyboard.up(modifier);
+        await page.mouse.move(x + 60, y + 40, { steps: 3 });
+        await page.mouse.up();
+        const after = (await svg.getAttribute('viewBox'))!.split(/\s+/).map(Number);
+        expect(after.slice(0, 2)).not.toEqual(before.slice(0, 2));
+        expect(after.slice(2)).toEqual(before.slice(2));
+        await expect(stage).not.toHaveClass(/zf-panning|zf-branch-dragging/);
+        await expect(shape(page, 'n_2')).toHaveClass(/zf-canvas-selected/);
+        await expect(page.getByRole('menu')).toHaveCount(0);
+        await board(page, 'root');
+        expect(await editorText(page)).toBe(original);
+        await page.getByRole('button', { name: 'Fit diagram', exact: true }).click();
+        expect(await svg.getAttribute('viewBox')).toBe(fitted);
+      }
+    }
+    // Editing is available again after the pan ends.
+    await dragTo(page, shape(page, 'n_1_1'), shape(page, 'n_2'));
+    await expect(shape(page, 'n_2')).toHaveClass(/zf-branch-target/);
+    await page.mouse.up(); await previewReady(page);
+    expect(await editorText(page)).not.toBe(original);
+  });
+}
+
 test('moves a subtree by dragging, keeps the builder editable, and follows selection through undo and redo', async ({ page }) => {
   await createMap(page);
   const original = await editorText(page);

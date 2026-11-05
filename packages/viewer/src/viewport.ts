@@ -60,7 +60,7 @@ export function createViewport(stage: HTMLElement, host: HTMLElement, clamp: typ
   controls.append(out, amount, fit, inside);
   const hint = document.createElement('div');
   hint.className = 'zf-pan-hint';
-  hint.textContent = touch ? 'Pinch to zoom · Drag to pan' : 'Space + drag to pan · Scroll to zoom';
+  hint.textContent = touch ? 'Pinch to zoom · Drag to pan' : '⌘/Ctrl + drag to pan · Space + drag while zoomed · Scroll to zoom';
   hint.hidden = true;
   let guidance = '';
   let preferGuidance = false;
@@ -90,6 +90,7 @@ export function createViewport(stage: HTMLElement, host: HTMLElement, clamp: typ
   let moved = false;
   let suppressClick = false;
   let panGesture = false;
+  let modifierPan = false;
   let spaceHeld = false;
   let hovered = false;
   /** When a pointer last pressed or released; focus right after it came from that press. */
@@ -131,26 +132,27 @@ export function createViewport(stage: HTMLElement, host: HTMLElement, clamp: typ
   function updateControls() {
     const currentScale = scale();
     const zoomed = Math.abs(currentScale - 1) > zoomEpsilon;
-    amount.textContent = zoomed ? `${Math.round(currentScale * 100)}%` : 'Fit';
-    amount.title = zoomed ? `${Math.round(currentScale * 100)}% of fitted size` : 'Diagram fitted to the available space';
+    const offset = Boolean(base && box && (Math.abs(box.x - base.x) > zoomEpsilon || Math.abs(box.y - base.y) > zoomEpsilon));
+    amount.textContent = zoomed || offset ? `${Math.round(currentScale * 100)}%` : 'Fit';
+    amount.title = zoomed || offset ? `${Math.round(currentScale * 100)}% of fitted size` : 'Diagram fitted to the available space';
     amount.setAttribute('aria-label', amount.title);
-    const panHint = touch ? 'Pinch to zoom · Drag to pan' : 'Space + drag to pan · Scroll to zoom';
+    const panHint = touch ? 'Pinch to zoom · Drag to pan' : '⌘/Ctrl + drag to pan · Space + drag while zoomed · Scroll to zoom';
     hint.textContent = guidance && (preferGuidance || currentScale <= 1 + zoomEpsilon) ? guidance : panHint;
     hint.title = hint.textContent;
     hint.hidden = !svg || !guidance && !touch && currentScale <= 1 + zoomEpsilon;
     const focused = [out, fit, inside].find((button) => button === document.activeElement);
     out.disabled = !svg || currentScale <= minZoom + zoomEpsilon;
     inside.disabled = !svg || currentScale >= maxZoom - zoomEpsilon;
-    fit.disabled = !svg || !zoomed;
+    fit.disabled = !svg || !zoomed && !offset;
     // A button disabled by its own press would drop keyboard focus to the page.
     if (focused?.disabled) ([focused === out ? inside : out, fit, inside].find((button) => !button.disabled) ?? stage).focus({ preventScroll: true });
     // Reserve gestures from the first contact: changing touch-action mid-pinch is too late.
     if (svg) svg.style.touchAction = 'none';
     stage.classList.toggle('zf-pan-ready', spaceHeld && zoomed);
   }
-  function setBox(next: Box) {
+  function setBox(next: Box, constrain = true) {
     if (!base || !svg) return;
-    box = clamp(base, next);
+    box = constrain ? clamp(base, next) : next;
     svg.setAttribute('viewBox', `${box.x} ${box.y} ${box.width} ${box.height}`);
     updateControls();
     svg.dispatchEvent(new Event('zf-viewportchange'));
@@ -181,7 +183,7 @@ export function createViewport(stage: HTMLElement, host: HTMLElement, clamp: typ
     if (!box || !svg) return;
     const matrix = svg.getScreenCTM();
     if (!matrix || !matrix.a || !matrix.d) return;
-    setBox({ ...box, x: box.x - dx / matrix.a, y: box.y - dy / matrix.d });
+    setBox({ ...box, x: box.x - dx / matrix.a, y: box.y - dy / matrix.d }, !modifierPan);
   }
   /** Frame targets with minimal movement; keep the current zoom whenever they fit. */
   function reveal(targets: readonly SVGGraphicsElement[]) {
@@ -323,10 +325,11 @@ export function createViewport(stage: HTMLElement, host: HTMLElement, clamp: typ
         const width = base.width / previous.scale;
         const height = base.height / previous.scale;
         setBox({ x: base.x + base.width * previous.centerX - width / 2,
-          y: base.y + base.height * previous.centerY - height / 2, width, height });
+          y: base.y + base.height * previous.centerY - height / 2, width, height }, false);
       } else svg.setAttribute('viewBox', `${base.x} ${base.y} ${base.width} ${base.height}`);
     }
     pointers.clear();
+    moved = panGesture = modifierPan = false;
     stage.classList.remove('zf-panning');
     updateControls();
     resetFocus();
@@ -352,14 +355,16 @@ export function createViewport(stage: HTMLElement, host: HTMLElement, clamp: typ
     zoom(factor, event.clientX, event.clientY);
   }, { passive: false, signal });
   stage.addEventListener('pointerdown', (event) => {
-    const forcePan = event.pointerType === 'mouse' && Math.abs(scale() - 1) > zoomEpsilon && (spaceHeld || event.button === 1);
-    if (!svg || !(event.target instanceof Element) || !svg.contains(event.target) ||
+    const modified = event.pointerType === 'mouse' && event.button === 0 && (event.ctrlKey || event.metaKey);
+    const forcePan = modified || event.pointerType === 'mouse' && Math.abs(scale() - 1) > zoomEpsilon && (spaceHeld || event.button === 1);
+    if (!svg || !(event.target instanceof Element) || !(svg.contains(event.target) || forcePan && event.target === stage) ||
       (event.pointerType === 'mouse' && !forcePan && (event.button !== 0 || event.target.closest('a, [data-shape-id], [data-flow-connection]')))) return;
-    if (!pointers.size) { moved = false; panGesture = forcePan; }
-    if (forcePan) event.preventDefault();
+    if (!pointers.size) { moved = false; panGesture = forcePan; modifierPan = modified; }
+    // Claim forced panning before shape editing or native link dragging can begin.
+    if (forcePan) { event.preventDefault(); event.stopImmediatePropagation(); }
     pointers.set(event.pointerId, { x: event.clientX, y: event.clientY, startX: event.clientX, startY: event.clientY });
     stage.setPointerCapture(event.pointerId);
-  }, { signal });
+  }, { capture: true, signal });
   stage.addEventListener('pointermove', (event) => {
     if (!pointers.has(event.pointerId)) return;
     const before = [...pointers.values()];
@@ -390,7 +395,7 @@ export function createViewport(stage: HTMLElement, host: HTMLElement, clamp: typ
         suppressClick = true;
         setTimeout(() => { suppressClick = false; }, 150);
       }
-      panGesture = false;
+      panGesture = modifierPan = false;
     }
   }
   stage.addEventListener('pointerup', finish, { signal });
@@ -399,9 +404,15 @@ export function createViewport(stage: HTMLElement, host: HTMLElement, clamp: typ
   stage.addEventListener('zf-cancelgesture', () => {
     for (const id of pointers.keys()) if (stage.hasPointerCapture(id)) stage.releasePointerCapture(id);
     pointers.clear();
-    moved = panGesture = false;
+    moved = panGesture = modifierPan = false;
     stage.classList.remove('zf-panning');
   }, { signal });
+  // macOS can send a context menu for Ctrl + left-click during the pan gesture.
+  stage.addEventListener('contextmenu', (event) => {
+    if (!modifierPan && !event.ctrlKey) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+  }, { capture: true, signal });
   stage.addEventListener('click', (event) => {
     if (!suppressClick) return;
     event.preventDefault();

@@ -411,7 +411,7 @@ test('canvas guidance follows navigation, mouse, keyboard and zoom context', asy
   await expect(hint).toContainText('Enter');
   await expect(hint).not.toContainText('Click');
   await page.getByRole('button', { name: 'Zoom in', exact: true }).click();
-  await expect(hint).toHaveText('Space + drag to pan · Scroll to zoom');
+  await expect(hint).toHaveText('⌘/Ctrl + drag to pan · Space + drag while zoomed · Scroll to zoom');
   await page.getByRole('button', { name: 'Fit diagram', exact: true }).click();
   await expect(hint).toHaveText('Click Charge to explore');
 });
