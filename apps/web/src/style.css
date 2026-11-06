@@ -1801,7 +1801,7 @@ footer {
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
-  padding: 0 var(--space-4) 10px;
+  padding: var(--space-3) var(--space-4);
 }
 [data-part="ai-assistant"] > summary,
 [data-part="lint-details"] > summary {
