@@ -11,6 +11,7 @@ import type { ProjectSaveSnapshot } from './project-save';
 import { parseDocumentView, serializeDocumentView, type DocumentView } from '@zoomflow/viewer';
 
 import type { PaneId } from './pane-scope';
+import { restoreField } from './field-preference';
 
 export type { PaneId };
 const panes: PaneId[] = ['a', 'b'];
@@ -76,6 +77,7 @@ export function setupExamplePicker({ readSource, open, onState, forget, checkpoi
   search.id = 'diagram-search';
   search.placeholder = 'Find a diagram or project…';
   search.setAttribute('aria-label', 'Find a diagram or project');
+  restoreField(search, 'zoomflow.diagram-search.v1');
   search.hidden = true;
   const empty = document.createElement('p');
   empty.className = 'example-menu-hint';

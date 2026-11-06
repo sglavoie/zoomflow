@@ -1,6 +1,7 @@
 import type { PaneScope } from './pane-scope';
 import { AiError, aiFailure, readAiResponse } from './ai-errors';
 import { setupAiQueryHistory } from './ai-query-history';
+import { restoreField } from './field-preference';
 import type { SourceDiagnostic } from './diagnostics';
 type Snapshot = { source: string; name: string; board: string; revision: number };
 const switchedDocument = Symbol('switched document');
@@ -53,7 +54,7 @@ export type AiAssistantHost = {
   dismissHighlights?: () => void;
 };
 
-export function setupAiAssistant({ root, part }: PaneScope, { read, diagnostics, validate, apply, readOnly = () => undefined, onStatus = () => {}, undo = () => false,
+export function setupAiAssistant({ root, part, pane }: PaneScope, { read, diagnostics, validate, apply, readOnly = () => undefined, onStatus = () => {}, undo = () => false,
   revealChange = () => {}, dismissHighlights = () => {} }: AiAssistantHost) {
   const form = part<HTMLFormElement>('ai-form');
   const provider = part<HTMLSelectElement>('ai-provider');
@@ -64,6 +65,10 @@ export function setupAiAssistant({ root, part }: PaneScope, { read, diagnostics,
   const workingConfig = part<HTMLElement>('ai-working-config');
   const workingDirectory = part<HTMLInputElement>('ai-working-directory');
   const prompt = part<HTMLTextAreaElement>('ai-prompt');
+  for (const name of ['ai-provider', 'ai-claude-config-dir', 'ai-environment', 'ai-working-directory']) {
+    restoreField(part<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>(name), `zoomflow.${name}.v1`);
+  }
+  const savePrompt = restoreField(prompt, `zoomflow.ai-prompt.${pane}.v1`);
   const history = setupAiQueryHistory({ part }, prompt);
   const button = part<HTMLButtonElement>('ai-send');
   const status = part<HTMLElement>('ai-status');
@@ -235,6 +240,7 @@ export function setupAiAssistant({ root, part }: PaneScope, { read, diagnostics,
         status.textContent = `${data.reply ? `${data.reply} ` : ''}The proposed source change was not applied. ${locked}`;
         onStatus('AI suggested a change the read-only document cannot take.', 'info');
         prompt.value = '';
+        savePrompt();
         return;
       }
       if (source !== null) {
@@ -272,6 +278,7 @@ export function setupAiAssistant({ root, part }: PaneScope, { read, diagnostics,
       });
       onStatus(source !== null && source !== snapshot.source ? 'AI updated the source.' : 'AI response ready.', 'info');
       prompt.value = '';
+      savePrompt();
     } catch (error) {
       if (controller.signal.aborted) {
         status.dataset.kind = 'info';

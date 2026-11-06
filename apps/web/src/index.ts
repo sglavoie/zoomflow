@@ -15,6 +15,7 @@ import { setupExportMenu } from './export-menu';
 import { setupFileOpen } from './file-open';
 import { DirectoryHandles, FileHandles } from './file-handles';
 import { setupProjectSave } from './project-save-dialog';
+import { restoreField } from './field-preference';
 
 const canvasStyle = document.createElement('style');
 canvasStyle.textContent = viewerStyle;
@@ -46,13 +47,6 @@ setupShortcuts();
 const narrow = matchMedia('(max-width: 999px)');
 const roomy = matchMedia('(min-width: 1400px)');
 setupViewportHeight(narrow);
-function restorePreference(select: HTMLSelectElement, key: string) {
-  try {
-    const saved = localStorage.getItem(key);
-    if ([...select.options].some((option) => option.value === saved)) select.value = saved!;
-  } catch { /* Preferences are optional when storage is unavailable. */ }
-  select.addEventListener('change', () => { try { localStorage.setItem(key, select.value); } catch { /* Optional storage. */ } });
-}
 
 const panes: Partial<Record<PaneId, DocumentPane>> = {};
 let active: PaneId = 'a';
@@ -61,7 +55,7 @@ const otherPane = (pane: PaneId): PaneId => pane === 'a' ? 'b' : 'a';
 const exportMenu = setupExportMenu(() => panes[active], () => examplePicker);
 
 const theme = document.querySelector<HTMLSelectElement>('#theme')!;
-restorePreference(theme, 'zoomflow.theme');
+restoreField(theme, 'zoomflow.theme');
 const media = matchMedia('(prefers-color-scheme: dark)');
 function updateTheme() {
   document.documentElement.dataset.theme = theme.value === 'system'
@@ -243,7 +237,7 @@ function ensureSecondPane() {
 }
 
 const layoutSelect = document.querySelector<HTMLSelectElement>('#layout')!;
-restorePreference(layoutSelect, 'zoomflow.layout');
+restoreField(layoutSelect, 'zoomflow.layout');
 /** All four views need room; narrower windows show the split as tabs. */
 function effectiveLayout() {
   const layout = layoutSelect.value;

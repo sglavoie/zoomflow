@@ -52,6 +52,7 @@ export function setupAiQueryHistory({ part }: Pick<PaneScope, 'part'>, prompt: H
     const query = queries[Number(picker.value)];
     if (query === undefined) return;
     prompt.value = query;
+    prompt.dispatchEvent(new Event('input', { bubbles: true }));
     picker.value = '';
     prompt.focus();
     prompt.setSelectionRange(query.length, query.length);

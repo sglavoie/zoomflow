@@ -2,6 +2,7 @@ import { referenceTopics } from './reference-data';
 import { d2HighlightRanges } from './d2-language';
 import { plural } from './text';
 import { setupSplit } from './source-split';
+import { restoreField } from './field-preference';
 
 /** Build text nodes only, preserving exact copy text and syntax colors under matches. */
 function renderMatches(element: HTMLElement, source: string, terms: string[], syntax = false) {
@@ -45,6 +46,7 @@ export function setupReference(host: () => ReferenceHost) {
   const close = document.querySelector<HTMLButtonElement>('#close-reference')!;
   const divider = document.querySelector<HTMLElement>('#reference-divider')!;
   const search = document.querySelector<HTMLInputElement>('#reference-search')!;
+  restoreField(search, 'zoomflow.reference-search.v1');
   const content = document.querySelector<HTMLElement>('#reference-content')!;
   const count = document.querySelector<HTMLElement>('#reference-count')!;
   const status = document.querySelector<HTMLElement>('#reference-status')!;

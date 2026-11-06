@@ -76,6 +76,18 @@ test('diagram is on the left; toggling preserves search, scroll, split size, and
   expect(await page.locator('#reference-content').evaluate((element) => element.scrollTop)).toBe(scroll);
 });
 
+test('reference search restores its text and matching results after reload', async ({ page }) => {
+  await ready(page);
+  await toggle(page).click();
+  await search(page).fill('arrows');
+  const count = await page.locator('#reference-count').textContent();
+  await page.reload(); await previewReady(page);
+  await toggle(page).click();
+  await expect(search(page)).toHaveValue('arrows');
+  await expect(page.locator('#reference-count')).toHaveText(count!);
+  await expect(page.locator('#reference-content mark').first()).toBeVisible();
+});
+
 test('divider supports dragging, keyboard bounds, and remembers its size after reload', async ({ page }) => {
   await ready(page);
   await toggle(page).click();

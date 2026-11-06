@@ -25,6 +25,7 @@ import { setupCompileError } from './compile-error';
 import { canChooseSaveFile, setupSaveFile } from './save-file';
 import { describeError, plural, setText } from './text';
 import type { ProjectSearchEntry } from './project-search';
+import { restoreField } from './field-preference';
 
 export type { PaneId } from './pane-scope';
 export type DocumentExport = { diagram: Diagram; render: RenderBoard; name: string; diagnostics: LintDiagnostic[];
@@ -160,6 +161,8 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
   const previewStatus = part('preview-status');
   const missingBacklink = part<HTMLInputElement>('missing-backlink');
   const boundaryPorts = part<HTMLInputElement>('boundary-ports');
+  restoreField(missingBacklink, 'zoomflow.missing-backlink.v1');
+  restoreField(boundaryPorts, 'zoomflow.boundary-ports.v1');
   const formatButton = part<HTMLButtonElement>('format-source');
   const formatStatus = part('format-status');
   const activityStatus = part('activity-status');

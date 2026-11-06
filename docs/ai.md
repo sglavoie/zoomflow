@@ -35,6 +35,8 @@ recent distinct queries first. Use **Previous queries** below the prompt to load
 one, edit it, and click **Send** when ready. History is shared across diagrams and
 panes and survives reloading; failed and canceled requests are included.
 **Clear history** removes the saved queries without changing the current prompt.
+Unfinished prompts are also saved as you type, separately for each pane, and restored
+after a refresh. A successful response clears that pane's saved prompt.
 
 Applied edits highlight the affected source lines and show a clickable change count
 beside **Undo AI change**. This feedback scrolls into view within the tools on
@@ -56,7 +58,10 @@ field is explicit and overrides the server's own `CLAUDE_CONFIG_DIR`. Both provi
 field, one literal `NAME=value` per line (blank lines and `#` comment lines are
 ignored). Values may contain `=`. A non-blank Claude config field takes precedence over
 `CLAUDE_CONFIG_DIR` in the shared field. These values are passed only to the
-selected CLI process and are kept in the current page, not saved by Zoomflow.
+selected CLI process. The selected provider, config directory, environment text, and
+working directory are saved in this browser's local storage as you edit them and
+restored after a refresh. Clearing a field saves the blank value too. AI settings
+are shared across both panes.
 Variables that change which programs or code the CLI loads are refused with an
 error naming the line: `PATH`, `NODE_OPTIONS`, `NODE_PATH`, `ELECTRON_RUN_AS_NODE`,
 `BASH_ENV`, `ENV`, `HOME`, `LD_*`, `DYLD_*`, every `GIT_*` variable, and similar shell

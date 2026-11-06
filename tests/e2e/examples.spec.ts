@@ -173,6 +173,10 @@ test('large document lists filter projects and collapse inactive groups', async 
   await page.locator('#example-picker summary').click();
   await filter.fill('no such file');
   await expect(page.getByText('No matching diagrams. Try a filename or project name.')).toBeVisible();
+  await page.reload(); await previewReady(page);
+  await page.locator('#example-picker summary').click();
+  await expect(filter).toHaveValue('no such file');
+  await expect(page.getByText('No matching diagrams. Try a filename or project name.')).toBeVisible();
   await filter.fill('');
   await expect(group.locator('.example-option').first()).toBeVisible();
 });

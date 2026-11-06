@@ -500,9 +500,14 @@ test('header stays stable while saving and preferences survive reload', async ({
   expect(await page.locator('header').boundingBox()).toEqual(before);
   await selectMenuOption(page, '#theme', 'dark');
   await selectMenuOption(page, '#export-format', 'html');
+  await page.locator('#lint-details > summary').click();
+  await page.locator('#missing-backlink').check();
+  await page.locator('#boundary-ports').check();
   await page.reload();
   await previewReady(page);
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+  await expect(page.locator('#missing-backlink')).toBeChecked();
+  await expect(page.locator('#boundary-ports')).toBeChecked();
   await openDownloads(page);
   await expect(page.locator('#export-format input[value="html"]')).toBeChecked();
   await page.locator('#export-format input[value="html"]').press('Escape');

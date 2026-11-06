@@ -25,6 +25,7 @@ test('query history survives reload and loads a previous query for editing befor
   }
   const history = page.getByRole('combobox', { name: 'Previous queries' });
   await expect(history).toBeEnabled();
+  await expect(page.locator('#ai-prompt')).toHaveValue('');
   await history.selectOption('0');
   await expect(page.locator('#ai-prompt')).toHaveValue(query);
   await expect(page.locator('#ai-prompt')).toBeFocused();
@@ -39,6 +40,8 @@ test('query history survives reload and loads a previous query for editing befor
   await expect(history).toBeHidden();
   await expect(page.locator('#ai-prompt')).toHaveValue(query + '\nFocus on the database.');
   expect(await page.evaluate(() => JSON.parse(localStorage.getItem('zoomflow.ai-query-history.v1')!))).toEqual([]);
+  await page.reload(); await previewReady(page);
+  await expect(page.locator('#ai-prompt')).toHaveValue(query + '\nFocus on the database.');
 });
 
 test('AI updates the current diagram and keeps the edit undoable', async ({ page }) => {
@@ -174,6 +177,71 @@ test('Claude config directory is visible and sent with shared environment', asyn
   await page.getByRole('textbox', { name: 'Ask AI about this diagram' }).fill('Explain this board');
   await page.getByRole('button', { name: 'Send' }).click();
   await expect(page.locator('#ai-status')).toHaveText('No change needed.');
+});
+
+test('AI settings and unfinished prompts survive reload, including edits before blur and cleared fields', async ({ page }) => {
+  const checks: Record<string, unknown>[] = [];
+  await page.route('**/api/ai/status', route => {
+    if (route.request().method() === 'POST') checks.push(route.request().postDataJSON());
+    return route.fulfill({ json: { available: true } });
+  });
+  const openSettings = async () => {
+    for (const selector of ['#ai-assistant', '#ai-form .ai-settings']) {
+      if (!await page.locator(selector).evaluate((node: HTMLDetailsElement) => node.open)) {
+        await page.locator(`${selector} > summary`).click();
+      }
+    }
+  };
+  await page.goto('/'); await previewReady(page);
+  await openSettings();
+  await page.locator('#ai-environment').fill('TEST_VALUE=one=two\nEMPTY=\n');
+  await page.locator('#ai-full-access').check();
+  await page.locator('#ai-working-directory').fill('~/projects/my project');
+  await page.locator('#ai-prompt').fill('An unfinished\nquestion');
+  await page.locator('#ai-claude-config-dir').fill('~/.claude-personal');
+  // Reload while the config field still has focus: change/blur has not fired.
+  await page.reload(); await previewReady(page);
+  await openSettings();
+  await expect(page.locator('#ai-claude-config-dir')).toHaveValue('~/.claude-personal');
+  await expect(page.locator('#ai-environment')).toHaveValue('TEST_VALUE=one=two\nEMPTY=\n');
+  await expect(page.locator('#ai-prompt')).toHaveValue('An unfinished\nquestion');
+  await expect(page.locator('#ai-full-access')).not.toBeChecked();
+  await page.locator('#ai-full-access').check();
+  await expect(page.locator('#ai-working-directory')).toHaveValue('~/projects/my project');
+  await expect.poll(() => checks.at(-1)).toMatchObject({ provider: 'claude', claudeConfigDir: '~/.claude-personal',
+    environment: 'TEST_VALUE=one=two\nEMPTY=\n' });
+  await page.locator('#ai-provider').selectOption('codex');
+  await page.locator('#ai-prompt').fill('');
+  await page.locator('#ai-environment').fill('');
+  await page.reload(); await previewReady(page);
+  await openSettings();
+  await expect(page.locator('#ai-provider')).toHaveValue('codex');
+  await expect(page.locator('#ai-claude-config')).toBeHidden();
+  await expect(page.locator('#ai-environment')).toHaveValue('');
+  await expect(page.locator('#ai-prompt')).toHaveValue('');
+  await page.locator('#ai-provider').selectOption('claude');
+  await expect(page.locator('#ai-claude-config-dir')).toHaveValue('~/.claude-personal');
+});
+
+test('reload restores shared AI settings from the second pane and keeps each unfinished prompt separate', async ({ page }) => {
+  await page.setViewportSize({ width: 1600, height: 900 });
+  await page.goto('/'); await previewReady(page);
+  await page.selectOption('#layout', 'quad');
+  await page.locator('#pane-start-empty-b').click(); await previewReady(page, 'b');
+  await page.locator('#ai-assistant > summary').click();
+  await page.locator('#ai-assistant-b > summary').click();
+  await page.locator('#ai-prompt').fill('First pane question');
+  await page.locator('#ai-prompt-b').fill('Second pane question');
+  await page.locator('#ai-form-b .ai-settings summary').click();
+  await page.locator('#ai-environment-b').fill('FROM_SECOND=yes');
+  await page.locator('#ai-claude-config-dir-b').fill('~/.claude-second');
+  await page.reload(); await previewReady(page); await previewReady(page, 'b');
+  for (const suffix of ['', '-b']) {
+    await expect(page.locator(`#ai-environment${suffix}`)).toHaveValue('FROM_SECOND=yes');
+    await expect(page.locator(`#ai-claude-config-dir${suffix}`)).toHaveValue('~/.claude-second');
+  }
+  await expect(page.locator('#ai-prompt')).toHaveValue('First pane question');
+  await expect(page.locator('#ai-prompt-b')).toHaveValue('Second pane question');
 });
 
 test('Full access sends its working directory only once switched on', async ({ page }) => {
