@@ -13,6 +13,7 @@ test('creates a mind map from an outline, drills into a detail board and edits i
   await dialog.getByLabel('Mind map name').fill('Trip');
   await dialog.getByRole('textbox', { name: 'Topics' }).fill('Trip\n- Places\n  - Lisbon\n    - Alfama\n  - Porto\n- Budget "max" $2k');
   await expect(dialog.getByRole('status')).toHaveText('6 topics · 1 detail board');
+  await dialog.getByText('Customize style', { exact: true }).click();
   await dialog.getByLabel('Compact text').check();
   await dialog.getByRole('button', { name: 'Create mind map', exact: true }).click();
   await ready(page);
@@ -21,7 +22,7 @@ test('creates a mind map from an outline, drills into a detail board and edits i
   await openFromBadge(page, 'Open Lisbon board');
   await board(page, 'root.layers.Lisbon');
   await expect(page.locator('.zf-stage')).toContainText('Alfama');
-  await expect(page.getByRole('navigation', { name: 'Breadcrumb' }).getByRole('button')).toHaveText(['Root', 'Lisbon']);
+  await expect(page.getByRole('navigation', { name: 'Breadcrumb' }).getByRole('button')).toHaveText(['Trip', 'Lisbon']);
   await page.keyboard.press('Escape');
   await board(page, 'root');
 

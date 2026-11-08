@@ -1,7 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { expect, test } from '@playwright/test';
-import { previewReady, source } from './helpers';
+import { previewReady, source, openBoards, closeBoards } from './helpers';
 import { downloadExport, selectMenuOption } from './menu';
 
 const { unzipSync } = createRequire(new URL('../../packages/core/package.json', import.meta.url))('fflate') as {
@@ -64,7 +64,9 @@ layers: {
 }
 `);
   await previewReady(page);
+  await openBoards(page);
   await page.getByRole('checkbox', { name: 'Show all layers', exact: true }).check();
+  await closeBoards(page);
   await expect(page.locator('[data-layer-board]')).toHaveCount(3);
   const hidden = page.locator('[data-shape-board="root"][data-shape-id="Hidden"]').locator('..');
   await hidden.focus(); await page.keyboard.press('h');
@@ -152,7 +154,9 @@ layers: {
     }
     await expect(page.locator('.zf-stage .appendix-icon')).toHaveCount(3);
   }
+  await openBoards(page);
   await page.getByRole('checkbox', { name: 'Show all layers', exact: true }).check();
+  await closeBoards(page);
   await expect(page.locator('.zf-stage .appendix-icon')).toHaveCount(5);
   await selectMenuOption(page, '#export-format', 'svg');
   const pending = page.waitForEvent('download');

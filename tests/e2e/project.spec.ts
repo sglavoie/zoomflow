@@ -1,3 +1,4 @@
+import { selectMenuOption } from './menu';
 import { expect, test } from '@playwright/test';
 import { fileURLToPath } from 'node:url';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
@@ -12,7 +13,7 @@ test('editing an import in the other pane refreshes the preview, export and sour
   await openFolder(page, folder);
   await expect(page.locator('#viewer .zf-stage')).toContainText('From a local import');
   await previewReady(page);
-  await page.selectOption('#layout', 'quad');
+  await selectMenuOption(page, '#layout', 'quad');
   await page.locator('#pane-choose-b').click();
   await page.locator('.project-toggle').click();
   await page.locator('.example-option[title="browser-project/lib/nodes.d2"]').click();

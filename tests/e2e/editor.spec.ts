@@ -30,6 +30,7 @@ test('live edits retain the last good render on syntax errors and recover with d
   await ready(page);
   await page.locator('.zf-stage a[data-board="root.layers.checkout"]').click();
   await ready(page, 'root.layers.checkout');
+  await expect(page.locator('.zf-stage')).not.toHaveAttribute('data-transition');
   const before = await previewMarkup(page);
   await source(page).focus();
   await source(page).press('ControlOrMeta+End');
@@ -83,7 +84,7 @@ test('explicit reveal opens the selected source board, linked shapes still drill
   await page.keyboard.insertText('Captured');
   await expect(page.locator('.zf-stage [data-shape-id="Captured"]')).toBeVisible();
   await ready(page, 'root.layers.checkout.layers.charge');
-  await page.getByRole('button', { name: 'Root', exact: true }).click();
+  await page.locator('.zf-breadcrumbs button').first().click();
   await ready(page);
   const checkout = page.locator('.zf-stage a[data-board="root.layers.checkout"]');
   await checkout.click({ modifiers: ['Alt'] });
@@ -268,6 +269,7 @@ test('formats nested boards with D2 rules, refreshes navigation, and supports un
 test('format errors leave source and last good preview intact', async ({ page }) => {
   await page.goto('/');
   await ready(page);
+  await expect(page.locator('.zf-stage')).not.toHaveAttribute('data-transition');
   const before = await previewMarkup(page);
   await replace(page, 'broken: {');
   await page.getByRole('button', { name: 'Format', exact: true }).click();

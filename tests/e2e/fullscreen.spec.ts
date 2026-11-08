@@ -1,5 +1,5 @@
 import { selectMenuOption } from './menu';
-import { previewReady, source } from './helpers';
+import { previewReady, source, openView, editorText } from './helpers';
 import { expect, test } from '@playwright/test';
 
 for (const viewport of [{ width: 1280, height: 900 }, { width: 390, height: 844 }]) {
@@ -9,13 +9,14 @@ for (const viewport of [{ width: 1280, height: 900 }, { width: 390, height: 844 
     const stage = page.locator('.zf-stage');
     await expect(stage).toHaveAttribute('data-board', 'root');
     await expect(page.locator('#viewer')).toHaveAttribute('aria-busy', 'false');
+    await openView(page);
     await page.getByRole('button', { name: 'D2 reference', exact: true }).click();
     await page.getByRole('searchbox', { name: 'Search D2 reference' }).fill('style');
     const divider = page.locator('#reference-divider');
     await divider.focus();
     await page.keyboard.press('ArrowUp');
     const split = await divider.getAttribute('aria-valuenow');
-    const source = await page.locator('.cm-content').textContent();
+    const originalSource = await editorText(page);
     const toggle = page.getByRole('button', { name: 'Fullscreen', exact: true });
     if (viewport.width <= 600) await page.locator('#workspace').evaluate((node) => { node.scrollTop = 120; });
     await toggle.scrollIntoViewIfNeeded();
@@ -56,7 +57,7 @@ for (const viewport of [{ width: 1280, height: 900 }, { width: 390, height: 844 
     await expect(page.locator('#d2-reference')).toBeVisible();
     await expect(page.getByRole('searchbox', { name: 'Search D2 reference' })).toHaveValue('style');
     await expect(divider).toHaveAttribute('aria-valuenow', split!);
-    expect(await page.locator('.cm-content').textContent()).toBe(source);
+    expect(await editorText(page)).toBe(originalSource);
   });
 }
 
@@ -87,6 +88,7 @@ test('nested board content stays centered with its own background', async ({ pag
 
   const assertBoard = async () => {
     await expect(page.locator('#viewer')).toHaveAttribute('aria-busy', 'false');
+    await expect(stage).not.toHaveAttribute('data-transition');
     const geometry = await stage.evaluate((element) => {
       const background = element.querySelector<SVGRectElement>('svg svg > rect')!;
       const stageRect = element.getBoundingClientRect();

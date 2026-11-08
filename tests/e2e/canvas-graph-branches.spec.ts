@@ -1,6 +1,6 @@
 import { readFile } from 'node:fs/promises';
 import { expect, test, type Locator, type Page } from '@playwright/test';
-import { board, chooseExample, editorText, previewReady, source } from './helpers';
+import { board, chooseExample, editorText, previewReady, source, openBoards, openShapeActions, closeBoards } from './helpers';
 
 test.use({ viewport: { width: 1440, height: 900 } });
 const shape = (page: Page, id: string, board = 'root') => page.locator(`.zf-stage [data-shape-board="${board}"][data-shape-id="${id}"]`);
@@ -85,7 +85,8 @@ test('moves merges from the keyboard picker, preserves labels and styles, and re
   await page.mouse.up();
   expect(await editorText(page)).toBe(changed);
   await shape(page, 'child').click();
-  await page.getByRole('button', { name: 'Move branch…', exact: true }).click();
+  await openShapeActions(page);
+  await page.getByRole('menuitem', { name: 'Move branch…', exact: true }).click();
   await page.keyboard.press('Escape');
   await expect(panel(page)).toBeHidden();
   expect(await editorText(page)).toBe(changed);
@@ -94,7 +95,9 @@ test('moves merges from the keyboard picker, preserves labels and styles, and re
 test('edits the right custom board on a connected canvas and rejects drops onto another board', async ({ page }) => {
   const original = 'a -> child\nb\nlayers: {detail: {a -> child -> leaf; b}}';
   await custom(page, original);
+  await openBoards(page);
   await page.getByRole('checkbox', { name: 'Show all layers', exact: true }).check(); await previewReady(page);
+  await closeBoards(page);
   const nested = 'root.layers.detail';
   await dragTo(page, shape(page, 'child', nested), shape(page, 'b'));
   await page.mouse.up();
@@ -114,7 +117,8 @@ test('edits the right custom board on a connected canvas and rejects drops onto 
 test('invalidates custom parent pickers on source changes', async ({ page }) => {
   await custom(page, 'a -> child\nb');
   await shape(page, 'child').click();
-  await page.getByRole('button', { name: 'Move branch…', exact: true }).click();
+  await openShapeActions(page);
+  await page.getByRole('menuitem', { name: 'Move branch…', exact: true }).click();
   await source(page).fill('x -> y'); await previewReady(page);
   await expect(panel(page)).toBeHidden();
   expect(await editorText(page)).toBe('x -> y');
@@ -128,7 +132,8 @@ test.describe('touch graph branches', () => {
     await page.locator('#mobile-preview').tap();
     await shape(page, 'child').tap();
     await expect(page.locator('#mobile-preview')).toHaveAttribute('aria-pressed', 'true');
-    await page.getByRole('button', { name: 'Move branch…', exact: true }).tap();
+    await openShapeActions(page);
+    await page.getByRole('menuitem', { name: 'Move branch…', exact: true }).tap();
     const box = (await panel(page).boundingBox())!;
     expect(box.x).toBeGreaterThanOrEqual(0);
     expect(box.x + box.width).toBeLessThanOrEqual(390);

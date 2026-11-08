@@ -1,10 +1,11 @@
 import { guardBuilderDialog, lookControls, lookFields, type BuilderTarget } from './builder-dialog';
 import { plural, setText } from './text';
+import { setupBuilderPreview, type CompileBuilderPreview } from './builder-preview';
 import { cleanLabel, flowFilename, flowSource, flowTemplate, readFlow, type Flow, type FlowStep } from './flow-model';
 
 /** One builder dialog: New flow creates a draft, and each pane opens it to add or edit a flow board. */
 export function setupFlowBuilder(create: (source: string, name: string) => void,
-  confirmDiscard: (title: string, description: string, action: string, focus: () => void) => Promise<boolean>) {
+  confirmDiscard: (title: string, description: string, action: string, focus: () => void) => Promise<boolean>, compilePreview?: CompileBuilderPreview) {
   const launch = document.querySelector<HTMLButtonElement>('#new-flow')!;
   const dialog = document.createElement('dialog');
   dialog.id = 'flow-builder';
@@ -65,11 +66,13 @@ export function setupFlowBuilder(create: (source: string, name: string) => void,
   let fallbackFocus: HTMLElement | undefined;
   const draft = (): BuilderTarget => ({ mode: 'draft', name: 'My flow', apply: (source, title) => { create(source, flowFilename(title)); } });
   let target = draft();
+  const preview = setupBuilderPreview(dialog, () => flowSource(flow), () => target.mode === 'draft', compilePreview);
 
   function announce() {
     setText(feedback, `${plural(flow.steps.length, 'step')} · ${plural(flow.connections.length, 'connection')}`);
     addConnection.disabled = flow.steps.length < 2;
     error.hidden = true;
+    preview.update();
   }
   function field(text: string, control: HTMLElement) {
     const label = document.createElement('label');
@@ -185,6 +188,7 @@ export function setupFlowBuilder(create: (source: string, name: string) => void,
     loaded = stepsState();
     returnFocus.focus({ preventScroll: true });
     dialog.showModal();
+    preview.update();
     (editing ? steps.querySelector('input')! : name).focus();
   }
   launch.addEventListener('click', () => open(draft()));

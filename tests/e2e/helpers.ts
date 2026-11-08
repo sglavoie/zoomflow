@@ -18,6 +18,27 @@ export const projectFolder = fileURLToPath(new URL('../../fixtures/browser-proje
 
 export const source = (page: Page) => page.getByRole('textbox', { name: 'D2 source', exact: true });
 
+export async function openView(page: Page) {
+  const menu = page.locator('#workspace-view');
+  if (await menu.getAttribute('open') === null) await menu.locator('summary').click();
+  await expect(menu.locator('.workspace-view-menu')).toBeVisible();
+}
+
+export async function openBoards(page: Page) {
+  const menu = page.locator('.board-outline:visible').first();
+  if (await menu.getAttribute('open') === null) await menu.locator('summary').click();
+  await expect(menu.locator('.board-outline-panel')).toBeVisible();
+}
+
+export async function closeBoards(page: Page) {
+  const menu = page.locator('.board-outline[open]:visible').first();
+  if (await menu.count()) await menu.locator('summary').click();
+}
+
+export async function openShapeActions(page: Page) {
+  await page.getByRole('button', { name: 'More shape actions', exact: true }).click();
+}
+
 /** Opens a project folder through the Open folder input.
  * Firefox and WebKit on Linux sometimes never acknowledge a directory upload that the
  * page already received, so this waits for the input's change event instead. */

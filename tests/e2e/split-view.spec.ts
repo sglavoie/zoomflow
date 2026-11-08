@@ -1,3 +1,4 @@
+import { selectMenuOption } from './menu';
 import { expect, test, type Page } from '@playwright/test';
 import { openDownloads } from './menu';
 
@@ -18,7 +19,7 @@ test.beforeEach(async ({ page }) => {
 });
 
 test('split tabs edit two documents independently and keep board navigation per pane', async ({ page }) => {
-  await page.selectOption('#layout', 'tabs');
+  await selectMenuOption(page, '#layout', 'tabs');
   await expect(page.locator('#workspace')).toHaveAttribute('data-layout', 'tabs');
   await expect(page.locator('#pane-empty-b')).toBeVisible();
   await expect(page.locator('#pane-document-b')).toHaveText(/Choose a diagram/);
@@ -54,7 +55,7 @@ test('split tabs edit two documents independently and keep board navigation per 
 });
 
 test('a document opens in only one pane and header commands follow the active pane', async ({ page }) => {
-  await page.selectOption('#layout', 'tabs');
+  await selectMenuOption(page, '#layout', 'tabs');
   await chooseSecond(page, /Flowchart basics/);
   await page.locator('#pane-document').click();
   await expect(page.locator('.example-option', { hasText: 'Flowchart basics' }).locator('.example-elsewhere')).toBeVisible();
@@ -75,7 +76,7 @@ test('a document opens in only one pane and header commands follow the active pa
 });
 
 test('all views show both diagrams and sources, survive reload and adapt to narrower windows', async ({ page }) => {
-  await page.selectOption('#layout', 'quad');
+  await selectMenuOption(page, '#layout', 'quad');
   await chooseSecond(page, /Sequence diagram/);
   for (const id of ['#preview-pane', '#source-pane', '#preview-pane-b', '#source-pane-b']) await expect(page.locator(id)).toBeVisible();
   const diagram = (await page.locator('#preview-pane-b').boundingBox())!;
@@ -106,14 +107,14 @@ test('all views show both diagrams and sources, survive reload and adapt to narr
 });
 
 test('the second pane can start empty and closes with the split', async ({ page }) => {
-  await page.selectOption('#layout', 'quad');
+  await selectMenuOption(page, '#layout', 'quad');
   await page.locator('#pane-start-empty-b').click();
   await expect(page.locator('#pane-document-b')).toHaveText(/untitled\.d2/);
   await expect(page.locator('#editor-b .cm-content')).toBeFocused();
   await page.locator('#editor-b .cm-content').fill('x -> y');
   await expect(page.locator('#viewer-b [data-shape-id="x"]')).toBeVisible();
 
-  await page.selectOption('#layout', 'single');
+  await selectMenuOption(page, '#layout', 'single');
   await expect(page.locator('#pane-b')).toBeHidden();
   await expect(page.locator('#pane-divider')).toBeHidden();
   await expect(page.locator('#filename')).toHaveText('order.d2');
@@ -122,7 +123,7 @@ test('the second pane can start empty and closes with the split', async ({ page 
   await expect(page.locator('#draft-options')).toContainText('untitled.d2');
   await page.keyboard.press('Escape');
 
-  await page.selectOption('#layout', 'tabs');
+  await selectMenuOption(page, '#layout', 'tabs');
   await expect(page.locator('#pane-empty-b')).toBeVisible();
 });
 
@@ -141,15 +142,15 @@ test('closing the split releases the second pane\'s page-level listeners until i
   await ready(page);
   const keyListeners = () => page.evaluate(() => (window as unknown as { keyListeners: () => number }).keyListeners());
   const closed = await keyListeners();
-  await page.selectOption('#layout', 'tabs');
+  await selectMenuOption(page, '#layout', 'tabs');
   await chooseSecond(page, /Flowchart basics/);
   const open = await keyListeners();
-  await page.selectOption('#layout', 'single');
+  await selectMenuOption(page, '#layout', 'single');
   await expect(page.locator('#pane-b')).toBeHidden();
   // Closing the second pane returns page-level input listeners to the single-pane baseline.
   expect(await keyListeners()).toBe(closed);
 
-  await page.selectOption('#layout', 'tabs');
+  await selectMenuOption(page, '#layout', 'tabs');
   expect(await keyListeners()).toBe(open);
   await chooseSecond(page, /Flowchart basics/);
   // The reopened pane pans with Space + drag again.
@@ -172,7 +173,7 @@ test('split view keeps one main landmark, distinct editors and per-pane divider 
   await expect(page.locator('#example-picker > summary')).toHaveAttribute('aria-label', 'order.d2 — choose a diagram');
   await page.getByRole('textbox', { name: 'D2 source', exact: true }).fill('a: Changed');
   await expect(page.locator('#example-picker > summary')).toHaveAttribute('aria-label', 'order.d2, unsaved changes — choose a diagram');
-  await page.selectOption('#layout', 'quad');
+  await selectMenuOption(page, '#layout', 'quad');
   await page.locator('#pane-start-empty-b').click();
   await ready(page, '-b');
   await expect(page.getByRole('main')).toHaveCount(1);
@@ -194,7 +195,7 @@ test('split view keeps one main landmark, distinct editors and per-pane divider 
 });
 
 test('a slow file open stays in its destination pane after focus moves', async ({ page }) => {
-  await page.selectOption('#layout', 'quad');
+  await selectMenuOption(page, '#layout', 'quad');
   await chooseSecond(page, /Flowchart basics/);
   await page.locator('#viewer').click({ position: { x: 5, y: 5 } });
   await page.evaluate(() => {

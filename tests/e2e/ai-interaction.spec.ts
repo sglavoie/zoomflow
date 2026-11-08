@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { source, previewReady, stubAiStatus, selectSource, withEditorView } from './helpers';
+import { source, previewReady, stubAiStatus, selectSource, withEditorView, openView } from './helpers';
 
 test.beforeEach(async ({ page }) => {
   await page.route('**/api/ai/status', (route) => route.fulfill({ status: 200,
@@ -121,6 +121,7 @@ test('the AI prompt sends with Command or Control+Enter', async ({ page }) => {
   await prompt.press('ControlOrMeta+Enter');
   await expect(page.locator('#ai-status')).toContainText('It shows checkout.');
   expect(prompts).toEqual(['What does this show?']);
+  await openView(page);
   await page.locator('#show-shortcuts').click();
   await expect(page.getByRole('dialog', { name: 'Keyboard shortcuts' })).toContainText('Send the prompt');
 });

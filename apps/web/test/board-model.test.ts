@@ -141,9 +141,9 @@ it('styles and lints every detail board of a mind map attached to an unstyled di
     'root.layers.Review the request.layers.Detail.layers.Deeper',
   ]);
   for (const board of boards) {
-    expect(board.diagram.shapes[0]).toMatchObject({ borderRadius: 999, fontSize: 20, bold: true });
-    expect(board.diagram.shapes[1]).toMatchObject({ borderRadius: 999, fontSize: 16 });
-    expect(board.diagram.connections[0]).toMatchObject({ stroke: '#e5484d' });
+    expect(board.diagram.shapes[0]).toMatchObject({ borderRadius: 18, fontSize: 20, bold: true });
+    expect(board.diagram.shapes[1]).toMatchObject({ borderRadius: 12, fontSize: 16 });
+    expect(board.diagram.connections[0]).toMatchObject({ stroke: '#be667a', strokeWidth: 2 });
   }
   const attached = splitBoard(added.source).attachments[0];
   expect('body' in attached && readMindMap(attached.body)).toEqual(mindMap);

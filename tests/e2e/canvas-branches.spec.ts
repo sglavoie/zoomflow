@@ -1,5 +1,5 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
-import { board, chooseExample, editorText, openFromBadge, previewReady, source } from './helpers';
+import { board, chooseExample, editorText, openFromBadge, previewReady, source, openBoards, openShapeActions, closeBoards } from './helpers';
 
 test.use({ viewport: { width: 1440, height: 900 } });
 const shape = (page: Page, id: string, board = 'root') => page.locator(`.zf-stage [data-shape-board="${board}"][data-shape-id="${id}"]`);
@@ -116,7 +116,8 @@ test('chooses a parent from the keyboard menu or diagram, and promotes a subtree
   await panel(page).getByLabel('New parent topic').selectOption('n_2');
   await panel(page).getByRole('button', { name: 'Move branch', exact: true }).click(); await previewReady(page);
   await expect(panel(page)).toBeHidden();
-  await page.getByRole('button', { name: 'Move branch…', exact: true }).click();
+  await openShapeActions(page);
+  await page.getByRole('menuitem', { name: 'Move branch…', exact: true }).click();
   await shape(page, 'n').click(); await previewReady(page);
   await expect(shape(page, 'n_3')).toBeFocused();
   expect(await outline(page)).toBe('Plan\n  Launch\n  Research\n    Interviews\n  Interviews\n    Notes');
@@ -145,7 +146,8 @@ test('moves between generated boards from the picker and restores a disappeared 
   await openFromBadge(page, 'Open Launch board'); await board(page, 'root.layers.Launch');
   const original = await editorText(page);
   await shape(page, 'n_1', 'root.layers.Launch').click();
-  await page.getByRole('button', { name: 'Move branch…', exact: true }).click();
+  await openShapeActions(page);
+  await page.getByRole('menuitem', { name: 'Move branch…', exact: true }).click();
   await panel(page).getByLabel('New parent topic').selectOption('n_2');
   await panel(page).getByRole('button', { name: 'Move branch', exact: true }).click(); await previewReady(page);
   await board(page, 'root.layers.Research');
@@ -161,7 +163,9 @@ test('moves between generated boards from the picker and restores a disappeared 
 test('drags on a nested connected layer while its attached board stays on the moved subtree', async ({ page }) => {
   await page.goto('/'); await previewReady(page);
   await chooseExample(page, /^Flows & mind maps/);
+  await openBoards(page);
   await page.getByRole('checkbox', { name: 'Show all layers', exact: true }).check(); await previewReady(page);
+  await closeBoards(page);
   const map = 'root.layers.Plan the launch';
   const original = await editorText(page);
   // Product (n_3) contains Onboarding, which opens an independently editable flow.
@@ -177,7 +181,9 @@ test('drags on a nested connected layer while its attached board stays on the mo
 
 test('drags from a generated detail board to a parent on another visible layer', async ({ page }) => {
   await createMap(page, initial, '1');
+  await openBoards(page);
   await page.getByRole('checkbox', { name: 'Show all layers', exact: true }).check(); await previewReady(page);
+  await closeBoards(page);
   const original = await editorText(page);
   await dragTo(page, shape(page, 'n_1', 'root.layers.Launch'), shape(page, 'n_2'));
   await expect(shape(page, 'n_2')).toHaveClass(/zf-branch-target/);
@@ -194,7 +200,8 @@ test('drags from a generated detail board to a parent on another visible layer',
 test('drops stale pickers when source changes and keeps move controls inside a phone viewport', async ({ page }) => {
   await createMap(page);
   await shape(page, 'n_1_1').click();
-  await page.getByRole('button', { name: 'Move branch…', exact: true }).click();
+  await openShapeActions(page);
+  await page.getByRole('menuitem', { name: 'Move branch…', exact: true }).click();
   await source(page).fill('custom: Changed diagram'); await previewReady(page);
   await expect(panel(page)).toBeHidden();
   await expect(page.getByRole('button', { name: 'Move branch…', exact: true })).toBeHidden();

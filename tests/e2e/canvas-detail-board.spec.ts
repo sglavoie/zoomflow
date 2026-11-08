@@ -115,7 +115,7 @@ test('Backspace in a shape’s menu or on its selection bar stays on the board',
   await board(page, 'root.layers.B');
   await page.keyboard.press('Escape');
   await expect(menu).toBeHidden();
-  await page.getByRole('group', { name: 'Selected: only child' }).getByRole('button', { name: 'Rename' }).focus();
+  await page.getByRole('group', { name: 'Selected: only child' }).getByRole('button', { name: 'More shape actions' }).focus();
   await page.keyboard.press('Backspace');
   await board(page, 'root.layers.B');
   await expect(stage(page)).toContainText('only child');

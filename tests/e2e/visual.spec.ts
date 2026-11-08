@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { comparesVisuals, source, visualSkipReason } from './helpers';
+import { comparesVisuals, source, visualSkipReason, openView } from './helpers';
 
 // Keep visual coverage small and intentional. Behavioral tests still run in all browsers.
 test.use({ reducedMotion: 'reduce', locale: 'en-US', timezoneId: 'UTC' });
@@ -52,6 +52,7 @@ for (const mobile of [false, true]) for (const theme of ['light', 'dark'] as con
     }
     await page.locator('#ai-assistant summary').first().click();
     await page.locator('#lint-details summary').click();
+    await openView(page);
     await page.locator('#toggle-reference').click();
     await expect(page.locator('#d2-reference')).toBeVisible();
     await screenshot('reference');

@@ -14,6 +14,7 @@ import { setupBoardOutline } from './board-outline';
 import { setupDiagramSearch } from './diagram-search';
 import type { PaneScope } from './pane-scope';
 import { setupProjectCheck } from './project-check-dialog';
+import { setupCanvasFeedback } from './canvas-feedback';
 
 export type { FileLinkHost } from './board-tools-shared';
 import { addKeys, undoHint, type BoardToolsOptions, type MoveState } from './board-tools-shared';
@@ -23,6 +24,8 @@ import { addKeys, undoHint, type BoardToolsOptions, type MoveState } from './boa
  * renamed, added and removed on the diagram itself. Each board keeps its own builder, so flows and mind maps can
  * open from each other's shapes. */
 export function setupBoardTools(scope: PaneScope, viewer: Viewer, options: BoardToolsOptions) {
+  const feedback = setupCanvasFeedback(viewer, options);
+  options = { ...options, status: feedback.status };
   // Lazy accessors share live state with the feature modules, including controls initialized below.
   const { startRename, stopRename, toggleVisibility, refresh, placeBar, closeMenu, openMenu, shapeAt, selectShape } = setupBoardSelection({
     get canvasTarget() { return canvasTarget; },
@@ -129,7 +132,7 @@ export function setupBoardTools(scope: PaneScope, viewer: Viewer, options: Board
   let compiledSource: string | undefined;
   let selected: string | undefined;
   /** What to show once `source` compiles: a board just added or renamed, and a shape to select or rename. */
-  let pending: { source: string; board?: string; replace?: boolean; shape?: string; rename?: boolean; view?: DocumentView } | undefined;
+  let pending: { source: string; board?: string; replace?: boolean; shape?: string; rename?: boolean; emphasize?: boolean; view?: DocumentView } | undefined;
   /** The shape, or the background as null, that a press on the diagram finishing a rename landed on. */
   let pressed: string | null | undefined;
   let menuReturn: HTMLElement | SVGElement | undefined;
@@ -226,7 +229,7 @@ export function setupBoardTools(scope: PaneScope, viewer: Viewer, options: Board
           before: { source: options.source(), board: branch.board, shape: branch.shape, view: beforeView },
           after: { source: result.source, board: result.board, shape: result.shape, view },
         }];
-        pending = { source: result.source, board: result.board, shape: result.shape, replace: true, view };
+        pending = { source: result.source, board: result.board, shape: result.shape, replace: true, view, emphasize: true };
         options.update(result.source);
         viewer.stage.focus({ preventScroll: true });
         options.status(`Moved “${branch.label}”. ${undoHint}`);
@@ -244,7 +247,7 @@ export function setupBoardTools(scope: PaneScope, viewer: Viewer, options: Board
           before: { source: options.source(), board: branch.board, shape: branch.shape },
           after: { source: updated.source, board: branch.board, shape: branch.shape },
         }];
-        pending = { source: updated.source, board: branch.board, replace: true, shape: branch.shape };
+        pending = { source: updated.source, board: branch.board, replace: true, shape: branch.shape, emphasize: true };
         options.update(updated.source);
         viewer.stage.focus({ preventScroll: true });
         options.status(`Moved “${branch.label}”. ${undoHint}`);
@@ -259,7 +262,7 @@ export function setupBoardTools(scope: PaneScope, viewer: Viewer, options: Board
         before: { source: options.source(), board: branch.board, shape: branch.shape },
         after: { source: updated.source, board, shape: result.select },
       }];
-      pending = { source: updated.source, board, replace: true, shape: result.select };
+      pending = { source: updated.source, board, replace: true, shape: result.select, emphasize: true };
       options.update(updated.source);
       viewer.stage.focus({ preventScroll: true });
       options.status(`Moved “${branch.label}”. ${undoHint}`);
@@ -353,6 +356,7 @@ export function setupBoardTools(scope: PaneScope, viewer: Viewer, options: Board
       const stayed = !focused || focused === document.body || viewer.stage.contains(focused) || shapeGroup.contains(focused);
       connections.settled();
       if (show?.shape && stayed) selectShape(show.shape, show.rename);
+      if (show?.shape && show.emphasize) feedback.highlight(show.shape);
     },
     /** Another board is on view. Going up selects the shape that leads back down, with its actions. */
     boardChanged() {

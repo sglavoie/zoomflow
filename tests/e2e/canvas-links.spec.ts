@@ -1,7 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 import { pathToFileURL } from 'node:url';
 import { selectMenuOption, downloadExport } from './menu';
-import { source, previewReady, stubAiStatus } from './helpers';
+import { source, previewReady, stubAiStatus, openBoards, closeBoards } from './helpers';
 
 test('link badges distinguish children, ancestors and peers in the live and offline viewers', async ({ page, context }, info) => {
   await page.goto('/'); await previewReady(page);
@@ -147,7 +147,9 @@ for (const mode of ['live', 'connected layers', 'offline'] as const) test(`link 
     buffer: Buffer.from('entry: Open detail {link: layers.detail}\nlayers: {detail: {back: Back {link: _}}}') });
   await previewReady(page);
   if (mode === 'connected layers') {
+    await openBoards(page);
     await page.getByRole('checkbox', { name: 'Show all layers', exact: true }).check();
+    await closeBoards(page);
     await expect(page.locator('[data-layer-board]')).toHaveCount(2);
   } else if (mode === 'offline') {
     const path = info.outputPath('badge-edges.html');

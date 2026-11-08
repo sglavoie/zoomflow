@@ -1,3 +1,4 @@
+import { selectMenuOption } from './menu';
 import { expect, test } from '@playwright/test';
 import { source, previewReady } from './helpers';
 import { draftRows } from './documents-helpers';
@@ -104,7 +105,7 @@ test('simultaneous saves in both panes each ask before overwriting externally ch
   });
   await page.goto('/'); await previewReady(page);
   await page.locator('#file').click(); await previewReady(page);
-  await page.selectOption('#layout', 'quad');
+  await selectMenuOption(page, '#layout', 'quad');
   await page.locator('#pane-choose-b').click();
   await page.keyboard.press('Escape');
   await page.locator('#file').click(); await previewReady(page, 'b');

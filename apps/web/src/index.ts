@@ -16,6 +16,8 @@ import { setupFileOpen } from './file-open';
 import { DirectoryHandles, FileHandles } from './file-handles';
 import { setupProjectSave } from './project-save-dialog';
 import { restoreField } from './field-preference';
+import { projectFileSystem } from './project-files';
+import type { CompileBuilderPreview } from './builder-preview';
 
 const canvasStyle = document.createElement('style');
 canvasStyle.textContent = viewerStyle;
@@ -51,6 +53,26 @@ setupViewportHeight(narrow);
 const panes: Partial<Record<PaneId, DocumentPane>> = {};
 let active: PaneId = 'a';
 const activePane = () => panes[active]!;
+const sourceToggle = document.querySelector<HTMLButtonElement>('#toggle-source')!;
+function updateSourceToggle() {
+  sourceToggle.setAttribute('aria-pressed', String(panes[active]?.views.sourceVisible ?? true));
+  sourceToggle.setAttribute('aria-controls', active === 'a' ? 'source-pane' : 'source-pane-b');
+}
+sourceToggle.addEventListener('click', () => { activePane().views.toggleSource(); updateSourceToggle(); });
+workspace.addEventListener('zf-workspaceviewchange', updateSourceToggle);
+const viewMenu = document.querySelector<HTMLDetailsElement>('#workspace-view')!;
+document.addEventListener('pointerdown', event => {
+  if (!viewMenu.contains(event.target as Node)) viewMenu.open = false;
+});
+viewMenu.addEventListener('click', event => {
+  if (event.target instanceof Element && event.target.closest('button')) viewMenu.open = false;
+});
+viewMenu.addEventListener('keydown', event => {
+  if (event.key !== 'Escape' || !viewMenu.open) return;
+  event.preventDefault(); event.stopPropagation();
+  viewMenu.open = false;
+  viewMenu.querySelector('summary')!.focus();
+});
 const otherPane = (pane: PaneId): PaneId => pane === 'a' ? 'b' : 'a';
 const exportMenu = setupExportMenu(() => panes[active], () => examplePicker);
 
@@ -91,8 +113,16 @@ const builderArgs = [(source: string, name: string) => {
   activePane().showView('preview');
 },
 (...request: Parameters<typeof examplePicker.confirm>) => examplePicker.confirm(...request)] as const;
-const flowBuilder = setupFlowBuilder(...builderArgs);
-const mindMapBuilder = setupMindMapBuilder(...builderArgs);
+const compileBuilderPreview: CompileBuilderPreview = async (source, draft) => {
+  const context = draft ? { inputPath: 'index', fs: {} } : examplePicker.compilation(active);
+  const { d2, fonts } = await compiler.get();
+  const compiled = await d2.compile(projectFileSystem(context.inputPath, context.fs, source), {
+    ...fonts, layout: 'elk', themeID: 0, darkThemeID: 200, pad: 40,
+  });
+  return { diagram: compiled.diagram, render: target => d2.render(compiled.diagram, { ...compiled.renderOptions, target, noXMLTag: true }) };
+};
+const flowBuilder = setupFlowBuilder(...builderArgs, compileBuilderPreview);
+const mindMapBuilder = setupMindMapBuilder(...builderArgs, compileBuilderPreview);
 
 function context(id: PaneId): PaneContext {
   return {
@@ -168,6 +198,7 @@ function setActive(pane: PaneId) {
   examplePicker.setTarget(pane);
   if (!activePane().key) showDocumentState(false);
   exportMenu.updateExportLabel();
+  updateSourceToggle();
 }
 paneRoots.a.toggleAttribute('data-active', true);
 function focusPane(pane: PaneId) {
@@ -279,6 +310,7 @@ function applyLayout() {
   else panes.b!.resume();
   for (const pane of Object.values(panes)) pane.views.layoutChanged();
   for (const divider of splits) divider.refresh();
+  updateSourceToggle();
 }
 layoutSelect.addEventListener('change', applyLayout);
 narrow.addEventListener('change', applyLayout);

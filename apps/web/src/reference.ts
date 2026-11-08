@@ -152,7 +152,9 @@ export function setupReference(host: () => ReferenceHost) {
     } else {
       if (active instanceof Node && (panel.contains(active) || active === divider)) {
         if (returnFocus && target.source.contains(returnFocus)) target.showSource();
-        (returnFocus?.isConnected ? returnFocus : toggle).focus({ preventScroll: true });
+        const focusTarget = returnFocus?.isConnected ? returnFocus : toggle;
+        const menu = focusTarget.closest('details');
+        (menu && !menu.open ? menu.querySelector('summary')! : focusTarget).focus({ preventScroll: true });
       }
     }
   }

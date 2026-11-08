@@ -84,7 +84,7 @@ test('creates a new linked flow that opens, stays editable, and links on from it
 
   // The flow's steps link to other files too, and the flow builder keeps those links.
   await page.locator('#viewer .zf-stage [data-shape-id="step_3"]').click();
-  const boards = page.getByRole('group', { name: 'Selected: Done' }).getByRole('button', { name: 'Add board…', exact: true });
+  const boards = page.getByRole('group', { name: 'Selected: Done' }).getByRole('button', { name: 'More shape actions', exact: true });
   await boards.click();
   await page.getByRole('menu', { name: 'Actions for Done' }).getByRole('menuitem', { name: 'Link to diagram…' }).click();
   const link = page.getByRole('dialog', { name: 'Link to a diagram' });

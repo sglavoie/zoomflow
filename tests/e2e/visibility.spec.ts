@@ -1,7 +1,7 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { expect, test, type Page } from '@playwright/test';
-import { openFolder, previewReady, source } from './helpers';
+import { openFolder, previewReady, source, openBoards, closeBoards } from './helpers';
 import { downloadExport, selectMenuOption } from './menu';
 
 const { unzipSync } = createRequire(new URL('../../packages/core/package.json', import.meta.url))('fflate') as {
@@ -28,7 +28,7 @@ test('menu and H toggle export visibility, retaining focus and leaving source ty
   await hide(page);
   await expect(secret(page)).toHaveCSS('opacity', '0.3');
   await expect(page.locator('.zf-hidden-label')).toHaveText('Hidden from export');
-  await expect(page.locator('.board-selection')).toContainText('Hidden from export');
+  await expect(page.locator('.board-selection')).toHaveAttribute('aria-label', /Hidden from export/);
   await expect(secret(page)).toBeFocused();
   await page.keyboard.press('h');
   await expect(secret(page)).not.toHaveAttribute('data-export-hidden', '');
@@ -108,7 +108,9 @@ test('hiding a container dims its children and removes the subtree and incident 
   await page.locator('.zf-stage [data-shape-id="Group"]').focus();
   await page.keyboard.press('h');
   await expect(page.locator('.zf-stage [data-shape-id="Group.Child"]')).toHaveAttribute('data-export-hidden', '');
+  await openBoards(page);
   await page.getByRole('checkbox', { name: 'Show all layers', exact: true }).check();
+  await closeBoards(page);
   await expect(page.locator('[data-layer-board]')).toHaveCount(2);
   await selectMenuOption(page, '#export-format', 'svg');
   await expect(page.locator('#export-scope')).toContainText('2 hidden shapes omitted');
@@ -175,7 +177,9 @@ layers: {
 }
 `);
   await previewReady(page);
+  await openBoards(page);
   await page.getByRole('checkbox', { name: 'Show all layers', exact: true }).check();
+  await closeBoards(page);
   await expect(page.locator('[data-layer-board]')).toHaveCount(3);
   await expect(page.locator('[data-merged-root]')).toHaveCount(2);
   const second = page.locator('[data-shape-board="root.layers.Detail"][data-shape-id="second"]');
@@ -222,7 +226,9 @@ layers: {
   }
   for (const layers of [false, true]) {
     if (layers) {
-      await page.getByRole('checkbox', { name: 'Show all layers', exact: true }).check();
+      await openBoards(page);
+  await page.getByRole('checkbox', { name: 'Show all layers', exact: true }).check();
+  await closeBoards(page);
       await expect(page.locator('[data-layer-board]')).toHaveCount(2);
       const detail = page.locator('[data-shape-board="root.layers.Detail"][data-shape-id="Hidden"]').locator('..');
       await detail.focus(); await page.keyboard.press('h');
@@ -285,7 +291,9 @@ layers: {
 }
 `);
   await previewReady(page);
+  await openBoards(page);
   await page.getByRole('checkbox', { name: 'Show all layers', exact: true }).check();
+  await closeBoards(page);
   await expect(page.locator('[data-layer-board]')).toHaveCount(4);
   await expect(page.locator('.zf-stage .appendix-icon')).toHaveCount(3);
   const selected = page.locator('[data-shape-board="root.layers.Branch"][data-shape-id="selected"]').locator('..');

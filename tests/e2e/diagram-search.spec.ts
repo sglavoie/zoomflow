@@ -1,3 +1,4 @@
+import { selectMenuOption } from './menu';
 import { expect, test, type Page } from '@playwright/test';
 import { board, chooseExample, editorText, insideStage, openFolder, previewReady, projectFolder, source, withEditorView } from './helpers';
 
@@ -177,7 +178,7 @@ test('frames a match on a zoomed board without changing its source', async ({ pa
 test('search follows the active split pane and hidden panes release their shortcut', async ({ page }) => {
   await page.setViewportSize({ width: 1600, height: 900 });
   await start(page);
-  await page.selectOption('#layout', 'quad');
+  await selectMenuOption(page, '#layout', 'quad');
   await page.locator('#pane-choose-b').click();
   await page.locator('.example-option').filter({ hasText: 'Flowchart basics' }).click();
   await previewReady(page, 'b');
@@ -199,7 +200,7 @@ test('search follows the active split pane and hidden panes release their shortc
     const ids = nodes.map(node => node.id);
     return ids.filter((id, index) => ids.indexOf(id) !== index);
   })).toEqual([]);
-  await page.selectOption('#layout', 'single');
+  await selectMenuOption(page, '#layout', 'single');
   await source(page).press('ControlOrMeta+Shift+f');
   await expect(page.locator('#diagram-find-dialog')).toBeVisible();
   await expect(page.locator('#diagram-find-dialog-b')).not.toHaveAttribute('open', '');

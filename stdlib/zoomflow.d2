@@ -7,12 +7,12 @@ vars: {
     theme-id: 0
     dark-theme-id: 200
   }
-  zf-accent-1: "#e5484d"
-  zf-accent-2: "#e38a1f"
-  zf-accent-3: "#30a46c"
-  zf-accent-4: "#0090ff"
-  zf-accent-5: "#8e4ec6"
-  zf-accent-6: "#d6409f"
+  zf-accent-1: "#be667a"
+  zf-accent-2: "#b88940"
+  zf-accent-3: "#448e77"
+  zf-accent-4: "#5484b5"
+  zf-accent-5: "#8272b4"
+  zf-accent-6: "#ad719c"
   zf-slate: "#64748b"
   zf-warning: "#e38a1f"
   zf-yes: "#30a46c"
@@ -21,6 +21,8 @@ vars: {
   zf-surface: "#e2e8f0"
   zf-ink: "#1e293b"
 }
+# Keep connectors light across detail boards; branch classes still supply their colours.
+(*** -> ***)[*]: {style.stroke-width: 1}
 classes: {
   zf-in: {
     shape: oval
@@ -49,9 +51,9 @@ classes: {
     style: {border-radius: 8; stroke-width: 2}
   }
   # Flows: the flow builder's actions, decisions and start or end points.
-  zf-step: {shape: rectangle}
-  zf-decision: {shape: diamond}
-  zf-terminal: {shape: oval}
+  zf-step: {shape: rectangle; style: {border-radius: 10; stroke: ${zf-slate}; stroke-width: 1; bold: false}}
+  zf-decision: {shape: diamond; style: {stroke: ${zf-warning}; stroke-width: 1; bold: false}}
+  zf-terminal: {shape: oval; style: {stroke: ${zf-accent-5}; stroke-width: 1; bold: false}}
   # Roles for any diagram. Combine them with others, as in [zf-state; zf-muted].
   zf-emphasis: {
     style: {stroke-width: 3; bold: true}
@@ -85,9 +87,9 @@ classes: {
     style: {fill: transparent; stroke-width: 1; bold: true}
   }
   # Connections. The flow builder writes zf-yes and zf-no on lines labelled Yes and No.
-  zf-yes: {style.stroke: ${zf-yes}}
+  zf-yes: {style: {stroke: ${zf-yes}; stroke-width: 1}}
   zf-no: {
-    style: {stroke: ${zf-no}; stroke-dash: 4}
+    style: {stroke: ${zf-no}; stroke-dash: 4; stroke-width: 1}
   }
   zf-async: {
     style: {stroke-dash: 4; animated: true}
@@ -113,13 +115,13 @@ classes: {
   # Mind maps: a central topic, main branches and deeper topics.
   # Add one zf-accent-N (1-6) per branch, to its topics and lines alike.
   zf-topic: {
-    style: {border-radius: 999; stroke-width: 3; font-size: 20; bold: true}
+    style: {border-radius: 18; stroke: ${zf-accent-5}; stroke-width: 2; font-size: 20; bold: true}
   }
   zf-branch: {
-    style: {border-radius: 999; stroke-width: 2; bold: true}
+    style: {border-radius: 12; stroke-width: 1; bold: false}
   }
   zf-leaf: {
-    style: {border-radius: 999; stroke-width: 1; bold: false}
+    style: {border-radius: 10; stroke-width: 1; bold: false}
   }
   zf-accent-1: {style.stroke: ${zf-accent-1}}
   zf-accent-2: {style.stroke: ${zf-accent-2}}

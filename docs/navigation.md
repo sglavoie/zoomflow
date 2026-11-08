@@ -4,7 +4,9 @@
 
 ## Explore a diagram
 
-Click a linked shape to drill into a board. Breadcrumbs record the visited path,
+Click a linked shape to drill into a board. The view zooms through the linked node;
+returning briefly highlights that node. Scrolling or dragging interrupts motion,
+and reduced-motion preferences skip zooming. The root breadcrumb uses the document name. Breadcrumbs record the visited path,
 trimming back to an earlier board whenever you revisit it so cycles do not repeat.
 Guidance below the canvas names a detail board to explore, explains source selection
 on hover or keyboard focus, and gives panning instructions after zooming. Touch
@@ -20,7 +22,7 @@ Open a `.d2` file or drop one onto the page; dropping several files opens the fi
 and says to drop one file at a time. Files are compiled locally
 with D2's WASM worker. Light, dark and system themes use D2's generated palettes.
 Theme and export format are remembered when browser storage is available. The appearance
-selector is in the header, separate from **Export**, which closes on Escape and restores focus to its button.
+selector is under **View** in the header, separate from **Export**, which closes on Escape and restores focus to its button.
 Use the preview's +, − and Fit controls or the mouse wheel to zoom. Drag empty
 space to pan, or hold Space and drag a shape or link; middle-button dragging also
 pans. Touch dragging works after zooming. Each board opens fitted around its

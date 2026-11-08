@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import { selectMenuOption, downloadExport } from './menu';
-import { d2Module, source, previewReady, stubAiStatus, openFolder } from './helpers';
+import { d2Module, source, previewReady, stubAiStatus, openFolder, openView } from './helpers';
 
 async function ready(page: Page, id = 'root') {
   await expect(page.locator('.zf-stage')).toHaveAttribute('data-board', id);
@@ -23,7 +23,7 @@ test('examples switch source and preview, start at root and export under their o
   await choose(page, 'Database schema', 'schema.d2');
   await expect(page.locator('.zf-stage')).toContainText('Customers');
   await expect(source(page)).toContainText('shape: sql_table');
-  await expect(page.getByRole('navigation', { name: 'Breadcrumb' }).getByRole('button')).toHaveText(['Root']);
+  await expect(page.getByRole('navigation', { name: 'Breadcrumb' }).getByRole('button')).toHaveText(['schema']);
   await expect(page.locator('#lint-summary')).toHaveText('No lint issues');
   const pending = page.waitForEvent('download');
   await downloadExport(page);
@@ -91,6 +91,7 @@ test('picker supports keyboard, Escape without navigating, outside dismissal, an
   await page.setViewportSize({ width: 375, height: 720 });
   await expect(page.locator('#header-more-toggle')).toHaveAttribute('aria-expanded', 'false');
   await page.locator('#header-more-toggle').click();
+  await openView(page);
   await expect(page.locator('#theme')).toBeVisible();
   await selectMenuOption(page, '#theme', 'dark');
   await summary.click();

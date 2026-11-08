@@ -109,8 +109,8 @@ test('documents restore boards, breadcrumbs, zoom and pan; returning to a board 
   await expect(stage).toHaveAttribute('data-board', 'root.layers.checkout');
   await expect(page.locator('.zf-zoom-controls span')).toHaveText('225%');
   await expectView(page, childBox!);
-  await expect(page.locator('.zf-breadcrumbs button')).toHaveText(['Root', 'checkout']);
-  await page.locator('.zf-breadcrumbs').getByRole('button', { name: 'Root', exact: true }).click();
+  await expect(page.locator('.zf-breadcrumbs button')).toHaveText(['order', 'checkout']);
+  await page.locator('.zf-breadcrumbs').getByRole('button').first().click();
   await expect(stage).toHaveAttribute('data-board', 'root');
   await expect(page.locator('.zf-zoom-controls span')).toHaveText('150%');
   await expectView(page, rootBox!);

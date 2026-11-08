@@ -2,6 +2,10 @@
 
 [Working with diagrams](workspace.md) · [Create and edit](authoring.md) · [Explore and inspect](navigation.md) · [Export and keyboard controls](exporting.md)
 
+Selecting a node shows its frequent actions beside it; **More** opens the full menu.
+New and moved nodes and their incoming connections briefly stand out. Destructive
+canvas edits offer an **Undo** confirmation beside the diagram, valid until the next edit.
+
 ## Create a flow without diagram syntax
 
 Choose **New flow** in the header. Give the flow a name, choose a simple flow or
@@ -11,8 +15,10 @@ between the selected steps; optional labels such as Yes and No describe branches
 **Add step** connects the new step from the previous one automatically. Change
 that connection or add others to make branches and loops. Removing a step also
 removes its connections. Layout can run top to bottom or left to right.
-Under **Look**, **Filled shapes**, **Compact text** and **Shadows** restyle every step
-at once. Connections labelled Yes or No are drawn green and dashed red.
+Under **Look**, choose **Outline**, **Soft**, or **Elevated**. **Customize style**
+contains the individual **Filled shapes**, **Compact text**, and **Shadows** controls.
+The live diagram beside the form updates as you edit; mind map detail boards can
+be explored there before applying changes. On phones the preview follows the fields. Connections labelled Yes or No are drawn green and dashed red.
 
 **Create flow** opens a separate, unsaved draft and keeps the current diagram in
 the filename menu. **Edit flow** above the preview reopens the form, including
@@ -131,7 +137,7 @@ and the message beside the pointer show the new parent before you release. On to
 screens, hold the topic briefly before dragging; dragging immediately still pans.
 Space + drag and middle-button dragging keep their usual pan behaviour.
 
-For a list of parents, select a topic and choose **Move branch…** from its action bar
+For a list of parents, select a topic and choose **Move branch…** from **More** in its action bar
 or right-click / Shift+F10 menu. Choose **New parent topic** and **Move branch**, or
 click the new parent on the diagram. The list includes topics on other generated
 detail boards of this mind map; topic paths distinguish similarly named branches.
@@ -159,7 +165,7 @@ boards and file links stay attached. The diagram lays out the changed connection
 automatically. This works in builder flows and hand-written D2, including containers,
 imported relationships, scenarios and steps.
 
-Select a node and choose **Move branch…** from its action bar or right-click /
+Select a node and choose **Move branch…** from **More** in its action bar or right-click /
 Shift+F10 menu to choose **New parent node** from a list. You can also click the new
 parent on the diagram. Hold before dragging on touch screens; dragging immediately
 still pans. Escape and invalid drops cancel, and undo/redo restores the connections
@@ -221,7 +227,7 @@ board. Mind map and custom D2 connections keep their existing behaviour.
 
 ## Find your way between boards
 
-Turn on **Show all layers** above the preview to expand the selected board and its
+Turn on **Show all layers** inside **Boards** above the preview to expand the selected board and its
 descendants on one connected canvas. Ancestors and sibling boards stay out of this
 view: opening a child board focuses its subtree, and opening an ancestor broadens the
 view again. Each child diagram connects to the shape that opens it, and keeps

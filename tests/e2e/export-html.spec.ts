@@ -15,7 +15,7 @@ test('opens a single HTML file offline and drills every level with history and b
   expect(html).not.toMatch(/<script[^>]+src=|d2\.wasm/);
   // Boards share one font subset per face instead of embedding their own.
   expect(html.match(/@font-face/g)).toHaveLength(1);
-  expect(html).toContain('@font-face{font-family:zf-font-bold;');
+  expect(html).toContain('@font-face{font-family:zf-font-regular;');
   await page.goto('about:blank');
   const network: string[] = [];
   context.on('request', (request) => { if (/^https?:/.test(request.url())) network.push(request.url()); });
@@ -29,11 +29,11 @@ test('opens a single HTML file offline and drills every level with history and b
   await drill(page, 'root.layers.checkout');
   await drill(page, 'root.layers.checkout.layers.charge');
   await expect(page.locator('.zf-stage')).toContainText('Capture');
-  const font = await page.locator('.zf-stage text.text-bold').first().evaluate(async (text) => {
+  const font = await page.locator('.zf-stage text.text').first().evaluate(async (text) => {
     await document.fonts.ready;
     return { family: getComputedStyle(text).fontFamily.replace(/"/g, ''), loaded: document.fonts.check(`16px ${getComputedStyle(text).fontFamily}`, text.textContent!) };
   });
-  expect(font).toEqual({ family: 'zf-font-bold', loaded: true });
+  expect(font).toEqual({ family: 'zf-font-regular', loaded: true });
   const colors = await page.locator('.zf-stage').evaluate((stage) => ({
     stage: getComputedStyle(stage).backgroundColor,
     board: getComputedStyle(stage.querySelector('svg svg > rect')!).fill,
@@ -52,7 +52,7 @@ test('opens a single HTML file offline and drills every level with history and b
   await drill(page, 'root');
   await drill(page, 'root.layers.checkout');
   await drill(page, 'root.layers.checkout.layers.charge');
-  await page.getByRole('button', { name: 'Root', exact: true }).first().click();
+  await page.getByRole('button', { name: 'order', exact: true }).first().click();
   await board(page, 'root');
   await expect(page.locator('a[href="https://d2lang.com/tour/intro/"]')).toHaveAttribute('target', '_blank');
   expect(network).toEqual([]);
@@ -92,21 +92,21 @@ test('exports cyclic links and collapses breadcrumb loops offline', async ({ pag
   await page.goto(pathToFileURL(path).href);
   await drill(page, 'root.layers.A');
   await drill(page, 'root.layers.B');
-  await expect(page.getByRole('navigation').getByRole('button')).toHaveText(['Root', 'A', 'B']);
+  await expect(page.getByRole('navigation').getByRole('button')).toHaveText(['cycle', 'A', 'B']);
   await drill(page, 'root.layers.A');
-  await expect(page.getByRole('navigation').getByRole('button')).toHaveText(['Root', 'A']);
+  await expect(page.getByRole('navigation').getByRole('button')).toHaveText(['cycle', 'A']);
   await page.reload();
   await board(page, 'root.layers.A');
-  await expect(page.getByRole('navigation').getByRole('button')).toHaveText(['Root', 'A']);
+  await expect(page.getByRole('navigation').getByRole('button')).toHaveText(['cycle', 'A']);
   await page.goBack();
   await board(page, 'root.layers.B');
-  await expect(page.getByRole('navigation').getByRole('button')).toHaveText(['Root', 'A', 'B']);
+  await expect(page.getByRole('navigation').getByRole('button')).toHaveText(['cycle', 'A', 'B']);
   await page.goForward();
   await board(page, 'root.layers.A');
-  await expect(page.getByRole('navigation').getByRole('button')).toHaveText(['Root', 'A']);
+  await expect(page.getByRole('navigation').getByRole('button')).toHaveText(['cycle', 'A']);
   await page.keyboard.press('Backspace');
   await board(page, 'root');
-  await expect(page.getByRole('navigation').getByRole('button')).toHaveText(['Root']);
+  await expect(page.getByRole('navigation').getByRole('button')).toHaveText(['cycle']);
 });
 
 test('exported HTML retains keyboard focus during drill-down', async ({ page, context }, info) => {
@@ -177,7 +177,7 @@ test('exported HTML returns keyboard focus to the link it came from when going u
   await charge.focus();
   await charge.press('Enter');
   await board(offline, 'root.layers.checkout.layers.charge');
-  await offline.locator('.zf-breadcrumbs').getByRole('button', { name: 'Root', exact: true }).press('Enter');
+  await offline.locator('.zf-breadcrumbs').getByRole('button').first().press('Enter');
   await board(offline, 'root');
   await expect(checkout).toBeFocused();
   // The focused link is revealed inside the visible canvas.

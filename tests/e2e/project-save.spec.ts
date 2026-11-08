@@ -1,3 +1,4 @@
+import { selectMenuOption } from './menu';
 import { expect, test, type Page } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
@@ -94,7 +95,7 @@ test('one save keeps an import and diagrams from both panes on disk when the fol
   await page.locator('#editor .cm-content').fill('...@lib/styles\nDetail: Changed detail');
   await choose(page, 'index.d2');
   await page.locator('#editor .cm-content').fill('...@lib/styles\nHome: Changed home');
-  await page.selectOption('#layout', 'quad');
+  await selectMenuOption(page, '#layout', 'quad');
   await page.locator('#pane-choose-b').click();
   await page.locator('.project-toggle').click();
   await page.locator('.example-option[title="save-project/lib/styles.d2"]').click();
@@ -114,7 +115,7 @@ test('one save keeps an import and diagrams from both panes on disk when the fol
   await expect(page.getByRole('button', { name: 'Save all · 0 files' })).toBeDisabled();
   await page.locator('#example-picker summary').click();
   await page.reload();
-  await page.selectOption('#layout', 'single');
+  await selectMenuOption(page, '#layout', 'single');
   await page.locator('#open-folder').click();
   await previewReady(page);
   await expect(page.locator('#editor .cm-content')).toContainText('Changed home');
@@ -269,7 +270,7 @@ test('project saves use real file and directory handles restored after reload', 
 test('save controls fit narrow dark screens and workspace shortcuts stay inside the modal', async ({ page }, info) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await writableProject(page);
-  await page.selectOption('#theme', 'dark');
+  await selectMenuOption(page, '#theme', 'dark');
   await page.locator('#mobile-source').click();
   await page.locator('#editor .cm-content').fill('Home: Narrow screen edit');
   const dialog = await saveAll(page, 1);

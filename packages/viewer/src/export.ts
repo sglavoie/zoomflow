@@ -8,6 +8,7 @@ import { setupBreadcrumbs } from './breadcrumbs';
 import { followLink, linkTo, prepareLinks, resolveLink } from './links';
 import { sanitizeSvg } from './sanitize';
 import { fitExportBounds } from './export-bounds';
+import { setupBoardMotion } from './board-motion';
 
 const placeholder = 'data:image/svg+xml;base64,' + btoa('<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64"><rect width="64" height="64" fill="#eee"/><path d="M8 8L56 56M56 8L8 56" stroke="#999" stroke-width="3"/></svg>');
 
@@ -123,7 +124,7 @@ export async function rasterizeSvg(svg: string): Promise<Blob> {
 const runtime = { classifyHref, shapeClass, boardLabel, sanitizeSvg, restoreMissingLinks, simplifyTrail, renderParentContext,
   createViewport, clampBox, revealBox, decorateLinks, splitHitArea, setupBreadcrumbs, resolveRouteHash, routeFallbackNotice,
   normalizeRouteHash, restoreTrail, watchHistory, childToward, resolveLink, prepareLinks, followLink, linkTo, atlasHash, parseAtlasHash, resolveFilePath,
-  indexDiagramSearch, searchDiagram, setupOfflineSearch };
+  indexDiagramSearch, searchDiagram, setupOfflineSearch, setupBoardMotion };
 
 // Keep this runtime self-contained: its compiled function body is embedded in HTML.
 // It consumes the same board IDs, hashes, parent and visited-trail model as Viewer.
@@ -169,6 +170,7 @@ function offlineViewer(lib: typeof runtime) {
     return { target, board, notice: lib.routeFallbackNotice(requested, route, board.name) };
   }
   const stage = document.querySelector<HTMLElement>('.zf-stage')!;
+  const motion = lib.setupBoardMotion(stage);
   const crumbs = document.querySelector<HTMLElement>('.zf-breadcrumbs')!;
   const breadcrumbs = lib.setupBreadcrumbs(crumbs);
   const context = document.querySelector<HTMLElement>('.zf-context')!;
@@ -210,6 +212,10 @@ function offlineViewer(lib: typeof runtime) {
     const focusStage = stage.contains(document.activeElement);
     const focusCrumb = crumbs.contains(document.activeElement);
     const previous = owner === doc ? current.id : undefined;
+    const down = previous && lib.childToward(board.id, previous, parentOf);
+    const up = previous && lib.childToward(previous, board.id, parentOf);
+    motion.cancel();
+    const snapshot = previous !== board.id ? motion.capture(down ? lib.linkTo(stage, down) : undefined) : undefined;
     if (owner !== doc) viewport.setDocument(owner.file);
     doc = owner;
     current = board;
@@ -255,7 +261,7 @@ function offlineViewer(lib: typeof runtime) {
     const files = stack;
     breadcrumbs.render([...files.map((visit, index) => ({ name: names.get(visit.file) ?? visit.file, activate: () => returnTo(index) })),
       // Like the live viewer, a file's root crumb is named after the file.
-      ...visited.map((id, index) => ({ name: id === 'root' && names.get(shown.file) || shown.byId.get(id)!.name,
+      ...visited.map((id, index) => ({ name: id === 'root' && (names.get(shown.file) || document.title) || shown.byId.get(id)!.name,
         activate: () => show(shown.byId.get(id)!, visited.slice(0, index + 1)) }))]);
     if (focusStage || focusCrumb) {
       // Going up keeps the keyboard position: focus the link leading back down, which the
@@ -265,6 +271,8 @@ function offlineViewer(lib: typeof runtime) {
       (link || (focusStage ? stage : crumbs.querySelector<HTMLButtonElement>('button[aria-current]')))?.focus({ preventScroll: true });
     }
     history[replace || location.hash === board.hash ? 'replaceState' : 'pushState']({ zoomflowTrail: trail, zoomflowFiles: stack }, '', board.hash);
+    const content = stage.querySelector(':scope > svg');
+    if (content && previous !== board.id) motion.enter(snapshot, content, down ? 'in' : up ? 'out' : 'across', up ? lib.linkTo(stage, up) : undefined);
   }
   /** Open an earlier file of the stack where it was left. */
   function returnTo(index: number) {

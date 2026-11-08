@@ -19,7 +19,7 @@ test('adds a mind map board to a selected flow step, and edits each board with i
   await approvalFlow(page);
   await shape(page, 'step_3').click();
   const selected = page.getByRole('group', { name: 'Selected: Complete request' });
-  const boards = selected.getByRole('button', { name: 'Add board…', exact: true });
+  const boards = selected.getByRole('button', { name: 'More shape actions', exact: true });
   await expect(boards).toHaveAttribute('aria-expanded', 'false');
   await boards.click();
   await expect(boards).toHaveAttribute('aria-expanded', 'true');
@@ -64,7 +64,7 @@ test('adds a mind map board to a selected flow step, and edits each board with i
   await page.getByRole('button', { name: 'Edit flow', exact: true }).click();
   await flow.getByRole('button', { name: 'Remove step 3' }).click();
   await flow.getByRole('button', { name: 'Apply changes', exact: true }).click();
-  await expect(flow.getByRole('alert')).toHaveText('The step “Done” opens the board “Complete request”. Keep the step, or delete its board in the source first.');
+  await expect(flow.locator('#flow-error')).toHaveText('The step “Done” opens the board “Complete request”. Keep the step, or delete its board in the source first.');
 });
 
 test('repairs missing detail imports when editing an existing attached mind map', async ({ page }) => {
@@ -97,7 +97,7 @@ test('adds flows and maps inside generated detail boards and keeps them after ed
   await openFromBadge(page, 'Open Detail board');
   await board(page, 'root.layers.Area.layers.Detail');
   await shape(page, 'n_1').click();
-  await page.getByRole('group', { name: 'Selected: Task' }).getByRole('button', { name: 'Add board…' }).click();
+  await page.getByRole('group', { name: 'Selected: Task' }).getByRole('button', { name: 'More shape actions' }).click();
   await page.getByRole('menuitem', { name: 'Add flow board…', exact: true }).click();
   await page.getByRole('dialog', { name: 'Add a flow board' }).getByRole('button', { name: 'Add board', exact: true }).click();
   await ready(page);
@@ -120,7 +120,7 @@ test('adds flows and maps inside generated detail boards and keeps them after ed
   await board(page, `root.layers.Area${suffix}`);
   await expect(page.getByRole('button', { name: 'Edit flow', exact: true })).toBeVisible();
 
-  await page.getByRole('navigation', { name: 'Breadcrumb' }).getByRole('button', { name: 'Root', exact: true }).click();
+  await page.getByRole('navigation', { name: 'Breadcrumb' }).getByRole('button').first().click();
   await page.getByRole('button', { name: 'Edit mind map', exact: true }).click();
   const edit = page.getByRole('dialog', { name: 'Edit mind map' });
   await expect(edit.getByRole('textbox', { name: 'Topics' })).toHaveValue('Plan\n  Area\n    Detail\n      Task');

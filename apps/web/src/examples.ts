@@ -1,4 +1,4 @@
-import order from '../../../fixtures/order.d2?raw';
+import order from './examples/order.d2?raw';
 import mixed from './examples/mixed.d2?raw';
 import flowchart from './examples/flowchart.d2?raw';
 import architecture from './examples/architecture.d2?raw';

@@ -1,3 +1,4 @@
+import { openView } from './helpers';
 import { expect, test } from '@playwright/test';
 import { previewReady } from './helpers';
 
@@ -30,6 +31,7 @@ test('diagram and D2 source divider drags, uses the keyboard, and remembers its 
   await expect(divider).toHaveAttribute('aria-valuenow', '75');
   await divider.press('ArrowLeft');
   await expect(divider).toHaveAttribute('aria-valuenow', '70');
+  await openView(page);
   await page.getByRole('button', { name: 'D2 reference', exact: true }).click();
   await expect(divider).toHaveAttribute('aria-valuenow', '70');
   await page.reload();

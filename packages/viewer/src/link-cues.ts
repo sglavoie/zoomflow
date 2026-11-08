@@ -167,6 +167,9 @@ export function decorateLinks(svg: Element, boards: Map<string, { name: string; 
   let attached = false;
   let measured = false;
   function updateGeometry() {
+    // Navigation scales the whole canvas temporarily. Keep badges in diagram space
+    // during that motion; its completion or interruption requests a fresh measurement.
+    if (svg.parentElement?.dataset.transition) return;
     // Hidden mobile previews have no measurable SVG bounds. Associate their
     // badges once the SVG first becomes visible, before sizing the touch targets.
     if (!attached && svg.getClientRects().length) { attachCues(); attached = true; }

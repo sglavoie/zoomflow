@@ -177,32 +177,33 @@ export function setupBoardSelection(ctx: Context) {
       element.addEventListener('click', () => run(relinks ? ctx.viewer.stage : element));
       return element;
     };
-    let buttons = shape ? actions(shape, button) : [];
-    // With canvas actions too, the board actions move behind one button that opens them as a menu.
-    if (shape && ctx.canvasTarget(shape) && ctx.shapeAction(shape).action === 'add') {
-      const boardsButton = button('Add board…', () => {});
-      boardsButton.setAttribute('aria-haspopup', 'menu');
-      boardsButton.setAttribute('aria-controls', ctx.menu.id);
-      boardsButton.setAttribute('aria-expanded', 'false');
-      boardsButton.addEventListener('click', () => {
+    const all = shape ? actions(shape, button) : [];
+    const canvas = shape && ctx.canvasTarget(shape);
+    const primary = canvas ? [canvas.add, canvas.kind === 'flow' ? 'Connect to…' : 'Add sibling topic'] : ['Open diagram'];
+    const buttons = all.filter(item => primary.includes(item.textContent!));
+    if (shape && all.length) {
+      // Keep the frequent actions beside the shape. The full list also remains available on right-click.
+      const more = button('More', () => {});
+      more.setAttribute('aria-label', 'More shape actions');
+      more.setAttribute('aria-haspopup', 'menu');
+      more.setAttribute('aria-controls', ctx.menu.id);
+      more.setAttribute('aria-expanded', 'false');
+      more.addEventListener('click', () => {
         // A click on the button while its menu is open closes the menu.
-        if (ctx.toggled === boardsButton) { ctx.toggled = undefined; return; }
-        const box = boardsButton.getBoundingClientRect();
-        openMenu(shape, boardsButton, box.left, box.bottom + 4, true);
+        if (ctx.toggled === more) { ctx.toggled = undefined; return; }
+        const box = more.getBoundingClientRect();
+        openMenu(shape, more, box.left, box.bottom + 4);
       });
-      buttons = [...buttons.filter(item => !/^(Add (flow|mind map) board|Link to diagram…|New linked diagram…)$/.test(item.textContent!)), boardsButton];
+      buttons.push(more);
     }
     ctx.shapeGroup.hidden = !buttons.length;
     if (shape && buttons.length) {
       const label = `Selected: ${ctx.shapeLabel(ctx.boardId(), shape)}`;
       ctx.shapeGroup.setAttribute('aria-label', label);
-      const caption = document.createElement('span');
-      caption.append('Selected: ', Object.assign(document.createElement('strong'), { textContent: ctx.shapeLabel(ctx.boardId(), shape) }));
       if (ctx.viewer.isShapeHidden(shape)) {
-        caption.append(' · Hidden from export');
         ctx.shapeGroup.setAttribute('aria-label', `${label} · Hidden from export`);
       }
-      ctx.shapeGroup.replaceChildren(caption, ...buttons);
+      ctx.shapeGroup.replaceChildren(...buttons);
     }
     drawSelection(shape);
     markLinks();
@@ -220,7 +221,7 @@ export function setupBoardSelection(ctx: Context) {
     }
   }
 
-  /** Mark the selected shape with a ring and halo around its bounds, drawn in the diagram so they pan and zoom
+  /** Mark the selected shape with a ring around its bounds, drawn in the diagram so it pans and zooms
    * with it. The ring keeps its width at any zoom. */
   function drawSelection(shape: string | undefined) {
     for (const node of ctx.viewer.stage.querySelectorAll('.zf-selection')) node.remove();
@@ -232,17 +233,13 @@ export function setupBoardSelection(ctx: Context) {
     // Pills, ovals and circles get a pill-shaped ring that follows them.
     const corner = Number(element.querySelector('rect')?.getAttribute('rx') ?? 0);
     const round = Boolean(element.querySelector('ellipse, circle')) || corner >= box.height / 2 - 1;
-    const [halo, ring] = ['halo', 'ring'].map(part => {
-      const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-      rect.setAttribute('class', `zf-selection zf-selection-${part}`);
-      for (const [name, value] of Object.entries({ x: box.x - pad, y: box.y - pad, width: box.width + 2 * pad,
-        height: box.height + 2 * pad, rx: round ? box.height / 2 + pad : 10 })) rect.setAttribute(name, String(value));
-      rect.setAttribute('aria-hidden', 'true');
-      return rect;
-    });
-    // The halo sits behind the shape and the ring in front of it, under a link's arrow badge.
+    const ring = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+    ring.setAttribute('class', 'zf-selection zf-selection-ring');
+    for (const [name, value] of Object.entries({ x: box.x - pad, y: box.y - pad, width: box.width + 2 * pad,
+      height: box.height + 2 * pad, rx: round ? box.height / 2 + pad : 10 })) ring.setAttribute(name, String(value));
+    ring.setAttribute('aria-hidden', 'true');
+    // The ring sits under a link's arrow badge.
     const outer = element.closest('a') ?? element;
-    outer.before(halo);
     const badge = outer.querySelector(':scope > .appendix-icon');
     if (badge) badge.before(ring);
     else outer.after(ring);
@@ -317,10 +314,13 @@ export function setupBoardSelection(ctx: Context) {
       element.setAttribute('aria-expanded', 'true');
     }
     ctx.menu.hidden = false;
-    // A shape's menu repeats the bar's actions, so the bar steps aside; the bar's own Add board… menu keeps it.
-    if (boardsOnly) delete ctx.shapeGroup.dataset.behindMenu; else ctx.shapeGroup.dataset.behindMenu = '';
+    // A shape's context menu replaces the bar; More keeps its trigger visible.
+    if (boardsOnly || ctx.shapeGroup.contains(element)) delete ctx.shapeGroup.dataset.behindMenu; else ctx.shapeGroup.dataset.behindMenu = '';
     // Keep the menu on screen beside the pointer or shape.
     const { width, height } = ctx.menu.getBoundingClientRect();
+    if (ctx.shapeGroup.contains(element) && y + height > innerHeight - 8) {
+      y = element.getBoundingClientRect().top - height - 4;
+    }
     ctx.menu.style.left = `${Math.max(8, Math.min(x, innerWidth - width - 8))}px`;
     ctx.menu.style.top = `${Math.max(8, Math.min(y, innerHeight - height - 8))}px`;
     ctx.menu.querySelector<HTMLElement>('[role="menuitem"]')?.focus({ preventScroll: true });

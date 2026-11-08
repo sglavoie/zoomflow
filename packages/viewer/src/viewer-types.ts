@@ -7,6 +7,8 @@ export class ViewerRenderError extends Error {
 }
 export type ViewerRoute = { hash: string; trail?: unknown };
 export type ViewerOptions = {
+  /** A human-readable title for this document's root breadcrumb. */
+  name?: () => string | undefined;
   /** Mirror the current board in the page URL and history; otherwise keep the route in memory. */
   history?: boolean;
   /** Whether page-level Escape/Backspace should navigate this viewer. */

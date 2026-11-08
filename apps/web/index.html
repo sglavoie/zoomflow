@@ -50,6 +50,7 @@
           <div id="header-more-content" class="header-more-content" hidden>
             <label class="export-name">Name<input id="export-name" type="text" maxlength="100" spellcheck="false" autocomplete="off" aria-describedby="export-name-hint" /></label>
             <p id="export-name-hint">Names the downloaded files.</p>
+            <figure id="export-preview"><img alt="Preview of the exported diagram" hidden /><figcaption aria-live="polite"></figcaption></figure>
             <fieldset id="export-format">
               <legend>What would you like to share?</legend>
               <label class="export-choice"><input type="radio" name="export-format" value="html" /><span><strong>Interactive diagram <small>HTML</small></strong><span>Every board, with drill-down navigation. Opens offline in a browser.</span></span></label>
@@ -64,6 +65,7 @@
             <div class="export-actions">
               <button id="export" class="button-primary" aria-describedby="export-scope" disabled>Download SVG</button>
               <button id="copy-board-png" type="button" aria-describedby="export-scope" hidden disabled>Copy PNG</button>
+              <button id="open-export-preview" type="button" hidden disabled>Open preview ↗</button>
             </div>
             <span id="export-status" role="status" hidden></span>
             <div class="export-sources">
@@ -76,12 +78,18 @@
         </div>
       </div>
       <div class="header-actions">
-        <label class="layout-control"><span class="zf-visually-hidden">Layout</span><select id="layout" aria-label="Layout" title="Workspace layout: one diagram, or two side by side"><option value="single">Single</option><option value="tabs">Split · tabs</option><option value="quad">Split · all views</option></select></label>
-        <label class="theme-control"><span class="zf-visually-hidden">Theme</span><select id="theme" aria-label="Theme" title="Appearance"><option value="system">System</option><option value="light">Light</option><option value="dark">Dark</option></select></label>
-        <button id="toggle-reference" class="button-quiet" aria-expanded="false" aria-controls="d2-reference" title="D2 reference (⌘⇧/ or Ctrl+Shift+/)">D2 reference</button>
-        <button id="show-shortcuts" class="button-quiet" type="button" aria-label="Keyboard shortcuts" aria-haspopup="dialog" aria-controls="keyboard-shortcuts" title="Keyboard shortcuts">
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="2" y="5" width="20" height="14" rx="3" /><path stroke-linecap="round" d="M6 9h.01M10 9h.01M14 9h.01M18 9h.01M6 12h.01M10 12h.01M14 12h.01M18 12h.01M8 15h8" /></svg>
-        </button>
+        <button id="toggle-source" type="button" class="button-quiet" aria-pressed="true" aria-controls="source-pane">Source</button>
+        <details id="workspace-view">
+          <summary>View</summary>
+          <div class="workspace-view-menu">
+            <label class="layout-control"><span class="zf-visually-hidden">Layout</span><select id="layout" aria-label="Layout" title="Workspace layout: one diagram, or two side by side"><option value="single">Single</option><option value="tabs">Split · tabs</option><option value="quad">Split · all views</option></select></label>
+            <label class="theme-control"><span class="zf-visually-hidden">Theme</span><select id="theme" aria-label="Theme" title="Appearance"><option value="system">System</option><option value="light">Light</option><option value="dark">Dark</option></select></label>
+            <button id="toggle-reference" class="button-quiet" aria-expanded="false" aria-controls="d2-reference" title="D2 reference (⌘⇧/ or Ctrl+Shift+/)">D2 reference</button>
+            <button id="show-shortcuts" class="button-quiet" type="button" aria-label="Keyboard shortcuts" aria-haspopup="dialog" aria-controls="keyboard-shortcuts" title="Keyboard shortcuts">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="2" y="5" width="20" height="14" rx="3" /><path stroke-linecap="round" d="M6 9h.01M10 9h.01M14 9h.01M18 9h.01M6 12h.01M10 12h.01M14 12h.01M18 12h.01M8 15h8" /></svg>
+            </button>
+          </div>
+        </details>
       </div>
     </header>
     <dialog id="keyboard-shortcuts" aria-labelledby="shortcuts-title" aria-describedby="shortcuts-hint">

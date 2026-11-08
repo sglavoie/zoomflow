@@ -1,6 +1,6 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { expect, test, type Page } from '@playwright/test';
-import { chooseExample, editorText, openFolder, previewReady, source } from './helpers';
+import { chooseExample, editorText, openFolder, previewReady, source, openBoards, closeBoards } from './helpers';
 import { downloadExport, openDownloads, selectMenuOption } from './menu';
 
 test.use({ viewport: { width: 1600, height: 1000 }, reducedMotion: 'reduce' });
@@ -32,7 +32,8 @@ async function saved(page: Page) {
 
 test('reload preserves curation and exports the same connected diagram; reset restores every board', async ({ page }, info) => {
   await load(page);
-  const depth = page.getByRole('spinbutton', { name: 'Layer depth', exact: true });
+  const depth = page.getByRole('spinbutton', { name: 'Layer depth', exact: true, includeHidden: true });
+  await openBoards(page);
   await depth.fill('1'); await depth.press('Enter');
   await expect(page.locator('#viewer [data-layer-board]')).toHaveCount(3);
   await toggle(page);
@@ -69,13 +70,15 @@ test('reload preserves curation and exports the same connected diagram; reset re
 
 test('unedited examples retain layer settings across reload and document switches without dirtying source', async ({ page }) => {
   await page.goto('/'); await previewReady(page);
+  await openBoards(page);
   await page.getByRole('checkbox', { name: 'Show all layers', exact: true }).check();
+  await closeBoards(page);
   await expect(page.locator('#viewer [data-layer-board]')).toHaveCount(3);
   await expect(page.locator('#document-unsaved')).toBeHidden();
   await saved(page);
   await page.reload(); await previewReady(page);
   await expect(page.locator('#viewer [data-layer-board]')).toHaveCount(3);
-  await expect(page.getByRole('checkbox', { name: 'Show all layers', exact: true })).toBeChecked();
+  await expect(page.getByRole('checkbox', { name: 'Show all layers', exact: true, includeHidden: true })).toBeChecked();
   await chooseExample(page, /^Flowchart basics/); await previewReady(page);
   await expect(page.locator('#viewer [data-layer-board]')).toHaveCount(0);
   await chooseExample(page, /^Order flow/); await previewReady(page);
@@ -90,7 +93,7 @@ test('an atlas export uses choices made in the other pane and restores unvisited
   await writeFile(`${folder}/other.d2`, 'Secret: Private atlas content\nPublic: Keep project content\n');
   await page.goto('/'); await previewReady(page);
   await openFolder(page, folder); await previewReady(page);
-  await page.selectOption('#layout', 'quad');
+  await selectMenuOption(page, '#layout', 'quad');
   await page.locator('#pane-choose-b').click();
   await page.locator('#draft-options .project-toggle').click();
   await page.locator('.example-option[title="curated-project/other.d2"]').click();
@@ -101,7 +104,7 @@ test('an atlas export uses choices made in the other pane and restores unvisited
   for (const round of ['other-pane', 'reloaded']) {
     if (round === 'reloaded') {
       // Reload with only the entry file open, so the other file is never mounted in this viewer.
-      await page.selectOption('#layout', 'single');
+      await selectMenuOption(page, '#layout', 'single');
       await page.reload(); await previewReady(page);
     }
     await selectMenuOption(page, '#export-format', 'atlas');
@@ -134,7 +137,9 @@ test('deleted shapes and layers do not block restored curation, and reset clears
 
 test('restoring an example clears curation and undo restores it', async ({ page }) => {
   await load(page);
+  await openBoards(page);
   await page.getByRole('spinbutton', { name: 'Layer depth', exact: true }).fill('1');
+  await openBoards(page);
   await page.getByRole('spinbutton', { name: 'Layer depth', exact: true }).press('Enter');
   await expect(page.locator('#viewer [data-layer-board]')).toHaveCount(3);
   await toggle(page);

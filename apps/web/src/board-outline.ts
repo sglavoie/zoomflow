@@ -11,14 +11,15 @@ export function setupBoardOutline(host: HTMLElement, viewer: Viewer, edit: (boar
   const details = document.createElement('details');
   details.className = 'board-outline';
   details.hidden = true;
-  details.innerHTML = '<summary></summary><nav aria-label="Boards"></nav>';
+  details.innerHTML = '<summary></summary><div class="board-outline-panel"><nav aria-label="Boards"></nav><div class="board-layer-settings"></div></div>';
+  const settings = details.querySelector('.board-layer-settings')!;
   host.prepend(details);
   const showAll = document.createElement('label');
   showAll.className = 'layer-visibility-all';
   showAll.hidden = true;
   showAll.innerHTML = '<input type="checkbox" /> Show all layers';
   const allLayers = showAll.querySelector('input')!;
-  details.after(showAll);
+  settings.append(showAll);
   allLayers.addEventListener('change', () => void viewer.setAllLayers(allLayers.checked));
   const depthControls = document.createElement('div');
   depthControls.className = 'layer-depth-controls';
@@ -26,15 +27,16 @@ export function setupBoardOutline(host: HTMLElement, viewer: Viewer, edit: (boar
   depthControls.setAttribute('aria-label', 'Layer depth controls');
   depthControls.hidden = true;
   depthControls.innerHTML = '<label>Depth <input type="number" min="0" step="1" inputmode="numeric" aria-label="Layer depth" placeholder="Custom" /></label><button type="button" aria-label="Decrease layer depth">−</button><button type="button" aria-label="Increase layer depth">+</button>';
-  showAll.after(depthControls);
+  settings.append(depthControls);
   const focusBoard = document.createElement('button');
   focusBoard.type = 'button';
   focusBoard.textContent = 'Focus this board';
   focusBoard.hidden = true;
-  depthControls.after(focusBoard);
+  settings.append(focusBoard);
   focusBoard.addEventListener('click', () => {
     const id = viewer.currentBoard?.id;
     if (!id || !viewer.layerState.root || viewer.layerState.root === id) return;
+    details.open = false;
     // Navigation redraws the canvas and hides this button. Keep keyboard focus in the diagram.
     viewer.stage.focus({ preventScroll: true });
     void viewer.navigate(id);

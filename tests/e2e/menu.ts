@@ -1,4 +1,5 @@
 import { expect, type Page } from '@playwright/test';
+import { openView } from './helpers';
 
 export async function openDownloads(page: Page) {
   // aria-expanded is the menu's own state; then wait for the content rather than sampling it once.
@@ -8,9 +9,11 @@ export async function openDownloads(page: Page) {
 }
 
 export async function selectMenuOption(page: Page, selector: string, value: string) {
-  if (selector !== '#theme') await openDownloads(page);
+  const view = selector === '#theme' || selector === '#layout';
+  if (view) await openView(page); else await openDownloads(page);
   if (selector === '#export-format') await page.locator(`${selector} input[value="${value}"]`).check();
   else await page.selectOption(selector, value);
+  if (view) await page.locator('#workspace-view > summary').click();
 }
 
 export async function downloadExport(page: Page) {

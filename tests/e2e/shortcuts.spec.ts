@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { source } from './helpers';
+import { source, openView } from './helpers';
 
 test('shortcuts dialog contains keyboard focus and leaves the current board unchanged', async ({ page }) => {
   await page.goto('/');
@@ -12,6 +12,7 @@ test('shortcuts dialog contains keyboard focus and leaves the current board unch
   const dialog = page.getByRole('dialog', { name: 'Keyboard shortcuts' });
   const close = page.getByRole('button', { name: 'Close keyboard shortcuts' });
 
+  await openView(page);
   await button.focus();
   await page.keyboard.press('Enter');
   await expect(dialog).toBeVisible();
@@ -27,19 +28,21 @@ test('shortcuts dialog contains keyboard focus and leaves the current board unch
   await expect(page.locator('#d2-reference')).toBeHidden();
   await page.keyboard.press('Escape');
   await expect(dialog).toBeHidden();
-  await expect(button).toBeFocused();
+  await expect(page.locator('#workspace-view > summary')).toBeFocused();
   await expect(stage).toHaveAttribute('data-board', 'root.layers.checkout');
   expect(await page.locator('.cm-content').innerText()).toBe(source);
 
+  await openView(page);
   await button.click();
   await close.click();
   await expect(dialog).toBeHidden();
-  await expect(button).toBeFocused();
+  await expect(page.locator('#workspace-view > summary')).toBeFocused();
 });
 
 test('shortcuts stay within a narrow viewport in dark mode', async ({ page }) => {
   await page.setViewportSize({ width: 320, height: 640 });
   await page.goto('/');
+  await openView(page);
   await page.getByLabel('Theme', { exact: true }).selectOption('dark');
   await page.getByRole('button', { name: 'Keyboard shortcuts', exact: true }).click();
   const dialog = page.getByRole('dialog', { name: 'Keyboard shortcuts' });

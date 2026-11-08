@@ -51,22 +51,48 @@ export function guardBuilderDialog(dialog: HTMLDialogElement, discard: () => boo
 }
 
 const lookLabels: Record<keyof Look, string> = { filled: 'Filled shapes', compact: 'Compact text', shadow: 'Shadows' };
+const presets = [
+  { name: 'Outline', look: { filled: false, compact: false, shadow: false } },
+  { name: 'Soft', look: { filled: true, compact: false, shadow: false } },
+  { name: 'Elevated', look: { filled: true, compact: false, shadow: true } },
+] as const;
+
+function lookThumbnail(look: Look) {
+  return `<svg viewBox="0 0 140 64" aria-hidden="true" class="look-thumbnail${look.filled ? ' look-filled' : ''}${look.shadow ? ' look-shadow' : ''}"><path d="M48 32H90"/><path d="m85 28 5 4-5 4"/><rect x="10" y="17" width="38" height="30" rx="8"/><rect x="92" y="17" width="38" height="30" rx="8"/><path class="look-text" d="M20 28h18m-18 7h12m60-7h18m-18 7h12"/></svg>`;
+}
 
 /** Look choices for a builder whose ids start with `prefix`. They only add library classes,
  * so a project's own zoomflow.d2 can restyle them. */
 export function lookFields(prefix: string) {
-  return `<fieldset class="builder-look" aria-describedby="${prefix}-look-help"><legend>Look</legend>
+  return `<fieldset class="builder-look"><legend>Look</legend>
+        <div class="look-presets" role="group" aria-label="Diagram style">${presets.map((preset, index) => `<button type="button" data-look-preset="${index}" aria-pressed="false">${lookThumbnail(preset.look)}<span>${preset.name}</span></button>`).join('')}</div>
+        <details class="look-custom"><summary>Customize style</summary><div>
         ${lookNames.map(name => `<label><input id="${prefix}-${name}" type="checkbox" /> ${lookLabels[name]}</label>`).join('\n        ')}
+        </div><details class="look-source"><summary>Project styling</summary>
         <p id="${prefix}-look-help" class="flow-help">Adds the library's ${lookNames.map(name => `zf-${name}`).join(', ')} classes. Restyle them in your project's zoomflow.d2.</p>
+        </details></details>
       </fieldset>`;
 }
 
 /** Read and set the checkboxes `lookFields` wrote. */
 export function lookControls(dialog: HTMLElement, prefix: string) {
   const boxes = lookNames.map(name => [name, dialog.querySelector<HTMLInputElement>(`#${prefix}-${name}`)!] as const);
+  const buttons = [...dialog.querySelectorAll<HTMLButtonElement>('[data-look-preset]')];
+  function sync() {
+    for (const [index, button] of buttons.entries()) {
+      button.setAttribute('aria-pressed', String(boxes.every(([name, box]) => box.checked === presets[index].look[name])));
+    }
+  }
+  for (const [index, button] of buttons.entries()) button.addEventListener('click', () => {
+    for (const [name, box] of boxes) box.checked = presets[index].look[name];
+    // The same events update the builder's model, dirty guard, and live preview.
+    boxes[0][1].dispatchEvent(new Event('change', { bubbles: true }));
+    sync();
+  });
+  for (const [, box] of boxes) box.addEventListener('change', sync);
   return {
     boxes: boxes.map(([, box]) => box),
     get: () => Object.fromEntries(boxes.map(([name, box]) => [name, box.checked])) as Look,
-    set(look: Look) { for (const [name, box] of boxes) box.checked = look[name]; },
+    set(look: Look) { for (const [name, box] of boxes) box.checked = look[name]; sync(); },
   };
 }

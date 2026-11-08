@@ -234,6 +234,7 @@ test('header stays stable while saving and preferences survive reload', async ({
   expect(await page.locator('header').boundingBox()).toEqual(before);
   await selectMenuOption(page, '#theme', 'dark');
   await selectMenuOption(page, '#export-format', 'html');
+  await page.keyboard.press('Escape');
   await page.locator('#lint-details > summary').click();
   await page.locator('#missing-backlink').check();
   await page.locator('#boundary-ports').check();
@@ -394,11 +395,11 @@ test('reopening an unchanged file, folder or empty draft reuses its draft', asyn
   await page.keyboard.press('Escape');
 
   await page.setViewportSize({ width: 1600, height: 900 });
-  await page.selectOption('#layout', 'tabs');
+  await selectMenuOption(page, '#layout', 'tabs');
   await page.locator('#pane-start-empty-b').click();
   await previewReady(page, 'b');
-  await page.selectOption('#layout', 'single');
-  await page.selectOption('#layout', 'tabs');
+  await selectMenuOption(page, '#layout', 'single');
+  await selectMenuOption(page, '#layout', 'tabs');
   await page.locator('#pane-start-empty-b').click();
   await previewReady(page, 'b');
   expect(await draftRows(page, 'untitled.d2')).toBe(1);

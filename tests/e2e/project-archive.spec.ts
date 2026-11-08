@@ -1,7 +1,7 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { expect, test, type Page, type TestInfo } from '@playwright/test';
 import { exportProjectArchive, readProjectArchive } from '../../packages/core/src/project-archive';
-import { editorText, openFolder, previewReady, source } from './helpers';
+import { editorText, openFolder, previewReady, source, openBoards, closeBoards } from './helpers';
 import { downloadExport, openDownloads, selectMenuOption } from './menu';
 
 test.use({ viewport: { width: 1600, height: 1000 }, reducedMotion: 'reduce' });
@@ -51,7 +51,8 @@ test('a curated diagram reopens in a fresh browser with editable source, visibil
   await page.goto('/'); await previewReady(page);
   await page.locator('#file').setInputFiles({ name: 'Launch.d2', mimeType: 'text/plain', buffer: Buffer.from(diagram) });
   await previewReady(page);
-  const depth = page.getByRole('spinbutton', { name: 'Layer depth', exact: true });
+  const depth = page.getByRole('spinbutton', { name: 'Layer depth', exact: true, includeHidden: true });
+  await openBoards(page);
   await depth.fill('1'); await depth.press('Enter');
   await expect(page.locator('#viewer [data-layer-board]')).toHaveCount(2);
   await curate(page); await curate(page, 'root.layers.Detail');
@@ -66,7 +67,7 @@ test('a curated diagram reopens in a fresh browser with editable source, visibil
     await restored.goto(page.url().split('#')[0]); await previewReady(restored);
     await openProject(restored, path);
     expect(await editorText(restored)).toBe(diagram);
-    await expect(restored.getByRole('spinbutton', { name: 'Layer depth', exact: true })).toHaveValue('1');
+    await expect(restored.getByRole('spinbutton', { name: 'Layer depth', exact: true, includeHidden: true })).toHaveValue('1');
     await expect(restored.locator('#viewer [data-layer-board]')).toHaveCount(2);
     await expect(restored.locator('#viewer [data-export-hidden]')).toHaveCount(2);
     await selectMenuOption(restored, '#export-format', 'svg');
@@ -77,7 +78,7 @@ test('a curated diagram reopens in a fresh browser with editable source, visibil
     expect(svg).not.toContain('Private root'); expect(svg).not.toContain('Private detail');
     await restored.reload(); await previewReady(restored);
     await expect(restored.locator('#viewer [data-export-hidden]')).toHaveCount(2);
-    await expect(restored.getByRole('spinbutton', { name: 'Layer depth', exact: true })).toHaveValue('1');
+    await expect(restored.getByRole('spinbutton', { name: 'Layer depth', exact: true, includeHidden: true })).toHaveValue('1');
     await source(restored).fill(`${diagram}\nAdded: Still editable\n`); await previewReady(restored);
     await expect(restored.locator('#viewer .zf-stage')).toContainText('Still editable');
     await expect(restored.locator('#viewer [data-export-hidden]')).toHaveCount(2);
@@ -134,7 +135,9 @@ for (const mode of ['all', 'custom'] as const) test(`restores a nested layer sta
   await previewReady(page);
   await page.locator('#viewer a[data-board="root.layers.Detail"]').click();
   await expect(page.locator('#viewer .zf-stage')).toHaveAttribute('data-board', 'root.layers.Detail');
+  await openBoards(page);
   await page.getByRole('checkbox', { name: 'Show all layers', exact: true }).check();
+  await closeBoards(page);
   await expect(page.locator('#viewer [data-layer-board]')).toHaveCount(3);
   if (mode === 'custom') {
     await page.locator('.board-outline summary').click();
@@ -150,8 +153,8 @@ for (const mode of ['all', 'custom'] as const) test(`restores a nested layer sta
     await openProject(restored, path);
     await expect(restored.locator('#viewer .zf-stage')).toHaveAttribute('data-board', 'root.layers.Detail');
     await expect(restored.locator('#viewer [data-layer-board]')).toHaveCount(mode === 'all' ? 3 : 2);
-    if (mode === 'custom') await expect(restored.getByRole('spinbutton', { name: 'Layer depth', exact: true })).toHaveAttribute('placeholder', 'Custom');
-    else await expect(restored.getByRole('checkbox', { name: 'Show all layers', exact: true })).toBeChecked();
+    if (mode === 'custom') await expect(restored.getByRole('spinbutton', { name: 'Layer depth', exact: true, includeHidden: true })).toHaveAttribute('placeholder', 'Custom');
+    else await expect(restored.getByRole('checkbox', { name: 'Show all layers', exact: true, includeHidden: true })).toBeChecked();
   } finally { await fresh.close(); }
 });
 

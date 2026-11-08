@@ -4,8 +4,12 @@
 
 ## Export
 
+The export menu shows a thumbnail with your visibility choices applied. For
+interactive HTML and atlas exports, **Open preview** opens the actual exported
+diagram in a new tab, including navigation and search, before you download it.
+
 To leave a node out of downloads, right-click it and choose **Hide from export**,
-use the same button in its selection bar, or focus it and press **H**. Repeat to
+choose it under **More** in its selection bar, or focus it and press **H**. Repeat to
 unhide it. Hidden nodes remain dimmed and labeled **Hidden from export** in the
 workspace, so they can still be selected and restored. Hiding a node also hides
 its contained nodes, downstream children, and attached detail layers recursively.

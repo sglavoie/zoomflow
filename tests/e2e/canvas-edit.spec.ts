@@ -3,7 +3,7 @@ import { board, openFromBadge, chooseExample, editorText, source, withEditorView
 
 const ready = (page: Page) => expect(page.locator('#preview-status')).toHaveText('Preview ready');
 const shape = (page: Page, id: string) => page.locator(`.zf-stage [data-shape-id="${id}"]`);
-const stage = (page: Page) => page.locator('.zf-stage');
+const stage = (page: Page) => page.locator('#viewer .zf-stage');
 test.use({ viewport: { width: 1440, height: 900 } });
 
 async function mixed(page: Page) {
@@ -17,7 +17,7 @@ test('renames, adds and removes flow steps on the diagram, and undoes there', as
   // Selecting a step keeps focus on the diagram, ready for its shortcuts.
   await shape(page, 'step_1').click();
   await expect(shape(page, 'step_1')).toBeFocused();
-  // One ring and halo mark the selected step, and move with the selection.
+  // One ring mark the selected step, and move with the selection.
   await expect(shape(page, 'step_1')).toHaveClass(/zf-canvas-selected/);
   await expect(stage(page).locator('.zf-selection-ring')).toHaveCount(1);
   await expect(page.getByRole('group', { name: 'Selected: New idea' })).toBeVisible();
@@ -72,7 +72,7 @@ test('renames, adds and removes flow steps on the diagram, and undoes there', as
   await page.getByRole('textbox', { name: 'Rename Launched' }).press('Escape');
   await expect(stage(page)).toContainText('Launched');
   await expect(page.getByRole('group', { name: 'Selected: Launched' }).getByRole('button'))
-    .toHaveText(['Rename', 'Add next step', 'Connect to…', 'Move branch…', 'Delete', 'Hide from export', 'Add board…']);
+    .toHaveText(['Add next step', 'Connect to…', 'More']);
   // Keyboard guidance names the keys that edit steps.
   await shape(page, 'step_5').focus();
   await page.keyboard.press('Home');
@@ -163,7 +163,7 @@ test('a builder applies to the latest source unless its own board changed meanwh
   await replace('"Launched"', '"Shipped"');
   await expect(stage(page)).toContainText('Shipped');
   await flow.getByRole('button', { name: 'Apply changes', exact: true }).click();
-  await expect(flow.getByRole('alert')).toHaveText('This board changed while the builder was open. Close and reopen the builder to use the latest version.');
+  await expect(flow.locator('#flow-error')).toHaveText('This board changed while the builder was open. Close and reopen the builder to use the latest version.');
 });
 
 test('the selection bar hides while its shape is panned out of view', async ({ page }) => {
@@ -230,7 +230,7 @@ test('a shape\'s context menu replaces its selection bar until it closes', async
   await expect(page.getByRole('menu', { name: 'Actions for New idea' })).toBeHidden();
   await expect(bar).toBeVisible();
   // The bar's own Add board… menu opens from the bar, which stays.
-  await bar.getByRole('button', { name: 'Add board…' }).click();
+  await bar.getByRole('button', { name: 'More shape actions' }).click();
   await expect(page.getByRole('menu', { name: 'Actions for New idea' })).toBeVisible();
   await expect(bar).toBeVisible();
 });
@@ -253,7 +253,7 @@ test('going up selects the shape that led down, with its actions', async ({ page
   await board(page, 'root.layers.Build and test');
   await page.keyboard.press('Escape');
   await board(page, 'root');
-  await expect(page.getByRole('group', { name: 'Selected: Build and test' }).getByRole('button', { name: 'Edit flow board', exact: true })).toBeVisible();
+  await expect(page.getByRole('group', { name: 'Selected: Build and test' }).getByRole('button', { name: 'More shape actions', exact: true })).toBeVisible();
   await expect(page.getByRole('link', { name: 'Open Build and test board', exact: true })).toBeFocused();
 });
 
@@ -265,7 +265,7 @@ test('the boards outline opens and edits any board, and the source follows the b
   await expect(outline.getByRole('button', { name: /^Plan the launch/ })).toContainText('Mind map');
   await outline.getByRole('button', { name: /^Onboarding/ }).click();
   await board(page, 'root.layers.Plan the launch.layers.Onboarding');
-  await expect(page.getByRole('navigation', { name: 'Breadcrumb' }).getByRole('button')).toHaveText(['Root', 'Plan the launch', 'Onboarding']);
+  await expect(page.getByRole('navigation', { name: 'Breadcrumb' }).getByRole('button')).toHaveText(['mixed', 'Plan the launch', 'Onboarding']);
   // Only the board's own block stays at full strength in the source.
   await expect(source(page).locator('.cm-line:not(.zf-outside-board)').filter({ hasText: 'Guided tour' })).toHaveCount(1);
   await expect(source(page).locator('.cm-line.zf-outside-board').filter({ hasText: 'Freeze features' })).toHaveCount(1);
@@ -303,7 +303,7 @@ test('a step that opens a board selects and renames on click, and opens from its
   await expect(stage(page)).toHaveAttribute('data-board', 'root');
   await expect(shape(page, 'step_2')).toHaveClass(/zf-canvas-selected/);
   await expect(link).toBeFocused();
-  await expect(page.getByRole('group', { name: 'Selected: Plan the launch' }).getByRole('button', { name: 'Edit mind map board' })).toBeVisible();
+  await expect(page.getByRole('group', { name: 'Selected: Plan the launch' }).getByRole('button', { name: 'More shape actions' })).toBeVisible();
   // Double-click renames it, and its board keeps opening from it.
   await shape(page, 'step_2').dblclick();
   const rename = page.getByRole('textbox', { name: 'Rename Plan the launch' });
@@ -321,7 +321,7 @@ test('a step that opens a board selects and renames on click, and opens from its
   await link.press('Enter');
   await board(page, 'root.layers.Plan the launch');
   // A topic that opens a board renames on double-click too, and Enter opens its board.
-  await shape(page, 'n_3_2').dblclick();
+  await shape(page, 'n_3_2').locator('text').dblclick();
   await page.getByRole('textbox', { name: 'Rename Onboarding' }).press('Escape');
   await expect(stage(page)).toHaveAttribute('data-board', 'root.layers.Plan the launch');
   await page.getByRole('link', { name: 'Open Onboarding board', exact: true }).press('Enter');

@@ -29,7 +29,7 @@ export function registerLintLibraryCases() {
     expect(shape('zf-icon-database').icon).toMatchObject({ Scheme: 'data' });
     expect(shape('zf-stack')).toMatchObject({ multiple: true });
     expect(shape('zf-code')).toMatchObject({ fontFamily: 'mono' });
-    expect(shape('zf-accent-3')).toMatchObject({ stroke: '#30a46c' });
+    expect(shape('zf-accent-3')).toMatchObject({ stroke: '#448e77' });
     // Unstyled lines keep a theme colour.
     expect(result.diagram.connections.map((edge) => [edge.stroke.startsWith('#') ? edge.stroke : 'theme', edge.strokeDash, edge.animated, edge.dstArrow])).toEqual([
       ['#30a46c', 0, false, 'triangle'], ['#e5484d', 4, false, 'triangle'], ['theme', 4, true, 'triangle'],
@@ -40,7 +40,7 @@ export function registerLintLibraryCases() {
 
 
   it('recolours every class from one palette value in a project copy of the library', async () => {
-    const copy = library.replace('zf-accent-3: "#30a46c"', 'zf-accent-3: "#123456"').replace('zf-yes: "#30a46c"', 'zf-yes: "#654321"');
+    const copy = library.replace('zf-accent-3: "#448e77"', 'zf-accent-3: "#123456"').replace('zf-yes: "#30a46c"', 'zf-yes: "#654321"');
     const result = await d2.compile({ fs: { index: '...@zoomflow\na.class: zf-accent-3\na -> b: {class: zf-yes}\na.link: layers.x\nlayers.x: {c.class: zf-accent-3}',
       'zoomflow.d2': copy }, options: { layout: 'elk' } });
     expect(result.diagram.shapes[0].stroke).toBe('#123456');

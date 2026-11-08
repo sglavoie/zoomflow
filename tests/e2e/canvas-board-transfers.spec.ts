@@ -1,6 +1,6 @@
 import { readFile } from 'node:fs/promises';
 import { expect, test, type Locator, type Page } from '@playwright/test';
-import { board, editorText, previewReady, source } from './helpers';
+import { board, editorText, previewReady, source, openBoards, openShapeActions, closeBoards } from './helpers';
 
 test.use({ viewport: { width: 1600, height: 1000 } });
 const map = 'root.layers.Plan the launch';
@@ -10,9 +10,12 @@ const fixture = () => readFile(new URL('../../fixtures/mixed-transfers.d2', impo
 async function open(page: Page) {
   await page.goto('/'); await previewReady(page);
   await source(page).fill(await fixture()); await previewReady(page);
+  await openBoards(page);
   await page.getByRole('checkbox', { name: 'Show all layers', exact: true }).check(); await previewReady(page);
+  await closeBoards(page);
 }
 async function drag(page: Page, from: Locator, to: Locator) {
+  await closeBoards(page);
   const a = (await from.boundingBox())!;
   const b = (await to.boundingBox())!;
   await page.mouse.move(a.x + a.width / 2, a.y + a.height / 2); await page.mouse.down();
@@ -83,7 +86,9 @@ test('drags Launched out of the main flow onto Short videos and saves an editabl
   expect(buffer.toString()).toBe(changed);
   await source(page).fill('temporary: Other diagram'); await previewReady(page);
   await page.locator('#file').setInputFiles({ name: saved.suggestedFilename(), mimeType: 'text/plain', buffer }); await previewReady(page);
+  await openBoards(page);
   await page.getByRole('checkbox', { name: 'Show all layers', exact: true }).check(); await previewReady(page);
+  await closeBoards(page);
   await expect(shape(page, launched, 'step_5')).toContainText('Launched');
   await shape(page, launched, 'step_5').click(); await board(page, launched);
   await page.getByRole('button', { name: 'Edit flow', exact: true }).click();
@@ -93,7 +98,8 @@ test('drags Launched out of the main flow onto Short videos and saves an editabl
 test('offers cross-board parents for an attached root and accepts a click on another board', async ({ page }) => {
   await open(page);
   await shape(page, map, 'n').click();
-  await page.getByRole('button', { name: 'Move branch…', exact: true }).click();
+  await openShapeActions(page);
+  await page.getByRole('menuitem', { name: 'Move branch…', exact: true }).click();
   const picker = page.locator('.canvas-branches');
   await expect(picker.getByLabel('New parent topic').locator('option')).toContainText(['Root › New idea']);
   await shape(page, 'root', 'step_1').click(); await previewReady(page);
@@ -138,7 +144,8 @@ test('keeps hidden-export choices on the moved and renumbered topics through und
 
 test('reveals a transferred branch beyond the visible depth and restores that depth on undo', async ({ page }) => {
   await open(page);
-  const depth = page.getByRole('spinbutton', { name: 'Layer depth', exact: true });
+  const depth = page.getByRole('spinbutton', { name: 'Layer depth', exact: true, includeHidden: true });
+  await openBoards(page);
   await depth.fill('1'); await depth.press('Enter'); await previewReady(page);
   await drag(page, shape(page, 'root', 'step_5'), shape(page, map, 'n_3_1_2'));
   const launched = `${map}.layers.Launched`;
@@ -158,7 +165,8 @@ test.describe('touch board transfers', () => {
     await page.setViewportSize({ width: 390, height: 844 });
     await page.locator('#mobile-preview').tap();
     await shape(page, 'root', 'step_5').tap();
-    await page.getByRole('button', { name: 'Move branch…', exact: true }).tap();
+    await openShapeActions(page);
+    await page.getByRole('menuitem', { name: 'Move branch…', exact: true }).tap();
     const panel = page.locator('.canvas-branches');
     await panel.getByLabel('New parent node').selectOption(`@board:${JSON.stringify([map, 'n_2'])}`);
     await panel.getByRole('button', { name: 'Move branch', exact: true }).tap(); await previewReady(page);
@@ -170,6 +178,7 @@ test.describe('touch board transfers', () => {
   test('holds then drags Pricing from a mind map to the onboarding flow', async ({ page, browserName }) => {
     test.skip(browserName !== 'chromium', 'Trusted touch sequences use Chromium CDP; picker and mouse gestures run in every engine.');
     await open(page);
+    await closeBoards(page);
     const from = (await shape(page, map, 'n_1').boundingBox())!;
     const to = (await shape(page, onboarding, 'step_1').boundingBox())!;
     const client = await page.context().newCDPSession(page);

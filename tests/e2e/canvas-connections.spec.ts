@@ -1,6 +1,6 @@
 import { readFile } from 'node:fs/promises';
 import { expect, test, type Page } from '@playwright/test';
-import { board, chooseExample, editorText, openFromBadge, previewReady, source } from './helpers';
+import { board, chooseExample, editorText, openFromBadge, previewReady, source, openBoards, closeBoards } from './helpers';
 import { downloadExport, selectMenuOption } from './menu';
 
 test.use({ viewport: { width: 1440, height: 900 } });
@@ -145,7 +145,9 @@ test('edits connections on the correct nested board of a connected canvas and pr
   await page.goto('/'); await previewReady(page);
   await chooseExample(page, /^Flows & mind maps/);
   const original = await editorText(page);
+  await openBoards(page);
   await page.getByRole('checkbox', { name: 'Show all layers', exact: true }).check();
+  await closeBoards(page);
   const nested = page.locator('.zf-stage [data-connection-board="root.layers.Plan the launch.layers.Onboarding"][data-flow-connection="0"]');
   await expect(nested).toBeAttached();
   await nested.focus(); await page.keyboard.press('F2');

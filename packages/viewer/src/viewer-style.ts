@@ -43,5 +43,7 @@ export const viewerStyle = `
   .zf-zoom-controls button { min-width: 44px; min-height: 44px; }
 }
 .zf-link-hint[hidden], .zf-pan-hint[hidden], .zf-context[hidden] { display: none; }
-.zf-stage a:not([data-missing]):hover { outline: 2px solid var(--focus); outline-offset: 3px; }
+.zf-stage a:not([data-missing]):not(:has(> .zf-canvas-selected)):hover { outline: 2px solid var(--focus); outline-offset: 3px; }
+.zf-board-snapshot { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: fill; pointer-events: none; }
+.zf-return-highlight { position: absolute; pointer-events: none; border: 2px solid var(--focus, #477de5); border-radius: 12px; }
 `;

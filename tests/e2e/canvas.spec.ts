@@ -286,7 +286,7 @@ for (const offline of [false, true]) test(`compact breadcrumbs retain every ance
     await expect(page.locator('.zf-stage')).toHaveAttribute('data-board', id);
   }
   expect((await crumbs.boundingBox())!.height).toBe(initialHeight);
-  await expect(crumbs.getByRole('button')).toHaveText(['Root', '…', 'charge', 'capture']);
+  await expect(crumbs.getByRole('button')).toHaveText(['nested', '…', 'charge', 'capture']);
   const earlier = crumbs.getByRole('button', { name: 'Earlier boards', exact: true });
   await earlier.click();
   const menu = crumbs.getByRole('group', { name: 'Earlier boards' });
@@ -326,7 +326,7 @@ test('appearance is separate from export and desktop canvas controls stay outsid
   await page.goto('/');
   await previewReady(page);
   await expect(page.locator('#header-more-content')).toBeHidden();
-  await page.getByLabel('Theme', { exact: true }).selectOption('dark');
+  await selectMenuOption(page, '#theme', 'dark');
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
   await expect(page.locator('#header-more-content')).toBeHidden();
   const canvas = (await page.locator('.zf-stage').boundingBox())!;

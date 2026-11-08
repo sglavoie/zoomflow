@@ -31,6 +31,7 @@ export function setupExportMenu(activePane: () => DocumentPane | undefined, pick
   function setMoreOpen(open: boolean) {
     moreContent.hidden = !open;
     moreToggle.setAttribute('aria-expanded', String(open));
+    if (open) void updateThumbnail(); else ++thumbnailRevision;
   }
   moreToggle.addEventListener('click', () => { showName(); setMoreOpen(Boolean(moreContent.hidden)); });
   document.addEventListener('click', (event) => { if (event.target instanceof Node && !more.contains(event.target)) setMoreOpen(false); });
@@ -117,6 +118,54 @@ export function setupExportMenu(activePane: () => DocumentPane | undefined, pick
 
   const exportButton = document.querySelector<HTMLButtonElement>('#export')!;
   const copyPngButton = document.querySelector<HTMLButtonElement>('#copy-board-png')!;
+  const previewButton = document.querySelector<HTMLButtonElement>('#open-export-preview')!;
+  const thumbnail = document.querySelector<HTMLImageElement>('#export-preview img')!;
+  const thumbnailCaption = document.querySelector<HTMLElement>('#export-preview figcaption')!;
+  let thumbnailRevision = 0;
+  let thumbnailKey = '';
+  let thumbnailUrl: string | undefined;
+  function clearThumbnail() {
+    if (thumbnailUrl) URL.revokeObjectURL(thumbnailUrl);
+    thumbnailUrl = undefined;
+    thumbnail.hidden = true;
+    thumbnail.removeAttribute('src');
+  }
+  async function updateThumbnail() {
+    const request = ++thumbnailRevision;
+    const pane = activePane();
+    const loaded = pane?.documentExport;
+    const board = pane?.viewer.currentBoard;
+    if (moreContent.hidden) return;
+    if (!pane || !loaded || !board || !pane.current) {
+      clearThumbnail(); thumbnailKey = '';
+      thumbnailCaption.textContent = 'Preview will appear when the diagram is ready.';
+      return;
+    }
+    const format = exportFormat.value;
+    const image = format === 'svg' || format === 'png';
+    const dark = document.documentElement.dataset.theme === 'dark';
+    const key = JSON.stringify([pane.key, pane.generation, image ? board.id : 'root', format, dark, pane.viewer.documentView]);
+    if (key === thumbnailKey && thumbnailUrl) return;
+    clearThumbnail();
+    thumbnailCaption.textContent = 'Preparing export preview…';
+    const view = pane.viewer.exportView(loaded.diagram, loaded.render);
+    try {
+      const prepared = image ? await boardImage(pane, view.render, board.target, dark)
+        : await prepareExportSvg(await view.render(''), dark, { interactive: format === 'html' || format === 'atlas' });
+      if (request !== thumbnailRevision || moreContent.hidden || pane.documentExport !== loaded || activePane() !== pane) return;
+      thumbnailUrl = URL.createObjectURL(new Blob([prepared.svg], { type: 'image/svg+xml' }));
+      thumbnail.src = thumbnailUrl;
+      thumbnail.hidden = false;
+      thumbnailKey = key;
+      thumbnailCaption.textContent = image ? 'Your image, with export visibility applied.'
+        : format === 'html' || format === 'atlas' ? 'Opening board · explore every included board in Open preview.' : 'First board · one image per included board in the ZIP.';
+      if (prepared.warnings.length) thumbnailCaption.textContent += ` ${prepared.warnings.join(' ')}`;
+    } catch {
+      if (request === thumbnailRevision) { clearThumbnail(); thumbnailKey = ''; thumbnailCaption.textContent = 'Preview unavailable. Try opening Export again.'; }
+    }
+  }
+  window.addEventListener('pagehide', () => { ++thumbnailRevision; clearThumbnail(); });
+  new MutationObserver(() => void updateThumbnail()).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
   const resetVisibility = document.querySelector<HTMLButtonElement>('#reset-export-visibility')!;
   resetVisibility.addEventListener('click', () => {
     const pane = activePane();
@@ -173,6 +222,9 @@ export function setupExportMenu(activePane: () => DocumentPane | undefined, pick
       html: 'Download HTML', atlas: 'Download atlas HTML' } as Record<string, string>)[exportFormat.value] ?? 'Download export';
     copyPngButton.hidden = exportFormat.value !== 'png';
     copyPngButton.disabled = !canExport();
+    previewButton.hidden = !['html', 'atlas'].includes(exportFormat.value);
+    previewButton.disabled = !canExport();
+    void updateThumbnail();
   }
   function rememberExportFormat() {
     explicitExportFormat = true;
@@ -229,22 +281,31 @@ export function setupExportMenu(activePane: () => DocumentPane | undefined, pick
     } finally { exporting = false; updateExportLabel(); }
   });
 
-  exportButton.addEventListener('click', async () => {
+  async function performExport(preview = false) {
     const pane = activePane()!;
     const loaded = pane.documentExport;
     const board = pane.viewer.currentBoard;
     if (!loaded || !board || !canExport()) return;
+    // Reserve a tab during the click, before compilation, so popup blocking never loses a completed preview.
+    const previewWindow = preview ? window.open('about:blank', '_blank') : undefined;
+    if (preview && !previewWindow) { reportExport('Allow a new tab to open the preview, or download the HTML file.', 'error', pane); return; }
+    if (previewWindow) {
+      previewWindow.opener = null;
+      previewWindow.document.title = 'Preparing Zoomflow preview';
+      previewWindow.document.body.textContent = 'Preparing your interactive diagram…';
+    }
     const exportRevision = pane.generation;
     const view = pane.viewer.exportView(loaded.diagram, loaded.render);
     exporting = true;
     exportButton.disabled = true;
     copyPngButton.disabled = true;
+    previewButton.disabled = true;
     const format = exportFormat.value;
     const pngZip = format === 'png-zip';
     const zip = format === 'zip' || pngZip;
     const formatName = pngZip ? 'PNG ZIP' : format === 'zip' ? 'SVG ZIP' : format === 'atlas' ? 'atlas' : format.toUpperCase();
     const renderOptions = { extension: pngZip ? 'png' as const : 'svg' as const };
-    reportExport(`Preparing ${formatName} download…`, 'info', pane);
+    reportExport(`Preparing ${formatName} ${preview ? 'preview' : 'download'}…`, 'info', pane);
     const dark = document.documentElement.dataset.theme === 'dark';
     const exportName = pane.name.replace(/\.d2$/i, '');
     const warnings: string[] = [];
@@ -310,6 +371,7 @@ export function setupExportMenu(activePane: () => DocumentPane | undefined, pick
       } else if (format === 'atlas' || (zip && isProject(pane))) {
         const documents = await atlasDocuments();
         if (!documents) {
+          previewWindow?.close();
           reportExport('Export canceled because the source changed.', 'info', pane);
           return;
         }
@@ -335,17 +397,28 @@ export function setupExportMenu(activePane: () => DocumentPane | undefined, pick
         name += pngZip ? '-png.zip' : `.${format}`;
       }
       if (canceled()) {
+        previewWindow?.close();
         reportExport('Export canceled because the source changed.', 'info', pane);
         return;
       }
-      download(blob, name);
-      const result = warnings.length ? `Download started: ${name}. ${[...new Set(warnings)].join(' ')}` : `Download started: ${name}`;
+      if (previewWindow) {
+        if (previewWindow.closed) { reportExport('Preview canceled because its tab was closed.', 'info', pane); return; }
+        const url = URL.createObjectURL(blob);
+        previewWindow.location.replace(url);
+        // The loaded page owns its data; release the blob after the tab has had time to navigate.
+        setTimeout(() => URL.revokeObjectURL(url), 60_000);
+      } else download(blob, name);
+      const message = preview ? 'Interactive preview opened in a new tab.' : `Download started: ${name}`;
+      const result = warnings.length ? `${message} ${[...new Set(warnings)].join(' ')}` : message;
       reportExport(result, warnings.length > 0 ? 'error' : 'info', pane);
     } catch (error) {
+      previewWindow?.close();
       reportExport(`Export failed: ${describeError(error)}`, 'error', pane);
     }
     finally { exporting = false; updateExportLabel(); }
-  });
+  }
+  exportButton.addEventListener('click', () => void performExport());
+  previewButton.addEventListener('click', () => void performExport(true));
 
   return {
     setExportStatus,

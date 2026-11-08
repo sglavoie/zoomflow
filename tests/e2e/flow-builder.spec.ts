@@ -13,6 +13,7 @@ test('creates, revisits, edits and recovers a flow without typing diagram syntax
   await dialog.getByRole('button', { name: 'Approval with Yes / No' }).click();
   await dialog.getByLabel('Step 1 name').fill('Submit holiday request');
   await dialog.getByLabel('Layout').selectOption('right');
+  await dialog.getByText('Customize style', { exact: true }).click();
   await dialog.getByLabel('Filled shapes').check();
   await dialog.getByLabel('Shadows').check();
   await dialog.getByRole('button', { name: 'Create flow', exact: true }).click();

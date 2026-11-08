@@ -25,9 +25,9 @@ export function setupLinkPreview(scope: PaneScope, viewer: Viewer, files: Linked
   card.id = scope.id('link-preview');
   card.setAttribute('role', 'tooltip');
   card.hidden = true;
-  card.innerHTML = '<img alt="" /><strong></strong><span></span>';
+  card.innerHTML = '<img alt="" /><strong></strong><span></span><small>Open board ↗</small>';
   scope.root.append(card);
-  const [picture, title, summary] = card.children as unknown as [HTMLImageElement, HTMLElement, HTMLElement];
+  const [picture, title, summary, cue] = card.children as unknown as [HTMLImageElement, HTMLElement, HTMLElement, HTMLElement];
   let compiledDocument: { boards: Map<string, Board>; sites: BoardSites; render: RenderBoard } | undefined;
   /** One picture per board for each compiled document. */
   let pictures = new Map<string, Promise<string>>();
@@ -77,6 +77,7 @@ export function setupLinkPreview(scope: PaneScope, viewer: Viewer, files: Linked
     const board = target.kind === 'board' ? compiledDocument?.boards.get(target.target) : undefined;
     if (!board || !compiledDocument) return;
     open(anchor, board.name, describe(board));
+    cue.textContent = 'Open board ↗';
     await showPicture(anchor, pictures, board.id, () => compiledDocument!.render(board.target));
   }
   /** The linked file's board: its root, or the fragment's board or nearest existing ancestor. */
@@ -84,6 +85,7 @@ export function setupLinkPreview(scope: PaneScope, viewer: Viewer, files: Linked
     const label = files.label(path);
     const missing = files.missing(path);
     open(anchor, label, missing ?? 'Diagram file');
+    cue.textContent = missing ? 'File unavailable' : 'Open diagram ↗';
     if (missing) return;
     const current = pictures;
     let file: Awaited<ReturnType<LinkedFiles['compile']>>;

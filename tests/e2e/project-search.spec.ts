@@ -1,3 +1,4 @@
+import { selectMenuOption } from './menu';
 import { expect, test, type Page } from '@playwright/test';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -38,7 +39,7 @@ async function settled(page: Page) {
   await expect(dialog(page).getByRole('status').filter({ hasText: 'Searched 6 files.' })).toBeVisible();
 }
 async function chooseSecond(page: Page, path: string) {
-  await page.selectOption('#layout', 'quad');
+  await selectMenuOption(page, '#layout', 'quad');
   await page.locator('#pane-choose-b').click();
   await page.getByRole('region', { name: 'atlas project', exact: true }).getByRole('button', { name: 'atlas', exact: true }).click();
   await page.locator(`.example-option[title="atlas/${path}"]`).click();

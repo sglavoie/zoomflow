@@ -13,7 +13,7 @@ interface Context {
   ready: () => boolean;
   viewer: Viewer;
   shapeLabel: (board: string, shape: string) => string;
-  pending: { source: string; board?: string; replace?: boolean; shape?: string; rename?: boolean; view?: DocumentView; } | undefined;
+  pending: { source: string; board?: string; replace?: boolean; shape?: string; rename?: boolean; emphasize?: boolean; view?: DocumentView; } | undefined;
   sites: BoardSites | undefined;
   boardId: () => string;
   shapeCache: { own: string; trail: string; find: (shape: string) => CanvasShape | undefined } | undefined;
@@ -145,7 +145,7 @@ export function setupBoardActions(ctx: Context) {
     if (board !== ctx.boardId()) ctx.boardMoves = [...ctx.boardMoves.slice(-49), { before: { source: ctx.options.source(), board: ctx.boardId() }, after: { source: updated.source, board } }];
     // A press elsewhere on the diagram that finished a rename selects what it landed on instead.
     const shown = landed !== undefined ? landed ?? undefined : result.select;
-    ctx.pending = { source: updated.source, ...moves, ...shown ? { shape: shown, rename: added && shown === result.select && shown !== shape } : {} };
+    ctx.pending = { source: updated.source, ...moves, emphasize: added, ...shown ? { shape: shown, rename: added && shown === result.select && shown !== shape } : {} };
     ctx.options.update(updated.source);
     if (edits.some(change => change.type === 'remove')) ctx.options.status(`Removed “${label}”. ${undoHint}`);
   }

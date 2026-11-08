@@ -1,3 +1,4 @@
+import { selectMenuOption } from './menu';
 import { expect, test } from '@playwright/test';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -238,7 +239,7 @@ test('the second pane follows file links on its own', async ({ page }) => {
   await page.goto('/');
   await openFolder(page, atlas);
   await showing(page, 'index.d2');
-  await page.selectOption('#layout', 'tabs');
+  await selectMenuOption(page, '#layout', 'tabs');
   await page.locator('#pane-choose-b').click();
   const project = page.locator('#draft-options .project-toggle');
   // The menu folds projects the target pane is not showing once it opens.

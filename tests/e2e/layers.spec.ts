@@ -1,6 +1,6 @@
 import { readFile } from 'node:fs/promises';
 import { expect, test, type Page } from '@playwright/test';
-import { board, chooseExample, comparesVisuals, editorText, openFromBadge, previewReady, selectSource, visualSkipReason } from './helpers';
+import { board, chooseExample, comparesVisuals, editorText, openFromBadge, previewReady, selectSource, visualSkipReason, openBoards, closeBoards } from './helpers';
 import { downloadExport, selectMenuOption } from './menu';
 
 test.use({ viewport: { width: 1440, height: 900 }, reducedMotion: 'reduce' });
@@ -17,21 +17,25 @@ async function open(page: Page) {
 test('increases and decreases visible depth and keeps it relative to a focused board', async ({ page }) => {
   await open(page);
   const source = await editorText(page);
-  const depth = page.getByRole('spinbutton', { name: 'Layer depth', exact: true });
-  const less = page.getByRole('button', { name: 'Decrease layer depth', exact: true });
-  const more = page.getByRole('button', { name: 'Increase layer depth', exact: true });
+  const depth = page.getByRole('spinbutton', { name: 'Layer depth', exact: true, includeHidden: true });
+  const less = page.getByRole('button', { name: 'Decrease layer depth', exact: true, includeHidden: true });
+  const more = page.getByRole('button', { name: 'Increase layer depth', exact: true, includeHidden: true });
   await expect(depth).toHaveValue('0');
   await expect(less).toBeDisabled();
+  await openBoards(page);
   await more.click();
   await expect(depth).toHaveValue('1');
   await expect(layers(page)).toHaveCount(3);
   await expect(stage(page).locator('[data-layer-board="root.layers.Plan the launch.layers.Onboarding"]')).toHaveCount(0);
+  await openBoards(page);
   await more.click();
   await expect(depth).toHaveValue('2');
   await expect(layers(page)).toHaveCount(4);
   await expect(more).toBeDisabled();
+  await openBoards(page);
   await less.click();
   await expect(layers(page)).toHaveCount(3);
+  await openBoards(page);
   await depth.fill('2'); await depth.press('Enter');
   await expect(layers(page)).toHaveCount(4);
   await openFromBadge(page, 'Open Plan the launch board');
@@ -39,6 +43,7 @@ test('increases and decreases visible depth and keeps it relative to a focused b
   await expect(depth).toHaveValue('1');
   await expect(depth).toHaveAttribute('max', '1');
   await expect(layers(page)).toHaveCount(2);
+  await openBoards(page);
   await less.click();
   await expect(depth).toHaveValue('0');
   await expect(layers(page)).toHaveCount(1);
@@ -48,15 +53,17 @@ test('increases and decreases visible depth and keeps it relative to a focused b
 
 test('a custom branch selection can return to a uniform depth', async ({ page }) => {
   await open(page);
-  const depth = page.getByRole('spinbutton', { name: 'Layer depth', exact: true });
+  const depth = page.getByRole('spinbutton', { name: 'Layer depth', exact: true, includeHidden: true });
+  await openBoards(page);
   await depth.fill('2'); await depth.press('Enter');
   await expect(layers(page)).toHaveCount(4);
-  await page.locator('.board-outline summary').click();
+  await openBoards(page);
   await page.getByRole('checkbox', { name: 'Show Build and test layer', exact: true }).uncheck();
   await expect(layers(page)).toHaveCount(3);
   await expect(depth).toHaveValue('');
   await expect(depth).toHaveAttribute('placeholder', 'Custom');
   await page.keyboard.press('Escape');
+  await openBoards(page);
   await page.getByRole('button', { name: 'Decrease layer depth', exact: true }).click();
   await expect(depth).toHaveValue('1');
   await expect(layers(page)).toHaveCount(3);
@@ -67,10 +74,12 @@ test('a custom branch selection can return to a uniform depth', async ({ page })
 test('shows connected nested layers and toggles branches without changing the source', async ({ page }) => {
   await open(page);
   const source = await editorText(page);
+  await openBoards(page);
   await page.getByRole('checkbox', { name: 'Show all layers', exact: true }).check();
+  await closeBoards(page);
   await expect(layers(page)).toHaveCount(4);
   await expect(stage(page).locator('[data-layer-link]')).toHaveCount(3);
-  await page.locator('.board-outline summary').click();
+  await openBoards(page);
   const parent = page.getByRole('checkbox', { name: 'Show Plan the launch layer', exact: true });
   const child = page.getByRole('checkbox', { name: 'Show Onboarding layer', exact: true });
   await parent.uncheck();
@@ -83,9 +92,13 @@ test('shows connected nested layers and toggles branches without changing the so
   await expect(layers(page)).toHaveCount(3);
   await expect(parent).toBeChecked();
   await page.keyboard.press('Escape');
+  await openBoards(page);
   await page.getByRole('checkbox', { name: 'Show all layers', exact: true }).check();
+  await closeBoards(page);
   await expect(layers(page)).toHaveCount(4);
+  await openBoards(page);
   await page.getByRole('checkbox', { name: 'Show all layers', exact: true }).uncheck();
+  await closeBoards(page);
   await expect(layers(page)).toHaveCount(0);
   await board(page, 'root');
   expect(await editorText(page)).toBe(source);
@@ -93,7 +106,9 @@ test('shows connected nested layers and toggles branches without changing the so
 
 test('edits a shape in its own layer when IDs repeat and keeps the expanded view through undo', async ({ page }) => {
   await open(page);
+  await openBoards(page);
   await page.getByRole('checkbox', { name: 'Show all layers', exact: true }).check();
+  await closeBoards(page);
   await expect(layers(page)).toHaveCount(4);
   const target = layerShape(page, 'root.layers.Build and test', 'step_1');
   await target.click();
@@ -119,7 +134,7 @@ test('expands a nested board and toggles its descendants without showing the doc
   const parent = 'root.layers.Plan the launch';
   const child = `${parent}.layers.Onboarding`;
   await board(page, parent);
-  await page.locator('.board-outline summary').click();
+  await openBoards(page);
   await page.getByRole('checkbox', { name: 'Show Onboarding layer', exact: true }).check();
   await expect(layers(page)).toHaveCount(2);
   await expect(stage(page)).toHaveAttribute('data-layer-root', parent);
@@ -129,13 +144,15 @@ test('expands a nested board and toggles its descendants without showing the doc
   await page.getByRole('checkbox', { name: 'Show Onboarding layer', exact: true }).uncheck();
   await expect(layers(page)).toHaveCount(1);
   await page.keyboard.press('Escape');
+  await openBoards(page);
   await page.getByRole('checkbox', { name: 'Show all layers', exact: true }).check();
+  await closeBoards(page);
   await expect(layers(page)).toHaveCount(2);
   await openFromBadge(page, 'Open Onboarding board');
   await board(page, child);
   await expect(stage(page)).toHaveAttribute('data-layer-root', child);
   await expect(layers(page)).toHaveCount(1);
-  await page.getByRole('navigation', { name: 'Breadcrumb' }).getByRole('button', { name: 'Root', exact: true }).click();
+  await page.getByRole('navigation', { name: 'Breadcrumb' }).getByRole('button').first().click();
   await board(page, 'root');
   await expect(layers(page)).toHaveCount(4);
   await page.goBack();
@@ -148,13 +165,17 @@ test('expands a nested board and toggles its descendants without showing the doc
 
 test('can make a selected child the starting board of an expanded view', async ({ page }) => {
   await open(page);
+  await openBoards(page);
   await page.getByRole('checkbox', { name: 'Show all layers', exact: true }).check();
+  await closeBoards(page);
   await expect(layers(page)).toHaveCount(4);
   const child = 'root.layers.Plan the launch';
   await layerShape(page, child, 'n_1').click();
   await board(page, child);
   await expect(layers(page)).toHaveCount(4);
+  await openBoards(page);
   await page.getByRole('checkbox', { name: 'Show all layers', exact: true }).check();
+  await closeBoards(page);
   await expect(stage(page)).toHaveAttribute('data-layer-root', child);
   await expect(layers(page)).toHaveCount(2);
   await expect(stage(page).locator('[data-layer-board="root"]')).toHaveCount(0);
@@ -165,14 +186,18 @@ test('focuses the selected board and its descendants directly from the connected
   const source = await editorText(page);
   const focus = page.getByRole('button', { name: 'Focus this board', exact: true });
   await expect(focus).toBeHidden();
+  await openBoards(page);
   await page.getByRole('checkbox', { name: 'Show all layers', exact: true }).check();
+  await closeBoards(page);
   await expect(layers(page)).toHaveCount(4);
   await expect(focus).toBeHidden();
   const child = 'root.layers.Plan the launch';
   await layerShape(page, child, 'n_1').click();
   await board(page, child);
   await expect(layers(page)).toHaveCount(4);
+  await openBoards(page);
   await expect(focus).toBeVisible();
+  await openBoards(page);
   await focus.click();
   await expect(stage(page)).toHaveAttribute('data-layer-root', child);
   await expect(layers(page)).toHaveCount(2);
@@ -185,7 +210,9 @@ test('focuses the selected board and its descendants directly from the connected
   const leaf = `${child}.layers.Onboarding`;
   await layerShape(page, leaf, 'step_1').focus();
   await board(page, leaf);
+  await openBoards(page);
   await focus.focus();
+  await openBoards(page);
   await focus.press('Enter');
   await expect(stage(page)).toHaveAttribute('data-layer-root', leaf);
   await expect(layers(page)).toHaveCount(1);
@@ -193,7 +220,7 @@ test('focuses the selected board and its descendants directly from the connected
   await page.keyboard.press('Escape');
   await board(page, child);
   await expect(layers(page)).toHaveCount(2);
-  await page.getByRole('navigation', { name: 'Breadcrumb' }).getByRole('button', { name: 'Root', exact: true }).click();
+  await page.getByRole('navigation', { name: 'Breadcrumb' }).getByRole('button').first().click();
   await board(page, 'root');
   await expect(layers(page)).toHaveCount(4);
   expect(await editorText(page)).toBe(source);
@@ -202,22 +229,27 @@ test('focuses the selected board and its descendants directly from the connected
 test('focusing a selected board keeps the chosen depth and custom branch visibility', async ({ page }) => {
   await open(page);
   const child = 'root.layers.Plan the launch';
-  const depth = page.getByRole('spinbutton', { name: 'Layer depth', exact: true });
+  const depth = page.getByRole('spinbutton', { name: 'Layer depth', exact: true, includeHidden: true });
   const focus = page.getByRole('button', { name: 'Focus this board', exact: true });
+  await openBoards(page);
   await depth.fill('1'); await depth.press('Enter');
   await expect(layers(page)).toHaveCount(3);
   await layerShape(page, child, 'n_1').click();
+  await openBoards(page);
   await focus.click();
   await expect(stage(page)).toHaveAttribute('data-layer-root', child);
   await expect(layers(page)).toHaveCount(2);
   await expect(depth).toHaveValue('1');
-  await page.getByRole('navigation', { name: 'Breadcrumb' }).getByRole('button', { name: 'Root', exact: true }).click();
+  await page.getByRole('navigation', { name: 'Breadcrumb' }).getByRole('button').first().click();
   await expect(layers(page)).toHaveCount(3);
+  await openBoards(page);
   await page.getByRole('checkbox', { name: 'Show all layers', exact: true }).check();
-  await page.locator('.board-outline summary').click();
+  await closeBoards(page);
+  await openBoards(page);
   await page.getByRole('checkbox', { name: 'Show Onboarding layer', exact: true }).uncheck();
   await page.keyboard.press('Escape');
   await layerShape(page, child, 'n_1').click();
+  await openBoards(page);
   await focus.click();
   await expect(stage(page)).toHaveAttribute('data-layer-root', child);
   await expect(layers(page)).toHaveCount(1);
@@ -229,7 +261,9 @@ test('shares a child centre with its parent and restores it in a focused view', 
   const source = await editorText(page);
   const child = 'root.layers.Plan the launch';
   const center = layerShape(page, child, 'n');
+  await openBoards(page);
   await page.getByRole('checkbox', { name: 'Show all layers', exact: true }).check();
+  await closeBoards(page);
   await expect(layers(page)).toHaveCount(4);
   await expect(center).toHaveCount(0);
   await expect(layerShape(page, 'root', 'step_2')).toContainText('Plan the launch');
@@ -240,7 +274,7 @@ test('shares a child centre with its parent and restores it in a focused view', 
   await openFromBadge(page, 'Open Plan the launch board');
   await board(page, child);
   await expect(center).toContainText('Plan the launch');
-  await page.getByRole('navigation', { name: 'Breadcrumb' }).getByRole('button', { name: 'Root', exact: true }).click();
+  await page.getByRole('navigation', { name: 'Breadcrumb' }).getByRole('button').first().click();
   await expect(center).toHaveCount(0);
   // Source reveal can still focus and edit a centre that is shared in the larger view.
   await layerShape(page, child, 'n_1').click();
@@ -261,7 +295,9 @@ test('merges repeated centres across generated detail boards while keeping the f
   await dialog.getByRole('button', { name: 'Create mind map', exact: true }).click();
   await previewReady(page);
   const source = await editorText(page);
+  await openBoards(page);
   await page.getByRole('checkbox', { name: 'Show all layers', exact: true }).check();
+  await closeBoards(page);
   await expect(layers(page)).toHaveCount(3);
   await expect(stage(page).locator('[data-merged-root]')).toHaveCount(2);
   await expect(stage(page).locator('[data-shape-id="n"]')).toHaveCount(1);
@@ -276,9 +312,11 @@ test('merges repeated centres across generated detail boards while keeping the f
 
 test('exports just the visible layers together as SVG and PNG', async ({ page }, info) => {
   await open(page);
+  await openBoards(page);
   await page.getByRole('checkbox', { name: 'Show all layers', exact: true }).check();
+  await closeBoards(page);
   await expect(layers(page)).toHaveCount(4);
-  await page.locator('.board-outline summary').click();
+  await openBoards(page);
   await page.getByRole('checkbox', { name: 'Show Onboarding layer', exact: true }).uncheck();
   await expect(layers(page)).toHaveCount(3);
   await page.keyboard.press('Escape');
@@ -309,23 +347,28 @@ test.describe('touch', () => {
   test.use({ hasTouch: true, viewport: { width: 390, height: 844 } });
   test('expands and collapses layers on a phone without overflowing the page', async ({ page }) => {
     await open(page);
+    await openBoards(page);
     await page.getByRole('button', { name: 'Increase layer depth', exact: true }).tap();
     await expect(layers(page)).toHaveCount(3);
-    await expect(page.getByRole('spinbutton', { name: 'Layer depth', exact: true })).toHaveValue('1');
+    await expect(page.getByRole('spinbutton', { name: 'Layer depth', exact: true, includeHidden: true })).toHaveValue('1');
+    await openBoards(page);
     await page.getByRole('checkbox', { name: 'Show all layers', exact: true }).check();
+    await closeBoards(page);
     await expect(layers(page)).toHaveCount(4);
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
     const child = 'root.layers.Plan the launch';
     await layerShape(page, child, 'n_1').tap();
     const focus = page.getByRole('button', { name: 'Focus this board', exact: true });
+    await openBoards(page);
     await expect(focus).toBeVisible();
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
+    await openBoards(page);
     await focus.tap();
     await expect(stage(page)).toHaveAttribute('data-layer-root', child);
     await expect(layers(page)).toHaveCount(2);
-    await page.getByRole('navigation', { name: 'Breadcrumb' }).getByRole('button', { name: 'Root', exact: true }).tap();
+    await page.getByRole('navigation', { name: 'Breadcrumb' }).getByRole('button').first().tap();
     await expect(layers(page)).toHaveCount(4);
-    await page.locator('.board-outline summary').tap();
+    await openBoards(page);
     await page.getByRole('checkbox', { name: 'Show Plan the launch layer', exact: true }).uncheck();
     await expect(layers(page)).toHaveCount(2);
     await page.keyboard.press('Escape');
@@ -337,7 +380,9 @@ for (const theme of ['light', 'dark'] as const) test(`connected canvas appearanc
   test.skip(!comparesVisuals(browserName), visualSkipReason);
   await page.emulateMedia({ colorScheme: theme });
   await open(page);
+  await openBoards(page);
   await page.getByRole('checkbox', { name: 'Show all layers', exact: true }).check();
+  await closeBoards(page);
   await expect(layers(page)).toHaveCount(4);
   await page.evaluate(() => document.fonts.ready);
   await expect(stage(page)).toHaveScreenshot(`connected-layers-${theme}.png`);

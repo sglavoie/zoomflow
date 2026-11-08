@@ -117,10 +117,11 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
     },
     open: (path: string, hash: string) => openFileLink(path, hash),
     label: fileLabel,
-    // A project file's root board is named after the file; the atlas map keeps Root.
+    // Project paths distinguish files with the same basename in breadcrumbs.
     name: () => showsAtlas() ? undefined : projectLabel(picker().inputPath(id)),
   };
   const viewer = new Viewer(part('viewer'), { history: id === 'a', active: shared.isActive,
+    name: () => showsAtlas() ? 'Atlas' : documentName.replace(/\.d2$/i, '') || undefined,
     // Steps and topics open their board from the arrow badge, so a click on the shape selects it to edit.
     follows: (link, event) => (link as SVGElement).dataset.follow !== 'badge' || event instanceof KeyboardEvent ||
       Boolean(event.target instanceof Element && event.target.closest('.appendix-icon')),
@@ -205,6 +206,7 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
   const boardTools = setupBoardTools(scope, viewer, {
     builders: { flow: shared.flowBuilder, 'mind map': shared.mindMapBuilder },
     source: () => editor.source,
+    document: () => currentDocumentKey,
     update: (source) => {
       immediate = true;
       editor.replaceSource(source);
@@ -315,6 +317,7 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
     }
     currentDocumentKey = saved.key;
     documentName = saved.name;
+    viewer.refreshName();
     setActivity('');
     // Identity changes do not invalidate compiled geometry or editor history.
     picker().refresh();

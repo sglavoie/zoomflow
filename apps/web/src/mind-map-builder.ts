@@ -2,10 +2,11 @@ import { guardBuilderDialog, lookControls, lookFields, type BuilderTarget } from
 import { cleanLabel, flowFilename, plainLook } from './flow-model';
 import { countTopics, mindMapExample, mindMapSource, outlineText, parseOutline, readMindMap, type MindMap } from './mind-map-model';
 import { plural, setText } from './text';
+import { setupBuilderPreview, type CompileBuilderPreview } from './builder-preview';
 
 /** One outline dialog: New mind map creates a draft, and each pane opens it to add or edit a mind map board. */
 export function setupMindMapBuilder(create: (source: string, name: string) => void,
-  confirmDiscard: (title: string, description: string, action: string, focus: () => void) => Promise<boolean>) {
+  confirmDiscard: (title: string, description: string, action: string, focus: () => void) => Promise<boolean>, compilePreview?: CompileBuilderPreview) {
   const launch = document.querySelector<HTMLButtonElement>('#new-mind-map')!;
   const dialog = document.createElement('dialog');
   dialog.id = 'mind-map-builder';
@@ -58,6 +59,7 @@ export function setupMindMapBuilder(create: (source: string, name: string) => vo
   const draft = (): BuilderTarget => ({ mode: 'draft', name: 'My mind map',
     apply: (source, title) => { create(source, flowFilename(title, 'My mind map')); } });
   let target = draft();
+  const preview = setupBuilderPreview(dialog, () => { const map = current(); return map && mindMapSource(map); }, () => target.mode === 'draft', compilePreview);
 
   function current(): MindMap | undefined {
     const root = parseOutline(outline.value);
@@ -70,6 +72,7 @@ export function setupMindMapBuilder(create: (source: string, name: string) => vo
     setText(feedback, topics ? `${plural(topics, 'topic')} · ${boards ? plural(boards, 'detail board') : 'one board'}` : 'Write a central topic to begin.');
     outline.setCustomValidity(topics ? '' : 'Write a central topic on the first line.');
     error.hidden = true;
+    preview.update();
   }
   /** Indent or outdent every line the selection touches, keeping the browser's undo history. */
   function shift(direction: 1 | -1) {
@@ -121,6 +124,7 @@ export function setupMindMapBuilder(create: (source: string, name: string) => vo
     snapshot = formState();
     returnFocus.focus({ preventScroll: true });
     dialog.showModal();
+    preview.update();
     (editing ? outline : name).focus();
     outline.setSelectionRange(0, 0);
     outline.scrollTop = 0;

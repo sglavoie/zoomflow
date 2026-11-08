@@ -1,3 +1,4 @@
+import { selectMenuOption } from './menu';
 import { expect, test } from '@playwright/test';
 import { d2Module, regularFont, source, previewReady } from './helpers';
 
@@ -129,7 +130,7 @@ test('editing the other pane keeps a stalled pane\'s restart notice', async ({ p
   });
   await page.setViewportSize({ width: 1600, height: 900 });
   await page.goto('/'); await previewReady(page);
-  await page.selectOption('#layout', 'quad');
+  await selectMenuOption(page, '#layout', 'quad');
   await page.locator('#pane-start-empty-b').click();
   await previewReady(page, 'b');
   await page.clock.install();

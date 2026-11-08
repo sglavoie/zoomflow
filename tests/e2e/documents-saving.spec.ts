@@ -1,3 +1,4 @@
+import { selectMenuOption } from './menu';
 import { expect, test } from '@playwright/test';
 import { openDownloads } from './menu';
 import { source, previewReady, stubAiStatus, chooseExample } from './helpers';
@@ -31,7 +32,7 @@ test('two drafts opened from the same disk file cannot overwrite a pending save'
   await page.locator('#file').click();
   await expect(page.locator('#filename')).toHaveText('shared.d2');
   await source(page).fill('x: First draft');
-  await page.selectOption('#layout', 'quad');
+  await selectMenuOption(page, '#layout', 'quad');
   await page.locator('#pane-start-empty-b').click();
   await page.locator('#file').click();
   await expect(page.locator('#pane-document-b .pane-document-name')).toHaveText('shared.d2');
@@ -71,7 +72,7 @@ test('a slow save follows an example moved to the other pane and prevents overla
   });
   await page.goto('/');
   await previewReady(page);
-  await page.selectOption('#layout', 'quad');
+  await selectMenuOption(page, '#layout', 'quad');
   await source(page).fill('x: Source being saved');
   await page.locator('#save-file').click();
   await expect.poll(() => page.evaluate(() => typeof (window as any).saveProbe.finish)).toBe('function');

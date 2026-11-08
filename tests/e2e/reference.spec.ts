@@ -1,11 +1,11 @@
 import { expect, test, type Page } from '@playwright/test';
 import { referenceTopics } from '../../apps/web/src/reference-data';
-import { source, previewReady, withEditorView } from './helpers';
+import { source, previewReady, withEditorView, openView } from './helpers';
 
 const panel = (page: Page) => page.getByRole('complementary', { name: 'D2 reference' });
 const search = (page: Page) => page.getByRole('searchbox', { name: 'Search D2 reference' });
 const divider = (page: Page) => page.getByRole('separator', { name: 'Resize diagram and reference' });
-const toggle = (page: Page) => page.getByRole('button', { name: 'D2 reference', exact: true });
+const toggle = (page: Page) => page.getByRole('button', { name: 'D2 reference', exact: true, includeHidden: true });
 
 async function ready(page: Page) {
   await page.goto('/');
@@ -54,6 +54,7 @@ test('diagram is on the left; toggling preserves search, scroll, split size, and
   const fullViewer = (await page.locator('#viewer').boundingBox())!;
   const editorBefore = (await page.locator('#source-pane').boundingBox())!;
   expect(fullViewer.x + fullViewer.width).toBeLessThanOrEqual(editorBefore.x + 1);
+  await openView(page);
   await toggle(page).click();
   const splitViewer = (await page.locator('#viewer').boundingBox())!;
   const reference = (await panel(page).boundingBox())!;
@@ -68,8 +69,9 @@ test('diagram is on the left; toggling preserves search, scroll, split size, and
   await page.keyboard.press('ArrowUp');
   await expect(divider(page)).toHaveAttribute('aria-valuenow', '55');
   await page.getByRole('button', { name: 'Close D2 reference' }).click();
-  await expect(toggle(page)).toBeFocused();
+  await expect(page.locator('#workspace-view > summary')).toBeFocused();
   expect((await page.locator('#viewer').boundingBox())!.height).toBeCloseTo(fullViewer.height, 0);
+  await openView(page);
   await toggle(page).click();
   await expect(search(page)).toHaveValue('style');
   await expect(divider(page)).toHaveAttribute('aria-valuenow', '55');
@@ -78,10 +80,12 @@ test('diagram is on the left; toggling preserves search, scroll, split size, and
 
 test('reference search restores its text and matching results after reload', async ({ page }) => {
   await ready(page);
+  await openView(page);
   await toggle(page).click();
   await search(page).fill('arrows');
   const count = await page.locator('#reference-count').textContent();
   await page.reload(); await previewReady(page);
+  await openView(page);
   await toggle(page).click();
   await expect(search(page)).toHaveValue('arrows');
   await expect(page.locator('#reference-count')).toHaveText(count!);
@@ -90,6 +94,7 @@ test('reference search restores its text and matching results after reload', asy
 
 test('divider supports dragging, keyboard bounds, and remembers its size after reload', async ({ page }) => {
   await ready(page);
+  await openView(page);
   await toggle(page).click();
   const before = (await page.locator('#viewer').boundingBox())!.height;
   const handle = (await divider(page).boundingBox())!;
@@ -106,18 +111,21 @@ test('divider supports dragging, keyboard bounds, and remembers its size after r
   await expect(divider(page)).toHaveAttribute('aria-valuenow', '75');
   await divider(page).press('ArrowUp');
   await page.reload();
+  await openView(page);
   await toggle(page).click();
   await expect(divider(page)).toHaveAttribute('aria-valuenow', '70');
 });
 
 test('double-clicking the reference divider resets and saves its default size', async ({ page }) => {
   await ready(page);
+  await openView(page);
   await toggle(page).click();
   await divider(page).press('End');
   await expect(divider(page)).toHaveAttribute('aria-valuenow', '75');
   await divider(page).dblclick();
   await expect(divider(page)).toHaveAttribute('aria-valuenow', '60');
   await page.reload();
+  await openView(page);
   await toggle(page).click();
   await expect(divider(page)).toHaveAttribute('aria-valuenow', '60');
 });
@@ -125,6 +133,7 @@ test('double-clicking the reference divider resets and saves its default size', 
 test('offline reference searches examples, copies exact source, and links to full documentation', async ({ page, context }) => {
   await ready(page);
   await context.setOffline(true);
+  await openView(page);
   await toggle(page).click();
   await expect(page.locator('.reference-topic:visible')).toHaveCount(referenceTopics.length);
   await search(page).fill('ARROWS');
@@ -176,10 +185,12 @@ test('reference controls preserve board navigation and focus follows the current
   await page.keyboard.press('Escape');
   await expect(source(page)).toBeFocused();
   await expect(page.locator('.zf-stage')).toHaveAttribute('data-board', 'root.layers.checkout');
+  await openView(page);
   await toggle(page).click();
   await source(page).focus();
   await page.keyboard.press('Meta+Shift+/');
   await expect(source(page)).toBeFocused();
+  await openView(page);
   await toggle(page).click();
   await page.locator('.zf-stage a[data-board="root.layers.checkout.layers.charge"]').click();
   await expect(page.locator('.zf-stage')).toHaveAttribute('data-board', 'root.layers.checkout.layers.charge');
@@ -194,8 +205,12 @@ test('reference stays usable on narrow screens, in dark mode, and with storage b
   await page.setViewportSize({ width: 390, height: 844 });
   await ready(page);
   await page.locator('#header-more-toggle').click();
+  await openView(page);
   await expect(page.locator('#theme')).toBeVisible();
+  await openView(page);
   await page.getByLabel('Theme').selectOption('dark');
+  await page.locator('#workspace-view > summary').click();
+  await openView(page);
   await toggle(page).click();
   await expect(search(page)).toBeVisible();
   await search(page).fill('variables');
@@ -217,6 +232,7 @@ test('reference keeps exact code, highlights search matches, and acknowledges ea
   await page.goto('/'); await previewReady(page);
   await page.evaluate(() => Object.defineProperty(navigator, 'clipboard', { configurable: true,
     value: { writeText: async (text: string) => { document.documentElement.dataset.copied = text; } } }));
+  await openView(page);
   await page.locator('#toggle-reference').click();
   await expect(page.locator('.reference-topic .zf-token-property').first()).toBeVisible();
   await page.locator('#reference-search').fill('connections arrows');

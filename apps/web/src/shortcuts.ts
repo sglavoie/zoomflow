@@ -18,7 +18,10 @@ export function setupShortcuts() {
     dialog.showModal();
   });
   close.addEventListener('click', () => dialog.close());
-  dialog.addEventListener('close', () => button.focus({ preventScroll: true }));
+  dialog.addEventListener('close', () => {
+    const menu = button.closest('details');
+    (menu && !menu.open ? menu.querySelector('summary')! : button).focus({ preventScroll: true });
+  });
 
   // Register before the workspace handlers so reading help cannot navigate
   // boards or change the workspace. Leave native scrolling available.

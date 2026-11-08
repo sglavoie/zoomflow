@@ -1,3 +1,4 @@
+import { selectMenuOption } from './menu';
 import { expect, test, type Page } from '@playwright/test';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -36,7 +37,7 @@ async function choose(page: Page, path: string) {
 }
 async function chooseSecond(page: Page, path: string) {
   await page.setViewportSize({ width: 1600, height: 900 });
-  await page.selectOption('#layout', 'quad');
+  await selectMenuOption(page, '#layout', 'quad');
   await page.locator('#pane-choose-b').click();
   await page.getByRole('region', { name: 'atlas project', exact: true }).getByRole('button', { name: 'atlas', exact: true }).click();
   await page.locator(`.example-option[title="atlas/${path}"]`).click();
@@ -66,7 +67,7 @@ test('reports a clean project and follows the active pane when checking a differ
   const clean = join(temporary, 'clean');
   mkdirSync(clean);
   writeFileSync(join(clean, 'index.d2'), 'a: Clean diagram');
-  await page.selectOption('#layout', 'tabs');
+  await selectMenuOption(page, '#layout', 'tabs');
   await page.locator('#pane-choose-b').click();
   await page.keyboard.press('Escape');
   await openFolder(page, clean);

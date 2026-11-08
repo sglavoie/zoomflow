@@ -6,6 +6,7 @@ import { childToward, normalizeRouteHash, renderParentContext, resolveRouteHash,
 import { setupBreadcrumbs } from './breadcrumbs';
 import { followLink, linkTo, resolveLink } from './links';
 import { layerDepths } from './layers';
+import { setupBoardMotion } from './board-motion';
 import type { DocumentView } from './document-view';
 export { parseDocumentView, serializeDocumentView, type DocumentView } from './document-view';
 
@@ -39,7 +40,7 @@ export class Viewer {
   private revision = 0;
   private dark = false;
   private styles = new WeakMap<Element, string>();
-  private transitions = new Set<Animation>();
+  private readonly motion = setupBoardMotion(this.stage);
   private readonly events = new AbortController();
   private keys?: AbortController;
   private readonly history: boolean;
@@ -166,6 +167,7 @@ export class Viewer {
   setSourceShapes(sources: readonly ShapeSource[]) { this.sourceShapes = sources; }
 
   get currentBoard() { return this.boards.get(this.current); }
+  refreshName() { if (this.trail.length) this.updateCrumbs(); }
   get hasExportVisibilityChoices() { return this.view.hasExportVisibilityChoices; }
   isShapeHidden(shape: string, board = this.current) { return this.view.isShapeHidden(shape, board); }
   toggleShapeHidden(shape: string, board = this.current) { return this.view.toggleShapeHidden(shape, board); }
@@ -308,17 +310,7 @@ export class Viewer {
   }
 
   private cancelTransition() {
-    for (const animation of this.transitions) animation.cancel();
-    this.transitions.clear();
-  }
-
-  private async fadeIn(element: Element) {
-    const animation = element.animate([{ opacity: 0.4 }, { opacity: 1 }],
-      { duration: 160, easing: 'ease-out', fill: 'both' });
-    this.transitions.add(animation);
-    try { await animation.finished; } catch { /* A newer route cancels this transition. */ }
-    this.transitions.delete(animation);
-    animation.cancel();
+    this.motion.cancel();
   }
 
   async navigate(id: string, mode: 'push' | 'replace' = 'push', trail?: string[], preserveViewport = false, notice = '') {
@@ -372,6 +364,9 @@ export class Viewer {
       ? (active.closest<SVGElement>('[data-shape-id]') ?? (active.localName === 'a' ? active.querySelector<SVGElement>('[data-shape-id]') : null))?.dataset.shapeId : undefined;
     const focusCrumb = this.crumbs.contains(active);
     this.cancelTransition();
+    const down = childToward(id, this.current, item => this.boards.get(item)?.parent);
+    const up = childToward(this.current, id, item => this.boards.get(item)?.parent);
+    const snapshot = id !== this.current ? this.motion.capture(down ? linkTo(this.stage, down) : undefined) : undefined;
     this.setBusy(true);
     try {
       const combined = Boolean(this.layerView.root);
@@ -383,8 +378,6 @@ export class Viewer {
       }
       if (revision !== this.revision) return;
       if (!combined && !board.diagram.shapes.length) content.textContent = 'This board is empty.';
-      const fade = this.stage.hasChildNodes() && id !== this.current &&
-        !matchMedia('(prefers-reduced-motion: reduce)').matches;
       const keepFocus = document.activeElement === active;
       const sameBoard = id === this.current;
       const previous = this.current;
@@ -398,7 +391,6 @@ export class Viewer {
         });
       } else decorateLinks(content, this.boards, board.id, splitHitArea, (target) => boardLabel(target, this.boards), (path) => this.fileLabel(path));
       syncBackground(this.stage);
-      if (fade) void this.fadeIn(content);
       this.current = id;
       this.applyVisibility();
       this.stage.setAttribute('aria-label', combined ? 'Connected layers diagram' : `${board.name} diagram`);
@@ -427,6 +419,7 @@ export class Viewer {
       this.setMessage(notice);
       this.stage.dispatchEvent(new Event('zf-layerchange'));
       this.saveLayers();
+      if (!sameBoard) this.motion.enter(snapshot, content, down ? 'in' : up ? 'out' : 'across', up ? linkTo(this.stage, up) : undefined);
     } catch (error) {
       if (revision === this.revision) { this.cancelTransition(); throw error; }
     } finally {
@@ -436,7 +429,7 @@ export class Viewer {
 
   private updateCrumbs() {
     const trail = this.trail;
-    const file = this.settings.files?.name?.();
+    const file = this.settings.files?.name?.() ?? this.settings.name?.();
     this.breadcrumbs.render([...this.trailPrefix, ...trail.map((id, index) => ({ name: id === 'root' && file || this.boards.get(id)!.name,
       activate: () => { void this.navigate(id, 'push', trail.slice(0, index + 1)); } }))]);
   }

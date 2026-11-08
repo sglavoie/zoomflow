@@ -20,6 +20,7 @@ export type Builder = { open: (target: BuilderTarget, returnFocus: HTMLElement, 
 export type BoardToolsOptions = {
   builders: Record<BuilderKind, Builder>;
   source: () => string;
+  document?: () => string | undefined;
   /** Replace the document's source with a builder's result. */
   update: (source: string) => void;
   /** Select a shape's source; `focusEditor` moves to the source editor, as Alt+click does. */

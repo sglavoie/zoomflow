@@ -30,7 +30,7 @@ for (const offline of [false, true]) {
     await crumbs.getByRole('button', { name: 'checkout', exact: true }).click();
     await expect(stage).toHaveAttribute('data-board', 'root.layers.checkout');
     expect(await page.evaluate(() => history.length)).toBe(length);
-    await crumbs.getByRole('button', { name: 'Root', exact: true }).click();
+    await crumbs.getByRole('button').first().click();
     await expect(stage).toHaveAttribute('data-board', 'root');
     expect(await page.evaluate(() => history.length)).toBe(length + 1);
 

@@ -8,12 +8,17 @@ Start with the guide for the task you want to do:
 
 ## Workspace and drafts
 
+Use **Source** in the header to give the canvas the full workspace; the choice is
+remembered for each pane. Source-editing actions reveal the editor automatically.
+**View** holds layout, theme, D2 reference, and keyboard shortcuts. On small screens,
+Preview and Source tabs keep the diagram and editor usable one at a time.
+
 The workspace opens local `.d2` files or a folder of related D2 files and starts
-with `fixtures/order.d2` as an example. Click the filename dropdown to explore the
+with the styled order drill-down example. Click the filename dropdown to explore the
 built-in templates: order drill-down, flowchart basics, service architecture,
 sequence diagrams, SQL schemas, layers / scenarios / steps, state transitions
-with boundary ports, and a guided lint repair. Every example includes source
-comments and compiles without imports or remote assets. The lint repair intentionally reports one error and one warning until fixed.
+with boundary ports, and a guided lint repair. Examples include source comments and use the built-in style library where needed;
+no remote assets are required. The lint repair intentionally reports one error and one warning until fixed.
 First-time opens start at the root board. Returning to an open document restores its
 last board and breadcrumb trail, with zoom and pan remembered separately for each board
 during the page session. Restoring an example resets its saved view. Source edits and

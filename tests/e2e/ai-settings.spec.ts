@@ -1,3 +1,4 @@
+import { selectMenuOption } from './menu';
 import { expect, test } from '@playwright/test';
 import { previewReady } from './helpers';
 
@@ -86,7 +87,7 @@ test('AI settings and unfinished prompts survive reload, including edits before 
 test('reload restores shared AI settings from the second pane and keeps each unfinished prompt separate', async ({ page }) => {
   await page.setViewportSize({ width: 1600, height: 900 });
   await page.goto('/'); await previewReady(page);
-  await page.selectOption('#layout', 'quad');
+  await selectMenuOption(page, '#layout', 'quad');
   await page.locator('#pane-start-empty-b').click(); await previewReady(page, 'b');
   await page.locator('#ai-assistant > summary').click();
   await page.locator('#ai-assistant-b > summary').click();
@@ -137,7 +138,7 @@ test('mirrored AI settings check availability once per change', async ({ page })
   });
   await page.setViewportSize({ width: 1600, height: 900 });
   await page.goto('/'); await previewReady(page);
-  await page.selectOption('#layout', 'quad');
+  await selectMenuOption(page, '#layout', 'quad');
   await page.locator('#pane-start-empty-b').click(); await previewReady(page, 'b');
   await page.locator('#ai-assistant > summary').click();
   await page.locator('#ai-assistant-b > summary').click();

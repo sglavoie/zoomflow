@@ -20,7 +20,7 @@ test('the production build compiles, navigates, edits and exports offline HTML',
   await page.keyboard.press('ControlOrMeta+End');
   await page.keyboard.type('\nBuilt: Production check');
   await previewReady(page);
-  await page.getByRole('navigation').getByRole('button', { name: 'Root' }).click();
+  await page.locator('.zf-breadcrumbs button').first().click();
   await expect(page.locator('.zf-stage')).toContainText('Production check');
 
   await selectMenuOption(page, '#export-format', 'html');
