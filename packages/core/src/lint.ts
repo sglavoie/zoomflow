@@ -1,200 +1,10 @@
-import type { CompileResponse } from '@d2lang/d2';
 import { boardKey, classifyHref, indexBoards, resolveFilePath, type Board } from './index';
 import { definedClasses } from './classes';
-import { boundaryNeighbours } from './context';
+import { lintNavigation } from './lint-navigation';
 import { compareOrder, filterMatches, fileLinkRules, globMatches, idSegments, importedLinks, importPath, linkAfterKey, linkOrder, linkSources, shapeAttributes, shapeFiles, shapeRanges,
   type AuthoredLink, type GlobFilter, type GlobSegment } from './source';
-
-export type LintRule = 'boundary-in' | 'boundary-out' | 'orphan-board' | 'dangling-link' | 'ignored-link' | 'missing-backlink'
-  | 'undefined-class' | 'unsupported-label' | 'dangling-file-link' | 'missing-file-board' | 'bare-file-link';
-export interface LintDiagnostic {
-  rule: LintRule;
-  severity: 'error' | 'warning';
-  message: string;
-  board: string;
-  shape?: string;
-  /** Compiled connection ID, such as `(a -> b)[0]`, for dangling connection links. */
-  connection?: string;
-  /** Resolved missing board ID for dangling-link diagnostics; the authored href for dangling-file-link ones. */
-  target?: string;
-  /** Original D2 range, possibly in an imported file. Never assume it is index. */
-  range?: string;
-}
-export interface LintOptions {
-  missingBacklink?: boolean;
-  /** Validate zf-in/zf-out contracts where a child layer declares ports. */
-  boundaryPorts?: boolean;
-  /** The project around the linted file, so links to other `.d2` files can be checked.
-   * Without it, file links are not reported: a single file cannot know its neighbours. */
-  files?: {
-    /** Project path of the linted file. File links resolve from the file that wrote them, this one or an import. */
-    inputPath: string;
-    /** Whether links may not open hidden or build folders, which the web app's project scan leaves out (default true). */
-    scanned?: boolean;
-    /** Whether a project path names a `.d2` file in the project. */
-    exists(path: string): boolean;
-    /** Board hashes (as `indexBoards` gives them) of a project file, when known. */
-    boards?(path: string): ReadonlySet<string> | undefined;
-  };
-}
-export interface BoundaryEvaluation {
-  board: string;
-  shape: string;
-  child: string;
-  /** Distinct directed neighbour requirements, independent of labels/parallel edges. */
-  expected: number;
-  /** Requirements for which at least one correctly named classed port exists. */
-  evaluated: number;
-}
-export interface LintResult {
-  diagnostics: LintDiagnostic[];
-  boundaryPairsEvaluated: number;
-  boundaries: BoundaryEvaluation[];
-}
-
-// Only the compiler AST fields needed to recover links D2 removes from shapes.
-interface AstString { range?: string; value?: string | { string?: string }[]; pattern?: string[] }
-interface AstValue {
-  unquoted_string?: AstString;
-  double_quoted_string?: AstString;
-  single_quoted_string?: AstString;
-  block_string?: { range?: string; value?: string };
-  boolean?: { value?: boolean };
-  number?: { raw?: string };
-  import?: AstImport;
-  map?: AstMap;
-}
-interface AstImport { spread?: boolean; pre?: string; path?: AstValue[] }
-interface AstKey {
-  range?: string;
-  key?: { path?: AstValue[] };
-  edges?: { src?: { path?: AstValue[] }; src_arrow?: string; dst?: { path?: AstValue[] }; dst_arrow?: string }[];
-  edge_index?: { int?: number; glob?: boolean };
-  edge_key?: { path?: AstValue[] };
-  primary?: AstValue;
-  value?: AstValue;
-  ampersand?: boolean;
-  not_ampersand?: boolean;
-}
-interface AstMap { range?: string; nodes?: { map_key?: AstKey; import?: AstImport }[] }
-interface LintGraph {
-  name?: string;
-  ast?: AstMap;
-  layers?: LintGraph[];
-  scenarios?: LintGraph[];
-  steps?: LintGraph[];
-}
-function stringValue(value?: AstValue): string | undefined {
-  const scalar = value?.unquoted_string ?? value?.double_quoted_string ?? value?.single_quoted_string;
-  return typeof scalar?.value === 'string' ? scalar.value
-    : scalar?.value?.map((part) => part.string ?? '').join('');
-}
-/** The text of an unquoted key segment: a quoted one, such as `"layers"`, is an ordinary shape, never a keyword. */
-const keyword = (value?: AstValue) => value?.unquoted_string ? stringValue(value) : undefined;
-function scalarRange(value?: AstValue): string | undefined {
-  return (value?.unquoted_string ?? value?.double_quoted_string ?? value?.single_quoted_string)?.range;
-}
-/** Quote a key segment as D2 does in compiled shape IDs, so `"a b"` is `a b` but `"a.b"` stays quoted. Unlike link
- * targets, shape IDs leave `$` bare and spell `null` in any case as `'null'`. */
-function keySegment(value: AstValue): string {
-  const name = stringValue(value) ?? '';
-  if (name.toLowerCase() === 'null') return "'null'";
-  const plain = name.replaceAll('$', '_');
-  return boardKey(plain) === plain ? name : boardKey(name);
-}
-/** D2 rewrites a connection's link to a board named `null` in any case, such as `NULL`, as `'null'`. */
-const nulled = (id: string) => id.replace(/(^|\.)(?:'null'|null)(?=\.|$)/gi, "$1'null'");
-/** The scalar of an edge's last `link` assignment, from `(a -> b)[0].link: x` or `a -> b: {link: x}`. */
-function edgeLink(entry: AstKey): AstValue | undefined {
-  const value = (key: AstKey) => stringValue(key.value) !== undefined ? key.value : key.primary;
-  if (entry.edge_key) {
-    const path = entry.edge_key.path ?? [];
-    return path.length === 1 && stringValue(path[0]) === 'link' ? value(entry) : undefined;
-  }
-  const link = (entry.value?.map?.nodes ?? []).map((node) => node.map_key)
-    .filter((key) => key?.key?.path?.length === 1 && stringValue(key.key.path[0]) === 'link').at(-1);
-  return link && value(link);
-}
-/** Re-quote an authored board path the way D2 quotes compiled links (`layers."a b"` is `layers.a b`). */
-function canonicalLink(href: string): string {
-  const segments: string[] = [];
-  const pattern = /\s*(?:"((?:[^"\\]|\\.)*)"|'([^']*)'|([^."']*[^."'\s]|))\s*(\.|$)/y;
-  for (let match = pattern.exec(href); match; match = pattern.exec(href)) {
-    segments.push(match[1]?.replace(/\\(.)/g, '$1') ?? match[2] ?? match[3]);
-    if (match[4]) continue;
-    // URLs and other non-board text keep their authored form.
-    if (pattern.lastIndex !== href.length || !['_', 'root', 'layers', 'scenarios', 'steps'].includes(segments[0])) break;
-    return segments.map(boardKey).join('.');
-  }
-  return href;
-}
-function boardTarget(href: string, board: Board, boards: Map<string, Board>): string | undefined {
-  const classified = classifyHref(href);
-  if ('target' in classified) return classified.target;
-  if (classified.kind === 'external') return;
-  let base = board;
-  let path = href;
-  while (path === '_' || path.startsWith('_.')) {
-    if (!base.parent) return;
-    base = boards.get(base.parent)!;
-    path = path === '_' ? '' : path.slice(2);
-  }
-  return path === '' ? base.id : /^(layers|scenarios|steps)\./.test(path) ? `${base.id}.${path}` : undefined;
-}
-
-/** Name a board, or a missing board below an existing one, by its breadcrumb trail. */
-export function boardLabel(id: string, boards: Map<string, Board>): string {
-  let board = boards.get(id), rest = '';
-  if (!board) {
-    const ancestor = [...boards.keys()].filter((key) => id.startsWith(`${key}.`)).sort((a, b) => b.length - a.length)[0];
-    if (!ancestor) return id;
-    board = boards.get(ancestor);
-    rest = id.slice(ancestor.length + 1);
-  }
-  // Missing segments keep D2's quoting (`layers."x.y"`); name them as authored.
-  const names: string[] = [];
-  let named = true;
-  for (const [, quoted, single, plain] of rest.matchAll(/"((?:[^"\\]|\\.)*)"|'([^']*)'|([^."']+)/g)) {
-    if (named && plain && ['layers', 'scenarios', 'steps'].includes(plain)) { named = false; continue; }
-    const name = quoted?.replace(/\\(.)/g, '$1') ?? single ?? plain;
-    if (named && names.length) names[names.length - 1] += `.${name}`;
-    else names.push(name);
-    named = true;
-  }
-  for (let item = board; item; item = item.parent ? boards.get(item.parent) : undefined) names.unshift(item.name);
-  return names.join(' > ');
-}
-
-/** Classes each board can use. Child boards carry compiler-expanded ASTs with every inherited and
- * imported class; the root AST keeps its imports, so its files are read instead, when given. */
-function boardClasses(compiled: LintInput): Map<string, Set<string> | undefined> {
-  const classes = new Map<string, Set<string> | undefined>();
-  classes.set('root', compiled.fs && compiled.inputPath ? definedClasses(compiled.fs, compiled.inputPath) : undefined);
-  function visit(graph: LintGraph, id: string) {
-    for (const group of ['layers', 'scenarios', 'steps'] as const) {
-      for (const child of graph[group] ?? []) {
-        const childId = `${id}.${group}.${boardKey(child.name ?? '')}`;
-        const names = new Set<string>();
-        for (const node of child.ast?.nodes ?? []) {
-          const parts = node.map_key?.key?.path ?? [];
-          const path = parts.map((part) => stringValue(part) ?? '');
-          if (keyword(parts[0]) !== 'classes') continue;
-          if (path.length > 1) names.add(path[1]);
-          else for (const entry of node.map_key?.value?.map?.nodes ?? []) {
-            const name = stringValue(entry.map_key?.key?.path?.[0]);
-            if (name) names.add(name);
-          }
-        }
-        classes.set(childId, names);
-        visit(child, childId);
-      }
-    }
-  }
-  visit(compiled.graph as LintGraph, 'root');
-  return classes;
-}
-
-type LintInput = Pick<CompileResponse, 'diagram' | 'graph'> & Partial<Pick<CompileResponse, 'fs' | 'inputPath'>>;
+import type { LintInput, LintOptions, LintResult, LintDiagnostic } from './lint-types';
+import { boardLabel, boardTarget, nulled, type LintGraph, canonicalLink, type AstKey, stringValue, scalarRange, type AstImport, type AstValue, type AstMap, keySegment, keyword, edgeLink, boardClasses } from './lint-ast';
 
 /** Lint a compiled document without following its cyclic navigation graph.
  * Shape identifiers, not display labels, are the boundary-port naming contract.
@@ -203,11 +13,9 @@ type LintInput = Pick<CompileResponse, 'diagram' | 'graph'> & Partial<Pick<Compi
 export function lint(compiled: LintInput, options: LintOptions = {}): LintResult {
   const boards = indexBoards(compiled.diagram);
   const diagnostics: LintDiagnostic[] = [];
-  const boundaries: BoundaryEvaluation[] = [];
   const links = new Map<string, Set<string>>();
   const linkKeys = new Set<string>();
   const boardRanges = new Map<string, string>();
-  const owners = new Map<string, { board: Board; shape: string; child: Board }[]>();
   const label = (id: string) => boardLabel(id, boards);
   let ranges: Map<string, string> | undefined, sources: Map<string, string> | undefined;
   let imported: ReturnType<typeof importedLinks> | undefined;
@@ -609,78 +417,9 @@ export function lint(compiled: LintInput, options: LintOptions = {}): LintResult
     }
   }
 
-  // Layers are reachable only by following links from root; like D2's own viewer,
-  // a reachable board's scenarios and steps are reachable without a link.
-  const reachable = new Set(['root']);
-  for (const id of reachable) {
-    const next = [...links.get(id) ?? []];
-    for (const board of boards.values()) if (board.parent === id && board.kind !== 'layers') next.push(board.id);
-    for (const target of next) reachable.add(target);
-  }
-  const linked = new Set([...links].flatMap(([source, targets]) => [...targets].filter((target) => target !== source)));
-  for (const board of boards.values()) {
-    if (board.kind === 'layers' && !reachable.has(board.id)) diagnostics.push({
-      rule: 'orphan-board', severity: 'warning', board: board.id, range: boardRanges.get(board.id),
-      message: linked.has(board.id) ? `Layer "${label(board.id)}" is linked only from boards unreachable from the root.`
-        : `Layer "${label(board.id)}" has no incoming board link.`,
-    });
-    // Scenarios and steps are navigated without links, so only layers need a way back.
-    if (options.missingBacklink && board.kind === 'layers' && board.parent && ![
-      ...board.diagram.shapes, ...board.diagram.connections, board.diagram.root,
-    ].some((item) => boardTarget(item.link, board, boards) === board.parent)) diagnostics.push({
-      rule: 'missing-backlink', severity: 'warning', board: board.id, range: boardRanges.get(board.id),
-      message: `Board "${label(board.id)}" has no link to its parent "${label(board.parent)}".`,
-    });
-    if (!options.boundaryPorts) continue;
-    for (const shape of board.diagram.shapes) {
-      const target = boardTarget(shape.link, board, boards);
-      const child = target && boards.get(target);
-      // Only immediate child layers represent a parent's drillable node.
-      if (!child || child.kind !== 'layers' || child.parent !== board.id) continue;
-      owners.set(child.id, [...owners.get(child.id) ?? [], { board, shape: shape.id, child }]);
-    }
-  }
-
-  // Several parent nodes may drill into one layer; a port need only match one of them.
-  for (const group of owners.values()) {
-    const { board, child } = group[0];
-    const ports = {
-      in: child.diagram.shapes.filter((port) => port.classes?.includes('zf-in')),
-      out: child.diagram.shapes.filter((port) => port.classes?.includes('zf-out')),
-    };
-    // Port-free layers use inferred parent connections; they have no explicit contract.
-    if (!ports.in.length && !ports.out.length) continue;
-    const requirements = group.map(({ shape }) => ({ shape, required: boundaryNeighbours(board.diagram, shape),
-      evaluation: { board: board.id, shape, child: child.id, expected: 0, evaluated: 0 } as BoundaryEvaluation }));
-    const names = requirements.map(({ shape }) => `"${shape}"`).join(' or ');
-    for (const direction of ['in', 'out'] as const) {
-      // Missing ports are per owner; a port is unmatched only if no owner needs it.
-      for (const { shape, required, evaluation } of requirements) {
-        evaluation.expected += required[direction].size;
-        for (const neighbour of required[direction]) {
-          // D2 IDs are case-insensitive within a board, so `API` and `api` name the same port.
-          const matches = ports[direction].filter((port) => port.id.toLowerCase() === neighbour.toLowerCase());
-          if (matches.length) evaluation.evaluated++;
-          else diagnostics.push({ rule: `boundary-${direction}`, severity: 'error', board: board.id, shape,
-            range: shapeRange(board.id, shape),
-            message: `"${shape}" needs a zf-${direction} port named "${neighbour}" in "${label(child.id)}".` });
-        }
-      }
-      for (const port of ports[direction]) {
-        if (!requirements.some(({ required }) => [...required[direction]].some((id) => id.toLowerCase() === port.id.toLowerCase()))) diagnostics.push({
-          rule: `boundary-${direction}`, severity: 'error', board: child.id, shape: port.id, range: shapeRange(child.id, port.id),
-          message: `zf-${direction} port "${port.id}" has no matching ${direction === 'in' ? 'incoming' : 'outgoing'} neighbour of ${names} in "${label(board.id)}".`,
-        });
-      }
-    }
-    for (const { shape, required, evaluation } of requirements) {
-      if (required.incident && evaluation.evaluated === 0) diagnostics.push({
-        rule: required.out.size && !required.in.size ? 'boundary-out' : 'boundary-in',
-        severity: 'error', board: board.id, shape, range: shapeRange(board.id, shape),
-        message: `Zero boundary pairs evaluated for "${shape}" → "${label(child.id)}" despite incident edges. Add matching zf-in/zf-out ports and directed edges.`,
-      });
-      boundaries.push(evaluation);
-    }
-  }
+  const boundaries = lintNavigation(boards, links, boardRanges, options, diagnostics, shapeRange);
   return { diagnostics, boundaries, boundaryPairsEvaluated: boundaries.reduce((sum, item) => sum + item.evaluated, 0) };
 }
+
+export type { LintRule, LintDiagnostic, LintOptions, BoundaryEvaluation, LintResult } from './lint-types';
+export { boardLabel } from './lint-ast';

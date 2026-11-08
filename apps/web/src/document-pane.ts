@@ -1,111 +1,115 @@
-import { boardBlocks, classifyHref, indexBoards, indexDiagramSearch, indexShapeSources, parseSourceRange, lint, rebaseFileLinks, resolveFilePath, type CompileResponse, type ShapeSource, type SourceRange, type Diagram, type DiagramSearchEntry, type LintDiagnostic, type LintResult } from '@zoomflow/core';
-import { Viewer, ViewerRenderError, openFolderMessage, setupViewport, type DocumentView, type RenderBoard, type ViewerRoute } from '@zoomflow/viewer';
+import { setupPaneEditing } from './pane-editing';
+import { setupPaneLifecycle } from './pane-lifecycle';
+import { projectLabel, statusLine, type DocumentExport, type PaneContext, type FileVisit } from './document-pane-shared';
+import { setupPaneSelection } from './pane-selection';
+import { setupPanePreview } from './pane-preview';
+import { setupPaneProject } from './pane-project';
+import { classifyHref, indexBoards, indexDiagramSearch, type CompileResponse, type ShapeSource, type SourceRange, type LintResult } from '@zoomflow/core';
+import { Viewer, openFolderMessage, setupViewport, type RenderBoard, type ViewerRoute } from '@zoomflow/viewer';
 import { SourceEditor } from './editor';
-import { compilerDiagnostics, lintDiagnostics, type SourceDiagnostic } from './diagnostics';
-import { CompilerStartupError, isEngineUnavailable, type createCompiler } from './compiler';
-import { AiError } from './ai-errors';
+import type { SourceDiagnostic } from './diagnostics';
 import { createPreviewQueue } from './preview-queue';
 import { setupFullscreen } from './fullscreen';
-import { setupAiAssistant } from './ai-assistant';
+import type { setupAiAssistant } from './ai-assistant';
 import { setupMobileView } from './mobile-view';
-import { newProjectPath, projectFileSystem, projectIdOf, projectPathOf } from './project-files';
+import { projectIdOf } from './project-files';
 import { setupCanvasGuidance } from './canvas-guidance';
 import { setupBoardTools } from './board-tools';
-import { boardRoute, setupLinkPreview } from './link-preview';
-import { boardSites } from './board-model';
-import { createProjectFile, type DirectoryHandles, type FileHandles } from './file-handles';
-import { atlasMapName, atlasMapSource, fileLinks as linksOfFile, type AtlasFile } from './atlas-map';
-import type { setupFlowBuilder } from './flow-builder';
-import type { setupMindMapBuilder } from './mind-map-builder';
-import type { DraftState, setupExamplePicker } from './example-picker';
-import { exampleSource } from './draft-library';
+import { setupLinkPreview } from './link-preview';
 import { paneScope, type PaneId } from './pane-scope';
-import { paneNotice, type EngineNotice } from './engine-notice';
+import { paneNotice } from './engine-notice';
 import { setupCompileError } from './compile-error';
-import { canChooseSaveFile, setupSaveFile } from './save-file';
-import { describeError, plural, setText } from './text';
-import type { ProjectSearchEntry } from './project-search';
+import { setupSaveFile } from './save-file';
 import { restoreField } from './field-preference';
 
 export type { PaneId } from './pane-scope';
-export type DocumentExport = { diagram: Diagram; render: RenderBoard; name: string; diagnostics: LintDiagnostic[];
-  /** Render standalone D2 source with the document's fonts, for shared export font subsets. */
-  renderSource: (source: string) => Promise<string> };
-
-/** What the panes share: one compiler, the draft library and the page-level controls. */
-export type PaneContext = {
-  compiler: ReturnType<typeof createCompiler>;
-  picker: () => ReturnType<typeof setupExamplePicker>;
-  flowBuilder: ReturnType<typeof setupFlowBuilder>;
-  mindMapBuilder: ReturnType<typeof setupMindMapBuilder>;
-  engine: EngineNotice;
-  fileHandles: FileHandles;
-  /** The folder each project was opened from, for creating new linked files in it. */
-  directoryHandles: DirectoryHandles;
-  documentRoutes: Map<string, ViewerRoute>;
-  isActive: () => boolean;
-  /** Whether this pane shows one view at a time (narrow screens and split tabs). */
-  tabbed: () => boolean;
-  exportChanged: () => void;
-  setExportStatus: (message: string, kind?: 'info' | 'error') => void;
-  clearFileError: () => void;
-  /** A canonical project source changed; other open files may import it. */
-  projectChanged: (projectId: string) => void;
-  /** A save follows its document if it moved to another pane during the write. */
-  adoptSaved: (key: string, saved: { key: string; name: string }) => void;
-  /** Select a source location in the pane that shows it. */
-  revealSource: (pane: PaneId, range?: { from: number; to: number }) => void;
-  /** Activate the pane already showing a project search result and reveal it there. */
-  revealMatch: (pane: PaneId, entry: DiagramSearchEntry) => Promise<void>;
-  /** The lint options changed in this pane; other panes follow. */
-  lintChanged: () => void;
-  viewChanged: (key: string, patch: DocumentView) => void;
-};
-
-/** A visible status line announced through polite and assertive live regions that keep their roles.
- * Settled info hides after a few seconds. */
-function statusLine(element: HTMLElement) {
-  const regions = document.createElement('span');
-  regions.className = 'zf-visually-hidden';
-  regions.innerHTML = '<span role="status"></span><span role="alert" hidden></span>';
-  element.after(regions);
-  const [polite, assertive] = regions.children as unknown as [HTMLElement, HTMLElement];
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  return (message: string, kind: 'info' | 'error' = 'info') => {
-    clearTimeout(timer);
-    setText(element, message);
-    element.title = message;
-    element.dataset.kind = kind;
-    element.hidden = !message;
-    setText(polite, kind === 'info' ? message : '');
-    setText(assertive, kind === 'error' ? message : '');
-    assertive.hidden = !assertive.textContent;
-    if (message && kind === 'info' && !message.endsWith('…')) timer = setTimeout(() => { element.hidden = true; setText(polite, ''); }, 4000);
-  };
-}
-
-/** A file or atlas map a pane came through, and the board it was left on. */
-type FileVisit = { key: string; path: string; route: ViewerRoute };
-/** Board hashes of each project file's last compile, by draft key, for checking links into that file. */
-const compiledBoards = new Map<string, ReadonlySet<string>>();
-/** The draft key of another file in the project of `key`. */
-const siblingKey = (key: string, path: string) => `project:${projectIdOf(key)}:${path}`;
-const projectLabel = (path: string) => path.replace(/\.d2$/i, '');
+export type { DocumentExport, PaneContext } from './document-pane-shared';
 /** One document's editor, preview, diagnostics and status. The workspace shows one or two panes. */
 export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneContext) {
+  // Lazy accessors share live state with the feature modules, including controls initialized below.
+  const { showBoardSource, highlightSelection, focusSourceBoard, revealSelection, selectShape } = setupPaneSelection({
+    get mappedSource() { return mappedSource; }, set mappedSource(value) { mappedSource = value; },
+    get editor() { return editor; },
+    get viewer() { return viewer; },
+    get blocks() { return blocks; }, set blocks(value) { blocks = value; },
+    get selectionCleared() { return selectionCleared; }, set selectionCleared(value) { selectionCleared = value; },
+    get sourceMap() { return sourceMap; }, set sourceMap(value) { sourceMap = value; },
+    get revealButton() { return revealButton; },
+    get boardTools() { return boardTools; },
+    get documentRevision() { return documentRevision; }, set documentRevision(value) { documentRevision = value; },
+    get showView() { return showView; },
+    get viewport() { return viewport; },
+    get touchDown() { return touchDown; }, set touchDown(value) { touchDown = value; },
+    get shared() { return shared; },
+  });
+
+  const { invalidateSource, compileSource, updateLint, canOpenDiagnostic, openDiagnostic, load } = setupPanePreview({
+    get previewTimer() { return previewTimer; }, set previewTimer(value) { previewTimer = value; },
+    get previewStatus() { return previewStatus; },
+    get lintSummary() { return lintSummary; },
+    get viewer() { return viewer; },
+    get activeDiagnostics() { return activeDiagnostics; }, set activeDiagnostics(value) { activeDiagnostics = value; },
+    get part() { return part; },
+    get editor() { return editor; },
+    get picker() { return picker; },
+    get id() { return id; },
+    get documentName() { return documentName; }, set documentName(value) { documentName = value; },
+    get diagnosticsButton() { return diagnosticsButton; },
+    get boardTools() { return boardTools; },
+    get generation() { return generation; }, set generation(value) { generation = value; },
+    get previewQueue() { return previewQueue; },
+    get documentRevision() { return documentRevision; }, set documentRevision(value) { documentRevision = value; },
+    get ai() { return ai; }, set ai(value) { ai = value; },
+    get setFormatStatus() { return setFormatStatus; },
+    get sourceMap() { return sourceMap; }, set sourceMap(value) { sourceMap = value; },
+    get revealButton() { return revealButton; },
+    get lintDocument() { return lintDocument; }, set lintDocument(value) { lintDocument = value; },
+    get documentExport() { return documentExport; }, set documentExport(value) { documentExport = value; },
+    get shared() { return shared; },
+    get setActivity() { return setActivity; },
+    get compileError() { return compileError; },
+    get mappedSource() { return mappedSource; }, set mappedSource(value) { mappedSource = value; },
+    get missingBacklink() { return missingBacklink; },
+    get boundaryPorts() { return boundaryPorts; },
+    get defaultLint() { return defaultLint; }, set defaultLint(value) { defaultLint = value; },
+    get lintFiles() { return lintFiles; },
+    get showView() { return showView; },
+    get replaceDocument() { return replaceDocument; },
+    get currentDocumentKey() { return currentDocumentKey; }, set currentDocumentKey(value) { currentDocumentKey = value; },
+    get previewAttempt() { return previewAttempt; }, set previewAttempt(value) { previewAttempt = value; },
+    get notice() { return notice; },
+    get initialLayerRoot() { return initialLayerRoot; }, set initialLayerRoot(value) { initialLayerRoot = value; },
+    get blocks() { return blocks; }, set blocks(value) { blocks = value; },
+    get linkPreview() { return linkPreview; },
+    get showBoardSource() { return showBoardSource; },
+    get highlightSelection() { return highlightSelection; },
+    get sourceError() { return sourceError; }, set sourceError(value) { sourceError = value; },
+  });
+
+  const { projectSources, showsAtlas, linkedPath, fileLabel, linkedBoards, createLinkedFile, compileLinkedFile, compileProjectFile, setFileStack, openProjectMatch, openFileLink, returnToFile, savedStack, restoreFromHistory, openAtlasMap, lintFiles } = setupPaneProject({
+    get picker() { return picker; },
+    get id() { return id; },
+    get currentDocumentKey() { return currentDocumentKey; }, set currentDocumentKey(value) { currentDocumentKey = value; },
+    get shared() { return shared; },
+    get setActivity() { return setActivity; },
+    get linkedCompiles() { return linkedCompiles; },
+    get compileSource() { return compileSource; },
+    get fileStack() { return fileStack; }, set fileStack(value) { fileStack = value; },
+    get viewer() { return viewer; },
+    get replaceDocument() { return replaceDocument; },
+    get boardTools() { return boardTools; },
+    get documentOpens() { return documentOpens; }, set documentOpens(value) { documentOpens = value; },
+    get editor() { return editor; },
+    get mappedSource() { return mappedSource; }, set mappedSource(value) { mappedSource = value; },
+    get sourceError() { return sourceError; }, set sourceError(value) { sourceError = value; },
+    get atlasRequest() { return atlasRequest; }, set atlasRequest(value) { atlasRequest = value; },
+    get showView() { return showView; },
+  });
+
   const scope = paneScope(id, root);
   const { part } = scope;
   const picker = () => shared.picker();
-  /** The project files of this pane's document, by project path; undefined outside a folder project. */
-  function projectSources() {
-    return picker().projectName(id) === undefined && picker().atlasProject(id) === undefined ? undefined : picker().compilation(id);
-  }
-  /** The pane shows a project's generated atlas map, which is read-only and never saved. */
-  const showsAtlas = () => currentDocumentKey?.startsWith('atlas:') === true;
-  const atlasReadOnly = 'The atlas map is drawn from the project files and is read-only. Open a file to edit it.';
-  /** The project path a file link of this document opens, when it stays inside the project. */
-  const linkedPath = (path: string) => projectSources() && resolveFilePath(picker().inputPath(id), path);
-  const fileLabel = (path: string) => projectLabel(linkedPath(path) ?? path.replace(/^.*\//, ''));
+
   const fileLinks = {
     exists: (path: string) => {
       const target = linkedPath(path);
@@ -176,72 +180,11 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
   let sourceError = false;
   /** The files this pane followed links through to reach its document, oldest first. */
   let fileStack: FileVisit[] = [];
-
-  function setPreviewState(state: 'loading' | 'updating' | 'ready' | 'error' | 'unavailable') {
-    if (state === 'updating') {
-      if (previewTimer || previewStatus.dataset.state === 'updating') return;
-      previewTimer = setTimeout(() => {
-        previewTimer = undefined;
-        previewStatus.dataset.state = 'updating';
-        setText(previewStatus, 'Updating preview…');
-        setText(lintSummary, 'Checking diagnostics…');
-        viewer.stage.dataset.previewState = 'updating';
-      }, 700);
-      return;
-    }
-    clearTimeout(previewTimer);
-    previewTimer = undefined;
-    previewStatus.dataset.state = state;
-    setText(previewStatus, { loading: 'Loading preview…',
-      ready: 'Preview ready', error: 'Preview out of date', unavailable: 'Preview unavailable' }[state]);
-    if (state === 'error' || state === 'unavailable') viewer.stage.dataset.previewState = 'stale';
-    else if (state === 'loading') viewer.stage.dataset.previewState = 'loading';
-    else delete viewer.stage.dataset.previewState;
-    viewer.stage.dispatchEvent(new Event('zf-sourcechange'));
-  }
   const setActivity = statusLine(activityStatus);
   const setFormatStatus = statusLine(formatStatus);
-  function setEditorDiagnostics(diagnostics: SourceDiagnostic[]) {
-    // Edits clear diagnostics on every keystroke; skip the work when there are none.
-    if (!diagnostics.length && !activeDiagnostics.length) return;
-    activeDiagnostics = diagnostics;
-    const errors = diagnostics.filter((item) => item.severity === 'error').length;
-    const warnings = diagnostics.length - errors;
-    part('mobile-source').textContent = errors ? `Source · ${plural(errors, 'error')}`
-      : warnings ? `Source · ${plural(warnings, 'warning')}` : 'Source';
-    editor.diagnostics(diagnostics, picker().inputPath(id), documentName, canOpenDiagnostic, (item) => void openDiagnostic(item));
-    diagnosticsButton.disabled = diagnostics.length === 0;
-    diagnosticsButton.textContent = diagnostics.length ? `Diagnostics (${diagnostics.length})` : 'Diagnostics';
-    diagnosticsButton.setAttribute('aria-label', `Review ${plural(diagnostics.length, 'diagnostic')}`);
-  }
   let lintDocument: CompileResponse | undefined;
   /** Lint with default options, computed once per compile for the viewer and exports. */
   let defaultLint: LintResult | undefined;
-  function invalidateSource() {
-    viewer.stage.classList.remove('zf-starter-preview');
-    boardTools.invalidate();
-    // Invalidate immediately, including requests still awaiting WASM/render startup.
-    ++generation;
-    previewQueue.invalidate();
-    ++documentRevision;
-    ai?.sourceChanged();
-    viewer.setBusy(true);
-    setFormatStatus('');
-    viewer.cancelPendingRender();
-    sourceMap = [];
-    revealButton.disabled = true;
-    lintDocument = undefined;
-    setEditorDiagnostics([]);
-    viewer.highlightShapes([]);
-    documentExport = undefined;
-    shared.exportChanged();
-    setPreviewState(viewer.stage.querySelector('svg') ? 'updating' : 'loading');
-    setActivity('');
-    shared.clearFileError();
-    shared.setExportStatus('');
-    compileError.invalidate();
-    viewer.stage.dispatchEvent(new Event('zf-sourcechange'));
-  }
   const editor = new SourceEditor(part('editor'), {
     panelId: scope.id('diagnostics-panel'),
     changed: () => {
@@ -255,7 +198,7 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
     },
     selected: () => { selectionCleared = undefined; void highlightSelection(false); },
     sourceClicked: (position) => void focusSourceBoard(position),
-    format: () => void formatSource(),
+    format: () => void editing.formatSource(),
     reveal: () => void revealSelection(),
     label: id === 'a' ? 'D2 source' : 'D2 source, second diagram',
   });
@@ -349,38 +292,6 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
       };
     },
   });
-  /** The boards below a project file's root, named from the root down, for choosing where a link opens. */
-  async function linkedBoards(path: string) {
-    const { boards } = await compileLinkedFile(path);
-    const names = (id: string): string[] => {
-      const board = boards.get(id)!;
-      return board.parent ? [...names(board.parent), board.kind === 'layers' ? board.name : `${board.name} (${board.kind === 'scenarios' ? 'scenario' : 'step'})`] : [];
-    };
-    return [...boards.values()].filter((board) => board.parent).map((board) => ({ hash: board.hash, label: names(board.id).join(' › ') }));
-  }
-  /** Create a project file beside this one, in the project's folder when the browser can write it, otherwise as a
-   * draft that Save asks where to put. Resolves its project path. */
-  async function createLinkedFile(name: string, source: string) {
-    const context = projectSources();
-    const projectId = currentDocumentKey && projectIdOf(currentDocumentKey);
-    if (!context || !projectId) return;
-    const taken = new Set(Object.keys(context.fs));
-    const folder = shared.directoryHandles.get(projectId);
-    try {
-      for (;;) {
-        const path = newProjectPath(context.inputPath, name, taken);
-        const created = folder ? await createProjectFile(folder, path, source) : 'refused';
-        if (created === 'exists') { taken.add(path); continue; }
-        const key = picker().addProjectFile(projectId, path, source, created !== 'refused');
-        if (!key) return;
-        if (created !== 'refused') shared.fileHandles.set(key, created);
-        else if (folder) setActivity(`Created ${path} as a draft. Save it to keep it.`);
-        return path;
-      }
-    } catch (error) {
-      setActivity(`Could not create a linked diagram: ${describeError(error)}`, 'error');
-    }
-  }
   const linkPreview = setupLinkPreview(scope, viewer, {
     label: fileLabel,
     missing: (path) => !projectSources() ? openFolderMessage : fileLinks.exists(path) ? undefined : `Missing file: ${fileLabel(path)}`,
@@ -389,153 +300,9 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
   /** One compile per linked file of a project and that project's sources, for previews of the boards links open.
    * Every source counts, since the file may import any of them, directly or through other imports. */
   const linkedCompiles = new Map<string, { sources: string; result: Promise<{ boards: ReturnType<typeof indexBoards>; render: RenderBoard }> }>();
-  function compileLinkedFile(path: string) {
-    const context = projectSources()!;
-    const source = context.fs[path]!;
-    const key = siblingKey(currentDocumentKey!, path);
-    const sources = JSON.stringify(Object.entries(context.fs).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0));
-    const cached = linkedCompiles.get(key);
-    if (cached?.sources === sources) return cached.result;
-    const result = (async () => {
-      const { d2 } = await shared.compiler.get();
-      const compiled = await compileSource(source, { inputPath: path, fs: context.fs });
-      const diagram = rebaseFileLinks(compiled, path);
-      const boards = indexBoards(diagram);
-      compiledBoards.set(key, new Set([...boards.values()].map((board) => board.hash)));
-      const render: RenderBoard = (target) => d2.render(diagram, { ...compiled.renderOptions, target, noXMLTag: true });
-      return { boards, render };
-    })();
-    linkedCompiles.set(key, { sources, result });
-    void result.catch(() => { if (linkedCompiles.get(key)?.result === result) linkedCompiles.delete(key); });
-    return result;
-  }
-
-  /** Compile another file of this pane's folder project for an export that follows file links. */
-  async function compileProjectFile(path: string, fs: Record<string, string>): Promise<Pick<DocumentExport, 'diagram' | 'render' | 'diagnostics'>> {
-    const { d2 } = await shared.compiler.get();
-    const compiled = await compileSource(fs[path]!, { inputPath: path, fs });
-    const diagram = rebaseFileLinks(compiled, path);
-    const render: RenderBoard = (target) => d2.render(diagram, { ...compiled.renderOptions, target, noXMLTag: true });
-    return { diagram, render, diagnostics: lint(compiled, { files: lintFiles(path) }).diagnostics };
-  }
-
-  function setFileStack(stack: FileVisit[]) {
-    fileStack = stack;
-    viewer.setTrailPrefix(stack.map((visit, index) => ({ name: projectLabel(visit.path), activate: () => void returnToFile(index) })));
-  }
-  /** Open another file of the project in this pane at `route`, coming from the files in `stack`.
-   * The first pane records it as a history entry, so Back returns to the file before. */
-  async function visitFile(target: { source: string; name: string; key: string }, route: ViewerRoute, stack: FileVisit[]) {
-    if (id === 'a') history.pushState({ zoomflowFile: target.key, zoomflowFiles: stack, zoomflowTrail: route.trail }, '',
-      `${location.pathname}${location.search}${route.hash}`);
-    await replaceDocument(target.source, target.name, target.key, false, route, stack);
-  }
-  /** A search jump follows the same file history as a link, including a way back from an unlinked file. */
-  async function openProjectMatch(entry: ProjectSearchEntry) {
-    if (entry.file === picker().inputPath(id) && !showsAtlas()) {
-      await boardTools.revealSearchMatch(entry);
-      return;
-    }
-    const here: FileVisit = { key: currentDocumentKey!, path: showsAtlas() ? atlasMapName : picker().inputPath(id), route: viewer.route };
-    const target = picker().selectProjectPath(id, entry.file);
-    if (!target) { viewer.setMessage(`Missing file: ${entry.file}`, true); return; }
-    if (target.pane !== id) { await shared.revealMatch(target.pane, entry); return; }
-    const earlier = fileStack.findIndex(visit => visit.key === target.key);
-    const stack = earlier >= 0 ? fileStack.slice(0, earlier) : [...fileStack, here];
-    const opening = visitFile(target, { hash: entry.hash, trail: entry.trail }, stack);
-    const request = documentOpens;
-    await opening;
-    if (documentOpens !== request || currentDocumentKey !== target.key || editor.source !== target.source || mappedSource !== editor.source || sourceError) return;
-    // The file visit already pushed history; revealing its shape keeps that single entry.
-    await boardTools.revealSearchMatch(entry, 'replace');
-  }
-  function openFileLink(path: string, hash: string) {
-    const resolved = linkedPath(path);
-    // Before the picker switches this pane to the target.
-    const here: FileVisit = { key: currentDocumentKey!, path: picker().inputPath(id), route: viewer.route };
-    const target = resolved && picker().selectProjectPath(id, resolved);
-    if (!target) { viewer.setMessage(`Missing file: ${fileLabel(path)}`, true); return; }
-    if (target.pane !== id) { viewer.setMessage(`${target.name} is open in the other pane.`, true); return; }
-    // Coming back to a file on the way here shortens the way instead of repeating it.
-    const earlier = fileStack.findIndex((visit) => visit.key === target.key);
-    // A file opened from the atlas map starts a new way through files, as one chosen from the menu does.
-    const stack = showsAtlas() ? [] : target.key === currentDocumentKey ? fileStack : earlier >= 0 ? fileStack.slice(0, earlier) : [...fileStack, here];
-    void visitFile(target, { hash: boardRoute(hash) }, stack);
-  }
-  /** Reopen a file on the way here at the board it was left on. */
-  async function returnToFile(index: number) {
-    const visit = fileStack[index];
-    // By key, so a recovered copy on the way here reopens itself rather than the file it copies.
-    const target = visit && (visit.key.startsWith('atlas:') ? picker().showAtlas(id, projectIdOf(visit.key)!)
-      : picker().selectProjectPath(id, visit.path, visit.key));
-    if (!target || target.pane !== id) {
-      viewer.setMessage(target ? `${target.name} is open in the other pane.` : `Missing file: ${projectLabel(visit.path)}`, true);
-      return;
-    }
-    await visitFile(target, visit.route, fileStack.slice(0, index));
-  }
-  /** Files on the way here as a history entry recorded them, keeping those the project still has. */
-  function savedStack(value: unknown): FileVisit[] {
-    if (!Array.isArray(value)) return [];
-    return value.filter((visit): visit is FileVisit => typeof visit?.key === 'string' && typeof visit.path === 'string' &&
-      typeof visit.route?.hash === 'string' && picker().hasDraft(visit.key));
-  }
-  /** Back or Forward reached an entry of another file: open it when it belongs to this pane's project. */
-  function restoreFromHistory(state: { zoomflowFile: string } & Record<string, unknown>) {
-    const key = state.zoomflowFile;
-    // Project files, the atlas map and recovered copies of project files all name their project.
-    const project = projectIdOf(key);
-    if (project === undefined || project !== projectIdOf(currentDocumentKey ?? '')) return false;
-    const path = projectPathOf(key);
-    const target = key.startsWith('atlas:') ? picker().showAtlas(id, project)
-      : path !== undefined ? picker().selectProjectPath(id, path, key) : undefined;
-    if (!target || target.pane !== id) return false;
-    void replaceDocument(target.source, target.name, target.key, false, viewer.route, savedStack(state.zoomflowFiles));
-    return true;
-  }
   let atlasRequest = 0;
   /** Counts documents shown in this pane, so work for one is abandoned when another opens, even the same one again. */
   let documentOpens = 0;
-  /** Draw a project's atlas map from its files' latest sources, compiling each file to find its links, and show it. */
-  async function openAtlasMap(projectId: string) {
-    const request = ++atlasRequest;
-    // Opening another document or closing the pane while files compile abandons the map.
-    const from = documentOpens;
-    const current = () => request === atlasRequest && documentOpens === from;
-    const { fs, home } = picker().projectSources(projectId);
-    const paths = Object.keys(fs).sort((a, b) => a.localeCompare(b));
-    const files: AtlasFile[] = [];
-    try {
-      for (const [index, path] of paths.entries()) {
-        setActivity(`Drawing the atlas map: ${path} (${index + 1} of ${paths.length})…`);
-        try {
-          const compiled = await compileSource(fs[path], { inputPath: path, fs });
-          files.push({ path, links: linksOfFile(rebaseFileLinks(compiled, path), path) });
-        } catch (error) {
-          // A restart that cuts a compile short says nothing about the file's source.
-          if (isEngineUnavailable(error)) throw error;
-          files.push({ path, links: [], failed: true });
-        }
-        if (!current()) return;
-      }
-    } catch (error) {
-      if (current()) setActivity(`Could not draw the atlas map: ${describeError(error)}`, 'error');
-      return;
-    }
-    const target = picker().showAtlas(id, projectId, atlasMapSource(files, home));
-    if (!target) { setActivity(''); return; }
-    if (target.pane !== id) { setActivity(`${target.name} is open in the other pane.`); return; }
-    const failed = files.filter((file) => file.failed).length;
-    setActivity(failed ? `${plural(failed, 'file')} did not compile, so ${failed === 1 ? 'its links are' : 'their links are'} left out.` : '');
-    await replaceDocument(target.source, target.name, target.key, true);
-    showView('preview');
-  }
-  /** Dim the source outside the board on view; `opened` scrolls to it unless someone is typing there. */
-  function showBoardSource(opened: boolean) {
-    if (mappedSource !== editor.source) return;
-    const board = viewer.currentBoard?.id ?? 'root';
-    editor.showBoard(board === 'root' ? undefined : blocks.get(board), opened && !editor.view.hasFocus);
-  }
 
   /** Take on a saved or renamed draft's key and name, which a saved or renamed example changes. */
   function adopt(saved: { key: string; name: string }) {
@@ -584,166 +351,21 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
     await load(source, name);
   }
 
-  async function compileSource(source: string, context: { inputPath: string; fs: Record<string, string> } = picker().compilation(id)) {
-    const { d2, fonts } = await shared.compiler.get();
-    const input = projectFileSystem(context.inputPath, context.fs, source);
-    const padValue = new URLSearchParams(location.search).get('pad');
-    const pad = padValue === null ? 100 : Number(padValue);
-    return d2.compile(input, {
-      ...fonts,
-      layout: 'elk', themeID: 0, darkThemeID: 200,
-      pad: Number.isFinite(pad) && pad >= 0 ? pad : 100,
-    });
-  }
-
-  async function formatSource() {
-    if (formatButton.disabled) return;
-    if (showsAtlas()) { setFormatStatus(atlasReadOnly); return; }
-    const revision = documentRevision;
-    const document = editor.view.state.doc;
-    const source = editor.source;
-    formatButton.disabled = true;
-    setFormatStatus('Formatting…');
-    try {
-      const compiled = mappedSource === source && lintDocument ? lintDocument : await compileSource(source);
-      // Edits or opening another file invalidate this request, even after undo.
-      if (editor.view.state.doc !== document || documentRevision !== revision) return;
-      const formatted = compiled.fs[compiled.inputPath];
-      if (typeof formatted !== 'string') throw new Error('D2 did not return formatted source.');
-      setFormatStatus(editor.format(formatted) ? 'Source formatted.' : 'Source is already formatted.');
-    } catch (error) {
-      if (editor.view.state.doc !== document || documentRevision !== revision) return;
-      // A restart or closed workspace says nothing about the source.
-      if (isEngineUnavailable(error)) { setFormatStatus('Formatting stopped because the diagram engine was unavailable. Try again.', 'error'); return; }
-      setFormatStatus(`Formatting failed: ${compilerDiagnostics(error, source, picker().inputPath(id)).map((item) => item.message).join('\n')}`, 'error');
-    } finally { formatButton.disabled = false; }
-  }
-  formatButton.addEventListener('click', () => void formatSource());
-  part('clear-source').addEventListener('click', () => {
-    if (showsAtlas()) return;
-    if (editor.replaceSource('', 'delete.clear')) setActivity('Source cleared. Undo with ⌘Z / Ctrl+Z.');
-    editor.view.focus();
+  const editing = setupPaneEditing({
+    formatButton, showsAtlas, setFormatStatus, editor, compileSource, picker, id, part, setActivity,
+    scope, viewer, missingBacklink, boundaryPorts, lintFiles, showView,
+    get documentRevision() { return documentRevision; },
+    get mappedSource() { return mappedSource; },
+    get lintDocument() { return lintDocument; },
+    get documentName() { return documentName; },
+    get activeDiagnostics() { return activeDiagnostics; },
   });
-  ai = setupAiAssistant(scope, {
-    read: () => ({ source: editor.source, name: documentName, board: viewer.currentBoard?.id ?? 'root', revision: documentRevision }),
-    diagnostics: async (source) => {
-      if (lintDocument && mappedSource === source) return activeDiagnostics;
-      const context = picker().compilation(id);
-      const options = { missingBacklink: missingBacklink.checked, boundaryPorts: boundaryPorts.checked, files: lintFiles(context.inputPath) };
-      try {
-        const compiled = await compileSource(source, context);
-        const sources = indexShapeSources(compiled.diagram, compiled.graph, source, compiled.inputPath);
-        return lintDiagnostics(lint(compiled, options).diagnostics, source, sources, compiled.inputPath);
-      } catch (error) {
-        if (isEngineUnavailable(error)) throw new AiError('The diagram engine is unavailable, so diagnostics could not be checked. Retry the preview, then send again.', describeError(error));
-        return compilerDiagnostics(error, source, context.inputPath);
-      }
-    },
-    validate: async (source) => {
-      try { await compileSource(source); }
-      catch (error) {
-        if (!isEngineUnavailable(error)) throw error;
-        throw new AiError('The diagram engine is unavailable, so the AI change could not be checked. Your source is unchanged; retry the preview, then send again.', describeError(error));
-      }
-    },
-    apply: (source) => editor.applyAi(source),
-    readOnly: () => showsAtlas() ? atlasReadOnly : undefined,
-    onStatus: (message, kind) => setActivity(message, kind),
-    undo: () => editor.undo(),
-    revealChange: () => { showView('source'); editor.revealAiChange(); },
-    dismissHighlights: () => editor.clearAiHighlights(),
-  });
-
-  /** The project around a compiled file, so lint checks its links to other files. */
-  function lintFiles(inputPath: string) {
-    const context = projectSources();
-    const key = currentDocumentKey;
-    if (!context || !key) return undefined;
-    return { inputPath, exists: (path: string) => Object.hasOwn(context.fs, path), boards: (path: string) => compiledBoards.get(siblingKey(key, path)) };
-  }
-  function updateLint() {
-    boardTools.refreshSearch();
-    if (!lintDocument || mappedSource !== editor.source) return;
-    const result = !missingBacklink.checked && !boundaryPorts.checked && defaultLint ? defaultLint
-      : lint(lintDocument, { missingBacklink: missingBacklink.checked, boundaryPorts: boundaryPorts.checked, files: lintFiles(lintDocument.inputPath) });
-    setEditorDiagnostics(lintDiagnostics(result.diagnostics, editor.source, sourceMap, lintDocument.inputPath));
-    const errors = result.diagnostics.filter((item) => item.severity === 'error').length;
-    const warnings = result.diagnostics.length - errors;
-    setText(lintSummary, errors || warnings ? `${plural(errors, 'lint error')}, ${plural(warnings, 'warning')}` : 'No lint issues');
-    lintSummary.dataset.empty = String(!errors && !warnings);
-  }
+  ai = editing.ai;
   for (const option of [missingBacklink, boundaryPorts]) option.addEventListener('change', () => { updateLint(); shared.lintChanged(); });
-  function canOpenDiagnostic(item: SourceDiagnostic) {
-    const context = picker().compilation(id);
-    if (item.filename === context.inputPath) return Boolean(item.range);
-    const text = item.filename && context.fs[item.filename];
-    return typeof text === 'string' && Boolean(item.rawRange && parseSourceRange(item.rawRange, text, item.filename));
-  }
-  async function openDiagnostic(item: SourceDiagnostic) {
-    if (!canOpenDiagnostic(item)) return;
-    showView('source');
-    if (item.filename === picker().inputPath(id)) {
-      if (item.range) editor.select(item.range, true);
-      return;
-    }
-    const target = picker().selectProjectPath(id, item.filename!);
-    if (!target || !item.rawRange) return;
-    const range = parseSourceRange(item.rawRange, target.source, item.filename);
-    // The other pane already shows that file: select the location there.
-    if (target.pane !== id) { shared.revealSource(target.pane, range); return; }
-    const key = target.key;
-    await replaceDocument(target.source, target.name, key);
-    // A second navigation during compilation must not move the new document's cursor.
-    if (currentDocumentKey !== key || editor.source !== target.source) return;
-    if (range) editor.select(range, true);
-  }
   diagnosticsButton.addEventListener('click', () => {
     showView('source');
     editor.showDiagnostics();
   });
-
-  async function highlightSelection(navigate: boolean) {
-    if (mappedSource !== editor.source) return;
-    const { from, to, empty } = editor.selection;
-    if (selectionCleared?.from !== from || selectionCleared.to !== to) selectionCleared = undefined;
-    const matches = sourceMap.filter((entry) => empty
-      ? from >= entry.from && from < entry.to : from < entry.to && to > entry.from);
-    const current = viewer.currentBoard?.id;
-    const target = matches.find((entry) => entry.board === current) ?? matches[0];
-    revealButton.disabled = !target;
-    // A shared layer root is represented by its parent shape in the connected view. Reveal its own board
-    // when its source is requested, so it can still be selected and edited as a standalone centre.
-    const shown = target && [...viewer.stage.querySelectorAll<SVGElement>('[data-shape-id]')]
-      .some(shape => shape.dataset.shapeBoard === target.board && shape.dataset.shapeId === target.shape);
-    if (navigate && target && (target.board !== current || !shown)) await viewer.navigate(target.board);
-    const shapes = selectionCleared ? [] : matches.filter((entry) => entry.board === viewer.currentBoard?.id).map((entry) => entry.shape);
-    viewer.highlightShapes(shapes);
-    boardTools.select([...new Set(shapes)]);
-  }
-  async function focusSourceBoard(position: number) {
-    if (mappedSource !== editor.source) return;
-    const line = editor.view.state.doc.lineAt(position);
-    // The opening and closing lines belong to the board too. Choose the smallest
-    // enclosing block so nested boards take precedence over their ancestors.
-    let target = 'root';
-    let size = editor.source.length;
-    for (const [board, block] of blocks) {
-      if (line.to >= block.from - 1 && line.from <= block.to + 1 && block.to - block.from < size) {
-        target = board;
-        size = block.to - block.from;
-      }
-    }
-    if (target !== viewer.currentBoard?.id) await viewer.navigate(target);
-  }
-  async function revealSelection() {
-    if (revealButton.disabled) return;
-    const revision = documentRevision;
-    await highlightSelection(true);
-    if (revision !== documentRevision) return;
-    showView('preview');
-    viewport.reveal([...viewer.stage.querySelectorAll<SVGGraphicsElement>('.zf-source-selected')]);
-    viewer.stage.focus({ preventScroll: true });
-  }
   revealButton.addEventListener('click', () => void revealSelection());
   const boardChanged = () => {
     // Viewer commits its URL and trail immediately after dispatching this event.
@@ -764,46 +386,6 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
     const shape = event.target instanceof Element ? event.target.closest<SVGElement>('[data-shape-id]') : null;
     touchDown = event.pointerType === 'touch' && shape ? { shape, at: event.timeStamp } : undefined;
   }, { capture: true });
-  function selectShape(event: MouseEvent | KeyboardEvent) {
-    const shape = event.target instanceof Element ? event.target.closest<SVGElement>('[data-shape-id]')
-      ?? event.target.closest('a')?.querySelector<SVGElement>('[data-shape-id]') : null;
-    const touch = touchDown;
-    const touchClick = event instanceof MouseEvent && touch !== undefined && shape === touch.shape && event.timeStamp - touch.at < 1000;
-    touchDown = undefined;
-    // A click on the background clears the selection on the diagram, even before it updates; the source cursor
-    // stays where it is.
-    if (!shape && event instanceof MouseEvent) {
-      const { from, to } = editor.selection;
-      selectionCleared = { from, to };
-      viewer.highlightShapes([]);
-      boardTools.select([]);
-      return;
-    }
-    if (mappedSource !== editor.source) return;
-    const entry = shape && sourceMap.find((item) => item.board === viewer.currentBoard?.id && item.shape === shape.dataset.shapeId);
-    if (!entry) return;
-    const anchor = shape.closest('a');
-    // A click on a step or topic that opens a board selects it; only its arrow badge opens the board.
-    const linked = Boolean(anchor) && !(anchor!.dataset.follow === 'badge' && event instanceof MouseEvent &&
-      !(event.target instanceof Element && event.target.closest('.appendix-icon')));
-    if (event instanceof KeyboardEvent) {
-      if (event.key !== 'Enter' && event.key !== ' ' || linked && !event.altKey) return;
-      event.preventDefault();
-      event.stopImmediatePropagation();
-    }
-    if (linked && event.altKey) { event.preventDefault(); event.stopImmediatePropagation(); }
-    // Steps and topics of a builder board are edited on the diagram, so selecting one keeps focus there.
-    const onCanvas = !linked && !event.altKey && (boardTools.editsOnCanvas(entry.shape) ||
-      // A touch tap keeps a draggable branch on the diagram so its branch controls remain available.
-      // Mouse clicks still reveal an ordinary shape's source, including at a narrow viewport.
-      shared.tabbed() && touchClick &&
-      shape.classList.contains('zf-branch-draggable'));
-    if (onCanvas) shape.focus({ preventScroll: true });
-    else if (!linked || event.altKey) showView('source');
-    selectionCleared = undefined;
-    editor.select(entry, !onCanvas && (!linked || event.altKey));
-    void highlightSelection(false);
-  }
   viewer.stage.addEventListener('click', selectShape, { capture: true });
   viewer.stage.addEventListener('keydown', selectShape, { capture: true });
   setupCanvasGuidance(viewer.stage, viewport.setGuidance, () => sourceMap.length > 0 && mappedSource === editor.source,
@@ -811,270 +393,52 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
       if (root.hasAttribute('data-fullscreen')) root.querySelector<HTMLButtonElement>('.zf-fullscreen-toggle')!.click();
       showView('source'); editor.view.focus();
     }, (target) => boardTools.canvasKeys(target));
-
-  function load(source: string, name: string, preserveViewport = false) {
-    return previewQueue.run(() => loadPreview(source, name, preserveViewport));
-  }
   let previewAttempt: symbol;
-  async function loadPreview(source: string, name: string, preserveViewport: boolean) {
-    const attempt = previewAttempt = Symbol();
-    let slowTimer: ReturnType<typeof setTimeout> | undefined;
-    const request = ++generation;
-    const view = currentDocumentKey === 'order.d2' ? picker().readView('order.d2') : undefined;
-    viewer.stage.classList.toggle('zf-starter-preview', id === 'a' && !shared.compiler.ready &&
-      currentDocumentKey === 'order.d2' && source === exampleSource('order.d2') &&
-      (!location.hash || location.hash === '#/') && !view?.hidden?.length && !view?.layers?.root &&
-      !viewer.stage.querySelector('svg'));
-    viewer.setBusy(true);
-    viewer.setMessage('');
-    setPreviewState(viewer.stage.querySelector('svg') ? 'updating' : 'loading');
-    notice.hide();
-    const startupTimer = !shared.compiler.ready ? setTimeout(() => {
-      if (request !== generation) return;
-      notice.show('Loading the diagram engine… The first download can take a moment. You can keep editing.', 'status');
-    }, 1200) : undefined;
-    try {
-      const { d2 } = await shared.compiler.get();
-      clearTimeout(startupTimer);
-      if (request !== generation) return;
-      notice.hide();
-      slowTimer = setTimeout(() => {
-        if (attempt !== previewAttempt) return;
-        notice.show('The preview is taking longer than usual. You can keep editing, wait, or restart the engine to preview your latest source.', 'status', 'Restart preview');
-      }, 15_000);
-      const compiled = await compileSource(source);
-      if (request !== generation) return;
-      // Links written in imported files open what they name from the file shown; lint reads them where written.
-      const diagram = rebaseFileLinks(compiled, picker().inputPath(id));
-      // D2 registers fonts at compile time for both text measurement and rendering.
-      // This diagram carries that family into every viewer/export render call.
-      const render: RenderBoard = (target) => d2.render(diagram, {
-        ...compiled.renderOptions, target, noXMLTag: true,
-      });
-      const linted = lint(compiled, { files: lintFiles(compiled.inputPath) });
-      const { diagnostics } = linted;
-      const compiledSources = indexShapeSources(compiled.diagram, compiled.graph, source, compiled.inputPath);
-      viewer.setSourceShapes(compiledSources);
-      if (initialLayerRoot) {
-        // Resolve the saved ID through the compiled boards, including quoted names. Starting at Root
-        // would otherwise broaden a saved subtree and change its custom branch selection.
-        viewer.setRoute({ hash: indexBoards(diagram).get(initialLayerRoot)?.hash ?? '#/' });
-        initialLayerRoot = undefined;
-      }
-      await viewer.setDocument(diagram, render, diagnostics, preserveViewport);
-      if (request === generation) {
-        viewer.stage.classList.remove('zf-starter-preview');
-        sourceMap = compiledSources;
-        mappedSource = source;
-        lintDocument = compiled;
-        defaultLint = linted;
-        updateLint();
-        compileError.hide(true);
-        const boards = indexBoards(diagram);
-        if (currentDocumentKey?.startsWith('project:')) compiledBoards.set(currentDocumentKey, new Set([...boards.values()].map((board) => board.hash)));
-        blocks = boardBlocks(compiled.graph, source, compiled.inputPath);
-        const sites = boardSites(source, blocks, boards);
-        boardTools.compiled(source, sites, boards, compiled.graph);
-        linkPreview.compiled(boards, sites, render);
-        showBoardSource(false);
-        void highlightSelection(false);
-        const renderSource = async (glyphs: string) => {
-          const { d2: engine, fonts } = await shared.compiler.get();
-          const result = await engine.compile(glyphs, { ...fonts, layout: 'elk', themeID: 0, darkThemeID: 200 });
-          return engine.render(result.diagram, { ...result.renderOptions, noXMLTag: true });
-        };
-        sourceError = false;
-        documentExport = { diagram, render, name, diagnostics, renderSource };
-        shared.exportChanged();
-        setPreviewState('ready');
-        // Show a board or shape an edit just made.
-        void boardTools.settled();
-      }
-    } catch (error) {
-      if (request === generation) {
-        viewer.stage.classList.remove('zf-starter-preview');
-        if (error instanceof CompilerStartupError || error instanceof ViewerRenderError) {
-          setEditorDiagnostics([]);
-          compileError.hide();
-          setText(lintSummary, '');
-          notice.show(error instanceof ViewerRenderError
-            ? 'The preview could not be drawn. Retry the preview. Your source is preserved.'
-            : 'The diagram engine could not start. Check your connection and retry. Your source is preserved.', 'alert', 'Retry preview');
-          setPreviewState('unavailable');
-          return;
-        }
-        const filename = picker().inputPath(id);
-        const diagnostics = compilerDiagnostics(error, source, filename);
-        setEditorDiagnostics(diagnostics);
-        lintDocument = undefined;
-        setText(lintSummary, plural(diagnostics.length, 'source error'));
-        sourceError = true;
-        shared.exportChanged();
-        const first = diagnostics[0];
-        const externalCompilerError = first.filename && first.filename !== filename ? first : undefined;
-        const message = first.message.replace(/^[^:]+:\d+:\d+:\s*/, '');
-        compileError.show(externalCompilerError
-          ? `Error · ${first.message}` : first.range ? `Error · Line ${first.line}, column ${first.column}: ${message}` : `Error · Source location unavailable: ${message}`,
-        externalCompilerError ? `Open ${externalCompilerError.filename}` : 'Go to error', canOpenDiagnostic(first));
-        viewer.setMessage('');
-        setPreviewState('error');
-      }
-    } finally {
-      clearTimeout(startupTimer);
-      clearTimeout(slowTimer);
-      if (attempt === previewAttempt && notice.offersRestart) notice.hide();
-      if (request === generation) viewer.setBusy(false);
-    }
-  }
+  const { pane } = setupPaneLifecycle({
+    get id() { return id; },
+    get root() { return root; },
+    get scope() { return scope; },
+    get viewer() { return viewer; },
+    get editor() { return editor; },
+    get viewport() { return viewport; },
+    get showView() { return showView; },
+    get views() { return views; },
+    get setActivity() { return setActivity; },
+    get currentDocumentKey() { return currentDocumentKey; }, set currentDocumentKey(value) { currentDocumentKey = value; },
+    get documentName() { return documentName; }, set documentName(value) { documentName = value; },
+    get generation() { return generation; }, set generation(value) { generation = value; },
+    get documentOpens() { return documentOpens; }, set documentOpens(value) { documentOpens = value; },
+    get documentExport() { return documentExport; }, set documentExport(value) { documentExport = value; },
+    get sourceError() { return sourceError; }, set sourceError(value) { sourceError = value; },
+    get documentRevision() { return documentRevision; }, set documentRevision(value) { documentRevision = value; },
+    get mappedSource() { return mappedSource; }, set mappedSource(value) { mappedSource = value; },
+    get load() { return load; },
+    get boardTools() { return boardTools; },
+    get compileProjectFile() { return compileProjectFile; },
+    get replaceDocument() { return replaceDocument; },
+    get adopt() { return adopt; },
+    get showsAtlas() { return showsAtlas; },
+    get invalidateSource() { return invalidateSource; },
+    get debounce() { return debounce; }, set debounce(value) { debounce = value; },
+    get saveFileButton() { return saveFileButton; },
+    get openAtlasMap() { return openAtlasMap; },
+    get picker() { return picker; },
+    get shared() { return shared; },
+    get ai() { return ai; }, set ai(value) { ai = value; },
+    get setFileStack() { return setFileStack; },
+    get savedStack() { return savedStack; },
+    get previewTimer() { return previewTimer; }, set previewTimer(value) { previewTimer = value; },
+    get previewQueue() { return previewQueue; },
+    get notice() { return notice; },
+    get linkedCompiles() { return linkedCompiles; },
+    get part() { return part; },
+    get draftStatus() { return draftStatus; },
+    get missingBacklink() { return missingBacklink; },
+    get boundaryPorts() { return boundaryPorts; },
+    get updateLint() { return updateLint; },
+    get setFormatStatus() { return setFormatStatus; },
+  });
 
-  const pane = {
-    id,
-    root,
-    scope,
-    viewer,
-    editor,
-    viewport,
-    showView,
-    views,
-    setActivity,
-    get key() { return currentDocumentKey; },
-    get name() { return documentName; },
-    get source() { return editor.source; },
-    get generation() { return generation; },
-    /** Opening and closing documents invalidates outstanding file reads. */
-    get documentOpens() { return documentOpens; },
-    get documentExport() { return documentExport; },
-    get sourceError() { return sourceError; },
-    async revealMatch(entry: DiagramSearchEntry) {
-      const request = documentOpens;
-      const revision = documentRevision;
-      if (mappedSource !== editor.source) await load(editor.source, documentName, true);
-      if (request === documentOpens && revision === documentRevision && mappedSource === editor.source && !sourceError)
-        await boardTools.revealSearchMatch(entry);
-    },
-    compileProjectFile,
-    /** The preview reflects the current source, so exports and source selection are valid. */
-    get current() { return mappedSource === editor.source; },
-    replaceDocument,
-    adopt,
-    /** A sibling's source may be imported directly or transitively, including by a failed compile. */
-    refreshProject(projectId: string) {
-      if (!currentDocumentKey || projectIdOf(currentDocumentKey) !== projectId) return;
-      boardTools.refreshSearch();
-      if (showsAtlas()) return;
-      invalidateSource();
-      clearTimeout(debounce);
-      debounce = setTimeout(() => void load(editor.source, documentName, true), 350);
-    },
-    save: () => { if (showsAtlas()) setActivity(atlasReadOnly); else saveFileButton.click(); },
-    openAtlasMap,
-    /** Name the document for its exports and downloads; returns the name it was given. */
-    rename(name: string) {
-      const renamed = picker().rename(id, name);
-      if (!renamed) return documentName;
-      // The file on disk keeps its name, so the next save asks where to save under the new one.
-      const linked = shared.fileHandles.delete(renamed.key);
-      adopt(renamed);
-      setActivity(`Renamed to ${renamed.name}.${linked ? ' Save asks where to save it.' : ''}`);
-      return documentName;
-    },
-    /** Show a document restored on startup, keeping its board from the page URL. */
-    open(document: { key: string; name: string; source: string }) {
-      viewer.stage.classList.remove('zf-starter-preview');
-      ++documentOpens;
-      boardTools.resetSearch();
-      ai?.documentSwitched();
-      sourceError = false;
-      documentName = document.name;
-      currentDocumentKey = document.key;
-      // A reload keeps the files the first pane came through, which its history entry recorded.
-      setFileStack(id === 'a' && history.state?.zoomflowFile === document.key ? savedStack(history.state.zoomflowFiles) : []);
-      delete root.dataset.empty;
-      viewport.setDocument(document.key);
-      editor.open(document.key, document.source);
-      boardTools.refresh();
-      picker().refresh();
-      clearTimeout(debounce);
-      void load(editor.source, documentName);
-    },
-    /** Leave the pane without a document, for example when its draft is removed. */
-    close() {
-      viewer.stage.classList.remove('zf-starter-preview');
-      ++documentOpens;
-      boardTools.resetSearch();
-      sourceError = false;
-      clearTimeout(debounce);
-      clearTimeout(previewTimer);
-      previewTimer = undefined;
-      // Like opening another document: pending format and AI results no longer apply.
-      ++documentRevision;
-      ai?.cancel();
-      ai?.sourceChanged();
-      ++generation;
-      previewQueue.invalidate();
-      viewer.cancelPendingRender();
-      viewer.setBusy(false);
-      currentDocumentKey = undefined;
-      setFileStack([]);
-      documentName = '';
-      documentExport = undefined;
-      root.dataset.empty = 'true';
-      root.querySelector('.pane-document-name')!.textContent = 'Choose a diagram';
-      root.querySelector<HTMLElement>('.pane-document .draft-unsaved')!.hidden = true;
-      if (notice.owned) notice.hide();
-      shared.exportChanged();
-    },
-    /** Restart after an engine failure or a slow preview; `restart` also abandons queued work. */
-    retry(restart: boolean) {
-      if (!currentDocumentKey) return;
-      if (restart) previewQueue.restart();
-      // Linked files' boards render with the engine a restart disposes.
-      if (restart) linkedCompiles.clear();
-      clearTimeout(debounce);
-      invalidateSource();
-      void load(editor.source, documentName, true);
-    },
-    focusSource(range?: { from: number; to: number }) {
-      showView('source');
-      if (range) editor.select(range, true);
-      else editor.view.focus();
-    },
-    renderDraftState({ dirty, recoveryAvailable, savePending, hasDraft, downloadRequested }: DraftState) {
-      const atlas = showsAtlas();
-      boardTools.refreshSearch();
-      for (const name of ['save-file', 'format-source', 'clear-source']) part(name).hidden = atlas;
-      const handle = currentDocumentKey ? shared.fileHandles.get(currentDocumentKey) : undefined;
-      const canSave = Boolean(handle) || canChooseSaveFile();
-      // Activating this pane on pointerdown refreshes its status; replacing the label cancels WebKit's click.
-      setText(saveFileButton, canSave ? 'Save .d2' : 'Download .d2');
-      saveFileButton.title = `${canSave ? 'Save source to a file' : 'Download a source copy; this browser cannot write back to your file'} (⌘S or Ctrl+S)`;
-      const recovery = !recoveryAvailable ? 'Browser draft unavailable' : savePending ? 'Saving browser draft…' : 'Browser draft saved';
-      const file = downloadRequested ? 'Source download started' : handle && !dirty ? 'Saved to file'
-        : dirty ? 'File has unsaved changes' : hasDraft ? 'Save a file copy to keep' : 'Edit to update the preview';
-      const status = atlas ? 'Atlas map · read-only, drawn from the project files' : recoveryAvailable ? file : `${file} · Browser draft unavailable`;
-      // Do not repeatedly announce unchanged file state during background backups.
-      if (draftStatus.textContent !== status) draftStatus.textContent = status;
-      draftStatus.dataset.kind = recoveryAvailable ? 'info' : 'error';
-      draftStatus.dataset.recovery = !recoveryAvailable ? 'unavailable' : savePending ? 'pending' : 'saved';
-      draftStatus.title = `${recovery}. ${canSave ? 'Save keeps a source copy on disk.' : 'Download keeps a separate source copy.'} View settings stay in this browser. Browser storage can be cleared.`;
-      part('recovery-info').textContent = recoveryAvailable
-        ? 'Source edits and view settings are backed up in this browser. Save a disk copy of your source to keep it; view settings stay in this browser.'
-        : 'Browser recovery is unavailable. Save or download your source to keep it; view settings may be lost on reload.';
-      // Rewriting an unchanged label under the pointer cancels the click in WebKit.
-      const label = root.querySelector('.pane-document-name')!;
-      if (label.textContent !== documentName) label.textContent = documentName;
-      root.querySelector<HTMLElement>('.pane-document .draft-unsaved')!.hidden = !dirty;
-    },
-    /** A closed split keeps the second pane for reopening; it releases page-level listeners meanwhile. */
-    suspend: () => viewer.suspend(),
-    resume: () => viewer.resume(),
-    lintOptions: { missingBacklink, boundaryPorts },
-    updateLint,
-    dispose() {
-      clearTimeout(debounce); clearTimeout(previewTimer); setActivity(''); setFormatStatus('');
-      previewQueue.invalidate(); ai?.dispose(); ++generation; editor.destroy(); viewer.destroy();
-    },
-  };
   return pane;
 }
 export type DocumentPane = ReturnType<typeof createDocumentPane>;
