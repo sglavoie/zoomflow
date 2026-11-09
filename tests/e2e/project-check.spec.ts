@@ -135,6 +135,8 @@ test('invalidates completed results after another pane edits, then activates its
   await expect(page.locator('#pane-b')).toHaveAttribute('data-active', '');
   await expect(page.locator('#editor-b .cm-content')).toBeFocused();
   await expect(page.locator('#pane-document')).toContainText('index.d2');
+  // The edit's pending preview also refreshes lint marks; that must preserve the selected issue.
+  await previewReady(page, 'b');
   await expect.poll(() => page.locator('#editor-b').evaluate(element => {
     const view = (element.querySelector('.cm-content') as any).cmTile.root.view;
     return view.state.sliceDoc(view.state.selection.main.from, view.state.selection.main.to);

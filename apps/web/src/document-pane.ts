@@ -126,6 +126,7 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
     name: () => showsAtlas() ? 'Atlas' : examples.find(example => example.name === currentDocumentKey)?.title ?? displayTitle(documentName),
     // Steps and topics open their board from the arrow badge, so a click on the shape selects it to edit.
     follows: (link, event) => (link as SVGElement).dataset.follow !== 'badge' || event instanceof KeyboardEvent ||
+      event.ctrlKey || event.metaKey || event.shiftKey ||
       Boolean(event.target instanceof Element && event.target.closest('.appendix-icon')),
     // Only folder projects can follow links to their other files; single files and drafts ask for the folder.
     get files() { return projectSources() && fileLinks; },

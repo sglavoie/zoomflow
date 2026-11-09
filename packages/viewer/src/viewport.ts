@@ -368,14 +368,20 @@ export function createViewport(stage: HTMLElement, host: HTMLElement, clamp: typ
     for (const child of graph.children) {
       if (!(child instanceof SVGGraphicsElement) || !['g', 'a'].includes(child.localName) || child.classList.contains('appendix-icon')) continue;
       const graphic = child.localName === 'a' ? child.querySelector(':scope > g:not(.appendix-icon, .zf-depth-stack)') ?? child : child;
-      const bounds = graphic.getBoundingClientRect();
-      if (!bounds.width && !bounds.height) continue;
-      for (const [x, y] of [[bounds.left, bounds.top], [bounds.right, bounds.bottom]]) {
-        const point = new DOMPoint(x, y).matrixTransform(inverse);
-        left = Math.min(left, point.x);
-        top = Math.min(top, point.y);
-        right = Math.max(right, point.x);
-        bottom = Math.max(bottom, point.y);
+      // Firefox includes invisible, non-scaling hit strokes in a connection's bounds.
+      // Measure its visible children so adding editing targets cannot change the fit.
+      const graphics = child.hasAttribute('data-connection-id') ? [...child.children].filter(node =>
+        node instanceof SVGGraphicsElement && !node.classList.contains('zf-connection-hit')) : [graphic];
+      for (const node of graphics) {
+        const bounds = node.getBoundingClientRect();
+        if (!bounds.width && !bounds.height) continue;
+        for (const [x, y] of [[bounds.left, bounds.top], [bounds.right, bounds.bottom]]) {
+          const point = new DOMPoint(x, y).matrixTransform(inverse);
+          left = Math.min(left, point.x);
+          top = Math.min(top, point.y);
+          right = Math.max(right, point.x);
+          bottom = Math.max(bottom, point.y);
+        }
       }
     }
     if (![left, top, right, bottom].every(Number.isFinite) || right <= left || bottom <= top) return fallback;

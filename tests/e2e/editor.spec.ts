@@ -13,13 +13,13 @@ async function replace(page: Page, text: string) {
 }
 /** Editing affordances retire when source changes; compare the retained diagram itself. */
 const previewMarkup = async (page: Page) => page.locator('.zf-stage').evaluate(stage => {
-  const copy = stage.cloneNode(true) as HTMLElement;
+  const copy = stage.querySelector(':scope > svg')!.cloneNode(true) as SVGElement;
   for (const hit of copy.querySelectorAll('.zf-connection-hit')) hit.remove();
   for (const edge of copy.querySelectorAll('[data-connection-id]')) {
     for (const attribute of ['data-flow-connection', 'tabindex', 'role', 'aria-label']) edge.removeAttribute(attribute);
   }
   for (const link of copy.querySelectorAll('[data-follow]')) link.removeAttribute('data-follow');
-  return copy.innerHTML.replaceAll(' zf-branch-draggable', '');
+  return copy.outerHTML.replaceAll(' zf-branch-draggable', '');
 });
 async function findSource(page: Page, text: string) {
   await source(page).focus();
@@ -39,6 +39,9 @@ test('live edits retain the last good render on syntax errors and recover with d
   await page.locator('.zf-stage a[data-board="root.layers.checkout"]').locator('.appendix-icon').click();
   await ready(page, 'root.layers.checkout');
   await expect(page.locator('.zf-stage')).not.toHaveAttribute('data-transition');
+  // The replacement board can put a different link under the pointer. Leave the
+  // canvas so its delayed hover preview cannot change attributes during editing.
+  await page.mouse.move(0, 0);
   const before = await previewMarkup(page);
   await source(page).focus();
   await source(page).press('ControlOrMeta+End');

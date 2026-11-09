@@ -206,6 +206,16 @@ export class SourceEditor {
       if (request !== this.diagnosticsRequest) return;
       this.view.dispatch(setDiagnostics(this.view.state, items.flatMap((item) =>
         item.filename === filename && item.range ? [{ ...item.range, severity: item.severity, message: item.message, source: item.source }] : [])));
+      // Chromium can collapse the native selection when a lint mark wraps its text
+      // node, while CodeMirror still caches the correct range. Restore it before
+      // the next DOM measurement reads that collapse back into the editor state.
+      const selection = this.view.state.selection.main;
+      const native = this.view.dom.ownerDocument.getSelection();
+      if (this.view.hasFocus && !selection.empty && native?.isCollapsed) {
+        const anchor = this.view.domAtPos(selection.anchor);
+        const head = this.view.domAtPos(selection.head);
+        native.setBaseAndExtent(anchor.node, anchor.offset, head.node, head.offset);
+      }
     };
     // Edits clear diagnostics from the update listener; dispatch after that update, not inside it.
     if (this.updating) setTimeout(apply); else apply();
