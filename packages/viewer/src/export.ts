@@ -268,7 +268,7 @@ function offlineViewer(lib: typeof runtime) {
     const files = stack;
     breadcrumbs.render([...files.map((visit, index) => ({ name: names.get(visit.file) ?? visit.file, activate: () => returnTo(index) })),
       // Like the live viewer, a file's root crumb is named after the file.
-      ...visited.map((id, index) => ({ name: id === 'root' && (names.get(shown.file) || document.title) || shown.byId.get(id)!.name,
+      ...visited.map((id, index) => ({ detail: id !== 'root', name: id === 'root' && (names.get(shown.file) || document.title) || shown.byId.get(id)!.name,
         activate: () => show(shown.byId.get(id)!, visited.slice(0, index + 1)) }))]);
     if (focusStage || focusCrumb) {
       // Going up keeps the keyboard position: focus the link leading back down, which the
@@ -332,8 +332,9 @@ function offlineViewer(lib: typeof runtime) {
     const owner = typeof file === 'string' ? docs.get(file) : undefined;
     return Boolean(owner) && Array.isArray(visits) && visits.length > 0 && visits.every((id) => typeof id === 'string' && owner!.byId.has(id));
   };
+  const presentation = JSON.parse(document.querySelector('#zoomflow-presentation')?.textContent ?? '{}') as { initialBoard?: string; startMode?: string };
   function restore() {
-    const requested = location.hash;
+    const requested = location.hash || presentation.initialBoard || '#/';
     const { path, hash: raw } = lib.parseAtlasHash(requested);
     const hash = lib.normalizeRouteHash(raw);
     const owner = path === undefined ? entry : docs.get(path);
@@ -382,6 +383,7 @@ function offlineViewer(lib: typeof runtime) {
   });
   lib.watchHistory(window, restore);
   restore();
+  if (presentation.startMode === 'walkthrough' || presentation.startMode === 'presentation') walkthrough.start(presentation.startMode === 'presentation');
 }
 
 export function offlineViewerScript(): string {

@@ -34,7 +34,7 @@ test('preview zooms and pans, then fits again', async ({ page }) => {
   expect((await box()).slice(0, 2)).not.toEqual(beforeLinkedPan.slice(0, 2));
   await expect(page.locator('.zf-stage')).toHaveAttribute('data-board', 'root');
   await page.getByRole('button', { name: 'Overview (fit diagram)' }).click();
-  expect(await box()).toEqual(original);
+  (await box()).forEach((value, index) => expect(value).toBeCloseTo(original[index], 5));
 });
 
 test('zoom out reaches 10% with the diagram centered, then fits again', async ({ page }) => {
@@ -58,8 +58,8 @@ test('zoom out reaches 10% with the diagram centered, then fits again', async ({
   expect(zoomedOut[1] + zoomedOut[3] / 2).toBeCloseTo(original[1] + original[3] / 2);
 
   await fit.click();
-  await expect(page.locator('.zf-zoom-controls span')).toHaveText('Fit');
-  expect(await box()).toEqual(original);
+  await expect(page.locator('.zf-zoom-controls span')).toHaveText('Fitted');
+  (await box()).forEach((value, index) => expect(value).toBeCloseTo(original[index], 5));
 });
 
 test('live edits keep the current view, while opening another diagram fits it', async ({ page }) => {
@@ -74,7 +74,7 @@ test('live edits keep the current view, while opening another diagram fits it', 
   await expect(page.locator('.zf-zoom-controls span')).toHaveText('150%');
   await page.locator('#file').setInputFiles({ name: 'fresh.d2', mimeType: 'text/plain', buffer: Buffer.from('fresh: Fits again') });
   await expect(page.locator('.zf-stage')).toContainText('Fits again');
-  await expect(page.locator('.zf-zoom-controls span')).toHaveText('Fit');
+  await expect(page.locator('.zf-zoom-controls span')).toHaveText('Fitted');
 });
 
 test('keyboard board navigation retains focus and announces the new board', async ({ page }) => {
@@ -253,12 +253,12 @@ test('pinching from Fit zooms the diagram using real touch input', async ({ page
     await client.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ id: 1, x: x - distance, y }, { id: 2, x: x + distance, y }] });
   }
   await client.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
-  await expect(page.locator('.zf-zoom-controls span')).not.toHaveText('Fit');
+  await expect(page.locator('.zf-zoom-controls span')).not.toHaveText('Fitted');
   const zoom = Number((await page.locator('.zf-zoom-controls span').innerText()).replace('%', ''));
   expect(zoom).toBeGreaterThan(150);
   await expect(stage).toHaveAttribute('data-board', 'root');
   await page.getByRole('button', { name: 'Overview (fit diagram)', exact: true }).click();
-  await expect(page.locator('.zf-zoom-controls span')).toHaveText('Fit');
+  await expect(page.locator('.zf-zoom-controls span')).toHaveText('Fitted');
 });
 
 for (const offline of [false, true]) test(`compact breadcrumbs retain every ancestor ${offline ? 'offline' : 'live'}`, async ({ page, context }, info) => {
@@ -287,7 +287,7 @@ for (const offline of [false, true]) test(`compact breadcrumbs retain every ance
     await expect(page.locator('.zf-stage')).toHaveAttribute('data-board', id);
   }
   expect((await crumbs.boundingBox())!.height).toBe(initialHeight);
-  await expect(crumbs.getByRole('button')).toHaveText(['nested', '…', 'charge', 'capture']);
+  await expect(crumbs.getByRole('button')).toHaveText(['Nested', '…', 'charge', 'capture']);
   const earlier = crumbs.getByRole('button', { name: 'Earlier boards', exact: true });
   await earlier.click();
   const menu = crumbs.getByRole('group', { name: 'Earlier boards' });

@@ -15,3 +15,9 @@ export function safeFilename(name: string) {
 
 /** Live regions announce every write, so only write changed text. */
 export const setText = (element: HTMLElement, text: string) => { if (element.textContent !== text) element.textContent = text; };
+
+/** Keep authored capitalization; make file slugs readable without changing the disk name. */
+export function displayTitle(name: string) {
+  const title = name.replace(/^.*[/\\]/, '').replace(/\.d2$/i, '').replace(/[-_]+/g, ' ').trim();
+  return title ? title[0].toLocaleUpperCase() + title.slice(1) : 'Untitled diagram';
+}

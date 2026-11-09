@@ -1,3 +1,4 @@
+import { setupCanvasCoach } from './canvas-coach';
 /** Listen to the page only while the viewer is shown: a hidden pane (closed split view) stops until it resumes. */
 export function pageListeners(stage: HTMLElement, listen: (signal: AbortSignal) => void) {
   let listening: AbortController | undefined;
@@ -18,6 +19,25 @@ export function setupCanvasGuidance(stage: HTMLElement, setGuidance: (text: stri
   empty?: { available(): boolean; start(kind: 'flow' | 'mind map', focus: HTMLElement): void }) {
   let input: 'keyboard' | 'touch' | 'mouse' = matchMedia('(pointer: coarse)').matches ? 'touch' : 'mouse';
   let hovered: Element | null = null;
+  const nearby = document.createElement('div');
+  nearby.className = 'canvas-context-help'; nearby.hidden = true;
+  nearby.setAttribute('aria-hidden', 'true'); stage.after(nearby);
+  function placeGuidance() {
+    const selected = stage.querySelector<SVGGraphicsElement>('.zf-canvas-selected');
+    const hide = !selected || Boolean(stage.dataset.walkthrough || stage.dataset.transition) ||
+      Boolean(stage.parentElement?.querySelector('.canvas-rename:not([hidden]), .canvas-coach:not([hidden])'));
+    if (nearby.hidden !== hide) nearby.hidden = hide;
+    if (nearby.hidden || !selected) return;
+    const editable = canvasKeys(selected)?.includes('F2 renames');
+    nearby.textContent = editable ? input === 'keyboard' ? canvasKeys(selected)!.split(' · ').slice(0, 2).join(' · ') : input === 'touch' ? 'More → Rename · + adds a step' : 'Double-click to rename · + to keep building'
+      : 'More actions are beside this shape';
+    const box = selected.getBoundingClientRect();
+    const canvas = stage.getBoundingClientRect();
+    const area = nearby.offsetParent?.getBoundingClientRect() ?? canvas;
+    if (box.top < canvas.top + nearby.offsetHeight + 16 || box.bottom > canvas.bottom || box.right < canvas.left || box.left > canvas.right) { nearby.hidden = true; return; }
+    nearby.style.left = `${Math.max(canvas.left + 8, Math.min(box.left + box.width / 2 - nearby.offsetWidth / 2, canvas.right - nearby.offsetWidth - 8)) - area.left}px`;
+    nearby.style.top = `${box.top - nearby.offsetHeight - 14 - area.top}px`;
+  }
   function update() {
     if (stage.dataset.board && !stage.querySelector('svg')) renderEmpty();
     const focused = stage.contains(document.activeElement) ? document.activeElement : null;
@@ -27,6 +47,7 @@ export function setupCanvasGuidance(stage: HTMLElement, setGuidance: (text: stri
     const connection = target?.closest('[data-flow-connection]');
     const source = canSelectSource();
     const activate = input === 'touch' ? 'Tap' : 'Click';
+    const rename = input === 'touch' ? 'More → Rename' : 'Double-click to rename';
     let text: string;
     if (input === 'keyboard' && focused) {
       // Steps and topics edit on the diagram, where Enter may add a topic instead of selecting source.
@@ -38,20 +59,20 @@ export function setupCanvasGuidance(stage: HTMLElement, setGuidance: (text: stri
     } else if (link && link.getAttribute('data-follow') === 'badge' && !target?.closest('.appendix-icon')) {
       // Steps and topics open their board from the arrow badge; the shape itself is for editing.
       const action = link.getAttribute('aria-label') ?? 'Open link';
-      text = `${activate} to select · Double-click to rename · The arrow badge will ${action[0].toLowerCase()}${action.slice(1)}`;
+      text = `${activate} to select · ${rename} · The arrow badge will ${action[0].toLowerCase()}${action.slice(1)}`;
     } else if (link) {
       const action = link.getAttribute('aria-label') ?? 'Open link';
       text = `${activate} to ${action[0].toLowerCase()}${action.slice(1)}${source && input === 'mouse' ? ' · Alt+click selects source' : ''}`;
     } else if (connection) {
       text = `${activate} to edit this connection’s label or delete it`;
     } else if (shape && source) {
-      text = canvasKeys(shape)?.includes('F2 renames') ? `${activate} to select · Double-click to rename` : `${activate} to select this shape’s source`;
+      text = canvasKeys(shape)?.includes('F2 renames') ? `${activate} to select · ${rename}` : `${activate} to select this shape’s source`;
     } else {
       const child = stage.querySelector('a[data-link-direction="child"]');
       const label = child?.querySelector('text')?.textContent?.trim();
       text = label ? child!.getAttribute('data-follow') === 'badge' ? `${activate} the arrow on ${label} to explore` : `${activate} ${label} to explore`
         : [...stage.querySelectorAll('[data-shape-id]')].some(shape => canvasKeys(shape)?.includes('F2 renames'))
-          ? `${activate} a step to add to it · Double-click to rename`
+          ? `${activate} a step to add to it · ${rename}`
         : source ? `${activate} a shape to select its source`
         : 'Use the breadcrumbs to explore this diagram';
       if (input === 'touch') text += ' · Pinch to zoom';
@@ -61,6 +82,7 @@ export function setupCanvasGuidance(stage: HTMLElement, setGuidance: (text: stri
     }
     if (!stage.querySelector('svg')) text = '';
     setGuidance(text, input === 'keyboard' && Boolean(focused));
+    placeGuidance();
   }
   stage.addEventListener('pointerover', (event) => {
     input = event.pointerType === 'touch' ? 'touch' : 'mouse';
@@ -118,47 +140,12 @@ export function setupCanvasGuidance(stage: HTMLElement, setGuidance: (text: stri
     renderEmpty();
     update();
   });
-  new MutationObserver(update).observe(stage.parentElement!.parentElement!, {
-    attributes: true, subtree: true, attributeFilter: ['aria-busy', 'data-preview-state'],
+  const observer = new MutationObserver(update);
+  observer.observe(stage.parentElement!.parentElement!, {
+    attributes: true, subtree: true, attributeFilter: ['aria-busy', 'data-preview-state', 'class'],
   });
+  stage.addEventListener('zf-viewportchange', placeGuidance, { capture: true });
+  stage.addEventListener('zf-destroy', () => { observer.disconnect(); nearby.remove(); });
   stage.parentElement!.classList.add('workspace-canvas');
   setupCanvasCoach(stage, canvasKeys);
-}
-
-/** A single dismissible invitation sits beside an editable step, then gets out of the way. */
-function setupCanvasCoach(stage: HTMLElement, keys: (target: Element) => string | undefined) {
-  const preference = 'zoomflow.canvas-hint-dismissed';
-  let dismissed = false;
-  try { dismissed = localStorage.getItem(preference) === 'true'; } catch { /* Optional preference. */ }
-  const coach = document.createElement('div');
-  coach.className = 'canvas-coach';
-  coach.hidden = true;
-  coach.innerHTML = '<span><strong>Make it yours</strong>Double-click to rename. Select to add the next step.</span><button type="button" aria-label="Dismiss editing hint">×</button>';
-  stage.after(coach);
-  function dismiss() {
-    dismissed = true;
-    coach.hidden = true;
-    try { localStorage.setItem(preference, 'true'); } catch { /* Optional preference. */ }
-  }
-  coach.querySelector('button')!.addEventListener('click', dismiss);
-  stage.addEventListener('dblclick', event => { if (event.target instanceof Element && keys(event.target)?.includes('F2 renames')) dismiss(); });
-  function place() {
-    if (dismissed || stage.dataset.transition || stage.querySelector('.zf-canvas-selected') || stage.dataset.walkthrough) { coach.hidden = true; return; }
-    const shape = [...stage.querySelectorAll<SVGGraphicsElement>('[data-shape-id]')].find(node => !node.closest('a') && keys(node)?.includes('F2 renames'));
-    if (!shape) { coach.hidden = true; return; }
-    const box = shape.getBoundingClientRect();
-    const canvas = stage.getBoundingClientRect();
-    if (!box.width || box.left < canvas.left || box.right > canvas.right || box.bottom > canvas.bottom - 90) { coach.hidden = true; return; }
-    coach.hidden = false;
-    const outer = coach.offsetParent!.getBoundingClientRect();
-    coach.style.maxWidth = `${Math.min(270, canvas.width - 24)}px`;
-    coach.style.left = `${Math.max(canvas.left + 12, Math.min(box.x + box.width / 2 - coach.offsetWidth / 2, canvas.right - coach.offsetWidth - 12)) - outer.left}px`;
-    coach.style.top = `${box.bottom + 16 - outer.top}px`;
-  }
-  const observer = new MutationObserver(place);
-  observer.observe(stage.parentElement!.parentElement!, { attributes: true, subtree: true, attributeFilter: ['aria-busy', 'data-preview-state', 'data-transition', 'class', 'data-walkthrough'] });
-  stage.addEventListener('zf-viewportchange', place, { capture: true });
-  const resize = new ResizeObserver(place);
-  resize.observe(stage);
-  stage.addEventListener('zf-destroy', () => { observer.disconnect(); resize.disconnect(); coach.remove(); });
 }

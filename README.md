@@ -57,7 +57,8 @@ use **Retry preview** to try again without losing your source.
    deeper. On any starter board, double-click a step to rename it, or select it
    and choose **Add next step** or **Add branch** to keep building. Hover a connection
    and click **+** to insert a step between its ends. **Walkthrough** lets you follow
-   a path, choose branches, and explore detail boards; it also works in exported HTML. Use breadcrumbs or **Boards** to move around, hover a link to preview its
+   a path, choose branches, and explore detail boards. Choose **Present** for a focused
+   canvas with smooth framing and compact controls; it also works in exported HTML. Use breadcrumbs or **Boards** to move around, hover a link to preview its
    board, or zoom and drag to inspect the diagram. **Overview** fits the whole diagram at a
    comfortable scale; phones start closer when needed to keep labels readable. **Find in diagram** (⌘⇧F / Ctrl+Shift+F)
    finds board names and shape labels across the current document and jumps to a match.
@@ -89,7 +90,8 @@ use **Retry preview** to try again without losing your source.
    With **Current board image (PNG)** selected, **Copy PNG** puts the image on your
    clipboard for pasting into another app.
    Interactive HTML includes offline search for boards and shapes, across every
-   bundled file in an atlas.
+   bundled file in an atlas. **Export → Presentation** adds a display title and subtitle,
+   chooses the opening board and mode for HTML, or frames SVG/PNG images for sharing.
 
 Edits have browser recovery backups, but save a disk copy or download a Zoomflow project to keep them. Browsers
 without direct file access offer **Download .d2**. Syntax errors retain the last

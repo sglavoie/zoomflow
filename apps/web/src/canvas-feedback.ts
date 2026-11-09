@@ -40,7 +40,17 @@ export function setupCanvasFeedback(viewer: Viewer, options: BoardToolsOptions) 
       const elements = [...viewer.stage.querySelectorAll<SVGElement>('[data-shape-id], [data-connection-id]')].filter(element =>
         element.dataset.shapeBoard === board?.id && element.dataset.shapeId === shape ||
         element.dataset.connectionBoard === board?.id && edges.has(element.dataset.connectionId!));
-      for (const element of elements) element.classList.add('zf-edit-highlight');
+      for (const element of elements) {
+        element.classList.add('zf-edit-highlight');
+        if (!matchMedia('(prefers-reduced-motion: reduce)').matches) for (const path of element.querySelectorAll<SVGPathElement>('path.connection')) {
+          const length = path.getTotalLength();
+          const animation = path.animate([{ strokeDasharray: `${length}`, strokeDashoffset: length }, { strokeDasharray: `${length}`, strokeDashoffset: 0 }],
+            { duration: 300, easing: 'ease-out' });
+          const cancel = () => animation.cancel();
+          viewer.stage.addEventListener('zf-sourcechange', cancel, { once: true });
+          void animation.finished.catch(() => {}).finally(() => viewer.stage.removeEventListener('zf-sourcechange', cancel));
+        }
+      }
       highlightTimer = setTimeout(() => { for (const element of elements) element.classList.remove('zf-edit-highlight'); }, 1000);
     },
   };

@@ -107,7 +107,7 @@ test('hover follows the shape while keyboard focus retains a visible selection',
   const link = page.locator('.zf-stage a[data-board="root.layers.checkout"]');
   await link.locator('[data-shape-id="Checkout"]').hover();
   await expect(link).toHaveCSS('outline-style', 'none');
-  await expect(link.locator('[data-shape-id="Checkout"]')).not.toHaveCSS('filter', 'none');
+  await expect(link.locator('.zf-depth-2')).toHaveCSS('transform', 'matrix(1, 0, 0, 1, 12, -12)');
   await expect(link.locator('[data-shape-id="Checkout"]')).toHaveCSS('outline-style', 'none');
   // Keyboard navigation back up restores focus to the link leading down.
   await link.locator('.appendix-icon').click();

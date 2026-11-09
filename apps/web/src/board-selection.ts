@@ -1,3 +1,4 @@
+import { readFlow } from './flow-model';
 import type { BoardTransfers } from './board-transfers';
 import type { Board } from '@zoomflow/core';
 import type { Viewer } from '@zoomflow/viewer';
@@ -56,6 +57,12 @@ interface Context {
 }
 
 export function setupBoardSelection(ctx: Context) {
+  const addHandle = document.createElement('button');
+  addHandle.type = 'button'; addHandle.className = 'canvas-add'; addHandle.textContent = '+'; addHandle.hidden = true;
+  addHandle.tabIndex = -1;
+  ctx.viewer.stage.after(addHandle);
+  addHandle.addEventListener('click', () => { if (ctx.selected) ctx.applyCanvas(ctx.selected, [{ type: 'add' }]); });
+  ctx.viewer.stage.addEventListener('zf-destroy', () => addHandle.remove(), { once: true });
   function startRename(shape: string) {
     const target = ctx.canvasTarget(shape);
     const element = ctx.shapeElement(shape);
@@ -69,6 +76,7 @@ export function setupBoardSelection(ctx: Context) {
     help.textContent = `Enter to save · ${addKeys} to add ${target.kind === 'flow' ? 'next step' : 'a topic'} · Esc to cancel`;
     help.hidden = false;
     ctx.rename.hidden = false;
+    addHandle.hidden = true;
     // Follow the shape while the diagram pans or zooms.
     const place = () => {
       const box = element.getBoundingClientRect();
@@ -98,6 +106,7 @@ export function setupBoardSelection(ctx: Context) {
     ctx.renaming = undefined;
     cancelAnimationFrame(frame);
     ctx.rename.hidden = true;
+    addHandle.hidden = !ctx.selected || !ctx.canvasTarget(ctx.selected);
     (ctx.rename.nextElementSibling as HTMLElement).hidden = true;
     const edits: CanvasEdit[] = commit ? [{ type: 'rename', label: ctx.rename.value }] : [];
     if (then) edits.push(then);
@@ -131,7 +140,10 @@ export function setupBoardSelection(ctx: Context) {
       items.push(item('Rename', () => startRename(shape), { keys: 'F2' }),
         item(canvas.add, () => ctx.applyCanvas(shape, [{ type: 'add' }]), { keys: 'Control+Enter Meta+Enter Insert' }));
       if (canvas.sibling) items.push(item('Add sibling topic', () => ctx.applyCanvas(shape, [{ type: 'sibling' }]), { keys: 'Enter' }));
-      if (canvas.kind === 'flow') items.push(item('Connect to…', () => ctx.connections.start(shape)));
+      if (canvas.kind === 'flow') {
+        if (canvas.add !== 'Add branch') items.push(item('Add branch', () => ctx.applyCanvas(shape, [{ type: 'branch' }])));
+        items.push(item('Connect to…', () => ctx.connections.start(shape)));
+      }
     }
     if (!boardsOnly && ctx.branchOwner(ctx.boardId()) && (!ctx.mapCanvas(ctx.boardId()) || shape !== 'n' || ctx.mapCanvas(ctx.boardId())!.trail.length || ctx.transfers?.canMove(ctx.boardId(), shape))) {
       items.push(item('Move branch…', () => ctx.branches.start(shape)));
@@ -189,7 +201,7 @@ export function setupBoardSelection(ctx: Context) {
     };
     const all = shape ? actions(shape, button) : [];
     const canvas = shape && ctx.canvasTarget(shape);
-    const primary = canvas ? [canvas.add, canvas.kind === 'flow' ? 'Connect to…' : 'Add sibling topic'] : ['Open diagram'];
+    const primary = canvas ? [canvas.add, ...(canvas.kind === 'flow' ? ['Add branch', 'Connect to…'] : ['Add sibling topic'])] : ['Open diagram'];
     const buttons = all.filter(item => primary.includes(item.textContent!));
     if (shape && all.length) {
       // Keep the frequent actions beside the shape. The full list also remains available on right-click.
@@ -207,6 +219,8 @@ export function setupBoardSelection(ctx: Context) {
       buttons.push(more);
     }
     ctx.shapeGroup.hidden = !buttons.length;
+    addHandle.hidden = !canvas || Boolean(ctx.renaming);
+    if (canvas) { addHandle.setAttribute('aria-label', `${canvas.add} after ${canvas.label}`); addHandle.title = `${canvas.add} (${addKeys})`; }
     if (shape && buttons.length) {
       const label = `Selected: ${ctx.shapeLabel(ctx.boardId(), shape)}`;
       ctx.shapeGroup.setAttribute('aria-label', label);
@@ -237,7 +251,7 @@ export function setupBoardSelection(ctx: Context) {
     for (const node of ctx.viewer.stage.querySelectorAll('.zf-selection')) node.remove();
     for (const node of ctx.viewer.stage.querySelectorAll('.zf-canvas-selected')) node.classList.remove('zf-canvas-selected');
     const element = shape && ctx.shapeElement(shape);
-    if (!(element instanceof SVGGraphicsElement)) { ctx.shapeGroup.hidden = true; return; }
+    if (!(element instanceof SVGGraphicsElement)) { ctx.shapeGroup.hidden = true; addHandle.hidden = true; return; }
     const box = element.getBBox();
     const pad = 7;
     // Pills, ovals and circles get a pill-shaped ring that follows them.
@@ -270,6 +284,13 @@ export function setupBoardSelection(ctx: Context) {
     ctx.shapeGroup.style.visibility = box.right < stage.left || box.left > stage.right || box.bottom < stage.top || box.top > stage.bottom ? 'hidden' : '';
     const { offsetWidth: width, offsetHeight: height } = ctx.shapeGroup;
     const gap = 8;
+    const own = ctx.current().canvas(ctx.boardId())?.own;
+    const down = own && readFlow(own)?.direction === 'down';
+    const handleX = box.right + 22;
+    const handleY = down ? box.bottom + 10 : box.top + box.height / 2;
+    addHandle.style.visibility = ctx.shapeGroup.style.visibility;
+    addHandle.style.left = `${Math.min(stage.right - 22, handleX) - bounds.left}px`;
+    addHandle.style.top = `${Math.min(stage.bottom - 22, handleY) - bounds.top}px`;
     const below = box.bottom + gap + height <= stage.bottom || box.top - gap - height < stage.top;
     const top = below ? Math.min(box.bottom + gap, stage.bottom - height - gap) : box.top - gap - height;
     const left = Math.max(stage.left + gap, Math.min(box.left + box.width / 2 - width / 2, stage.right - width - gap));

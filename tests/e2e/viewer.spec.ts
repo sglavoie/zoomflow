@@ -96,15 +96,15 @@ for (const offline of [false, true]) {
       await expect(crumbs.getByRole('button')).toHaveText(names);
       await expect(crumbs.locator('[aria-current="page"]')).toHaveText(names.at(-1)!);
     }
-    await visit('root.layers.checkout', ['order', 'checkout']);
+    await visit('root.layers.checkout', ['Order', 'checkout']);
     for (let i = 0; i < 3; i++) {
-      await visit('root.layers.checkout.layers.charge', ['order', 'checkout', 'charge']);
-      await visit('root.layers.checkout', ['order', 'checkout']);
+      await visit('root.layers.checkout.layers.charge', ['Order', 'checkout', 'charge']);
+      await visit('root.layers.checkout', ['Order', 'checkout']);
     }
     await page.goBack();
-    await expect(crumbs.getByRole('button')).toHaveText(['order', 'checkout', 'charge']);
+    await expect(crumbs.getByRole('button')).toHaveText(['Order', 'checkout', 'charge']);
     await page.goForward();
-    await expect(crumbs.getByRole('button')).toHaveText(['order', 'checkout']);
+    await expect(crumbs.getByRole('button')).toHaveText(['Order', 'checkout']);
 
     // Older history entries may already contain repeated cycles.
     await page.evaluate(() => history.replaceState({ zoomflowTrail: [
@@ -112,9 +112,9 @@ for (const offline of [false, true]) {
       'root.layers.checkout', 'root.layers.checkout.layers.charge', 'root.layers.checkout',
     ] }, ''));
     await page.reload();
-    await expect(crumbs.getByRole('button')).toHaveText(['order', 'checkout']);
+    await expect(crumbs.getByRole('button')).toHaveText(['Order', 'checkout']);
     expect(await page.evaluate(() => history.state.zoomflowTrail)).toEqual(['root', 'root.layers.checkout']);
-    await visit('root', ['order']);
+    await visit('root', ['Order']);
   });
 }
 
@@ -127,18 +127,18 @@ test('collapses sibling-board cycles while preserving browser history', async ({
   const crumbs = page.getByRole('navigation').getByRole('button');
   await drill(page, 'root.layers.A');
   await drill(page, 'root.layers.B');
-  await expect(crumbs).toHaveText(['cycle', 'A', 'B']);
+  await expect(crumbs).toHaveText(['Cycle', 'A', 'B']);
   await drill(page, 'root.layers.A');
-  await expect(crumbs).toHaveText(['cycle', 'A']);
+  await expect(crumbs).toHaveText(['Cycle', 'A']);
   await page.goBack();
   await board(page, 'root.layers.B');
-  await expect(crumbs).toHaveText(['cycle', 'A', 'B']);
+  await expect(crumbs).toHaveText(['Cycle', 'A', 'B']);
   await page.goForward();
   await board(page, 'root.layers.A');
-  await expect(crumbs).toHaveText(['cycle', 'A']);
+  await expect(crumbs).toHaveText(['Cycle', 'A']);
   await page.keyboard.press('Escape');
   await board(page, 'root');
-  await expect(crumbs).toHaveText(['cycle']);
+  await expect(crumbs).toHaveText(['Cycle']);
 });
 
 test('missing board link has a dashed outline and names its target in the viewer and offline HTML', async ({ page, context }, info) => {
@@ -221,11 +221,11 @@ test('opens order.d2, drills three levels and returns by breadcrumb, Esc and bro
 test('opens a deep link directly and restores it on reload', async ({ page }) => {
   await page.goto('/#/checkout/charge');
   await board(page, 'root.layers.checkout.layers.charge');
-  await expect(page.getByRole('navigation').getByRole('button')).toHaveText(['order', 'checkout', 'charge']);
+  await expect(page.getByRole('navigation').getByRole('button')).toHaveText(['Order flow', 'checkout', 'charge']);
   await expect(page.locator('.zf-stage')).toContainText('Capture');
   await page.reload();
   await board(page, 'root.layers.checkout.layers.charge');
-  await page.getByRole('button', { name: 'order', exact: true }).click();
+  await page.getByRole('button', { name: 'Order flow', exact: true }).click();
   await board(page, 'root');
 });
 

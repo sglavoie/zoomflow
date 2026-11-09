@@ -32,7 +32,7 @@
         <div class="document-control">
         <details id="example-picker">
           <summary aria-label="Choose a diagram" title="Choose a built-in example or return to your file">
-            <span id="filename">order.d2</span><span id="document-unsaved" class="draft-unsaved" role="img" aria-label="Unsaved changes" title="Unsaved changes — save a disk copy" hidden>•</span><span class="picker-chevron" aria-hidden="true">⌄</span>
+            <span class="document-titles"><span id="document-title">Order flow</span><span id="filename">order.d2</span></span><span id="document-unsaved" class="draft-unsaved" role="img" aria-label="Unsaved changes" title="Unsaved changes — save a disk copy" hidden>•</span><span class="picker-chevron" aria-hidden="true">⌄</span>
           </summary>
           <section class="example-menu" aria-label="Diagrams and projects">
             <div class="example-menu-heading">Built-in examples</div>
@@ -62,6 +62,16 @@
               <label class="export-choice"><input type="radio" name="export-format" value="zip" /><span><strong>All boards as SVG <small>ZIP</small></strong><span>Separate images organized in folders.</span></span></label>
               <label class="export-choice"><input type="radio" name="export-format" value="png-zip" /><span><strong>All boards as PNG <small>ZIP</small></strong><span>Separate images organized in folders.</span></span></label>
             </fieldset>
+            <details class="export-presentation"><summary>Presentation <span>Title, opening view &amp; image frame</span></summary>
+              <label>Display title <span class="field-optional">optional</span><input id="export-title" type="text" maxlength="160" /></label>
+              <label>Subtitle <span class="field-optional">optional</span><input id="export-subtitle" type="text" maxlength="300" /></label>
+              <div id="export-interactive-options">
+                <label>Opening board<select id="export-opening-board"></select></label>
+                <label>Open in<select id="export-start-mode"><option value="explore">Explore</option><option value="walkthrough">Walkthrough</option><option value="presentation">Presentation mode</option></select></label>
+              </div>
+              <label id="export-frame-option"><input id="export-frame" type="checkbox" /> Presentation frame</label>
+              <p id="export-presentation-hint">Preview your presentation before sharing.</p>
+            </details>
             <p id="export-scope" role="status"></p>
             <button id="reset-export-visibility" type="button" class="button-quiet" hidden disabled>Reset export visibility</button>
             <div class="export-actions">

@@ -1,3 +1,4 @@
+import { displayTitle } from './text';
 import { examples } from './examples';
 import type { Draft } from './draft-store';
 import { setupDocumentActions } from './document-actions';
@@ -115,7 +116,8 @@ export function setupExamplePicker({ readSource, open, onState, forget, checkpoi
   }
   function showTarget() {
     const draft = currentDraft();
-    filename.textContent = draft?.name ?? 'Choose a diagram';
+    filename.textContent = draft?.name ?? '';
+    document.querySelector('#document-title')!.textContent = draft ? displayTitle(draft.title || draft.name) : 'Choose a diagram';
     filename.title = draft?.title ?? 'Choose a diagram for this pane';
     const elsewhere = split ? current[otherPane(target)] : undefined;
     for (const [id, button] of buttons) {

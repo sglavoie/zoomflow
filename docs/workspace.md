@@ -236,3 +236,46 @@ Home: {link: ../index.d2}
   the linked file's last compile in this browser session; **Check project** checks
   every target against fresh sources. Opening a file that the other pane shows only says
   so. Images in folder projects are not loaded yet.
+
+## Presentation and finishing touches
+
+Steps with detail boards have a layered outline. Hover or focus one to preview
+what is inside; its arrow opens the board, and the violet breadcrumb marks the
+same depth. Filled diagrams distinguish ordinary steps, decisions and outcomes
+with neutral, amber and green surfaces. Outline, Soft and Elevated show the same
+sample flow in Style; Elevated also uses larger, heavier text and outlines.
+Custom project colors remain authored colors.
+
+Select a flow step and choose **Add next step** (or its nearby **+**) to insert a
+step into its single outgoing path, keeping the connection label. **Add branch**
+adds a separate outgoing path. A step with several outgoing paths offers Add
+branch; use a particular connection's **+** to insert on that path. The new step
+is ready to name immediately. Keyboard addition follows the same rule.
+
+The first-use coach follows three actions: rename a step, add a step, and open a
+detail board. Progress is remembered in this browser. Dismiss the coach at any
+point to stop the sequence. Touch instructions use the shape's **More → Rename**
+action. Contextual editing hints appear beside a selected shape.
+
+Start **Walkthrough**, then choose **Present** to explain a diagram with the
+editing controls hidden. A compact controller keeps Back, branch choices and
+nested-board exploration available. The camera frames the current step and its
+neighbors; manual input interrupts the motion, and reduced-motion preferences
+skip it. **Exit presentation** or Escape returns to the walkthrough; its close
+button ends the walkthrough. Presentation also works in offline HTML exports.
+
+In **Export → Presentation**, set an optional display title and subtitle without
+renaming the source file. For interactive HTML, choose the opening board and
+whether the file opens in Explore, Walkthrough or Presentation mode. A link with
+an explicit board fragment takes precedence over the opening-board choice.
+Use **Open preview** to try the exact interactive export before downloading it.
+
+For SVG and PNG images, enable **Presentation frame** for consistent padding and
+an optional title and subtitle. The same frame is used by the image thumbnail,
+downloads, PNG clipboard copies and images in ZIP exports. These presentation
+preferences are remembered per document in this browser; they are not written
+into D2 source or included in editable project backups.
+
+The zoom status says **Fitted** when the diagram is at its overview scale;
+**Overview** is the button that returns to that view. Hover either for an
+explanation. Document headers show a readable title above the actual filename.

@@ -58,7 +58,7 @@ const presets = [
 ] as const;
 
 function lookThumbnail(look: Look) {
-  return `<svg viewBox="0 0 140 64" aria-hidden="true" class="look-thumbnail${look.filled ? ' look-filled' : ''}${look.shadow ? ' look-shadow' : ''}"><path d="M48 32H90"/><path d="m85 28 5 4-5 4"/><rect x="10" y="17" width="38" height="30" rx="8"/><rect x="92" y="17" width="38" height="30" rx="8"/><path class="look-text" d="M20 28h18m-18 7h12m60-7h18m-18 7h12"/></svg>`;
+  return `<svg viewBox="0 0 180 82" aria-hidden="true" class="look-thumbnail${look.filled ? ' look-filled' : ''}${look.shadow ? ' look-shadow' : ''}"><path class="look-connector" d="M43 41H69m38 0h30"/><path d="m65 38 4 3-4 3m68-3 4 3-4 3"/><rect x="5" y="27" width="38" height="28" rx="7"/><path class="look-decision" d="M88 20 109 41 88 62 67 41Z"/><rect class="look-outcome" x="137" y="27" width="38" height="28" rx="14"/><g class="look-labels" fill="currentColor" stroke="none" font-family="system-ui, sans-serif" font-size="8" text-anchor="middle"><text x="24" y="44">Step</text><text x="88" y="44">Yes?</text><text x="156" y="44">Done</text></g></svg>`;
 }
 
 /** Look choices for a builder whose ids start with `prefix`. They only add library classes,

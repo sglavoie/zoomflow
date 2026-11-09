@@ -3,7 +3,7 @@ import { boardTopics, mindMapSource, placedTopics, readMindMap, type BoardTopic,
 
 /** Edits made on the diagram of a builder board: rename a shape, add the next step or a subtopic,
  * add a sibling topic, or remove a shape. */
-export type CanvasEdit = { type: 'rename'; label: string } | { type: 'add' } | { type: 'sibling' } | { type: 'remove' };
+export type CanvasEdit = { type: 'rename'; label: string } | { type: 'add' } | { type: 'branch' } | { type: 'sibling' } | { type: 'remove' };
 /** What a shape on a builder board offers on the diagram. */
 export type CanvasShape = { kind: 'flow' | 'mind map'; label: string; add: string; sibling: boolean; remove: boolean };
 /** The builder's new text, the shape to select once it is drawn, the board's trail when a rename renames the board
@@ -68,7 +68,7 @@ export function canvasShapes(own: string, trail: string[]): (shape: string) => C
   const flow = !trail.length ? readFlow(own) : undefined;
   if (flow) return shape => {
     const step = flow.steps.find(item => item.id === shape);
-    return step && { kind: 'flow', label: step.label, add: flow.connections.some(edge => edge.from === shape) ? 'Add branch' : 'Add next step', sibling: false, remove: flow.steps.length > 1 };
+    return step && { kind: 'flow', label: step.label, add: flow.connections.filter(edge => edge.from === shape).length > 1 ? 'Add branch' : 'Add next step', sibling: false, remove: flow.steps.length > 1 };
   };
   const map = readMindMap(own);
   const topics = map && mapBoard(map, trail);
@@ -130,7 +130,7 @@ function topicMoves(before: ReturnType<typeof placedTopics>, after: ReturnType<t
 
 export function editOnCanvas(own: string, trail: string[], shape: string, edit: CanvasEdit): CanvasResult | undefined {
   const target = canvasShape(own, trail, shape);
-  if (!target || edit.type === 'sibling' && !target.sibling || edit.type === 'remove' && !target.remove) return;
+  if (!target || edit.type === 'branch' && target.kind !== 'flow' || edit.type === 'sibling' && !target.sibling || edit.type === 'remove' && !target.remove) return;
   const label = edit.type === 'rename' ? cleanLabel(edit.label).replace(/\s+/g, ' ').trim() : '';
   // The rename box starts with the label as written, which may hold doubled spaces: committing it untouched is no edit.
   if (edit.type === 'rename' && (!label || label === target.label || edit.label === target.label)) return;
@@ -148,8 +148,14 @@ export function editOnCanvas(own: string, trail: string[], shape: string, edit: 
       return { own: flowSource(flow), select };
     } else {
       const id = `step_${highestStepNumber(flow) + 1}`;
-      flow.steps.push({ id, label: 'New step', shape: 'rectangle' });
-      flow.connections.push({ from: shape, to: id, label: '' });
+      flow.steps.splice(flow.steps.indexOf(step) + 1, 0, { id, label: 'New step', shape: 'rectangle' });
+      const outgoing = flow.connections.filter(edge => edge.from === shape);
+      if (edit.type === 'add' && outgoing.length === 1) {
+        // Continue a linear path without creating a second outcome. Keep its label on the first half.
+        const edge = outgoing[0];
+        flow.connections.push({ from: id, to: edge.to, label: '' });
+        edge.to = id;
+      } else flow.connections.push({ from: shape, to: id, label: '' });
       return { own: flowSource(flow), select: id };
     }
     return { own: flowSource(flow), select: shape };

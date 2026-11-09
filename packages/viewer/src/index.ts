@@ -13,6 +13,7 @@ export { parseDocumentView, serializeDocumentView, type DocumentView } from './d
 
 export { ViewerRenderError, openFolderMessage, type RenderBoard, type ViewerRoute, type ViewerOptions, type TrailPrefixEntry } from './viewer-types';
 import { ViewerRenderError, openFolderMessage, type RenderBoard, type ViewerRoute, type ViewerOptions, type TrailPrefixEntry } from './viewer-types';
+export { frameExportSvg, type ImagePresentation } from './export-frame';
 export { prepareExportSvg, rasterizeSvg, offlineViewerScript } from './export';
 export { setupViewport } from './viewport';
 export { normalizeRouteHash, resolveRouteHash } from './navigation';
@@ -435,7 +436,7 @@ export class Viewer {
   private updateCrumbs() {
     const trail = this.trail;
     const file = this.settings.files?.name?.() ?? this.settings.name?.();
-    this.breadcrumbs.render([...this.trailPrefix, ...trail.map((id, index) => ({ name: id === 'root' && file || this.boards.get(id)!.name,
+    this.breadcrumbs.render([...this.trailPrefix, ...trail.map((id, index) => ({ detail: id !== 'root', name: id === 'root' && file || this.boards.get(id)!.name,
       activate: () => { void this.navigate(id, 'push', trail.slice(0, index + 1)); } }))]);
   }
 

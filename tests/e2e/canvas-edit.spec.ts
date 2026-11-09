@@ -68,15 +68,16 @@ test('renames, adds and removes flow steps on the diagram, and undoes there', as
   await expect(stage(page)).not.toContainText('Gather feedback');
 
   // Double-click renames too, and the selection bar offers the same actions.
+  await page.getByRole('button', { name: 'Overview (fit diagram)', exact: true }).click();
   await shape(page, 'step_5').dblclick();
   await page.getByRole('textbox', { name: 'Rename Launched' }).press('Escape');
   await expect(stage(page)).toContainText('Launched');
   await expect(page.getByRole('group', { name: 'Selected: Launched' }).getByRole('button'))
-    .toHaveText(['Add next step', 'Connect to…', 'More']);
+    .toHaveText(['Add next step', 'Add branch', 'Connect to…', 'More']);
   // Keyboard guidance names the keys that edit steps.
   await shape(page, 'step_5').focus();
   await page.keyboard.press('Home');
-  await expect(page.locator('.zf-pan-hint')).toContainText('F2 renames · ⌘/Ctrl+Enter adds branch · Delete removes');
+  await expect(page.locator('.zf-pan-hint')).toContainText('F2 renames · ⌘/Ctrl+Enter adds next step · Delete removes');
 });
 
 test('a rename left unchanged by a press on another step does not take over the next edit', async ({ page }) => {
@@ -265,7 +266,7 @@ test('the boards outline opens and edits any board, and the source follows the b
   await expect(outline.getByRole('button', { name: /^Plan the launch/ })).toContainText('Mind map');
   await outline.getByRole('button', { name: /^Onboarding/ }).click();
   await board(page, 'root.layers.Plan the launch.layers.Onboarding');
-  await expect(page.getByRole('navigation', { name: 'Breadcrumb' }).getByRole('button')).toHaveText(['mixed', 'Plan the launch', 'Onboarding']);
+  await expect(page.getByRole('navigation', { name: 'Breadcrumb' }).getByRole('button')).toHaveText(['Flows & mind maps', 'Plan the launch', 'Onboarding']);
   // Only the board's own block stays at full strength in the source.
   await expect(source(page).locator('.cm-line:not(.zf-outside-board)').filter({ hasText: 'Guided tour' })).toHaveCount(1);
   await expect(source(page).locator('.cm-line.zf-outside-board').filter({ hasText: 'Freeze features' })).toHaveCount(1);

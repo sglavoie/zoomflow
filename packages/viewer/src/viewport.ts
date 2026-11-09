@@ -29,7 +29,7 @@ export function createViewport(stage: HTMLElement, host: HTMLElement, clamp: typ
   fit.type = 'button';
   fit.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5"/><rect x="7" y="7" width="10" height="10" rx="1"/></svg>';
   fit.append('Overview');
-  fit.title = 'Show the entire diagram (0)';
+  fit.title = 'Overview: show every shape at a comfortable reading size (0)';
   fit.className = 'zf-fit';
   fit.setAttribute('aria-label', 'Overview (fit diagram)');
   const inside = document.createElement('button');
@@ -61,6 +61,7 @@ export function createViewport(stage: HTMLElement, host: HTMLElement, clamp: typ
   const views = new Map<string, View>();
   let documentKey = '';
   let activeKey: string | undefined;
+  let presentingView = false;
   let editAnchor: { key: string; shape: string; board?: string; x: number; y: number; pixels: number } | undefined;
   // Capture just before replacement, after any asynchronous render finishes. A pending edit never
   // overrides a pan or navigation that happened while it was compiling.
@@ -78,6 +79,7 @@ export function createViewport(stage: HTMLElement, host: HTMLElement, clamp: typ
       x: bounds.left + bounds.width / 2, y: bounds.top + bounds.height / 2, pixels: Math.abs(matrix.a) };
   }, { signal });
   function remember() {
+    if (presentingView) return;
     if (activeKey && base && box) views.set(activeKey, { scale: scale(),
       centerX: (box.x + box.width / 2 - base.x) / base.width,
       centerY: (box.y + box.height / 2 - base.y) / base.height });
@@ -129,8 +131,8 @@ export function createViewport(stage: HTMLElement, host: HTMLElement, clamp: typ
     const currentScale = scale();
     const zoomed = Math.abs(currentScale - 1) > zoomEpsilon;
     const offset = Boolean(base && box && (Math.abs(box.x - base.x) > zoomEpsilon || Math.abs(box.y - base.y) > zoomEpsilon));
-    amount.textContent = zoomed || offset ? `${Math.round(currentScale * 100)}%` : 'Fit';
-    amount.title = zoomed || offset ? `${Math.round(currentScale * 100)}% of fitted size` : 'Diagram fitted to the available space';
+    amount.textContent = zoomed || offset ? `${Math.round(currentScale * 100)}%` : 'Fitted';
+    amount.title = zoomed || offset ? `${Math.round(currentScale * 100)}% of fitted size` : 'Current zoom: fitted. Overview returns to this view.';
     amount.setAttribute('aria-label', amount.title);
     const panHint = touch ? 'Pinch to zoom · Drag to pan' : '⌘/Ctrl + drag to pan · Space + drag while zoomed · Scroll to zoom';
     hint.textContent = guidance && (preferGuidance || touch || currentScale <= 1 + zoomEpsilon) ? guidance : panHint;
@@ -209,13 +211,63 @@ export function createViewport(stage: HTMLElement, host: HTMLElement, clamp: typ
     return [...stage.querySelectorAll<SVGGraphicsElement>('a[tabindex], [data-shape-id][tabindex], [data-flow-connection][tabindex]')]
       .filter((node) => node.localName === 'a' || !node.closest('a'));
   }
+  let cameraFrame = 0;
+  let cameraRevision = 0;
+  const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
+  const stopCamera = () => { ++cameraRevision; cancelAnimationFrame(cameraFrame); };
+  for (const type of ['pointerdown', 'wheel', 'keydown', 'zf-beforerender', 'zf-destroy']) stage.addEventListener(type, stopCamera, { signal });
+  reducedMotion.addEventListener('change', stopCamera, { signal });
+  stage.addEventListener('zf-presentationchange', event => {
+    stopCamera();
+    if ((event as CustomEvent).detail.active) { remember(); presentingView = true; }
+    else {
+      presentingView = false;
+      const previous = activeKey ? views.get(activeKey) : undefined;
+      const target = svg;
+      requestAnimationFrame(() => {
+        if (presentingView || !svg || svg !== target || !base) return;
+        base = fittedBox(svg, base);
+        const width = base.width / (previous?.scale ?? 1), height = base.height / (previous?.scale ?? 1);
+        setBox(previous ? { x: base.x + previous.centerX * base.width - width / 2,
+          y: base.y + previous.centerY * base.height - height / 2, width, height } : { ...base }, false);
+      });
+    }
+  }, { signal });
   stage.addEventListener('zf-walkthroughstep', event => {
-    const { shape, board } = (event as CustomEvent<{ shape: string; board: string }>).detail;
-    requestAnimationFrame(() => {
-      if (!stage.dataset.walkthrough) return;
-      const target = [...stage.querySelectorAll<SVGGraphicsElement>('[data-shape-id]')].find(node =>
-        node.dataset.shapeId === shape && (!node.dataset.shapeBoard || node.dataset.shapeBoard === board));
-      if (target) reveal([target]);
+    const { shape, board, neighbors = [], presenting } = (event as CustomEvent<{ shape: string; board: string; neighbors?: string[]; presenting?: boolean }>).detail;
+    if (!presenting && cameraFrame) { cancelAnimationFrame(cameraFrame); cameraFrame = 0; }
+    stopCamera();
+    const revision = cameraRevision;
+    cameraFrame = requestAnimationFrame(() => {
+      if (!stage.dataset.walkthrough || revision !== cameraRevision) return;
+      const shapes = [...stage.querySelectorAll<SVGGraphicsElement>('[data-shape-id]')].filter(node => !node.dataset.shapeBoard || node.dataset.shapeBoard === board);
+      const target = shapes.find(node => node.dataset.shapeId === shape);
+      if (!target) return;
+      if (!presenting || !svg || !box || !base) { reveal([target]); return; }
+      const matrix = svg.getScreenCTM();
+      if (!matrix) return;
+      const inverse = matrix.inverse();
+      const bounds = shapes.filter(node => node === target || neighbors.includes(node.dataset.shapeId!)).map(node => node.getBoundingClientRect());
+      const from = new DOMPoint(Math.min(...bounds.map(b => b.left)), Math.min(...bounds.map(b => b.top))).matrixTransform(inverse);
+      const to = new DOMPoint(Math.max(...bounds.map(b => b.right)), Math.max(...bounds.map(b => b.bottom))).matrixTransform(inverse);
+      const width = Math.max(to.x - from.x + 160, stage.clientWidth / 1.75);
+      const height = Math.max(to.y - from.y + 200, stage.clientHeight / 1.75);
+      // Match the stage aspect ratio and leave room for the floating controller.
+      const ratio = stage.clientWidth / Math.max(1, stage.clientHeight);
+      const w = Math.max(width, height * ratio), h = w / ratio;
+      const next = { x: (from.x + to.x - w) / 2, y: (from.y + to.y - h) / 2 + h * .07, width: w, height: h };
+      const previous = { ...box };
+      if (reducedMotion.matches) { setBox(next, false); return; }
+      const start = performance.now();
+      const move = (time: number) => {
+        if (revision !== cameraRevision) return;
+        const progress = Math.min(1, (time - start) / 280);
+        const ease = 1 - (1 - progress) ** 3;
+        setBox({ x: previous.x + (next.x - previous.x) * ease, y: previous.y + (next.y - previous.y) * ease,
+          width: previous.width + (next.width - previous.width) * ease, height: previous.height + (next.height - previous.height) * ease }, false);
+        if (progress < 1) cameraFrame = requestAnimationFrame(move);
+      };
+      cameraFrame = requestAnimationFrame(move);
     });
   }, { signal });
   function resetFocus() {
@@ -315,7 +367,7 @@ export function createViewport(stage: HTMLElement, host: HTMLElement, clamp: typ
     let bottom = -Infinity;
     for (const child of graph.children) {
       if (!(child instanceof SVGGraphicsElement) || !['g', 'a'].includes(child.localName) || child.classList.contains('appendix-icon')) continue;
-      const graphic = child.localName === 'a' ? child.querySelector('g:not(.appendix-icon)') ?? child : child;
+      const graphic = child.localName === 'a' ? child.querySelector(':scope > g:not(.appendix-icon, .zf-depth-stack)') ?? child : child;
       const bounds = graphic.getBoundingClientRect();
       if (!bounds.width && !bounds.height) continue;
       for (const [x, y] of [[bounds.left, bounds.top], [bounds.right, bounds.bottom]]) {

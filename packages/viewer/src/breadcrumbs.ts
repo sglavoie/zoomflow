@@ -43,7 +43,7 @@ export function setupBreadcrumbs(container: HTMLElement) {
   }, options);
   window.addEventListener('resize', position, options);
   return {
-    render(items: readonly { name: string; activate: () => void }[]) {
+    render(items: readonly { name: string; detail?: boolean; activate: () => void }[]) {
       close();
       trigger = undefined;
       container.replaceChildren();
@@ -54,6 +54,7 @@ export function setupBreadcrumbs(container: HTMLElement) {
         node.type = 'button';
         node.textContent = item.name;
         node.title = item.name;
+        if (item.detail) node.classList.add('zf-detail-crumb');
         if (index === items.length - 1) node.setAttribute('aria-current', 'page');
         // A menu item hides with the menu, so focus moves to its toggle first, for navigation to restore.
         node.onclick = () => { close(menu.contains(node)); item.activate(); };

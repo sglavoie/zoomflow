@@ -1,8 +1,20 @@
 /** Canvas, navigation and controls shared by the workspace and standalone HTML. */
 export const viewerStyle = `
+/* One violet accent connects a detail node, its preview and the breadcrumb inside it. */
+.zf-detail-link, .zf-detail-crumb { --zf-detail-accent: #8272b4; }
+.zf-depth-sheet { pointer-events: none; transform: translate(4px, -4px); opacity: .7; }
+.zf-depth-2 { transform: translate(8px, -8px); opacity: .4; }
+.zf-depth-sheet > * { fill: var(--surface, #fff); stroke: var(--zf-detail-accent); stroke-width: 1; }
+.zf-detail-link { --zf-badge-ink: var(--zf-detail-accent); }
+.zf-detail-link:is(:hover, :focus-visible) .zf-depth-1 { transform: translate(6px, -6px); opacity: .9; }
+.zf-detail-link:is(:hover, :focus-visible) .zf-depth-2 { transform: translate(12px, -12px); opacity: .6; }
+.zf-breadcrumbs .zf-detail-crumb[aria-current] { box-shadow: inset 0 -2px var(--zf-detail-accent); }
+@media (prefers-reduced-motion: no-preference) { .zf-depth-sheet { transition: transform 160ms ease-out, opacity 160ms ease-out; } }
+
 .zf-breadcrumbs { display: flex; align-items: center; flex-wrap: nowrap; gap: var(--space-2); min-height: 36px; flex-shrink: 0; min-width: 0; }
 .zf-breadcrumbs > button { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .zf-breadcrumbs > button:first-child { flex-shrink: 0; max-width: 22%; }
+.zf-breadcrumbs > button:first-child[aria-current] { max-width: 100%; }
 .zf-breadcrumbs > .zf-ancestor-toggle { flex-shrink: 0; }
 .zf-crumb-separator { flex-shrink: 0; color: var(--muted); }
 .zf-ancestor-menu { position: fixed; z-index: 50; width: min(300px, calc(100vw - 16px)); overflow-y: auto; padding: 6px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); box-shadow: 0 8px 28px #20304426; }
@@ -45,7 +57,7 @@ export const viewerStyle = `
   .zf-zoom-controls button { min-width: 44px; min-height: 44px; }
 }
 .zf-link-hint[hidden], .zf-pan-hint[hidden], .zf-context[hidden] { display: none; }
-.zf-stage a:not([data-missing]):not(:has(> .zf-canvas-selected)):hover > g:not(.appendix-icon) { filter: drop-shadow(0 0 2px var(--focus)); }
+.zf-stage a:not(.zf-detail-link):not([data-missing]):not(:has(> .zf-canvas-selected)):hover > g:not(.appendix-icon) { filter: drop-shadow(0 0 2px var(--focus)); }
 .zf-stage[data-link-preview] .zf-link-hint { display: none; }
 .zf-stage-area:has(.zf-stage[data-link-preview="pointer"]) .zf-pan-hint { visibility: hidden; }
 .zf-board-snapshot { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: fill; pointer-events: none; }
@@ -53,7 +65,7 @@ export const viewerStyle = `
 .zf-walkthrough { grid-row: 3; grid-column: 1 / -1; min-width: 0; padding: 12px 16px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); font-size: 13px; }
 .zf-walkthrough[hidden] { display: none; }
 .zf-walkthrough-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-weight: 600; }
-.zf-walkthrough-heading button { padding: 0; min-width: 32px; min-height: 32px; font-size: 20px; background: transparent; border: 0; }
+.zf-walkthrough-heading button:not(.zf-present-toggle) { padding: 0; min-width: 32px; min-height: 32px; font-size: 20px; background: transparent; border: 0; }
 .zf-walkthrough p { margin: 2px 0 10px; color: var(--muted); }
 .zf-walkthrough-actions { display: flex; gap: 6px; flex-wrap: wrap; }
 .zf-walkthrough-actions button { font-size: 13px; max-width: 100%; overflow-wrap: anywhere; }
@@ -63,4 +75,19 @@ export const viewerStyle = `
 .zf-stage-area:has(.zf-stage[data-walkthrough]) > :is(.zf-pan-hint, .board-selection, .canvas-coach, .canvas-insert, .canvas-connections) { display: none; }
 .zf-walkthrough-trigger[aria-pressed="true"] { color: var(--focus); background: var(--hover); }
 @media (prefers-reduced-motion: no-preference) { .zf-walkthrough-muted, .zf-walkthrough-path { transition: opacity 160ms ease-out; } }
+
+.zf-walkthrough-heading > div { display: flex; align-items: center; gap: 8px; }
+.zf-present-toggle { font-size: 12px; font-weight: 500; }
+.zf-stage-area[data-presentation] { position: fixed; inset: 0; z-index: 1000; padding: 20px; background: var(--surface); display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); }
+.zf-stage-area[data-presentation] > .zf-stage { grid-area: 1 / 1; border: 0; border-radius: 0; }
+.zf-stage-area[data-presentation] > :not(.zf-stage, .zf-walkthrough, .zf-present-title) { display: none; }
+.zf-stage-area[data-presentation] > .zf-walkthrough { grid-area: 1 / 1; z-index: 2; align-self: end; justify-self: center; width: max-content; max-width: min(680px, 100%); box-shadow: 0 10px 40px #20304420; padding: 12px 18px; }
+.zf-stage-area[data-presentation] .zf-walkthrough p { font-size: 12px; margin-block: 4px 10px; }
+.zf-stage-area[data-presentation] .zf-walkthrough-actions { justify-content: center; }
+@media (max-width: 599px) { .zf-stage-area[data-presentation] { padding: 10px; } .zf-stage-area[data-presentation] > .zf-walkthrough { padding: 10px 12px; } }
+
+.zf-present-title { grid-area: 1 / 1; align-self: start; justify-self: start; padding: 18px; z-index: 2; pointer-events: none; max-width: min(640px, 100%); overflow-wrap: anywhere; }
+.zf-present-title[hidden] { display: none; }
+.zf-present-title strong { display: block; font-size: 22px; letter-spacing: -.025em; }
+.zf-present-title span { display: block; font-size: 14px; color: var(--muted); margin-top: 6px; }
 `;

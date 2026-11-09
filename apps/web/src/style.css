@@ -2958,6 +2958,7 @@ header > strong { font-size: 18px; letter-spacing: -0.6px; }
 .create-open-menu { position: absolute; left: 0; top: calc(100% + 8px); z-index: var(--z-popover); display: grid; gap: 6px; padding: 8px; min-width: 220px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); box-shadow: var(--shadow-dialog); }
 .create-open-menu :is(button, .file-button) { display: block; width: 100%; margin: 0; text-align: left; border-color: transparent; background: transparent; color: var(--text); font-size: 14px; padding: 9px 12px; }
 .create-open-menu :is(button, .file-button):hover { background: var(--hover); }
+.create-open-menu :is(#new-mind-map, #open-folder) { display: block; }
 .create-open-menu #new-flow { color: var(--accent); background: var(--accent-soft); }
 #workspace-view .theme-control { display: flex; width: 100%; }
 #workspace-view .theme-control button { flex: 1; text-align: center; }
@@ -3017,3 +3018,40 @@ header > strong { font-size: 18px; letter-spacing: -0.6px; }
   [data-part="viewer"] { padding-block: 4px; }
   .workspace-canvas .zf-pan-hint { min-height: 18px; max-height: 18px; -webkit-line-clamp: 1; }
 }
+
+/* Style samples use the same roles in each look, so differences are easy to compare. */
+.look-thumbnail { max-height: 82px; color: var(--text); }
+.look-thumbnail .look-decision { fill: var(--surface); stroke: #b88940; }
+.look-thumbnail .look-outcome { stroke: #448e77; }
+.look-filled rect { fill: #edf2f8; }
+.look-filled .look-decision { fill: #fff3db; }
+.look-filled .look-outcome { fill: #e3f3eb; }
+.look-shadow :is(rect, .look-decision) { stroke-width: 2; filter: drop-shadow(0 3px 2px var(--menu-shadow)); }
+.look-shadow .look-labels { font-size: 9px; font-weight: 650; }
+[data-theme="dark"] .look-filled rect { fill: #26364c; }
+[data-theme="dark"] .look-filled .look-decision { fill: #443721; }
+[data-theme="dark"] .look-filled .look-outcome { fill: #203d36; }
+.link-preview { border-top: 3px solid #8272b4; }
+.canvas-add { position: absolute; transform: translate(-50%, -50%); z-index: var(--z-raised); width: 32px; height: 32px; min-height: 32px; padding: 0; border-radius: 50%; border: 1px solid var(--border-strong); background: var(--surface); color: var(--accent); font-size: 22px; box-shadow: 0 2px 8px var(--menu-shadow); }
+.canvas-add:hover { background: var(--accent-surface); border-color: var(--accent); }
+@media (pointer: coarse) { .canvas-add { width: 44px; height: 44px; } }
+.zf-stage-area:has(.zf-stage[data-walkthrough]) > .canvas-add { display: none; }
+
+.canvas-coach small { display: block; color: var(--muted); font-size: 10px; letter-spacing: .06em; text-transform: uppercase; margin-bottom: 4px; }
+.canvas-context-help { position: absolute; pointer-events: none; max-width: min(280px, calc(100% - 24px)); padding: 6px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); color: var(--muted); font-size: 11px; text-align: center; z-index: var(--z-raised); }
+@media (max-width: 599px) { .board-selection button { font-size: 11px; } }
+
+.document-titles { display: flex; flex-direction: column; min-width: 0; gap: 2px; text-align: left; }
+#document-title { overflow: hidden; text-overflow: ellipsis; font-weight: 650; }
+#filename { font-size: 11px; font-weight: 400; color: var(--muted); }
+.export-presentation { padding-top: 12px; border-top: 1px solid var(--border); margin-top: 12px; }
+.export-presentation > summary { font-weight: 600; cursor: pointer; }
+.export-presentation > summary span { display: block; font-size: 11px; color: var(--muted); font-weight: 400; margin-top: 3px; }
+.export-presentation label { display: block; margin-top: 12px; font-size: 12px; font-weight: 600; }
+.export-presentation input:not([type="checkbox"]), .export-presentation select { display: block; width: 100%; min-width: 0; margin-top: 5px; padding: 8px; border: 1px solid var(--control-border); border-radius: 7px; background: var(--surface); color: var(--text); font: inherit; }
+.export-presentation .field-optional { font-weight: 400; color: var(--muted); margin-left: 4px; }
+#export-frame-option { display: flex; align-items: center; gap: 8px; }
+#export-frame-option[hidden], #export-interactive-options[hidden] { display: none; }
+#export-presentation-hint { font-size: 11px; line-height: 1.5; color: var(--muted); }
+
+.zf-stage-area:has(.canvas-coach:not([hidden]), .canvas-rename:not([hidden])) .canvas-context-help { display: none; }

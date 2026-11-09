@@ -1,3 +1,5 @@
+import { displayTitle } from './text';
+import { examples } from './examples';
 import { setupPaneEditing } from './pane-editing';
 import { setupPaneLifecycle } from './pane-lifecycle';
 import { projectLabel, statusLine, type DocumentExport, type PaneContext, type FileVisit } from './document-pane-shared';
@@ -121,7 +123,7 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
     name: () => showsAtlas() ? undefined : projectLabel(picker().inputPath(id)),
   };
   const viewer = new Viewer(part('viewer'), { history: id === 'a', active: shared.isActive,
-    name: () => showsAtlas() ? 'Atlas' : documentName.replace(/\.d2$/i, '') || undefined,
+    name: () => showsAtlas() ? 'Atlas' : examples.find(example => example.name === currentDocumentKey)?.title ?? displayTitle(documentName),
     // Steps and topics open their board from the arrow badge, so a click on the shape selects it to edit.
     follows: (link, event) => (link as SVGElement).dataset.follow !== 'badge' || event instanceof KeyboardEvent ||
       Boolean(event.target instanceof Element && event.target.closest('.appendix-icon')),

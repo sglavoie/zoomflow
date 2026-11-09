@@ -182,9 +182,11 @@ steps: {first: {Step}}`, { layout: 'elk' });
 
   it('escapes labels and titles that would break out of embedded HTML data', async () => {
     const boards = await renderExportBoards({ name: '', shapes: [{ id: 'a' }] } as unknown as Diagram, async () => '<svg><text></script><script>alert(1)</script></text></svg>');
-    const html = exportBoardsHtml(boards, { title: '<img src=x onerror=alert(1)>', script: 'void 0;', style: '' });
+    const html = exportBoardsHtml(boards, { title: '<img src=x onerror=alert(1)>', subtitle: '</p><script>bad()</script>', initialBoard: '</script>', startMode: 'presentation', script: 'void 0;', style: '' });
     expect(html).not.toContain('<img');
-    expect(html.match(/<script/g)).toHaveLength(2);
+    expect(html).toContain('&lt;/p&gt;&lt;script&gt;bad()&lt;/script&gt;');
+    expect(html).toContain('"startMode":"presentation"');
+    expect(html.match(/<script/g)).toHaveLength(3);
     expect(html).toContain(`<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; font-src data:; connect-src 'none'; base-uri 'none'; form-action 'none'">`);
     const json = html.match(/type="application\/json">(.*?)<\/script>/s)![1];
     expect(JSON.parse(json)).toEqual(boards);

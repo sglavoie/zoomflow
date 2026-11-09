@@ -20,7 +20,11 @@ test('fresh workspace teaches direct editing, keeps attached boards, and remembe
   await page.getByRole('textbox', { name: 'Rename Browse', exact: true }).fill('Discover');
   await page.keyboard.press('Enter'); await previewReady(page);
   await expect(shape(page, 'Browse')).toContainText('Discover');
-  await expect(page.locator('.canvas-coach')).toBeHidden();
+  await expect(page.locator('.canvas-coach')).toContainText('Keep the idea moving');
+  await page.getByRole('button', { name: 'Add next step', exact: true }).click();
+  await page.getByRole('textbox', { name: 'Rename New step', exact: true }).fill('Choose items');
+  await page.getByRole('textbox', { name: 'Rename New step', exact: true }).press('Enter'); await previewReady(page);
+  await expect(page.locator('.canvas-coach')).toContainText('There’s more inside');
   await page.getByRole('link', { name: 'Open checkout board', exact: true }).locator('.appendix-icon').click();
   await page.getByRole('link', { name: 'Open charge board', exact: true }).locator('.appendix-icon').click();
   await expect(shape(page, 'step_2')).toContainText('Capture');

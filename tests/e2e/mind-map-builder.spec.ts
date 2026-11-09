@@ -68,7 +68,7 @@ test('indents and outdents outline lines from the keyboard and buttons', async (
   await outline.press('Backspace');
   await expect(outline).toHaveValue('Centre\nA\n  B');
   await outline.fill('');
-  await expect(dialog.getByRole('status')).toHaveText('Write a central topic to begin.');
+  await expect(dialog.locator('#mind-map-feedback')).toHaveText('Write a central topic to begin.');
   await dialog.getByRole('button', { name: 'Create mind map', exact: true }).click();
   await expect(dialog).toBeVisible();
   await page.keyboard.press('Escape');

@@ -126,10 +126,12 @@ export function setupBoardActions(ctx: Context) {
     let trail = canvas.trail;
     let result: ReturnType<typeof editOnCanvas>;
     let moved: Map<string, string> | undefined;
+    let renamed = false;
     for (const change of edits) {
       const next = editOnCanvas(own, trail, shape, change);
       if (!next) continue;
       result = next;
+      renamed ||= change.type === 'rename';
       own = next.own;
       trail = next.trail ?? trail;
       // Chain each edit's moves, so attached boards follow their topics through all of them.
@@ -139,7 +141,7 @@ export function setupBoardActions(ctx: Context) {
     const updated = ctx.sites!.update(canvas.owner, own, moved);
     if ('error' in updated) { ctx.options.status(updated.error, 'error'); return; }
     const board = trail === canvas.trail ? ctx.boardId() : canvas.owner + trail.map(name => `.layers.${boardKey(name)}`).join('');
-    const added = edits.some(change => change.type === 'add' || change.type === 'sibling');
+    const added = edits.some(change => change.type === 'add' || change.type === 'branch' || change.type === 'sibling');
     // A rename that renames the board, or a remove that removes it, replaces it in history, since the old board is gone.
     const moves = board !== ctx.boardId() ? { board, replace: true } : {};
     if (board !== ctx.boardId()) ctx.boardMoves = [...ctx.boardMoves.slice(-49), { before: { source: ctx.options.source(), board: ctx.boardId() }, after: { source: updated.source, board } }];
@@ -147,6 +149,7 @@ export function setupBoardActions(ctx: Context) {
     const shown = landed !== undefined ? landed ?? undefined : result.select;
     ctx.pending = { source: updated.source, ...moves, emphasize: added, ...shown ? { shape: shown, rename: added && shown === result.select && shown !== shape } : {} };
     ctx.options.update(updated.source);
+    ctx.viewer.stage.dispatchEvent(new CustomEvent('zf-canvasedit', { detail: { added, renamed } }));
     if (edits.some(change => change.type === 'remove')) ctx.options.status(`Removed “${label}”. ${undoHint}`);
   }
 

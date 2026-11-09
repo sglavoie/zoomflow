@@ -182,7 +182,7 @@ describe('offline atlas runtime', () => {
     expect(amount()).toBe('150%');
     link('./health.d2').dispatchEvent(new MouseEvent('click', { bubbles: true }));
     expect([stage().dataset.file, stage().dataset.board]).toEqual(['health.d2', 'root']);
-    expect(amount()).toBe('Fit');
+    expect(amount()).toBe('Fitted');
     zoomIn();
     zoomIn();
     expect(amount()).toBe('225%');

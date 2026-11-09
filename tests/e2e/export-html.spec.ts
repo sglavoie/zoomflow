@@ -54,7 +54,7 @@ test('opens a single HTML file offline and drills every level with history and b
   await drill(page, 'root');
   await drill(page, 'root.layers.checkout');
   await drill(page, 'root.layers.checkout.layers.charge');
-  await page.getByRole('button', { name: 'order', exact: true }).first().click();
+  await page.getByRole('button', { name: 'Order', exact: true }).first().click();
   await board(page, 'root');
   await expect(page.locator('a[href="https://d2lang.com/tour/intro/"]')).toHaveAttribute('target', '_blank');
   expect(network).toEqual([]);
@@ -94,21 +94,21 @@ test('exports cyclic links and collapses breadcrumb loops offline', async ({ pag
   await page.goto(pathToFileURL(path).href);
   await drill(page, 'root.layers.A');
   await drill(page, 'root.layers.B');
-  await expect(page.getByRole('navigation').getByRole('button')).toHaveText(['cycle', 'A', 'B']);
+  await expect(page.getByRole('navigation').getByRole('button')).toHaveText(['Cycle', 'A', 'B']);
   await drill(page, 'root.layers.A');
-  await expect(page.getByRole('navigation').getByRole('button')).toHaveText(['cycle', 'A']);
+  await expect(page.getByRole('navigation').getByRole('button')).toHaveText(['Cycle', 'A']);
   await page.reload();
   await board(page, 'root.layers.A');
-  await expect(page.getByRole('navigation').getByRole('button')).toHaveText(['cycle', 'A']);
+  await expect(page.getByRole('navigation').getByRole('button')).toHaveText(['Cycle', 'A']);
   await page.goBack();
   await board(page, 'root.layers.B');
-  await expect(page.getByRole('navigation').getByRole('button')).toHaveText(['cycle', 'A', 'B']);
+  await expect(page.getByRole('navigation').getByRole('button')).toHaveText(['Cycle', 'A', 'B']);
   await page.goForward();
   await board(page, 'root.layers.A');
-  await expect(page.getByRole('navigation').getByRole('button')).toHaveText(['cycle', 'A']);
+  await expect(page.getByRole('navigation').getByRole('button')).toHaveText(['Cycle', 'A']);
   await page.keyboard.press('Backspace');
   await board(page, 'root');
-  await expect(page.getByRole('navigation').getByRole('button')).toHaveText(['cycle']);
+  await expect(page.getByRole('navigation').getByRole('button')).toHaveText(['Cycle']);
 });
 
 test('exported HTML retains keyboard focus during drill-down', async ({ page, context }, info) => {
@@ -205,12 +205,12 @@ test('exported HTML restyles its canvas and link badges when the reader switches
   }));
   const light = await colors();
   expect(light.stage).toBe(light.board);
-  expect([light.badge, light.ink]).toEqual(['rgb(255, 255, 255)', 'rgb(82, 101, 125)']);
+  expect([light.badge, light.ink]).toEqual(['rgb(255, 255, 255)', 'rgb(130, 114, 180)']);
   await offline.emulateMedia({ colorScheme: 'dark' });
   await expect.poll(async () => (await colors()).stage).not.toBe(light.stage);
   const dark = await colors();
   expect(dark.stage).toBe(dark.board);
-  expect([dark.badge, dark.ink]).toEqual(['rgb(24, 34, 49)', 'rgb(173, 187, 205)']);
+  expect([dark.badge, dark.ink]).toEqual(['rgb(24, 34, 49)', 'rgb(130, 114, 180)']);
   await offline.emulateMedia({ colorScheme: 'light' });
   await expect.poll(colors).toEqual(light);
 });
@@ -218,8 +218,8 @@ test('exported HTML restyles its canvas and link badges when the reader switches
 test('interactive HTML is titled with the document name without its .d2 extension', async ({ page }, info) => {
   await page.goto('/'); await previewReady(page);
   const html = await readFile(await download(page, 'html', info), 'utf8');
-  expect(html).toContain('<title>order</title>');
-  expect(html).toContain('<header><h1>order</h1></header>');
+  expect(html).toContain('<title>Order</title>');
+  expect(html).toContain('<header><h1>Order</h1></header>');
 });
 
 test('exports a folder project as one offline atlas and links file SVGs in the ZIP', async ({ page, context }, info) => {

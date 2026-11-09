@@ -65,6 +65,7 @@ export function decorateLinks(svg: Element, boards: Map<string, { name: string; 
       : target ? direction === 'parent' ? `Return to ${target.name}` : direction === 'child' ? `Open ${target.name} board` : `Visit ${target.name} board` : `Missing board: ${describe(href)}`;
     link.dataset.linkKind = external ? 'external' : 'board';
     if (direction) link.dataset.linkDirection = direction;
+    if (direction === 'child') link.classList.add('zf-detail-link');
     // One accessible name: a <title> as well would make screen readers announce it twice.
     link.setAttribute('aria-label', label);
   }
@@ -128,9 +129,27 @@ export function decorateLinks(svg: Element, boards: Map<string, { name: string; 
       badge.setAttribute('aria-hidden', 'true');
       // Make the badge itself activate the same link as its shape.
       link.append(badge);
-      const shape = link.querySelector<SVGGraphicsElement>('g:not(.appendix-icon)');
+      const shape = link.querySelector<SVGGraphicsElement>(':scope > g:not(.appendix-icon, .zf-depth-stack)');
       const matrix = badge.transform.baseVal.consolidate()?.matrix;
       if (shape && matrix) {
+        if (direction === 'child') {
+          const outline = shape.querySelector('.shape');
+          const stack = document.createElementNS(ns, 'g');
+          stack.setAttribute('class', 'zf-depth-stack');
+          stack.setAttribute('aria-hidden', 'true');
+          stack.setAttribute('pointer-events', 'none');
+          if (shape.hasAttribute('transform')) stack.setAttribute('transform', shape.getAttribute('transform')!);
+          if (outline) for (const depth of [2, 1]) {
+            const sheet = outline.cloneNode(true) as SVGElement;
+            sheet.removeAttribute('id');
+            for (const node of sheet.querySelectorAll('[id]')) node.removeAttribute('id');
+            sheet.setAttribute('class', `zf-depth-sheet zf-depth-${depth}`);
+            sheet.setAttribute('aria-hidden', 'true');
+            sheet.setAttribute('pointer-events', 'none');
+            stack.append(sheet);
+          }
+          shape.before(stack);
+        }
         const hit = document.createElementNS(ns, 'rect');
         hit.classList.add('zf-link-hit');
         hit.setAttribute('fill', 'transparent');
@@ -162,7 +181,7 @@ export function decorateLinks(svg: Element, boards: Map<string, { name: string; 
     // hit area over another shape, including ordinary source-selection shapes.
     const obstacles = graph ? [...graph.children].filter((node) =>
       ['g', 'a'].includes(node.localName) && !node.classList.contains('appendix-icon')).flatMap((node) => {
-        const shape = node.localName === 'a' ? node.querySelector('g:not(.appendix-icon)') ?? node : node;
+        const shape = node.localName === 'a' ? node.querySelector(':scope > g:not(.appendix-icon, .zf-depth-stack)') ?? node : node;
         const box = bounds(shape as SVGGraphicsElement);
         return box ? [{ node, bounds: box, link: node.localName === 'a' }] : [];
       }) : [];
@@ -222,7 +241,12 @@ export function decorateLinks(svg: Element, boards: Map<string, { name: string; 
     for (const { cue, scale, start, end } of updates) {
       // Size badges in screen pixels, independently of diagram fit and zoom.
       const size = scale * badgeScale;
-      cue.badge.setAttribute('transform', `translate(${cue.x - 16 * size} ${cue.y - 16 * size}) scale(${size})`);
+      // On dense overviews the arrow remains available without covering neighboring labels.
+      const compact = (end.y - start.y) / scale < 44;
+      for (const label of cue.badge.querySelectorAll('rect, text')) label.setAttribute('display', compact ? 'none' : '');
+      // Keep a fixed-size badge above the node's center even when the diagram is zoomed out.
+      const y = Math.min(cue.y - 16 * size, start.y + (end.y - start.y) / 4 - 28 * size);
+      cue.badge.setAttribute('transform', `translate(${cue.x - 16 * size} ${y}) scale(${size})`);
       cue.hit.setAttribute('x', String(start.x));
       cue.hit.setAttribute('y', String(start.y));
       cue.hit.setAttribute('width', String(Math.max(0, end.x - start.x)));

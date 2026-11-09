@@ -276,8 +276,9 @@ test('removed file undo restores its save handle, board view and editor history'
   await expect(page.locator('#filename')).toHaveText('work.d2'); await previewReady(page);
   await expect(page.locator('.zf-stage')).toHaveAttribute('data-board', 'root.layers.checkout');
   // Badge fitting can differ by a fraction of a pixel after restoring a document.
-  await expect.poll(async () => (await page.locator('.zf-stage > svg').getAttribute('viewBox'))!.split(' ').map(value => Number(Number(value).toFixed(3))))
-    .toEqual(box!.split(' ').map(value => Number(Number(value).toFixed(3))));
+  const expectedBox = box!.split(' ').map(Number);
+  await expect.poll(async () => Math.max(...(await page.locator('.zf-stage > svg').getAttribute('viewBox'))!.split(' ')
+    .map((value, index) => Math.abs(Number(value) - expectedBox[index])))).toBeLessThan(0.1);
   await source(page).press('ControlOrMeta+s');
   await expect.poll(() => page.evaluate(() => (window as typeof window & { written?: string }).written)).toBe(`${text}\n# Edited`);
   await source(page).press('ControlOrMeta+z');

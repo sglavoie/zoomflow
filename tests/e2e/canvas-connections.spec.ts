@@ -44,7 +44,7 @@ test('builds Yes/No branches on the canvas, undoes and redoes, then saves and re
   await panel(page).getByRole('button', { name: 'Done', exact: true }).click();
   await expect(panel(page)).toBeHidden();
   await shape(page, 'step_2').click();
-  await page.keyboard.press('ControlOrMeta+Enter'); await previewReady(page);
+  await page.getByRole('button', { name: 'Add branch', exact: true }).click(); await previewReady(page);
   await page.getByRole('textbox', { name: 'Rename New step', exact: true }).fill('Request changes');
   await page.getByRole('textbox', { name: 'Rename New step', exact: true }).press('Enter'); await previewReady(page);
   await edge(page, 2).focus(); await page.keyboard.press('F2');

@@ -1,11 +1,12 @@
+import { setupExportPresentation, type ExportPresentation } from './export-presentation';
 import { classifyHref, exportAtlasHtml, exportAtlasZip, exportBoardsHtml, exportBoardsZip, exportGlyphSource, exportProjectArchive,
   renderExportBoards, indexBoards, resolveFilePath, type AtlasDocument, type Diagram, type ExportBoard } from '@zoomflow/core';
 import type { RenderBoard } from '@zoomflow/viewer';
-import { prepareExportSvg, rasterizeSvg, offlineViewerScript, offlineViewerStyle } from '@zoomflow/viewer';
+import { frameExportSvg, prepareExportSvg, rasterizeSvg, offlineViewerScript, offlineViewerStyle } from '@zoomflow/viewer';
 import type { DocumentExport, DocumentPane } from './document-pane';
 import type { setupExamplePicker } from './example-picker';
 import { compilerDiagnostics } from './diagnostics';
-import { describeError, plural, safeFilename } from './text';
+import { describeError, displayTitle, plural, safeFilename } from './text';
 import { download, downloadSource, downloadProjectSources } from './download';
 import { projectIdOf } from './project-files';
 
@@ -33,14 +34,14 @@ export function setupExportMenu(activePane: () => DocumentPane | undefined, pick
     moreToggle.setAttribute('aria-expanded', String(open));
     if (open) void updateThumbnail(); else ++thumbnailRevision;
   }
-  moreToggle.addEventListener('click', () => { showName(); setMoreOpen(Boolean(moreContent.hidden)); });
+  moreToggle.addEventListener('click', () => { showName(); presentation.refresh(exportFormat.value); setMoreOpen(Boolean(moreContent.hidden)); });
   document.addEventListener('click', (event) => { if (event.target instanceof Node && !more.contains(event.target)) setMoreOpen(false); });
   more.addEventListener('focusout', (event) => { if (event.relatedTarget instanceof Node && !more.contains(event.relatedTarget)) setMoreOpen(false); });
-  more.addEventListener('keydown', (event) => {
-    if (event.key === 'Escape' && !moreContent.hidden) {
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && !moreContent.hidden && !document.querySelector('dialog[open]')) {
       event.preventDefault(); event.stopPropagation(); setMoreOpen(false); moreToggle.focus();
     }
-  });
+  }, { capture: true });
 
   // The name field shows the name without its extension; changing it renames the draft.
   const nameField = document.querySelector<HTMLInputElement>('#export-name')!;
@@ -79,10 +80,10 @@ export function setupExportMenu(activePane: () => DocumentPane | undefined, pick
   }
 
   /** Downloads and clipboard copies use the same visible board, theme and hidden-shape choices. */
-  async function boardImage(pane: DocumentPane, render: RenderBoard, target: string, dark: boolean) {
+  async function boardImage(pane: DocumentPane, render: RenderBoard, target: string, dark: boolean, options = presentation.read()) {
     const layers = await pane.viewer.renderVisibleLayers();
     const prepared = await prepareExportSvg(layers ?? await render(target), dark);
-    return { ...prepared, layers: Boolean(layers) };
+    return { ...prepared, svg: frameExportSvg(prepared.svg, options, dark), layers: Boolean(layers) };
   }
 
   document.querySelector<HTMLButtonElement>('#save-source')!.addEventListener('click', () => {
@@ -121,6 +122,7 @@ export function setupExportMenu(activePane: () => DocumentPane | undefined, pick
   const previewButton = document.querySelector<HTMLButtonElement>('#open-export-preview')!;
   const thumbnail = document.querySelector<HTMLImageElement>('#export-preview img')!;
   const thumbnailCaption = document.querySelector<HTMLElement>('#export-preview figcaption')!;
+  const presentation = setupExportPresentation(activePane, () => { presentation.refresh(exportFormat.value); void updateThumbnail(); });
   let thumbnailRevision = 0;
   let thumbnailKey = '';
   let thumbnailUrl: string | undefined;
@@ -144,14 +146,18 @@ export function setupExportMenu(activePane: () => DocumentPane | undefined, pick
     const format = exportFormat.value;
     const image = format === 'svg' || format === 'png';
     const dark = document.documentElement.dataset.theme === 'dark';
-    const key = JSON.stringify([pane.key, pane.generation, image ? board.id : 'root', format, dark, pane.viewer.documentView]);
+    const settings = presentation.read();
+    const opening = indexBoards(loaded.diagram).get(settings.opening);
+    const key = JSON.stringify([pane.key, pane.generation, image ? board.id : settings.opening, format, dark, pane.viewer.documentView, settings]);
     if (key === thumbnailKey && thumbnailUrl) return;
     clearThumbnail();
     thumbnailCaption.textContent = 'Preparing export preview…';
     const view = pane.viewer.exportView(loaded.diagram, loaded.render);
     try {
-      const prepared = image ? await boardImage(pane, view.render, board.target, dark)
-        : await prepareExportSvg(await view.render(''), dark, { interactive: format === 'html' || format === 'atlas' });
+      const prepared = image ? await boardImage(pane, view.render, board.target, dark, settings)
+        : await prepareExportSvg(await view.render(format === 'html' || format === 'atlas' ? opening?.target ?? '' : ''), dark, { interactive: format === 'html' || format === 'atlas' });
+      const interactive = format === 'html' || format === 'atlas';
+      if (!image) prepared.svg = frameExportSvg(prepared.svg, interactive ? { frame: Boolean(settings.title || settings.subtitle), title: settings.title, subtitle: settings.subtitle } : settings, dark);
       if (request !== thumbnailRevision || moreContent.hidden || pane.documentExport !== loaded || activePane() !== pane) return;
       thumbnailUrl = URL.createObjectURL(new Blob([prepared.svg], { type: 'image/svg+xml' }));
       thumbnail.src = thumbnailUrl;
@@ -224,6 +230,7 @@ export function setupExportMenu(activePane: () => DocumentPane | undefined, pick
     copyPngButton.disabled = !canExport();
     previewButton.hidden = !['html', 'atlas'].includes(exportFormat.value);
     previewButton.disabled = !canExport();
+    presentation.refresh(exportFormat.value);
     void updateThumbnail();
   }
   function rememberExportFormat() {
@@ -248,6 +255,7 @@ export function setupExportMenu(activePane: () => DocumentPane | undefined, pick
       return;
     }
     const revision = pane.generation;
+    const settings = presentation.read();
     const view = pane.viewer.exportView(loaded.diagram, loaded.render);
     const dark = document.documentElement.dataset.theme === 'dark';
     const canceled = () => pane.generation !== revision || pane.documentExport !== loaded ||
@@ -261,7 +269,7 @@ export function setupExportMenu(activePane: () => DocumentPane | undefined, pick
     // awaits this promise while rendering and PNG encoding finish.
     const image = (async () => {
       try {
-        const prepared = await boardImage(pane, view.render, board.target, dark);
+        const prepared = await boardImage(pane, view.render, board.target, dark, settings);
         warnings = prepared.warnings;
         const png = await rasterizeSvg(prepared.svg);
         if (canceled()) throw new Error('The diagram changed while copying.');
@@ -294,6 +302,7 @@ export function setupExportMenu(activePane: () => DocumentPane | undefined, pick
       previewWindow.document.title = 'Preparing Zoomflow preview';
       previewWindow.document.body.textContent = 'Preparing your interactive diagram…';
     }
+    const settings: ExportPresentation = presentation.read();
     const exportRevision = pane.generation;
     const view = pane.viewer.exportView(loaded.diagram, loaded.render);
     exporting = true;
@@ -308,6 +317,8 @@ export function setupExportMenu(activePane: () => DocumentPane | undefined, pick
     reportExport(`Preparing ${formatName} ${preview ? 'preview' : 'download'}…`, 'info', pane);
     const dark = document.documentElement.dataset.theme === 'dark';
     const exportName = pane.name.replace(/\.d2$/i, '');
+    const htmlPresentation = { title: settings.title || displayTitle(exportName), subtitle: settings.subtitle,
+      initialBoard: indexBoards(view.diagram).get(settings.opening)?.hash, startMode: settings.mode };
     const warnings: string[] = [];
     // Interactive HTML follows its reader's color scheme; images keep the theme shown here.
     const interactive = format === 'html' || format === 'atlas';
@@ -315,7 +326,7 @@ export function setupExportMenu(activePane: () => DocumentPane | undefined, pick
     const prepareWith = (render: RenderBoard) => async (target: string) => {
       const result = await prepareExportSvg(await render(target), theme, { interactive });
       warnings.push(...result.warnings);
-      return result.svg;
+      return interactive ? result.svg : frameExportSvg(result.svg, settings, dark);
     };
     const prepare = prepareWith(view.render);
     const canceled = () => exportRevision !== pane.generation || pane.documentExport !== loaded;
@@ -364,7 +375,7 @@ export function setupExportMenu(activePane: () => DocumentPane | undefined, pick
       let blob: Blob;
       let name = safeFilename(exportName);
       if (format === 'svg' || format === 'png') {
-        const prepared = await boardImage(pane, view.render, board.target, dark);
+        const prepared = await boardImage(pane, view.render, board.target, dark, settings);
         warnings.push(...prepared.warnings);
         blob = format === 'png' ? await rasterizeSvg(prepared.svg) : new Blob([prepared.svg], { type: 'image/svg+xml' });
         name += `-${prepared.layers ? 'layers' : board.name === 'Root' ? 'root' : safeFilename(board.name)}.${format}`;
@@ -382,7 +393,7 @@ export function setupExportMenu(activePane: () => DocumentPane | undefined, pick
           const boards = documents.flatMap((document) => document.boards);
           const glyphSource = exportGlyphSource(boards);
           const glyphs = glyphSource ? await loaded.renderSource(glyphSource).catch(() => undefined) : undefined;
-          blob = new Blob([exportAtlasHtml(documents, { title: exportName, script: offlineViewerScript(),
+          blob = new Blob([exportAtlasHtml(documents, { ...htmlPresentation, script: offlineViewerScript(),
             style: offlineViewerStyle, glyphs })], { type: 'text/html' });
           name += '-atlas.html';
         }
@@ -392,7 +403,7 @@ export function setupExportMenu(activePane: () => DocumentPane | undefined, pick
         const glyphSource = format === 'html' ? exportGlyphSource(boards) : undefined;
         const glyphs = glyphSource ? await loaded.renderSource(glyphSource).catch(() => undefined) : undefined;
         blob = zip ? await zipDownload([{ path: '', name: exportName, boards }])
-          : new Blob([exportBoardsHtml(boards, { title: exportName, script: offlineViewerScript(),
+          : new Blob([exportBoardsHtml(boards, { ...htmlPresentation, script: offlineViewerScript(),
             style: offlineViewerStyle, glyphs })], { type: 'text/html' });
         name += pngZip ? '-png.zip' : `.${format}`;
       }

@@ -261,7 +261,7 @@ function shareStyles(svgs: string[], glyphs?: string): { svgs: string[]; style: 
   return { svgs: result, style };
 }
 
-type HtmlOptions = { title: string; script: string; style: string; /** Rendered {@link exportGlyphSource}. */ glyphs?: string };
+type HtmlOptions = { title: string; subtitle?: string; initialBoard?: string; startMode?: 'explore' | 'walkthrough' | 'presentation'; script: string; style: string; /** Rendered {@link exportGlyphSource}. */ glyphs?: string };
 
 /** The caller supplies its DOM runtime; core stays usable in Node without a DOM. */
 export function exportBoardsHtml(boards: readonly ExportBoard[], options: HtmlOptions): string {
@@ -278,6 +278,7 @@ export function exportAtlasHtml(documents: readonly AtlasDocument[], options: Ht
 
 function boardsHtml(boards: readonly ExportBoard[], options: HtmlOptions, files?: { path: string; name: string }[]): string {
   const title = options.title.replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char]!);
+  const subtitle = (options.subtitle ?? '').replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char]!);
   // The viewer never shows an empty board's SVG.
   const shown = boards.filter((board) => !board.empty);
   const shared = shareStyles(shown.map((board) => board.svg), options.glyphs);
@@ -291,7 +292,7 @@ function boardsHtml(boards: readonly ExportBoard[], options: HtmlOptions, files?
   return `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="${csp}"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>${title}</title><style>${options.style}</style>${style ? `<style id="zoomflow-svg-style">${style}</style>` : ''}</head><body>
-<header><h1>${title}</h1></header><main id="viewer"><nav class="zf-breadcrumbs" aria-label="Breadcrumb"></nav><div class="zf-context" role="group" aria-label="Parent connections" hidden></div><div class="zf-message"><span role="status"></span><span role="alert"></span></div><div class="zf-visually-hidden" aria-live="polite"></div><div class="zf-stage" role="region" aria-label="Diagram" tabindex="-1"></div></main>
+<header><h1>${title}</h1>${subtitle ? `<p>${subtitle}</p>` : ''}</header><main id="viewer"><nav class="zf-breadcrumbs" aria-label="Breadcrumb"></nav><div class="zf-context" role="group" aria-label="Parent connections" hidden></div><div class="zf-message"><span role="status"></span><span role="alert"></span></div><div class="zf-visually-hidden" aria-live="polite"></div><div class="zf-stage" role="region" aria-label="Diagram" tabindex="-1"></div></main>
 <footer>Select a linked shape to explore · Esc or Backspace goes up</footer>
-<script id="zoomflow-data" type="application/json">${data}</script>${files ? `<script id="zoomflow-files" type="application/json">${json(files)}</script>` : ''}<script>${options.script}</script></body></html>`;
+<script id="zoomflow-data" type="application/json">${data}</script><script id="zoomflow-presentation" type="application/json">${json({ initialBoard: boards.some(board => board.hash === options.initialBoard) ? options.initialBoard : boards[0]?.hash, startMode: options.startMode ?? 'explore' })}</script>${files ? `<script id="zoomflow-files" type="application/json">${json(files)}</script>` : ''}<script>${options.script}</script></body></html>`;
 }

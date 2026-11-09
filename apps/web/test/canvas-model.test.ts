@@ -175,3 +175,16 @@ it('inserts into one parallel decision edge without changing its sibling or atta
   expect(editConnection(own, { type: 'insert', index: 8 })).toBeUndefined();
   expect(editConnection(own + '\nChoose.style.fill: red', { type: 'insert', index: 0 })).toBeUndefined();
 });
+
+it('continues one outgoing edge without losing its label and keeps branching explicit', () => {
+  const original = flowTemplate('simple'); original.connections[0].label = 'Ready';
+  const own = flowSource(original);
+  const next = readFlow(editOnCanvas(own, [], 'step_1', { type: 'add' })!.own)!;
+  expect(next.connections).toContainEqual({ from: 'step_1', to: 'step_4', label: 'Ready' });
+  expect(next.connections).toContainEqual({ from: 'step_4', to: 'step_2', label: '' });
+  const branch = readFlow(editOnCanvas(own, [], 'step_1', { type: 'branch' })!.own)!;
+  expect(branch.connections).toContainEqual(original.connections[0]);
+  expect(branch.connections).toContainEqual({ from: 'step_1', to: 'step_4', label: '' });
+  expect(canvasShape(own, [], 'step_1')!.add).toBe('Add next step');
+  expect(editOnCanvas(mindMapSource(map('Idea\n  Detail')), [], 'n', { type: 'branch' })).toBeUndefined();
+});

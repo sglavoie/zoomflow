@@ -18,3 +18,11 @@ it('embeds a portable filled palette, freezes it for images, and leaves custom a
   expect(custom).toContain('fill="#111111"');
   expect(libraryTheme('<svg><rect fill="#ff0000"/></svg>')).toBe('<svg><rect fill="#ff0000"/></svg>');
 });
+
+it('coordinates elevated connectors without changing an authored heavier stroke', () => {
+  const elevated = svg.replace('zf-filled', 'zf-step zf-filled zf-shadow').replace('</svg>', '<path class="connection" style="stroke-width:1;"/><path class="connection" style="stroke-width:3;"/></svg>');
+  const result = libraryTheme(elevated);
+  expect(result).toContain('stroke-width:1.5;stroke-linecap:round');
+  expect(result).toContain('stroke-width:3;');
+  expect(libraryTheme(result)).toBe(result);
+});

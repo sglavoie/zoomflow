@@ -23,7 +23,7 @@ test('examples switch source and preview, start at root and export under their o
   await choose(page, 'Database schema', 'schema.d2');
   await expect(page.locator('.zf-stage')).toContainText('Customers');
   await expect(source(page)).toContainText('shape: sql_table');
-  await expect(page.getByRole('navigation', { name: 'Breadcrumb' }).getByRole('button')).toHaveText(['schema']);
+  await expect(page.getByRole('navigation', { name: 'Breadcrumb' }).getByRole('button')).toHaveText(['Database schema']);
   await expect(page.locator('#lint-summary')).toHaveText('No lint issues');
   const pending = page.waitForEvent('download');
   await downloadExport(page);
