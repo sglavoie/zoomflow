@@ -204,12 +204,8 @@ test('reference stays usable on narrow screens, in dark mode, and with storage b
   });
   await page.setViewportSize({ width: 390, height: 844 });
   await ready(page);
-  await page.locator('#header-more-toggle').click();
-  await openView(page);
   await expect(page.locator('#theme')).toBeVisible();
-  await openView(page);
-  await page.getByLabel('Theme').selectOption('dark');
-  await page.locator('#workspace-view > summary').click();
+  await page.getByRole('group', { name: 'Theme', exact: true }).getByRole('button', { name: 'Dark', exact: true }).click();
   await openView(page);
   await toggle(page).click();
   await expect(search(page)).toBeVisible();

@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import { selectMenuOption, downloadExport } from './menu';
-import { d2Module, source, previewReady, stubAiStatus, openFolder, openView } from './helpers';
+import { d2Module, source, previewReady, stubAiStatus, openFolder } from './helpers';
 
 async function ready(page: Page, id = 'root') {
   await expect(page.locator('.zf-stage')).toHaveAttribute('data-board', id);
@@ -90,8 +90,6 @@ test('picker supports keyboard, Escape without navigating, outside dismissal, an
   await page.keyboard.press('Escape');
   await page.setViewportSize({ width: 375, height: 720 });
   await expect(page.locator('#header-more-toggle')).toHaveAttribute('aria-expanded', 'false');
-  await page.locator('#header-more-toggle').click();
-  await openView(page);
   await expect(page.locator('#theme')).toBeVisible();
   await selectMenuOption(page, '#theme', 'dark');
   await summary.click();

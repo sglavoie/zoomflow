@@ -79,11 +79,15 @@
       </div>
       <div class="header-actions">
         <button id="toggle-source" type="button" class="button-quiet" aria-pressed="true" aria-controls="source-pane">Source</button>
+        <div id="theme" class="theme-control" role="group" aria-label="Theme">
+          <button type="button" value="light" aria-pressed="false">Light</button>
+          <button type="button" value="dark" aria-pressed="false">Dark</button>
+          <button type="button" value="system" aria-pressed="true" title="Follow your device’s appearance">System</button>
+        </div>
         <details id="workspace-view">
           <summary>View</summary>
           <div class="workspace-view-menu">
             <label class="layout-control"><span class="zf-visually-hidden">Layout</span><select id="layout" aria-label="Layout" title="Workspace layout: one diagram, or two side by side"><option value="single">Single</option><option value="tabs">Split · tabs</option><option value="quad">Split · all views</option></select></label>
-            <label class="theme-control"><span class="zf-visually-hidden">Theme</span><select id="theme" aria-label="Theme" title="Appearance"><option value="system">System</option><option value="light">Light</option><option value="dark">Dark</option></select></label>
             <button id="toggle-reference" class="button-quiet" aria-expanded="false" aria-controls="d2-reference" title="D2 reference (⌘⇧/ or Ctrl+Shift+/)">D2 reference</button>
             <a class="workspace-docs" href="https://d2lang.com/tour/intro/" target="_blank" rel="noopener noreferrer">D2 documentation ↗</a>
             <button id="show-shortcuts" class="button-quiet" type="button" aria-label="Keyboard shortcuts" aria-haspopup="dialog" aria-controls="keyboard-shortcuts" title="Keyboard shortcuts">

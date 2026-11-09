@@ -76,15 +76,25 @@ viewMenu.addEventListener('keydown', event => {
 const otherPane = (pane: PaneId): PaneId => pane === 'a' ? 'b' : 'a';
 const exportMenu = setupExportMenu(() => panes[active], () => examplePicker);
 
-const theme = document.querySelector<HTMLSelectElement>('#theme')!;
-restoreField(theme, 'zoomflow.theme');
+const themeButtons = document.querySelectorAll<HTMLButtonElement>('#theme button');
+let theme = 'system';
+try {
+  const saved = localStorage.getItem('zoomflow.theme');
+  if (saved === 'light' || saved === 'dark') theme = saved;
+} catch { /* Preferences are optional when storage is unavailable. */ }
 const media = matchMedia('(prefers-color-scheme: dark)');
 function updateTheme() {
-  document.documentElement.dataset.theme = theme.value === 'system'
-    ? media.matches ? 'dark' : 'light' : theme.value;
+  document.documentElement.dataset.theme = theme === 'system'
+    ? media.matches ? 'dark' : 'light' : theme;
+  for (const button of themeButtons) button.setAttribute('aria-pressed', String(button.value === theme));
   for (const pane of Object.values(panes)) pane.viewer.setTheme(document.documentElement.dataset.theme === 'dark');
 }
-theme.addEventListener('change', updateTheme);
+for (const button of themeButtons) button.addEventListener('click', () => {
+  theme = button.value;
+  try { localStorage.setItem('zoomflow.theme', theme); }
+  catch { /* Keep the current preference when storage is blocked or full. */ }
+  updateTheme();
+});
 media.addEventListener('change', updateTheme);
 
 // The pinned browser entry creates and owns D2's WASM worker. Import it lazily

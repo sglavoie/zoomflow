@@ -9,7 +9,11 @@ export async function openDownloads(page: Page) {
 }
 
 export async function selectMenuOption(page: Page, selector: string, value: string) {
-  const view = selector === '#theme' || selector === '#layout';
+  if (selector === '#theme') {
+    await page.locator(`#theme button[value="${value}"]`).click();
+    return;
+  }
+  const view = selector === '#layout';
   if (view) await openView(page); else await openDownloads(page);
   if (selector === '#export-format') await page.locator(`${selector} input[value="${value}"]`).check();
   else await page.selectOption(selector, value);

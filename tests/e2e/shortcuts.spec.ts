@@ -42,8 +42,8 @@ test('shortcuts dialog contains keyboard focus and leaves the current board unch
 test('shortcuts stay within a narrow viewport in dark mode', async ({ page }) => {
   await page.setViewportSize({ width: 320, height: 640 });
   await page.goto('/');
+  await page.getByRole('group', { name: 'Theme', exact: true }).getByRole('button', { name: 'Dark', exact: true }).click();
   await openView(page);
-  await page.getByLabel('Theme', { exact: true }).selectOption('dark');
   await page.getByRole('button', { name: 'Keyboard shortcuts', exact: true }).click();
   const dialog = page.getByRole('dialog', { name: 'Keyboard shortcuts' });
   await expect(dialog).toBeVisible();
