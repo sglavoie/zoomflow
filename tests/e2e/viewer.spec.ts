@@ -2,7 +2,7 @@ import { selectMenuOption, downloadExport } from './menu';
 import { expect, test } from '@playwright/test';
 import { pathToFileURL } from 'node:url';
 import { readFileSync } from 'node:fs';
-import { board, drill } from './helpers';
+import { board, drill, previewReady } from './helpers';
 import { devURL } from './servers';
 
 test('opening a board in another tab keeps the current board', async ({ page, context, browserName }) => {
@@ -78,6 +78,7 @@ for (const offline of [false, true]) {
     await page.emulateMedia({ reducedMotion: 'reduce' });
     await page.goto('/');
     await board(page, 'root');
+    await page.locator('#file').setInputFiles('fixtures/order.d2'); await previewReady(page);
     if (offline) {
       await selectMenuOption(page, '#export-format', 'html');
       const pending = page.waitForEvent('download');
@@ -236,6 +237,7 @@ test('handles external links, theme changes, invalid files and missing deep link
   await page.keyboard.press('Escape');
   await board(page, 'root');
   await expect(page.locator('.zf-message')).toBeEmpty();
+  await page.locator('#file').setInputFiles('fixtures/order.d2'); await previewReady(page);
   const external = page.locator('.zf-stage a[href="https://d2lang.com/tour/intro/"]');
   await expect(external).toHaveAttribute('target', '_blank');
   await expect(external).toHaveAttribute('rel', 'noopener noreferrer');
@@ -311,6 +313,7 @@ test('destroying a viewer releases its viewport listeners and controls', async (
 test('going up returns keyboard focus to the link that leads back down', async ({ page }) => {
   await page.goto('/');
   await board(page, 'root');
+  await page.locator('#file').setInputFiles('fixtures/order.d2'); await previewReady(page);
   const checkout = page.locator('.zf-stage a[data-board="root.layers.checkout"]');
   await checkout.focus();
   await checkout.press('Enter');

@@ -75,7 +75,7 @@ for (const modifier of ['Control', 'Meta']) {
         await expect(page.getByRole('menu')).toHaveCount(0);
         await board(page, 'root');
         expect(await editorText(page)).toBe(original);
-        await page.getByRole('button', { name: 'Fit diagram', exact: true }).click();
+        await page.getByRole('button', { name: 'Overview (fit diagram)', exact: true }).click();
         expect(await svg.getAttribute('viewBox')).toBe(fitted);
       }
     }

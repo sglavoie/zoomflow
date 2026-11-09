@@ -1,5 +1,5 @@
 import { classifyHref, type Board } from '@zoomflow/core';
-import { normalizeRouteHash, resolveRouteHash, type RenderBoard, type Viewer } from '@zoomflow/viewer';
+import { normalizeRouteHash, prepareExportSvg, resolveRouteHash, type RenderBoard, type Viewer } from '@zoomflow/viewer';
 import type { BoardSites } from './board-model';
 import { pageListeners } from './canvas-guidance';
 import type { PaneScope } from './pane-scope';
@@ -25,9 +25,9 @@ export function setupLinkPreview(scope: PaneScope, viewer: Viewer, files: Linked
   card.id = scope.id('link-preview');
   card.setAttribute('role', 'tooltip');
   card.hidden = true;
-  card.innerHTML = '<img alt="" /><strong></strong><span></span><small>Open board ↗</small>';
+  card.innerHTML = '<img alt="" /><strong></strong><span></span><p class="link-preview-contents"></p><small>Open board ↗</small>';
   scope.root.append(card);
-  const [picture, title, summary, cue] = card.children as unknown as [HTMLImageElement, HTMLElement, HTMLElement, HTMLElement];
+  const [picture, title, summary, contents, cue] = card.children as unknown as [HTMLImageElement, HTMLElement, HTMLElement, HTMLElement, HTMLElement];
   let compiledDocument: { boards: Map<string, Board>; sites: BoardSites; render: RenderBoard } | undefined;
   /** One picture per board for each compiled document. */
   let pictures = new Map<string, Promise<string>>();
@@ -35,6 +35,15 @@ export function setupLinkPreview(scope: PaneScope, viewer: Viewer, files: Linked
   const filePictures = new WeakMap<object, Map<string, Promise<string>>>();
   let timer: ReturnType<typeof setTimeout> | undefined;
   let link: Element | undefined;
+
+  function describeContents(board: Board) {
+    const shapes = board.diagram.shapes;
+    const labels = shapes.slice(0, 4).map(shape => String('label' in shape && shape.label || shape.id));
+    // Arrows describe an actual linear flow only; lists and branches use neutral separators.
+    const linear = shapes.length > 1 && board.diagram.connections.length === shapes.length - 1 &&
+      shapes.slice(1).every((shape, i) => board.diagram.connections.some(edge => edge.src === shapes[i].id && edge.dst === shape.id));
+    contents.textContent = labels.join(linear ? ' → ' : ' · ') + (shapes.length > 4 ? ' …' : '');
+  }
 
   function describe(board: Board) {
     const owner = compiledDocument!.sites.owner(board.id);
@@ -47,6 +56,7 @@ export function setupLinkPreview(scope: PaneScope, viewer: Viewer, files: Linked
   function hide() {
     clearTimeout(timer);
     card.hidden = true;
+    delete viewer.stage.dataset.linkPreview;
     link?.removeAttribute('aria-describedby');
     link = undefined;
   }
@@ -54,18 +64,23 @@ export function setupLinkPreview(scope: PaneScope, viewer: Viewer, files: Linked
     link = anchor;
     title.textContent = name;
     summary.textContent = description;
+    contents.textContent = '';
     picture.hidden = true;
     anchor.setAttribute('aria-describedby', card.id);
     card.hidden = false;
+    viewer.stage.dataset.linkPreview = anchor.matches(':focus-visible') ? 'keyboard' : 'pointer';
     place(anchor);
   }
   async function showPicture(anchor: Element, current: Map<string, Promise<string>>, key: string, render: () => Promise<string>) {
-    if (!current.has(key)) current.set(key, render());
-    const document = pictures;
+    const dark = document.documentElement.dataset.theme === 'dark';
+    key = `${key}\n${dark ? 'dark' : 'light'}`;
+    if (!current.has(key)) current.set(key, render().then(async svg =>
+      (await prepareExportSvg(svg, dark, { fit: true })).svg));
+    const currentDocument = pictures;
     try {
       const svg = await current.get(key)!;
       // An image keeps the picture's styles and IDs apart from the diagram's.
-      if (link !== anchor || document !== pictures) return;
+      if (link !== anchor || currentDocument !== pictures) return;
       picture.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
       picture.hidden = false;
       place(anchor);
@@ -76,7 +91,8 @@ export function setupLinkPreview(scope: PaneScope, viewer: Viewer, files: Linked
     if (target.kind === 'file') { await showFile(anchor, target.path, target.hash); return; }
     const board = target.kind === 'board' ? compiledDocument?.boards.get(target.target) : undefined;
     if (!board || !compiledDocument) return;
-    open(anchor, board.name, describe(board));
+    open(anchor, anchor.querySelector('text')?.textContent?.trim() || board.name, describe(board));
+    describeContents(board);
     cue.textContent = 'Open board ↗';
     await showPicture(anchor, pictures, board.id, () => compiledDocument!.render(board.target));
   }
@@ -96,6 +112,7 @@ export function setupLinkPreview(scope: PaneScope, viewer: Viewer, files: Linked
     if (!board) return;
     title.textContent = board.id === 'root' ? label : `${label} · ${board.name}`;
     summary.textContent = plural(board.diagram.shapes.length, 'shape');
+    describeContents(board);
     place(anchor);
     if (!filePictures.has(file)) filePictures.set(file, new Map());
     await showPicture(anchor, filePictures.get(file)!, board.id, () => file.render(board.target));

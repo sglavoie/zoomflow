@@ -64,14 +64,14 @@ function lookThumbnail(look: Look) {
 /** Look choices for a builder whose ids start with `prefix`. They only add library classes,
  * so a project's own zoomflow.d2 can restyle them. */
 export function lookFields(prefix: string) {
-  return `<fieldset class="builder-look"><legend>Look</legend>
+  return `<details class="builder-appearance"><summary>Appearance <span>Style presets and finishing touches</span></summary><fieldset class="builder-look"><legend>Look</legend>
         <div class="look-presets" role="group" aria-label="Diagram style">${presets.map((preset, index) => `<button type="button" data-look-preset="${index}" aria-pressed="false">${lookThumbnail(preset.look)}<span>${preset.name}</span></button>`).join('')}</div>
         <details class="look-custom"><summary>Customize style</summary><div>
         ${lookNames.map(name => `<label><input id="${prefix}-${name}" type="checkbox" /> ${lookLabels[name]}</label>`).join('\n        ')}
         </div><details class="look-source"><summary>Project styling</summary>
         <p id="${prefix}-look-help" class="flow-help">Adds the library's ${lookNames.map(name => `zf-${name}`).join(', ')} classes. Restyle them in your project's zoomflow.d2.</p>
         </details></details>
-      </fieldset>`;
+      </fieldset></details>`;
 }
 
 /** Read and set the checkboxes `lookFields` wrote. */

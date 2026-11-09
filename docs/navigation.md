@@ -5,7 +5,8 @@
 ## Explore a diagram
 
 Click a linked shape to drill into a board. The view zooms through the linked node;
-returning briefly highlights that node. Scrolling or dragging interrupts motion,
+returning briefly highlights that node. Ordinary pointer movement lets the transition finish.
+Scrolling or dragging interrupts motion,
 and reduced-motion preferences skip zooming. The root breadcrumb uses the document name. Breadcrumbs record the visited path,
 trimming back to an earlier board whenever you revisit it so cycles do not repeat.
 Guidance below the canvas names a detail board to explore, explains source selection
@@ -17,17 +18,21 @@ navigation. Deep links such as `#/checkout/charge` open a board directly in the
 loaded diagram. Child-board links show a downward arrow badge, links to ancestors show
 an upward arrow, and links to other boards show a sideways arrow. External links show
 an outward arrow. Hover or focus a link to identify its destination; hovering a shape
-highlights its selectable boundary. These link cues also appear in exported HTML.
+highlights its shape. Board previews show a cropped thumbnail and the names of the
+steps or topics inside; the preview replaces redundant hover hints. Keyboard focus
+keeps a distinct outline. Link badges also appear in exported HTML.
 Open a `.d2` file or drop one onto the page; dropping several files opens the first
 and says to drop one file at a time. Files are compiled locally
 with D2's WASM worker. Light, dark and system themes use D2's generated palettes.
 Theme and export format are remembered when browser storage is available. The appearance
 selector is under **View** in the header, separate from **Export**, which closes on Escape and restores focus to its button.
-Use the preview's +, − and Fit controls or the mouse wheel to zoom. Drag empty
+Use the preview's +, − and **Overview** controls or the mouse wheel to zoom. Drag empty
 space to pan, or hold Space and drag a shape or link; middle-button dragging also
-pans. Touch dragging works after zooming. Each board opens fitted around its
-rendered content. Edits on the same board preserve zoom and pan; returning to a board
-restores its view.
+pans. Touch dragging works after zooming. Small diagrams open at a comfortable
+reading size. Phones start closer when labels would otherwise be too small;
+**Overview** (or **0**) shows the whole diagram. Edits preserve zoom and pan, and
+renaming a focused shape keeps its centre and scale in place through layout changes.
+Returning to a board restores its view.
 The zoom readout says **Fit** at the fitted baseline; percentages describe magnification
 relative to that fit. A hint below the canvas explains panning after zooming in.
 Deep breadcrumb trails keep the first board, parent and current board visible on

@@ -75,11 +75,11 @@ test('clicking shapes selects exact source and selecting source highlights the m
 test('explicit reveal opens the selected source board, linked shapes still drill, and file loading replaces editor text', async ({ page }) => {
   await page.goto('/');
   await ready(page);
-  await findSource(page, 'Capture');
+  await findSource(page, 'step_2');
   await ready(page);
   await source(page).press('ControlOrMeta+Shift+Enter');
   await ready(page, 'root.layers.checkout.layers.charge');
-  await expect(page.locator('.zf-stage [data-shape-id="Capture"]')).toHaveClass(/zf-source-selected/);
+  await expect(page.locator('.zf-stage [data-shape-id="step_2"]')).toHaveClass(/zf-source-selected/);
   await source(page).focus();
   await page.keyboard.insertText('Captured');
   await expect(page.locator('.zf-stage [data-shape-id="Captured"]')).toBeVisible();
@@ -300,7 +300,8 @@ test('formatting during compiler startup cannot overwrite later edits', async ({
 });
 
 test('D2 syntax tokens remain visible in light and dark themes', async ({ page }) => {
-  await page.goto('/');
+  await page.goto('/'); await previewReady(page);
+  await source(page).fill('# Syntax example\n...@zoomflow\ndirection: right\na -> b\na.link: https://example.com\n');
   await expect(page.locator('#editor .zf-token-comment').first()).toBeVisible();
   await expect(page.locator('#editor .zf-token-keyword').first()).toBeVisible();
   await expect(page.locator('#editor .zf-token-property').first()).toBeVisible();

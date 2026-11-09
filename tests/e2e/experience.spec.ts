@@ -25,6 +25,7 @@ test('builder previews respond to edits and presets without changing the documen
   const dialog = page.getByRole('dialog', { name: 'Create a flow' });
   const preview = dialog.getByRole('region', { name: 'Live diagram preview', exact: true });
   await dialog.getByLabel('Step 1 name').fill('Ship something delightful');
+  await dialog.locator('.builder-appearance > summary').click();
   await dialog.getByRole('button', { name: 'Elevated', exact: true }).click();
   await expect(preview.locator('.zf-stage')).toContainText('Ship something delightful');
   await expect(preview).toHaveAttribute('aria-busy', 'false');
@@ -115,4 +116,93 @@ test('adding a step briefly highlights the node and incoming connection', async 
   await expect(page.locator('#viewer [data-shape-id].zf-edit-highlight')).toHaveCount(1);
   await expect(page.locator('#viewer [data-connection-id].zf-edit-highlight')).toHaveCount(1);
   await expect(page.locator('#viewer .zf-edit-highlight')).toHaveCount(0);
+});
+
+test('board motion survives incidental pointer movement, yields to dragging, and respects reduced motion', async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
+  await page.goto('/'); await previewReady(page);
+  const result = await page.evaluate(async () => {
+    const stage = document.querySelector<HTMLElement>('#viewer .zf-stage')!;
+    const arrival = new Promise<{ moving: string | undefined; afterHover: string | undefined; afterDrag: string | undefined }>(resolve => {
+      const observer = new MutationObserver(() => {
+        if (!stage.dataset.transition) return;
+        observer.disconnect();
+        const moving = stage.dataset.transition;
+        stage.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, buttons: 0, pointerType: 'mouse' }));
+        const afterHover = stage.dataset.transition;
+        stage.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, buttons: 1, pointerType: 'mouse' }));
+        resolve({ moving, afterHover, afterDrag: stage.dataset.transition });
+      });
+      observer.observe(stage, { attributes: true, attributeFilter: ['data-transition'] });
+    });
+    document.querySelector('#viewer a[data-board="root.layers.checkout"]')!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    return arrival;
+  });
+  expect(result).toEqual({ moving: 'in', afterHover: 'in', afterDrag: undefined });
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.locator('.zf-breadcrumbs button').first().click();
+  await expect(page.locator('#viewer .zf-stage')).toHaveAttribute('data-board', 'root');
+  await expect(page.locator('.zf-board-snapshot')).toHaveCount(0);
+});
+
+test('small diagrams keep a comfortable reading scale when the workspace expands', async ({ page }) => {
+  await page.goto('/'); await previewReady(page);
+  const size = () => page.locator('#viewer [data-shape-id="Browse"] text').evaluate(node =>
+    parseFloat(getComputedStyle(node).fontSize) * Math.abs((node as SVGGraphicsElement).getScreenCTM()!.a));
+  const before = await size();
+  await page.locator('#toggle-source').click();
+  await expect.poll(size).toBeCloseTo(before, 0);
+  expect(await size()).toBeGreaterThanOrEqual(14);
+  expect(await size()).toBeLessThanOrEqual(24);
+  await page.getByRole('button', { name: 'Zoom in', exact: true }).click();
+  expect(await size()).toBeGreaterThan(before);
+});
+
+test('hover offers one cropped preview with a readable account of the board', async ({ page }) => {
+  await page.goto('/'); await previewReady(page);
+  await page.locator('#viewer a[data-board="root.layers.checkout"]').hover();
+  const card = page.locator('.link-preview');
+  await expect(card).toBeVisible();
+  await expect(card.locator('strong')).toHaveText('Checkout');
+  await expect(card.locator('.link-preview-contents')).toHaveText('Cart → Charge → Confirm');
+  await expect(card.locator('img')).toBeVisible();
+  await expect(page.locator('.zf-link-hint')).toBeHidden();
+  await expect(page.locator('.zf-pan-hint')).toBeHidden();
+  const image = await card.locator('img').evaluate(async (el: HTMLImageElement) => {
+    const doc = new DOMParser().parseFromString(await (await fetch(el.src)).text(), 'image/svg+xml');
+    return doc.documentElement.getAttribute('viewBox')!.split(/\s+/).map(Number);
+  });
+  expect(image[2] / image[3]).toBeGreaterThan(3);
+});
+
+test('the starter leads to direct editing and rename preserves the edited shape’s position and scale', async ({ page }) => {
+  await page.goto('/'); await previewReady(page);
+  await expect(page.locator('#viewer [data-shape-id="Docs"]')).toHaveCount(0);
+  await page.getByRole('link', { name: 'Open checkout board', exact: true }).click();
+  await expect(page.locator('#viewer [data-shape-id="Back"]')).toHaveCount(0);
+  await page.getByRole('link', { name: 'Open charge board', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Edit flow', exact: true })).toBeVisible();
+  const step = page.locator('#viewer [data-shape-id="step_2"]');
+  await step.dblclick();
+  const rename = page.getByRole('textbox', { name: 'Rename Capture', exact: true });
+  await expect(rename).toBeFocused();
+  await expect(page.locator('.canvas-rename-help')).toContainText('Enter to save');
+  const before = (await step.boundingBox())!;
+  const textSize = await step.locator('text').evaluate(node => (node as SVGGraphicsElement).getScreenCTM()!.a);
+  await rename.fill('Capture the customer’s payment');
+  await rename.press('Enter');
+  await expect(step).toContainText('Capture the customer’s payment');
+  await previewReady(page);
+  const after = (await step.boundingBox())!;
+  expect(Math.abs(after.x + after.width / 2 - before.x - before.width / 2)).toBeLessThan(2);
+  expect(Math.abs(after.y + after.height / 2 - before.y - before.height / 2)).toBeLessThan(2);
+  expect(await step.locator('text').evaluate(node => (node as SVGGraphicsElement).getScreenCTM()!.a)).toBeCloseTo(textSize, 2);
+  await expect(step).toBeFocused();
+  await step.press('ControlOrMeta+Enter');
+  const next = page.getByRole('textbox', { name: 'Rename New step', exact: true });
+  await expect(next).toBeFocused();
+  await next.fill('Send confirmation'); await next.press('Enter');
+  await expect(page.locator('#viewer')).toContainText('Send confirmation');
+  await previewReady(page);
+  await expect(page.locator('#viewer [data-shape-id="step_4"]')).toBeFocused();
 });

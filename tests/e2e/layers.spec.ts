@@ -38,6 +38,7 @@ test('increases and decreases visible depth and keeps it relative to a focused b
   await openBoards(page);
   await depth.fill('2'); await depth.press('Enter');
   await expect(layers(page)).toHaveCount(4);
+  await closeBoards(page);
   await openFromBadge(page, 'Open Plan the launch board');
   await board(page, 'root.layers.Plan the launch');
   await expect(depth).toHaveValue('1');

@@ -22,8 +22,8 @@ The untouched `order.d2` starter shows a small, static root-board SVG while D2
 downloads. It is labelled as an example preview and is removed when the live
 preview arrives, the source changes, or startup fails. Other documents, saved
 export choices and non-root routes do not show it. The light and dark SVG assets
-in `apps/web/src/order-preview*.svg` were generated from `fixtures/order.d2`
-with native D2 v0.9.0 at themes 0 and 200; regenerate both if that example changes.
+in `apps/web/src/order-preview*.svg` are current-board SVG exports of `apps/web/src/examples/order.d2` in light and dark
+mode. Regenerate both through Export → Current board image (SVG) if the starter changes.
 
 To measure cold loading, see `spike/first-preview.mjs`. On this Mac, against the
 local production preview at 10 Mbps and 40 ms latency, the pre-change median of

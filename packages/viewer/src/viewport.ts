@@ -28,8 +28,10 @@ export function createViewport(stage: HTMLElement, host: HTMLElement, clamp: typ
   const fit = document.createElement('button');
   fit.type = 'button';
   fit.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5"/><rect x="7" y="7" width="10" height="10" rx="1"/></svg>';
-  fit.title = 'Fit diagram';
-  fit.setAttribute('aria-label', 'Fit diagram');
+  fit.append('Overview');
+  fit.title = 'Show the entire diagram (0)';
+  fit.className = 'zf-fit';
+  fit.setAttribute('aria-label', 'Overview (fit diagram)');
   const inside = document.createElement('button');
   inside.type = 'button';
   inside.textContent = '+';
@@ -59,6 +61,22 @@ export function createViewport(stage: HTMLElement, host: HTMLElement, clamp: typ
   const views = new Map<string, View>();
   let documentKey = '';
   let activeKey: string | undefined;
+  let editAnchor: { key: string; shape: string; board?: string; x: number; y: number; pixels: number } | undefined;
+  // Capture just before replacement, after any asynchronous render finishes. A pending edit never
+  // overrides a pan or navigation that happened while it was compiling.
+  stage.addEventListener('zf-beforerender', () => {
+    editAnchor = undefined;
+    if (!activeKey || !svg) return;
+    const focused = document.activeElement;
+    const shape = focused instanceof Element && stage.contains(focused)
+      ? focused.closest<SVGElement>('[data-shape-id]') ?? (focused.localName === 'a' ? focused.querySelector<SVGElement>('[data-shape-id]') : null)
+      : stage.querySelector<SVGElement>('.zf-canvas-selected, .zf-source-selected');
+    const matrix = svg.getScreenCTM();
+    if (!shape?.dataset.shapeId || !matrix?.a) return;
+    const bounds = shape.getBoundingClientRect();
+    editAnchor = { key: activeKey, shape: shape.dataset.shapeId, board: shape.dataset.shapeBoard,
+      x: bounds.left + bounds.width / 2, y: bounds.top + bounds.height / 2, pixels: Math.abs(matrix.a) };
+  }, { signal });
   function remember() {
     if (activeKey && base && box) views.set(activeKey, { scale: scale(),
       centerX: (box.x + box.width / 2 - base.x) / base.width,
@@ -115,7 +133,7 @@ export function createViewport(stage: HTMLElement, host: HTMLElement, clamp: typ
     amount.title = zoomed || offset ? `${Math.round(currentScale * 100)}% of fitted size` : 'Diagram fitted to the available space';
     amount.setAttribute('aria-label', amount.title);
     const panHint = touch ? 'Pinch to zoom · Drag to pan' : '⌘/Ctrl + drag to pan · Space + drag while zoomed · Scroll to zoom';
-    hint.textContent = guidance && (preferGuidance || currentScale <= 1 + zoomEpsilon) ? guidance : panHint;
+    hint.textContent = guidance && (preferGuidance || touch || currentScale <= 1 + zoomEpsilon) ? guidance : panHint;
     hint.title = hint.textContent;
     hint.hidden = !svg || !guidance && !touch && currentScale <= 1 + zoomEpsilon;
     const focused = [out, fit, inside].find((button) => button === document.activeElement);
@@ -259,7 +277,22 @@ export function createViewport(stage: HTMLElement, host: HTMLElement, clamp: typ
     }
     if (next) { reveal([next]); next.focus({ preventScroll: true }); }
   }, { signal });
-  const resize = new ResizeObserver(() => svg?.dispatchEvent(new Event('zf-viewportchange')));
+  const resize = new ResizeObserver(() => {
+    // Refit the baseline as the available space changes, retaining the chosen magnification
+    // and position. Otherwise desktop padding shrinks the content to tiny text on a phone.
+    if (svg && base && box && stage.clientWidth && stage.clientHeight) {
+      const next = fittedBox(svg, base);
+      const magnification = scale();
+      const centerX = (box.x + box.width / 2 - base.x) / base.width;
+      const centerY = (box.y + box.height / 2 - base.y) / base.height;
+      base = next;
+      const width = base.width / magnification;
+      const height = base.height / magnification;
+      setBox({ x: base.x + base.width * centerX - width / 2,
+        y: base.y + base.height * centerY - height / 2, width, height }, false);
+    }
+    svg?.dispatchEvent(new Event('zf-viewportchange'));
+  });
   resize.observe(stage);
   signal.addEventListener('abort', () => resize.disconnect());
   function fittedBox(element: SVGSVGElement, fallback: Box): Box {
@@ -286,7 +319,12 @@ export function createViewport(stage: HTMLElement, host: HTMLElement, clamp: typ
     }
     if (![left, top, right, bottom].every(Number.isFinite) || right <= left || bottom <= top) return fallback;
     const margin = Math.max(16, Math.min(32, Math.min(right - left, bottom - top) * 0.12));
-    return { x: left - margin, y: top - margin, width: right - left + margin * 2, height: bottom - top + margin * 2 };
+    const width = right - left + margin * 2;
+    const height = bottom - top + margin * 2;
+    // Fitting is an overview, not an instruction to magnify a three-step flow to billboard size.
+    const padding = Math.max(1, Math.min(stage.clientWidth / width, stage.clientHeight / height) / 1.1);
+    return { x: (left + right - width * padding) / 2, y: (top + bottom - height * padding) / 2,
+      width: width * padding, height: height * padding };
   }
   function reset() {
     remember();
@@ -304,8 +342,35 @@ export function createViewport(stage: HTMLElement, host: HTMLElement, clamp: typ
         const height = base.height / previous.scale;
         setBox({ x: base.x + base.width * previous.centerX - width / 2,
           y: base.y + base.height * previous.centerY - height / 2, width, height }, false);
-      } else svg.setAttribute('viewBox', `${base.x} ${base.y} ${base.width} ${base.height}`);
+      } else {
+        svg.setAttribute('viewBox', `${base.x} ${base.y} ${base.width} ${base.height}`);
+        // On a phone, start at readable text size. Overview always returns to the whole diagram.
+        if (touch && stage.clientWidth < 600 && !stage.dataset.layerRoot) {
+          const text = svg.querySelector('text');
+          const pixels = text && parseFloat(getComputedStyle(text).fontSize) * Math.abs(text.getScreenCTM()?.a ?? 1);
+          if (pixels && pixels < 14) {
+            const factor = Math.min(2.5, 14 / pixels);
+            setBox({ x: base.x, y: base.y + base.height * (1 - 1 / factor) / 2,
+              width: base.width / factor, height: base.height / factor });
+          }
+        }
+      }
+      if (editAnchor?.key === activeKey) {
+        const anchor = editAnchor;
+        const shape = [...svg.querySelectorAll<SVGGraphicsElement>('[data-shape-id]')]
+          .find(node => node.dataset.shapeId === anchor.shape && node.dataset.shapeBoard === anchor.board);
+        if (shape) {
+          const factor = Math.min(stage.clientWidth / base.width, stage.clientHeight / base.height) / anchor.pixels;
+          const width = base.width * factor;
+          const height = base.height * factor;
+          setBox({ x: box!.x + (box!.width - width) / 2, y: box!.y + (box!.height - height) / 2, width, height }, false);
+          const bounds = shape.getBoundingClientRect();
+          setBox({ ...box!, x: box!.x + (bounds.left + bounds.width / 2 - anchor.x) / anchor.pixels,
+            y: box!.y + (bounds.top + bounds.height / 2 - anchor.y) / anchor.pixels }, false);
+        }
+      }
     }
+    editAnchor = undefined;
     pointers.clear();
     moved = panGesture = modifierPan = false;
     stage.classList.remove('zf-panning');
@@ -341,7 +406,8 @@ export function createViewport(stage: HTMLElement, host: HTMLElement, clamp: typ
     // Claim forced panning before shape editing or native link dragging can begin.
     if (forcePan) { event.preventDefault(); event.stopImmediatePropagation(); }
     pointers.set(event.pointerId, { x: event.clientX, y: event.clientY, startX: event.clientX, startY: event.clientY });
-    stage.setPointerCapture(event.pointerId);
+    // A modifier click still opens a link in another tab; capture only once it becomes a drag.
+    if (!modified) stage.setPointerCapture(event.pointerId);
   }, { capture: true, signal });
   stage.addEventListener('pointermove', (event) => {
     if (!pointers.has(event.pointerId)) return;
@@ -358,6 +424,7 @@ export function createViewport(stage: HTMLElement, host: HTMLElement, clamp: typ
       pan(mid.x - previousMid.x, mid.y - previousMid.y);
       moved = true;
     } else if (moved || Math.hypot(event.clientX - prior.startX, event.clientY - prior.startY) >= 5) {
+      if (modifierPan && !stage.hasPointerCapture(event.pointerId)) stage.setPointerCapture(event.pointerId);
       pan(event.clientX - prior.x, event.clientY - prior.y);
       moved = true;
     }
@@ -369,7 +436,7 @@ export function createViewport(stage: HTMLElement, host: HTMLElement, clamp: typ
     if (stage.hasPointerCapture(event.pointerId)) stage.releasePointerCapture(event.pointerId);
     if (!pointers.size) {
       stage.classList.remove('zf-panning');
-      if (moved || panGesture) {
+      if (moved || panGesture && !modifierPan) {
         suppressClick = true;
         setTimeout(() => { suppressClick = false; }, 150);
       }

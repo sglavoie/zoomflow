@@ -65,15 +65,24 @@ export function setupBoardSelection(ctx: Context) {
     ctx.rename.value = target.label;
     ctx.rename.setAttribute('aria-label', `Rename ${target.label}`);
     ctx.rename.title = `Enter renames. ${target.add} with ${addKeys}. Escape cancels.`;
+    const help = ctx.rename.nextElementSibling as HTMLElement;
+    help.textContent = `Enter to save · ${addKeys} to add ${target.kind === 'flow' ? 'next step' : 'a topic'} · Esc to cancel`;
+    help.hidden = false;
     ctx.rename.hidden = false;
     // Follow the shape while the diagram pans or zooms.
     const place = () => {
       const box = element.getBoundingClientRect();
       const area = ctx.rename.offsetParent?.getBoundingClientRect() ?? { left: 0, top: 0 };
       const width = Math.max(box.width, 140);
-      ctx.rename.style.left = `${box.left - area.left + (box.width - width) / 2}px`;
+      const stage = ctx.viewer.stage.getBoundingClientRect();
+      const fitted = Math.min(width, stage.width - 16);
+      const left = Math.max(stage.left + 8, Math.min(box.left + (box.width - fitted) / 2, stage.right - fitted - 8));
+      ctx.rename.style.left = `${left - area.left}px`;
       ctx.rename.style.top = `${box.top - area.top + box.height / 2 - ctx.rename.offsetHeight / 2}px`;
-      ctx.rename.style.width = `${width}px`;
+      ctx.rename.style.width = `${fitted}px`;
+      help.style.maxWidth = `${stage.width - 16}px`;
+      help.style.left = `${Math.max(stage.left + 8, Math.min(box.left + box.width / 2 - help.offsetWidth / 2, stage.right - help.offsetWidth - 8)) - area.left}px`;
+      help.style.top = `${Math.min(box.top + box.height / 2 + ctx.rename.offsetHeight / 2 + 8, stage.bottom - help.offsetHeight - 8) - area.top}px`;
       if (ctx.renaming) ctx.renaming.frame = requestAnimationFrame(place);
     };
     ctx.renaming = { shape, element, frame: 0 };
@@ -89,6 +98,7 @@ export function setupBoardSelection(ctx: Context) {
     ctx.renaming = undefined;
     cancelAnimationFrame(frame);
     ctx.rename.hidden = true;
+    (ctx.rename.nextElementSibling as HTMLElement).hidden = true;
     const edits: CanvasEdit[] = commit ? [{ type: 'rename', label: ctx.rename.value }] : [];
     if (then) edits.push(then);
     if (element.isConnected) (element.closest<SVGElement>('a') ?? element).focus({ preventScroll: true });

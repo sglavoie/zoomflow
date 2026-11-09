@@ -43,11 +43,13 @@ export function setupCanvasGuidance(stage: HTMLElement, setGuidance: (text: stri
     } else if (connection) {
       text = `${activate} to edit this connection’s label or delete it`;
     } else if (shape && source) {
-      text = `${activate} to select this shape’s source`;
+      text = canvasKeys(shape)?.includes('F2 renames') ? `${activate} to select · Double-click to rename` : `${activate} to select this shape’s source`;
     } else {
       const child = stage.querySelector('a[data-link-direction="child"]');
       const label = child?.querySelector('text')?.textContent?.trim();
       text = label ? child!.getAttribute('data-follow') === 'badge' ? `${activate} the arrow on ${label} to explore` : `${activate} ${label} to explore`
+        : [...stage.querySelectorAll('[data-shape-id]')].some(shape => canvasKeys(shape)?.includes('F2 renames'))
+          ? `${activate} a step to add to it · Double-click to rename`
         : source ? `${activate} a shape to select its source`
         : 'Use the breadcrumbs to explore this diagram';
       if (input === 'touch') text += ' · Pinch to zoom';

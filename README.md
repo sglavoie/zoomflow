@@ -54,8 +54,10 @@ use **Retry preview** to try again without losing your source.
    folder** in the filename menu starts one from nothing. **D2 reference**
    contains searchable examples.
 2. **Explore:** click **Checkout** in the default diagram, then **Charge** to drill
-   deeper. Use breadcrumbs or **Boards** to move around, hover a link to preview its
-   board, or zoom and drag to inspect the diagram. **Find in diagram** (⌘⇧F / Ctrl+Shift+F)
+   deeper. On the Charge board, double-click a step to rename it, or select it
+   and choose **Add next step** to keep building. Use breadcrumbs or **Boards** to move around, hover a link to preview its
+   board, or zoom and drag to inspect the diagram. **Overview** fits the whole diagram at a
+   comfortable scale; phones start closer when needed to keep labels readable. **Find in diagram** (⌘⇧F / Ctrl+Shift+F)
    finds board names and shape labels across the current document and jumps to a match.
    In an open folder, **Find in project** searches every project file, including unsaved
    edits and unlinked diagrams; ⌘⇧F / Ctrl+Shift+F opens project search there.

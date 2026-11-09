@@ -50,6 +50,7 @@ layers: {
 test('live and offline links distinguish board navigation from external destinations', async ({ page, context }, info) => {
   await page.goto('/');
   await previewReady(page);
+  await page.locator('#file').setInputFiles('fixtures/order.d2'); await previewReady(page);
   const assertCues = async (target: Page) => {
     const board = target.getByRole('link', { name: 'Open checkout board', exact: true });
     const external = target.getByRole('link', { name: 'Open external link: Docs (new tab)', exact: true });
@@ -97,21 +98,25 @@ test('link badges preserve diagram tooltips and support Alt+click source selecti
   await expect(offline.getByRole('link', { name: 'Open child board' }).locator('.appendix-icon')).toHaveCount(1);
 });
 
-test('hovering a linked shape draws a single outline', async ({ page }) => {
+test('hover follows the shape while keyboard focus retains a visible selection', async ({ page }) => {
   await page.goto('/'); await previewReady(page);
   const browse = page.locator('.zf-stage [data-shape-id="Browse"]');
   await browse.hover();
-  await expect(browse).toHaveCSS('outline-style', 'solid');
+  await expect(browse).toHaveCSS('outline-style', 'none');
+  await expect(browse).not.toHaveCSS('filter', 'none');
   const link = page.locator('.zf-stage a[data-board="root.layers.checkout"]');
   await link.locator('[data-shape-id="Checkout"]').hover();
-  await expect(link).toHaveCSS('outline-style', 'solid');
+  await expect(link).toHaveCSS('outline-style', 'none');
+  await expect(link.locator('[data-shape-id="Checkout"]')).not.toHaveCSS('filter', 'none');
   await expect(link.locator('[data-shape-id="Checkout"]')).toHaveCSS('outline-style', 'none');
-  // Returning by mouse focuses the link back down for keyboard users, without outlining it.
+  // Keyboard navigation back up restores focus to the link leading down.
   await link.click();
-  await page.getByRole('link', { name: 'Return to Root', exact: true }).click();
+  await page.locator('.zf-breadcrumbs button').first().focus();
+  await page.keyboard.press('Enter');
   await page.mouse.move(0, 0);
   await expect(link).toBeFocused();
-  await expect(link).toHaveCSS('outline-style', 'none');
+  await expect(link.locator('[data-shape-id="Checkout"]')).toHaveClass(/zf-canvas-selected/);
+  await expect(page.locator('.zf-selection-ring')).toBeVisible();
 });
 
 for (const offline of [false, true]) test(`link badges keep their screen size through zoom and resize ${offline ? 'offline' : 'live'}`, async ({ page, context }, info) => {
@@ -136,7 +141,7 @@ for (const offline of [false, true]) test(`link badges keep their screen size th
   }
   await page.setViewportSize({ width: 1050, height: 600 });
   await expect.poll(async () => Math.abs(await size() - initial)).toBeLessThan(0.2);
-  await page.getByRole('button', { name: 'Fit diagram', exact: true }).click();
+  await page.getByRole('button', { name: 'Overview (fit diagram)', exact: true }).click();
   await page.locator('a[data-link-direction="child"]').first().click();
   await expect(page.locator('.zf-stage')).toHaveAttribute('data-board', 'root.layers.checkout');
 });

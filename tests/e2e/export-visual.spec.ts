@@ -37,7 +37,7 @@ for (const theme of ['light', 'dark'] as const) {
       expect(await page.evaluate(() => document.documentElement.scrollHeight)).toBe(size.height);
       if (comparesVisuals(browserName)) await expect(page).toHaveScreenshot(`offline-${theme}-${size.name}.png`);
     }
-    await page.getByRole('link', { name: 'Return to checkout', exact: true }).focus();
+    await page.getByRole('navigation', { name: 'Breadcrumb' }).getByRole('button', { name: 'checkout', exact: true }).focus();
     await page.keyboard.press('Enter');
     await expect(page.locator('.zf-stage')).toHaveAttribute('data-board', 'root.layers.checkout');
   });

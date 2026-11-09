@@ -33,7 +33,7 @@ test('preview zooms and pans, then fits again', async ({ page }) => {
   await page.keyboard.up('Space');
   expect((await box()).slice(0, 2)).not.toEqual(beforeLinkedPan.slice(0, 2));
   await expect(page.locator('.zf-stage')).toHaveAttribute('data-board', 'root');
-  await page.getByRole('button', { name: 'Fit diagram' }).click();
+  await page.getByRole('button', { name: 'Overview (fit diagram)' }).click();
   expect(await box()).toEqual(original);
 });
 
@@ -44,7 +44,7 @@ test('zoom out reaches 10% with the diagram centered, then fits again', async ({
   const box = async () => (await svg.getAttribute('viewBox'))!.split(/\s+/).map(Number);
   const original = await box();
   const out = page.getByRole('button', { name: 'Zoom out' });
-  const fit = page.getByRole('button', { name: 'Fit diagram' });
+  const fit = page.getByRole('button', { name: 'Overview (fit diagram)' });
 
   await out.click();
   await expect(page.locator('.zf-zoom-controls span')).toHaveText('67%');
@@ -177,13 +177,13 @@ test.describe('touch and offline navigation', () => {
 test('reading source leaves the board and history alone; explicit reveal works on desktop and phone', async ({ page }) => {
   await page.goto('/'); await previewReady(page);
   const history = await page.evaluate(() => window.history.length);
-  await cursorAt(page, 'Capture');
+  await cursorAt(page, 'step_2');
   await expect(page.locator('#reveal-source')).toBeEnabled();
   await expect(page.locator('.zf-stage')).toHaveAttribute('data-board', 'root');
   expect(await page.evaluate(() => window.history.length)).toBe(history);
   await page.locator('#reveal-source').click();
   await expect(page.locator('.zf-stage')).toHaveAttribute('data-board', 'root.layers.checkout.layers.charge');
-  await expect(page.locator('.zf-source-selected')).toHaveAttribute('data-shape-id', 'Capture');
+  await expect(page.locator('.zf-source-selected')).toHaveAttribute('data-shape-id', 'step_2');
   await expect(page.locator('.zf-stage')).toBeFocused();
   await page.setViewportSize({ width: 390, height: 844 });
   await page.locator('#mobile-source').click();
@@ -225,15 +225,15 @@ test('wheel units produce equivalent zoom and pinch-wheel remains anchored', asy
   const wheel = (deltaY: number, deltaMode: number) => svg.dispatchEvent('wheel', { deltaY, deltaMode, clientX: 300, clientY: 300, bubbles: true, cancelable: true });
   await wheel(-48, 0);
   const pixels = await svg.getAttribute('viewBox');
-  await page.getByRole('button', { name: 'Fit diagram', exact: true }).click();
+  await page.getByRole('button', { name: 'Overview (fit diagram)', exact: true }).click();
   await wheel(-3, 1);
   expect(await svg.getAttribute('viewBox')).toBe(pixels);
-  await page.getByRole('button', { name: 'Fit diagram', exact: true }).click();
+  await page.getByRole('button', { name: 'Overview (fit diagram)', exact: true }).click();
   const height = await page.locator('.zf-stage').evaluate((el) => el.clientHeight);
   await wheel(-48 / height, 2);
   expect(await svg.getAttribute('viewBox')).toBe(pixels);
   await expect(svg).toHaveCSS('touch-action', 'none');
-  await page.getByRole('button', { name: 'Fit diagram', exact: true }).click();
+  await page.getByRole('button', { name: 'Overview (fit diagram)', exact: true }).click();
   await svg.dispatchEvent('wheel', { deltaY: -20, ctrlKey: true, clientX: 300, clientY: 300, bubbles: true, cancelable: true });
   await expect(page.locator('.zf-zoom-controls span')).toHaveText('122%');
 });
@@ -256,7 +256,7 @@ test('pinching from Fit zooms the diagram using real touch input', async ({ page
   const zoom = Number((await page.locator('.zf-zoom-controls span').innerText()).replace('%', ''));
   expect(zoom).toBeGreaterThan(150);
   await expect(stage).toHaveAttribute('data-board', 'root');
-  await page.getByRole('button', { name: 'Fit diagram', exact: true }).click();
+  await page.getByRole('button', { name: 'Overview (fit diagram)', exact: true }).click();
   await expect(page.locator('.zf-zoom-controls span')).toHaveText('Fit');
 });
 
@@ -305,7 +305,7 @@ test('canvas guidance follows navigation, mouse, keyboard and zoom context', asy
   await page.goto('/'); await previewReady(page);
   const hint = page.locator('.zf-pan-hint');
   await expect(hint).toHaveText('Click Checkout to explore');
-  await expect(page.locator('.zf-stage a[href="https://d2lang.com/tour/intro/"]')).toBeVisible();
+  await expect(page.locator('#workspace-view a[href="https://d2lang.com/tour/intro/"]')).toHaveCount(1);
   const browse = page.locator('.zf-stage [data-shape-id="Browse"]');
   await browse.hover();
   await expect(hint).toHaveText('Click to select this shape’s source · Drag onto a new parent to move this branch');
@@ -318,7 +318,7 @@ test('canvas guidance follows navigation, mouse, keyboard and zoom context', asy
   await expect(hint).not.toContainText('Click');
   await page.getByRole('button', { name: 'Zoom in', exact: true }).click();
   await expect(hint).toHaveText('⌘/Ctrl + drag to pan · Space + drag while zoomed · Scroll to zoom');
-  await page.getByRole('button', { name: 'Fit diagram', exact: true }).click();
+  await page.getByRole('button', { name: 'Overview (fit diagram)', exact: true }).click();
   await expect(hint).toHaveText('Click Charge to explore');
 });
 

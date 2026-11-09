@@ -5,6 +5,9 @@
 Selecting a node shows its frequent actions beside it; **More** opens the full menu.
 New and moved nodes and their incoming connections briefly stand out. Destructive
 canvas edits offer an **Undo** confirmation beside the diagram, valid until the next edit.
+Adding a step or topic opens its name field immediately. A hint beside the field
+shows **Enter** to save, **⌘/Ctrl+Enter** to save and add another, and **Esc** to cancel
+the rename. The renamed shape stays in place while its layout updates.
 
 ## Create a flow without diagram syntax
 
@@ -15,7 +18,7 @@ between the selected steps; optional labels such as Yes and No describe branches
 **Add step** connects the new step from the previous one automatically. Change
 that connection or add others to make branches and loops. Removing a step also
 removes its connections. Layout can run top to bottom or left to right.
-Under **Look**, choose **Outline**, **Soft**, or **Elevated**. **Customize style**
+After the steps and connections, expand **Appearance** and choose **Outline**, **Soft**, or **Elevated**. **Customize style**
 contains the individual **Filled shapes**, **Compact text**, and **Shadows** controls.
 The live diagram beside the form updates as you edit; mind map detail boards can
 be explored there before applying changes. On phones the preview follows the fields. Connections labelled Yes or No are drawn green and dashed red.
@@ -56,7 +59,7 @@ in; breadcrumbs, Esc and Backspace return to the parent. Deeper levels split aga
 the same depth, and each board is named after its topic. Choose **Keep every topic on
 one board** for a single board.
 
-**Create mind map**, **Edit mind map**, undo, discard confirmation and **Look** work as
+**Create mind map**, **Edit mind map**, undo, discard confirmation and **Appearance** work as
 in the flow builder. The generated D2 imports the [standard library](../stdlib/README.md)
 on each board, so detail boards keep their styles when the map is attached inside another
 diagram. Existing maps with one import still reopen and gain the detail imports when

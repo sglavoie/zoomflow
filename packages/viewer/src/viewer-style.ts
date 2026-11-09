@@ -39,11 +39,15 @@ export const viewerStyle = `
 .zf-link-hint { position: absolute; top: 12px; left: 12px; max-width: calc(100% - 24px); padding: 6px 10px; border-radius: var(--radius); background: #203044; color: #fff; font-size: 12px; pointer-events: none; overflow-wrap: anywhere; }
 .zf-pan-hint { grid-row: 3; grid-column: 1 / -1; font-size: 12px; color: var(--muted); }
 .zf-zoom-controls button svg { display: block; margin: auto; }
+.zf-zoom-controls .zf-fit { display: flex; align-items: center; gap: 5px; padding-inline: 8px; font-size: 12px; }
+.zf-zoom-controls .zf-fit svg { margin: 0; }
 @media (pointer: coarse) {
   .zf-zoom-controls button { min-width: 44px; min-height: 44px; }
 }
 .zf-link-hint[hidden], .zf-pan-hint[hidden], .zf-context[hidden] { display: none; }
-.zf-stage a:not([data-missing]):not(:has(> .zf-canvas-selected)):hover { outline: 2px solid var(--focus); outline-offset: 3px; }
+.zf-stage a:not([data-missing]):not(:has(> .zf-canvas-selected)):hover > g:not(.appendix-icon) { filter: drop-shadow(0 0 2px var(--focus)); }
+.zf-stage[data-link-preview] .zf-link-hint { display: none; }
+.zf-stage-area:has(.zf-stage[data-link-preview="pointer"]) .zf-pan-hint { visibility: hidden; }
 .zf-board-snapshot { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: fill; pointer-events: none; }
 .zf-return-highlight { position: absolute; pointer-events: none; border: 2px solid var(--focus, #477de5); border-radius: 12px; }
 `;

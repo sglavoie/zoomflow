@@ -81,7 +81,8 @@ export function setupBoardMotion(stage: HTMLElement) {
   for (const type of ['wheel', 'keydown', 'zf-suspend', 'zf-destroy']) stage.addEventListener(type, cancel);
   // Keep a clicked link under the pointer until its click handler navigates. Pointer movement can
   // immediately take over the viewport, and navigation itself cancels the old motion.
-  stage.addEventListener('pointermove', cancel);
+  // Incidental movement after a click is not a pan and must not cut the arrival short.
+  stage.addEventListener('pointermove', event => { if (event.buttons || event.pointerType === 'touch') cancel(); });
   reduced.addEventListener('change', cancel);
   stage.addEventListener('zf-destroy', () => reduced.removeEventListener('change', cancel), { once: true });
   return { capture, enter, cancel };

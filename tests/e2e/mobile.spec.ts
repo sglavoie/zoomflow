@@ -184,3 +184,33 @@ test.describe('phone workspace', () => {
     await expect(page.locator('#ai-undo')).toBeHidden();
   });
 });
+
+test.describe('readable phone canvas', () => {
+  test.use({ hasTouch: true, viewport: { width: 390, height: 844 }, reducedMotion: 'reduce' });
+  test('starts with readable labels and an explicit overview, then keeps a chosen view', async ({ page }) => {
+    await page.goto('/'); await previewReady(page);
+    const stage = page.locator('#viewer .zf-stage');
+    const textSize = await stage.locator('[data-shape-id="Browse"] text').evaluate(node =>
+      parseFloat(getComputedStyle(node).fontSize) * Math.abs((node as SVGGraphicsElement).getScreenCTM()!.a));
+    expect(textSize).toBeGreaterThanOrEqual(13.9);
+    const first = (await stage.locator('[data-shape-id="Browse"]').boundingBox())!;
+    expect(first.x).toBeGreaterThanOrEqual((await stage.boundingBox())!.x);
+    const overview = page.getByRole('button', { name: 'Overview (fit diagram)', exact: true });
+    await expect(overview).toContainText('Overview');
+    await expect(overview).toBeEnabled();
+    await overview.click();
+    const fitted = await stage.locator(':scope > svg').getAttribute('viewBox');
+    for (const shape of await stage.locator('[data-shape-id]').all()) {
+      const box = (await shape.boundingBox())!;
+      const canvas = (await stage.boundingBox())!;
+      expect(box.x).toBeGreaterThanOrEqual(canvas.x);
+      expect(box.x + box.width).toBeLessThanOrEqual(canvas.x + canvas.width);
+    }
+    await page.getByRole('link', { name: 'Open checkout board', exact: true }).click();
+    await page.locator('.zf-breadcrumbs button').first().click();
+    await expect(stage).toHaveAttribute('data-board', 'root');
+    const restored = (await stage.locator(':scope > svg').getAttribute('viewBox'))!.split(' ').map(Number);
+    // Browser SVG matrix round trips can differ by fractions of a screen pixel.
+    fitted!.split(' ').map(Number).forEach((value, i) => expect(Math.abs(restored[i] - value)).toBeLessThan(0.1));
+  });
+});

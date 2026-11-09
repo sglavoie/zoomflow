@@ -102,6 +102,12 @@ export function setupBoardTools(scope: PaneScope, viewer: Viewer, options: Board
   rename.hidden = true;
   rename.maxLength = 200;
   shapeGroup.after(rename);
+  const renameHelp = document.createElement('div');
+  renameHelp.id = scope.id('rename-help');
+  renameHelp.className = 'canvas-rename-help';
+  renameHelp.hidden = true;
+  rename.setAttribute('aria-describedby', renameHelp.id);
+  rename.after(renameHelp);
   const menu = document.createElement('div');
   menu.className = 'board-menu';
   menu.id = scope.id('board-menu');

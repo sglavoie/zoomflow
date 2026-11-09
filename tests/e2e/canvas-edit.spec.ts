@@ -295,7 +295,7 @@ test('a link to a board previews it before drilling in', async ({ page }) => {
   await board(page, 'root');
 });
 
-test('a step that opens a board selects and renames on click, and opens from its arrow', async ({ page }) => {
+test('a step that opens a board selects and renames on click, and opens from its arrow', async ({ page, browserName }) => {
   await mixed(page);
   const link = page.getByRole('link', { name: 'Open Plan the launch board', exact: true });
   // A click on the shape selects it and stays on this board.
@@ -321,7 +321,13 @@ test('a step that opens a board selects and renames on click, and opens from its
   await link.press('Enter');
   await board(page, 'root.layers.Plan the launch');
   // A topic that opens a board renames on double-click too, and Enter opens its board.
-  await shape(page, 'n_3_2').locator('text').dblclick();
+  const label = shape(page, 'n_3_2').locator('text');
+  if (browserName === 'webkit') {
+    // WebKit's automation quads omit the nested SVG translation for this text node.
+    await expect(stage(page)).not.toHaveAttribute('data-transition');
+    const box = await label.evaluate(node => node.getBoundingClientRect().toJSON());
+    await page.mouse.dblclick(box.x + box.width / 2, box.y + box.height / 2);
+  } else await label.dblclick();
   await page.getByRole('textbox', { name: 'Rename Onboarding' }).press('Escape');
   await expect(stage(page)).toHaveAttribute('data-board', 'root.layers.Plan the launch');
   await page.getByRole('link', { name: 'Open Onboarding board', exact: true }).press('Enter');

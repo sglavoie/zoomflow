@@ -13,6 +13,7 @@ test('creates a mind map from an outline, drills into a detail board and edits i
   await dialog.getByLabel('Mind map name').fill('Trip');
   await dialog.getByRole('textbox', { name: 'Topics' }).fill('Trip\n- Places\n  - Lisbon\n    - Alfama\n  - Porto\n- Budget "max" $2k');
   await expect(dialog.getByRole('status')).toHaveText('6 topics · 1 detail board');
+  await dialog.locator('.builder-appearance > summary').click();
   await dialog.getByText('Customize style', { exact: true }).click();
   await dialog.getByLabel('Compact text').check();
   await dialog.getByRole('button', { name: 'Create mind map', exact: true }).click();

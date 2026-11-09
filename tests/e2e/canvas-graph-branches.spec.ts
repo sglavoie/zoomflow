@@ -43,6 +43,7 @@ test('drags builder flow branches while keeping outgoing arrows, attached boards
 test('reparents a custom D2 node with its detail board, saves it, and restores the exact source with undo', async ({ page }) => {
   await page.addInitScript(() => Object.defineProperty(window, 'showSaveFilePicker', { value: undefined, configurable: true }));
   await page.goto('/'); await previewReady(page);
+  await page.locator('#file').setInputFiles('fixtures/order.d2'); await previewReady(page);
   const original = await editorText(page);
   await dragTo(page, shape(page, 'Checkout'), shape(page, 'Docs'));
   await page.mouse.up(); await previewReady(page); await board(page, 'root');

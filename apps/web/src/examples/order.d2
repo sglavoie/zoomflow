@@ -4,7 +4,6 @@ Browse -> Checkout -> Receipt
 Browse.class: [zf-step; zf-filled]
 Checkout: {class: [zf-step; zf-filled]; link: layers.checkout}
 Receipt.class: zf-terminal
-Docs: {class: [zf-step; zf-muted]; link: https://d2lang.com/tour/intro/}
 layers: {
   checkout: {
     direction: right
@@ -12,14 +11,18 @@ layers: {
     Cart.class: [zf-step; zf-filled]
     Charge: {class: [zf-step; zf-filled]; link: layers.charge}
     Confirm.class: zf-terminal
-    Back: {class: zf-terminal; link: _; near: top-left; width: 64; height: 32; style.font-size: 14}
     layers: {
       charge: {
-        Authorize -> Capture -> Receipt
-        Authorize.class: [zf-step; zf-filled]
-        Capture.class: [zf-step; zf-filled]
-        Receipt.class: zf-terminal
-        Back: {class: zf-terminal; link: _; near: top-left; width: 64; height: 32; style.font-size: 14}
+        # Created with the Zoomflow flow builder.
+        ...@zoomflow
+        direction: right
+
+        step_1: "Authorize" {class: [zf-step; zf-filled]}
+        step_2: "Capture" {class: [zf-step; zf-filled]}
+        step_3: "Receipt" {class: [zf-terminal; zf-filled]}
+
+        step_1 -> step_2: ""
+        step_2 -> step_3: ""
       }
     }
   }

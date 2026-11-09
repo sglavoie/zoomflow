@@ -148,7 +148,7 @@ test('workspace is compact and stable, zoom explains its baseline, export descri
   await page.getByRole('button', { name: 'Zoom in', exact: true }).click();
   await expect(page.locator('.zf-pan-hint')).toBeVisible();
   await expect(page.locator('.zf-zoom-controls span')).toHaveAttribute('aria-label', '150% of fitted size');
-  await page.getByRole('button', { name: 'Fit diagram', exact: true }).click();
+  await page.getByRole('button', { name: 'Overview (fit diagram)', exact: true }).click();
   await page.getByRole('link', { name: 'Open checkout board', exact: true }).click();
   await openDownloads(page);
   await page.locator('#export-format input[value="svg"]').check();

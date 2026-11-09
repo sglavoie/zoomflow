@@ -381,6 +381,7 @@ export class Viewer {
       const keepFocus = document.activeElement === active;
       const sameBoard = id === this.current;
       const previous = this.current;
+      if (sameBoard) this.stage.dispatchEvent(new Event('zf-beforerender'));
       this.stage.replaceChildren(content);
       if (combined) {
         const layers = [...content.querySelectorAll<SVGGElement>('[data-layer-board]')];

@@ -10,12 +10,14 @@ test.use({ colorScheme: 'light', reducedMotion: 'reduce' });
 test('opens a single HTML file offline and drills every level with history and backlinks', async ({ page, context }, info) => {
   await page.goto('/');
   await board(page, 'root');
+  // This fixture includes ancestor and external links; the introductory example uses breadcrumbs.
+  await page.locator('#file').setInputFiles('fixtures/order.d2'); await previewReady(page);
   const path = await download(page, 'html', info);
   const html = await readFile(path, 'utf8');
   expect(html).not.toMatch(/<script[^>]+src=|d2\.wasm/);
   // Boards share one font subset per face instead of embedding their own.
   expect(html.match(/@font-face/g)).toHaveLength(1);
-  expect(html).toContain('@font-face{font-family:zf-font-regular;');
+  expect(html).toContain('@font-face{font-family:zf-font-bold;');
   await page.goto('about:blank');
   const network: string[] = [];
   context.on('request', (request) => { if (/^https?:/.test(request.url())) network.push(request.url()); });
@@ -29,11 +31,11 @@ test('opens a single HTML file offline and drills every level with history and b
   await drill(page, 'root.layers.checkout');
   await drill(page, 'root.layers.checkout.layers.charge');
   await expect(page.locator('.zf-stage')).toContainText('Capture');
-  const font = await page.locator('.zf-stage text.text').first().evaluate(async (text) => {
+  const font = await page.locator('.zf-stage text').first().evaluate(async (text) => {
     await document.fonts.ready;
     return { family: getComputedStyle(text).fontFamily.replace(/"/g, ''), loaded: document.fonts.check(`16px ${getComputedStyle(text).fontFamily}`, text.textContent!) };
   });
-  expect(font).toEqual({ family: 'zf-font-regular', loaded: true });
+  expect(font).toEqual({ family: 'zf-font-bold', loaded: true });
   const colors = await page.locator('.zf-stage').evaluate((stage) => ({
     stage: getComputedStyle(stage).backgroundColor,
     board: getComputedStyle(stage.querySelector('svg svg > rect')!).fill,
@@ -125,7 +127,7 @@ test('exported HTML retains keyboard focus during drill-down', async ({ page, co
   await offline.getByRole('button', { name: 'Zoom out' }).click();
   await offline.getByRole('button', { name: 'Zoom out' }).click();
   await expect(offline.locator('.zf-zoom-controls span')).toHaveText('67%');
-  await offline.getByRole('button', { name: 'Fit diagram' }).click();
+  await offline.getByRole('button', { name: 'Overview (fit diagram)' }).click();
   const link = offline.locator('.zf-stage a[data-board="root.layers.checkout"]');
   // A board link's address is the board's route, so a new tab or a copied link opens that board.
   const href = (await link.getAttribute('href'))!;

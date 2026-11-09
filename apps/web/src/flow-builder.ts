@@ -19,7 +19,6 @@ export function setupFlowBuilder(create: (source: string, name: string) => void,
         <label id="flow-name-field"><span>Flow name</span><input id="flow-name" value="My flow" required maxlength="100" /></label>
         <label>Layout<select id="flow-direction"><option value="down">Top to bottom</option><option value="right">Left to right</option></select></label>
       </div>
-      ${lookFields('flow')}
       <fieldset id="flow-starters"><legend>Start with an example</legend><button type="button" data-template="simple">Simple flow</button> <button type="button" data-template="approval">Approval with Yes / No</button></fieldset>
       <section aria-labelledby="flow-steps-heading">
         <h3 id="flow-steps-heading">1. Name the steps</h3>
@@ -33,6 +32,7 @@ export function setupFlowBuilder(create: (source: string, name: string) => void,
         <div id="flow-connections"></div>
         <button id="flow-add-connection" type="button">Add connection</button>
       </section>
+      ${lookFields('flow')}
       <p id="flow-feedback" role="status"></p>
       <p id="flow-error" role="alert" hidden></p>
       <div class="flow-footer"><span id="flow-save-hint">Creates a new draft. Your current diagram is kept.</span><button type="button" data-close>Cancel</button><button class="button-primary" type="submit">Create flow</button></div>
