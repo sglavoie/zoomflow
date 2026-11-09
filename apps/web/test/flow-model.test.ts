@@ -84,7 +84,7 @@ it('writes looks as classes after each role and reads them back', async () => {
   const source = flowSource(flow);
   expect(source).toContain('step_2: "Do something" {class: [zf-step; zf-filled]}');
   const compiled = await compile(source);
-  expect(compiled.diagram.shapes.every(shape => shape.fill === '#e2e8f0')).toBe(true);
+  expect(compiled.diagram.shapes.every(shape => shape.fill === '#e9f0fa')).toBe(true);
   expect(readFlow(source)).toEqual(flow);
   const all = { ...flow, look: { filled: true, compact: true, shadow: true } };
   expect(flowSource(all)).toContain('{class: [zf-step; zf-filled; zf-compact; zf-shadow]}');

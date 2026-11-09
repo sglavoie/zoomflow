@@ -15,6 +15,10 @@ The browser provides `zoomflow.d2` in the compiler's virtual filesystem. For
 plain D2, copy this file beside your document or adjust the relative import path.
 The library is opt-in; existing documents are not rewritten.
 
+The default filled look uses soft blue surfaces and slate text. In Zoomflow and
+its SVG/HTML exports, those default fills adapt to dark mode; custom colours stay
+as authored. The current board's **Style** menu changes builder looks in place.
+
 Shapes:
 
 - `zf-in` / `zf-out`: dashed oval boundary ports.

@@ -25,7 +25,8 @@ test('mobile source view gives the editor room with secondary controls collapsed
 
 test('selecting a shape on a phone reveals its source', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto('/');
+  await page.goto('/'); await previewReady(page);
+  await page.locator('#file').setInputFiles('fixtures/order.d2'); await previewReady(page);
   await expect(page.locator('.zf-stage [data-shape-id="Browse"]')).toBeVisible();
   await page.locator('.zf-stage [data-shape-id="Browse"]').click();
   await expect(page.locator('#mobile-source')).toHaveAttribute('aria-pressed', 'true');
@@ -136,14 +137,14 @@ test.describe('phone workspace', () => {
 
   test('touch guidance and empty boards lead back to source without inserting text', async ({ page }) => {
     await page.goto('/'); await previewReady(page);
-    await expect(page.locator('.zf-pan-hint')).toHaveText('Tap Checkout to explore · Pinch to zoom');
-    await page.getByRole('link', { name: 'Open checkout board', exact: true }).tap();
+    await expect(page.locator('.zf-pan-hint')).toHaveText('Tap the arrow on Checkout to explore · Pinch to zoom');
+    await page.getByRole('link', { name: 'Open checkout board', exact: true }).locator('.appendix-icon').tap();
     await expect(page.locator('.zf-stage')).toHaveAttribute('data-board', 'root.layers.checkout');
     await page.locator('#mobile-source').tap();
     expect((await page.locator('#editor').boundingBox())!.y).toBeLessThan(260);
     await source(page).fill(''); await previewReady(page);
     await page.locator('#mobile-preview').tap();
-    await expect(page.locator('.empty-board-help code')).toHaveText('a -> b');
+    await expect(page.getByRole('button', { name: 'Add first step', exact: true })).toBeVisible();
     await expect(page.locator('.zf-pan-hint')).toBeHidden();
     await page.getByRole('button', { name: 'Edit source', exact: true }).tap();
     await expect(source(page)).toBeFocused();
@@ -206,7 +207,7 @@ test.describe('readable phone canvas', () => {
       expect(box.x).toBeGreaterThanOrEqual(canvas.x);
       expect(box.x + box.width).toBeLessThanOrEqual(canvas.x + canvas.width);
     }
-    await page.getByRole('link', { name: 'Open checkout board', exact: true }).click();
+    await page.getByRole('link', { name: 'Open checkout board', exact: true }).locator('.appendix-icon').click();
     await page.locator('.zf-breadcrumbs button').first().click();
     await expect(stage).toHaveAttribute('data-board', 'root');
     const restored = (await stage.locator(':scope > svg').getAttribute('viewBox'))!.split(' ').map(Number);

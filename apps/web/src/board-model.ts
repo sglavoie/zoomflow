@@ -277,6 +277,8 @@ export function boardSites(source: string, blocks: Map<string, SourceRange>, boa
   }
   return {
     owner,
+    /** Only truly empty local boards can be initialized without discarding custom D2. */
+    empty: (id: string) => Boolean(site(id) && !site(id)!.parts.own.trim() && !site(id)!.parts.attachments.length),
     /** Append connection overrides inside the nearest local board. Keeping them inside an attached board's
      * body preserves its parent's lossless builder section, even for imported/inherited descendant boards. */
     append(board: string, text: string): string {

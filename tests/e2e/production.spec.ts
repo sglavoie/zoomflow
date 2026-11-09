@@ -13,7 +13,7 @@ test('the production build compiles, navigates, edits and exports offline HTML',
   await page.goto('/');
   await previewReady(page);
   await expect(page.locator('.zf-stage')).not.toHaveClass(/zf-starter-preview/);
-  await page.locator('.zf-stage a[data-board="root.layers.checkout"]').click();
+  await page.locator('.zf-stage a[data-board="root.layers.checkout"]').locator('.appendix-icon').click();
   await expect(page.locator('.zf-stage')).toHaveAttribute('data-board', 'root.layers.checkout');
 
   await source(page).click();

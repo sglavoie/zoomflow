@@ -209,6 +209,15 @@ export function createViewport(stage: HTMLElement, host: HTMLElement, clamp: typ
     return [...stage.querySelectorAll<SVGGraphicsElement>('a[tabindex], [data-shape-id][tabindex], [data-flow-connection][tabindex]')]
       .filter((node) => node.localName === 'a' || !node.closest('a'));
   }
+  stage.addEventListener('zf-walkthroughstep', event => {
+    const { shape, board } = (event as CustomEvent<{ shape: string; board: string }>).detail;
+    requestAnimationFrame(() => {
+      if (!stage.dataset.walkthrough) return;
+      const target = [...stage.querySelectorAll<SVGGraphicsElement>('[data-shape-id]')].find(node =>
+        node.dataset.shapeId === shape && (!node.dataset.shapeBoard || node.dataset.shapeBoard === board));
+      if (target) reveal([target]);
+    });
+  }, { signal });
   function resetFocus() {
     const targets = focusTargets();
     const focused = targets.find((node) => node === document.activeElement);

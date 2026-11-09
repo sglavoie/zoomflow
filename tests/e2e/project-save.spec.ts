@@ -64,7 +64,8 @@ async function writableProject(page: Page) {
     (window as any).showSaveFilePicker = async () => { throw new Error('Batch saves must not open destination pickers'); };
   });
   await page.goto('/');
-  if (await page.locator('#open-folder').isVisible()) await page.locator('#open-folder').click(); else { await page.locator('#example-picker summary').click(); await page.locator('#open-folder-picker').click(); }
+  await page.locator('#create-open > summary').click();
+  await page.locator('#open-folder').click();
   await previewReady(page);
 }
 
@@ -116,6 +117,7 @@ test('one save keeps an import and diagrams from both panes on disk when the fol
   await page.locator('#example-picker summary').click();
   await page.reload();
   await selectMenuOption(page, '#layout', 'single');
+  await page.locator('#create-open > summary').click();
   await page.locator('#open-folder').click();
   await previewReady(page);
   await expect(page.locator('#editor .cm-content')).toContainText('Changed home');
@@ -249,6 +251,7 @@ test('project saves use real file and directory handles restored after reload', 
       await stream.write(source); await stream.close();
     }
   });
+  await page.locator('#create-open > summary').click();
   await page.locator('#open-folder').click();
   await previewReady(page);
   await page.locator('#editor .cm-content').fill('Home: First changed file');

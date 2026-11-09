@@ -3,12 +3,13 @@ import { restoreMissingLinks } from './missing-links';
 import { prepareLinks, type resolveLink } from './links';
 import { sanitizeSvg } from './sanitize';
 import { associateShapeBadges } from './shape-badges';
+import { libraryTheme } from './library-theme';
 
 /** Parse inert renderer output, sanitize it, and annotate interactive shapes and links. */
 export function viewerSvg(svg: string, board: Board, boards: ReadonlyMap<string, Board>,
   diagnostics: readonly LintDiagnostic[], sourceShapes: readonly ShapeSource[],
   resolve: (href: string) => ReturnType<typeof resolveLink>): SVGElement {
-  const doc = new DOMParser().parseFromString(svg, 'image/svg+xml');
+  const doc = new DOMParser().parseFromString(libraryTheme(svg), 'image/svg+xml');
   // File content can contain labels and links; never insert executable markup. Sanitize while
   // the parsed SVG is still inert: importing an element into this document can start loading it.
   if (doc.querySelector('parsererror') || !sanitizeSvg(doc.documentElement)) throw new Error(`Invalid SVG for ${board.name}`);

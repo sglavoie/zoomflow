@@ -1,7 +1,7 @@
 import { guardBuilderDialog, lookControls, lookFields, type BuilderTarget } from './builder-dialog';
 import { plural, setText } from './text';
 import { setupBuilderPreview, type CompileBuilderPreview } from './builder-preview';
-import { cleanLabel, flowFilename, flowSource, flowTemplate, readFlow, type Flow, type FlowStep } from './flow-model';
+import { cleanLabel, flowFilename, flowSource, flowTemplate, highestStepNumber, readFlow, type Flow, type FlowStep } from './flow-model';
 
 /** One builder dialog: New flow creates a draft, and each pane opens it to add or edit a flow board. */
 export function setupFlowBuilder(create: (source: string, name: string) => void,
@@ -15,10 +15,12 @@ export function setupFlowBuilder(create: (source: string, name: string) => void,
     <form>
       <div class="flow-heading"><h2 id="flow-builder-title">Create a flow</h2><button type="button" data-close aria-label="Close flow builder">Close</button></div>
       <p id="flow-builder-description">Name your steps, then choose what happens next. No diagram syntax needed.</p>
+      <div class="flow-entry-mode" role="group" aria-label="Flow creation mode"><button type="button" data-entry="quick" aria-pressed="true">Quick start</button><button type="button" data-entry="full" aria-pressed="false">Full builder</button></div>
       <div class="flow-settings">
         <label id="flow-name-field"><span>Flow name</span><input id="flow-name" value="My flow" required maxlength="100" /></label>
         <label>Layout<select id="flow-direction"><option value="down">Top to bottom</option><option value="right">Left to right</option></select></label>
       </div>
+      <label class="flow-quick"><span id="flow-quick-label">Steps, one per line</span><textarea id="flow-quick-steps" aria-labelledby="flow-quick-label" aria-describedby="flow-quick-help" rows="5" placeholder="Receive request&#10;Review request&#10;Send confirmation"></textarea><span id="flow-quick-help" class="flow-help">We connect them in order. Start with one step and keep building on the canvas.</span></label>
       <fieldset id="flow-starters"><legend>Start with an example</legend><button type="button" data-template="simple">Simple flow</button> <button type="button" data-template="approval">Approval with Yes / No</button></fieldset>
       <section aria-labelledby="flow-steps-heading">
         <h3 id="flow-steps-heading">1. Name the steps</h3>
@@ -49,11 +51,24 @@ export function setupFlowBuilder(create: (source: string, name: string) => void,
   const addStep = dialog.querySelector<HTMLButtonElement>('#flow-add-step')!;
   const addConnection = dialog.querySelector<HTMLButtonElement>('#flow-add-connection')!;
   const submit = dialog.querySelector<HTMLButtonElement>('[type="submit"]')!;
+  const quickSteps = dialog.querySelector<HTMLTextAreaElement>('#flow-quick-steps')!;
+  const modeButtons = [...dialog.querySelectorAll<HTMLButtonElement>('[data-entry]')];
+  let quick = false;
+  function setMode(value: boolean) {
+    quick = value;
+    dialog.dataset.entry = quick ? 'quick' : 'full';
+    quickSteps.required = quick;
+    quickSteps.disabled = !quick;
+    // Hidden full-builder inputs must not block quick-start submission.
+    for (const input of steps.querySelectorAll<HTMLInputElement>('input')) input.disabled = quick;
+    modeButtons.forEach(button => button.setAttribute('aria-pressed', String((button.dataset.entry === 'quick') === quick)));
+    if (quick) quickSteps.value = flow.steps.map(step => step.label).join('\n');
+  }
   let flow: Flow = flowTemplate('simple');
   /** The highest step number since the builder opened. New steps never reuse a removed step's identifier,
    * so a board that opened from the removed step does not move to the new one. */
   let highest = 0;
-  const highestStep = () => Math.max(highest, ...flow.steps.map(step => Number(step.id.slice(5))));
+  const highestStep = () => Math.max(highest, highestStepNumber(flow));
   let editing = false;
   /** The form when the builder opened; closing asks before discarding later changes. */
   let snapshot = '';
@@ -161,6 +176,7 @@ export function setupFlowBuilder(create: (source: string, name: string) => void,
     direction.value = flow.direction;
     look.set(flow.look);
     renderSteps(); renderConnections();
+    setMode(quick);
   }
   function open(next: BuilderTarget, edit?: HTMLElement, fallback?: HTMLElement) {
     const existing = next.mode === 'edit' ? readFlow(next.source ?? '') : undefined;
@@ -168,15 +184,19 @@ export function setupFlowBuilder(create: (source: string, name: string) => void,
     target = next;
     editing = next.mode === 'edit';
     flow = existing ?? flowTemplate('simple');
+    quick = !editing;
+    if (quick) { flow.steps = [{ id: 'step_1', label: 'Start', shape: 'rectangle' }]; flow.connections = []; flow.look.filled = true; }
     highest = 0;
     highest = highestStep();
-    returnFocus = edit ?? launch;
+    returnFocus = edit ?? document.querySelector<HTMLElement>('#create-open > summary') ?? launch;
     fallbackFocus = fallback;
     name.value = next.name;
     name.setCustomValidity('');
+    quickSteps.setCustomValidity('');
     dialog.querySelector('#flow-name-field span')!.textContent = next.mode === 'board' ? 'Board name' : 'Flow name';
     dialog.querySelector<HTMLElement>('#flow-name-field')!.hidden = editing;
     dialog.querySelector<HTMLElement>('#flow-starters')!.hidden = editing;
+    dialog.querySelector<HTMLElement>('.flow-entry-mode')!.hidden = editing;
     dialog.querySelector('h2')!.textContent = { draft: 'Create a flow', board: 'Add a flow board', edit: 'Edit flow' }[next.mode];
     submit.textContent = { draft: 'Create flow', board: 'Add board', edit: 'Apply changes' }[next.mode];
     dialog.querySelector('#flow-save-hint')!.textContent = {
@@ -192,6 +212,33 @@ export function setupFlowBuilder(create: (source: string, name: string) => void,
     (editing ? steps.querySelector('input')! : name).focus();
   }
   launch.addEventListener('click', () => open(draft()));
+  quickSteps.addEventListener('input', () => {
+    const labels = quickSteps.value.split('\n').map(label => cleanLabel(label).trim()).filter(Boolean);
+    quickSteps.setCustomValidity(labels.length ? '' : 'Name at least one step.');
+    const previous = flow.steps;
+    flow.steps = labels.map((label, i) => ({ id: previous[i]?.id ?? `step_${++highest}`, label, shape: previous[i]?.shape ?? 'rectangle' }));
+    flow.connections = flow.steps.slice(1).map((step, i) => ({ from: flow.steps[i].id, to: step.id, label: '' }));
+    announce();
+  });
+  for (const button of modeButtons) button.addEventListener('click', () => {
+    if (button.dataset.entry === 'full') {
+      const pristine = formState() === snapshot;
+      if (pristine && flow.steps.length === 1 && flow.steps[0].label === 'Start') {
+        flow = { ...flowTemplate('simple'), look: flow.look, direction: flow.direction };
+        highest = highestStep();
+      }
+      if (!flow.steps.length) flow.steps = [{ id: `step_${++highest}`, label: '', shape: 'rectangle' }];
+      quick = false; render();
+      if (pristine) { snapshot = formState(); loaded = stepsState(); }
+      return;
+    }
+    // A branching flow cannot be represented as a list without losing information.
+    const linear = flow.connections.length === flow.steps.length - 1 && flow.connections.every((edge, i) =>
+      edge.from === flow.steps[i].id && edge.to === flow.steps[i + 1].id && !edge.label);
+    if (!linear) { error.textContent = 'This flow has branches or connection labels. Keep using the full builder to preserve them.'; error.hidden = false; return; }
+    setMode(true);
+    quickSteps.focus();
+  });
   // Enter in a step or label moves on instead of submitting a flow that is still being written.
   // The dialog guard stops keys before they reach the form, so it runs this as its shortcut.
   function enterMovesOn(event: KeyboardEvent) {
@@ -244,6 +291,7 @@ export function setupFlowBuilder(create: (source: string, name: string) => void,
   });
   form.addEventListener('submit', event => {
     event.preventDefault();
+    if (!flow.steps.length) { quickSteps.setCustomValidity('Name at least one step.'); quickSteps.reportValidity(); return; }
     const problem = target.apply(flowSource(flow), name.value.trim());
     if (problem) {
       error.textContent = problem;

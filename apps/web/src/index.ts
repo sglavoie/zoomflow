@@ -61,6 +61,15 @@ function updateSourceToggle() {
 sourceToggle.addEventListener('click', () => { activePane().views.toggleSource(); updateSourceToggle(); });
 workspace.addEventListener('zf-workspaceviewchange', updateSourceToggle);
 const viewMenu = document.querySelector<HTMLDetailsElement>('#workspace-view')!;
+const createMenu = document.querySelector<HTMLDetailsElement>('#create-open')!;
+document.addEventListener('pointerdown', event => { if (!createMenu.contains(event.target as Node)) createMenu.open = false; });
+createMenu.addEventListener('click', event => {
+  if (event.target instanceof Element && event.target.closest('button, .file-button')) createMenu.open = false;
+});
+createMenu.addEventListener('keydown', event => {
+  if (event.key !== 'Escape' || !createMenu.open) return;
+  event.preventDefault(); event.stopPropagation(); createMenu.open = false; createMenu.querySelector('summary')!.focus();
+});
 document.addEventListener('pointerdown', event => {
   if (!viewMenu.contains(event.target as Node)) viewMenu.open = false;
 });

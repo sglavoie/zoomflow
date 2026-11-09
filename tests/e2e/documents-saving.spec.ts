@@ -29,11 +29,13 @@ test('two drafts opened from the same disk file cannot overwrite a pending save'
   });
   await page.goto('/');
   await previewReady(page);
+  await page.locator('#create-open > summary').click();
   await page.locator('#file').click();
   await expect(page.locator('#filename')).toHaveText('shared.d2');
   await source(page).fill('x: First draft');
   await selectMenuOption(page, '#layout', 'quad');
   await page.locator('#pane-start-empty-b').click();
+  await page.locator('#create-open > summary').click();
   await page.locator('#file').click();
   await expect(page.locator('#pane-document-b .pane-document-name')).toHaveText('shared.d2');
   await previewReady(page, 'b');
@@ -113,9 +115,11 @@ for (const delayed of ['getFile', 'text'] as const) {
     }, delayed);
     await page.goto('/');
     await previewReady(page);
-    await page.locator('#file').click();
+    await page.locator('#create-open > summary').click();
+  await page.locator('#file').click();
     await expect.poll(() => page.evaluate(() => typeof (window as any).finishOldOpen)).toBe('function');
-    await page.locator('#file').click();
+    await page.locator('#create-open > summary').click();
+  await page.locator('#file').click();
     await expect(page.locator('#filename')).toHaveText('latest.d2');
     await previewReady(page);
     // Release and drain the older read before checking that it cannot activate a draft.
@@ -149,6 +153,7 @@ test('renaming during a pending save keeps the new name and asks for a new file 
     };
   });
   await page.goto('/'); await previewReady(page);
+  await page.locator('#create-open > summary').click();
   await page.locator('#file').click();
   await expect(page.locator('#filename')).toHaveText('work.d2'); await previewReady(page);
   await source(page).fill('a: Edited');
@@ -175,6 +180,7 @@ test('the save shortcut applies a name still being typed before saving', async (
     target.showSaveFilePicker = async ({ suggestedName }) => { target.suggested = suggestedName; return handle(suggestedName); };
   });
   await page.goto('/'); await previewReady(page);
+  await page.locator('#create-open > summary').click();
   await page.locator('#file').click();
   await expect(page.locator('#filename')).toHaveText('work.d2'); await previewReady(page);
   await openDownloads(page);
@@ -199,6 +205,7 @@ test('a blank or unedited name keeps an opened file linked to it', async ({ page
     target.showSaveFilePicker = async () => { throw new Error('Save should write back to Work.D2'); };
   });
   await page.goto('/'); await previewReady(page);
+  await page.locator('#create-open > summary').click();
   await page.locator('#file').click();
   await expect(page.locator('#filename')).toHaveText('Work.D2'); await previewReady(page);
   await openDownloads(page);

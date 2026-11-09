@@ -3,7 +3,18 @@ export function setupMobileView(pane: HTMLElement, preview: HTMLButtonElement, s
   tabbed: () => boolean, onPreview: () => void) {
   const workspace = document.querySelector<HTMLElement>('#workspace')!;
   const preference = `zoomflow.source-visible.${pane.dataset.pane ?? 'a'}`;
-  try { pane.toggleAttribute('data-source-hidden', localStorage.getItem(preference) === 'false'); }
+  pane.setAttribute('data-source-hidden', '');
+  try {
+    let saved = localStorage.getItem(preference);
+    // Keep the former split default for people with an existing workspace. Record the
+    // fresh canvas default now, before the first draft writes its recovery selection.
+    if (saved === null) {
+      saved = localStorage.getItem('zoomflow.source-visible.a') ??
+        (localStorage.getItem('zoomflow.selection.v2') || localStorage.getItem('zoomflow.drafts.v1') ? 'true' : 'false');
+      localStorage.setItem(preference, saved);
+    }
+    pane.toggleAttribute('data-source-hidden', saved !== 'true');
+  }
   catch { /* Optional preference. */ }
   function setSourceVisible(visible: boolean, remember = false) {
     pane.toggleAttribute('data-source-hidden', !visible);

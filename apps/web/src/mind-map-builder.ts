@@ -104,7 +104,7 @@ export function setupMindMapBuilder(create: (source: string, name: string) => vo
     const root = next.mode === 'board' ? { label: cleanLabel(next.name).replace(/\s+/g, ' ').trim() || 'Topic',
       children: ['First idea', 'Second idea'].map(label => ({ label, children: [] })) } : parseOutline(mindMapExample)!;
     const map: MindMap = existing ?? { direction: 'right', split: 2, look: plainLook(), root };
-    returnFocus = edit ?? launch;
+    returnFocus = edit ?? document.querySelector<HTMLElement>('#create-open > summary') ?? launch;
     fallbackFocus = fallback;
     name.value = next.name;
     name.setCustomValidity('');

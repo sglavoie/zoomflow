@@ -126,6 +126,7 @@ test('an opened file can be saved back to its original handle', async ({ page })
     }];
   });
   await page.goto('/');
+  await page.locator('#create-open > summary').click();
   await page.locator('#file').click();
   await expect(page.locator('#filename')).toHaveText('original.d2');
   await source(page).fill('original: After');
@@ -153,6 +154,7 @@ test('directory access opens nested imports and saves an edited file back to its
     });
   });
   await page.goto('/');
+  await page.locator('#create-open > summary').click();
   await page.locator('#open-folder').click();
   await expect(page.locator('.zf-stage')).toContainText('Imported from folder');
   await page.locator('#example-picker summary').click();

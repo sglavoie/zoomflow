@@ -7,6 +7,7 @@ test.use({ viewport: { width: 1440, height: 900 } });
 
 test('creates a mind map from an outline, drills into a detail board and edits it again', async ({ page }) => {
   await page.goto('/'); await ready(page);
+  await page.locator('#create-open > summary').click();
   await page.getByRole('button', { name: 'New mind map', exact: true }).click();
   const dialog = page.getByRole('dialog', { name: 'Create a mind map' });
   await expect(dialog.getByRole('status')).toHaveText('13 topics · 1 detail board');
@@ -47,6 +48,7 @@ test('creates a mind map from an outline, drills into a detail board and edits i
 
 test('indents and outdents outline lines from the keyboard and buttons', async ({ page }) => {
   await page.goto('/'); await ready(page);
+  await page.locator('#create-open > summary').click();
   await page.getByRole('button', { name: 'New mind map', exact: true }).click();
   const dialog = page.getByRole('dialog', { name: 'Create a mind map' });
   const outline = dialog.getByRole('textbox', { name: 'Topics' });
@@ -74,7 +76,7 @@ test('indents and outdents outline lines from the keyboard and buttons', async (
   await confirm.getByRole('button', { name: 'Discard changes', exact: true }).click();
   await expect(dialog).toBeHidden();
   await expect(page.locator('#filename')).toHaveText('order.d2');
-  await expect(page.getByRole('button', { name: 'New mind map', exact: true })).toBeFocused();
+  await expect(page.locator('#create-open > summary')).toBeFocused();
 });
 
 test('works on a phone and keeps the builder inside the viewport', async ({ page }) => {
@@ -96,6 +98,7 @@ test('works on a phone and keeps the builder inside the viewport', async ({ page
 
 test('renaming a detail board’s centre topic replaces the board in history', async ({ page }) => {
   await page.goto('/'); await ready(page);
+  await page.locator('#create-open > summary').click();
   await page.getByRole('button', { name: 'New mind map', exact: true }).click();
   const dialog = page.getByRole('dialog', { name: 'Create a mind map' });
   await dialog.getByLabel('Mind map name').fill('Trip');

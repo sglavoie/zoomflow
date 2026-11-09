@@ -62,7 +62,7 @@ test('reparents a custom D2 node with its detail board, saves it, and restores t
   await source(page).fill('temporary: Other diagram'); await previewReady(page);
   await page.locator('#file').setInputFiles({ name: saved.suggestedFilename(), mimeType: 'text/plain', buffer: await readFile(await saved.path()) }); await previewReady(page);
   expect(await arrows(page)).toContain('(Docs -> Checkout)[0]');
-  await page.getByRole('link', { name: 'Open checkout board', exact: true }).click();
+  await page.getByRole('link', { name: 'Open checkout board', exact: true }).locator('.appendix-icon').click();
   await board(page, 'root.layers.checkout');
   await expect(shape(page, 'Cart', 'root.layers.checkout')).toBeVisible();
 });

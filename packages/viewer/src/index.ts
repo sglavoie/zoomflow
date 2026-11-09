@@ -7,6 +7,7 @@ import { setupBreadcrumbs } from './breadcrumbs';
 import { followLink, linkTo, resolveLink } from './links';
 import { layerDepths } from './layers';
 import { setupBoardMotion } from './board-motion';
+import { setupEditMotion } from './edit-motion';
 import type { DocumentView } from './document-view';
 export { parseDocumentView, serializeDocumentView, type DocumentView } from './document-view';
 
@@ -17,6 +18,8 @@ export { setupViewport } from './viewport';
 export { normalizeRouteHash, resolveRouteHash } from './navigation';
 export { offlineViewerStyle } from './export-style';
 export { viewerStyle } from './viewer-style';
+export { libraryTheme } from './library-theme';
+export { setupWalkthrough, type WalkthroughBoard } from './walkthrough';
 
 /** DOM viewer with an injected renderer so callers can reuse compiled documents. */
 export class Viewer {
@@ -73,6 +76,7 @@ export class Viewer {
     };
   }
   constructor(private readonly host: HTMLElement, private readonly settings: ViewerOptions = {}) {
+    setupEditMotion(this.stage);
     this.history = settings.history ?? true;
     this.crumbs.className = 'zf-breadcrumbs';
     this.crumbs.setAttribute('aria-label', 'Breadcrumb');
@@ -381,7 +385,7 @@ export class Viewer {
       const keepFocus = document.activeElement === active;
       const sameBoard = id === this.current;
       const previous = this.current;
-      if (sameBoard) this.stage.dispatchEvent(new Event('zf-beforerender'));
+      if (sameBoard) this.stage.dispatchEvent(new CustomEvent('zf-beforerender', { detail: { animate: preserveViewport } }));
       this.stage.replaceChildren(content);
       if (combined) {
         const layers = [...content.querySelectorAll<SVGGElement>('[data-layer-board]')];

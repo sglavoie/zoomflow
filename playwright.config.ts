@@ -23,7 +23,12 @@ export default defineConfig({
   // than file by file; otherwise the largest spec file sets the length of a CI shard.
   fullyParallel: true,
   workers: 2,
-  use: { baseURL: appURL, trace: 'retain-on-failure' },
+  // Most regression tests exercise source editing. Keep that returning-user layout
+  // explicit; delight.spec.ts uses empty storage to verify the new canvas-first start.
+  use: { baseURL: appURL, trace: 'retain-on-failure', storageState: { cookies: [], origins: [devURL, previewURL].map(origin => ({
+    origin, localStorage: [{ name: 'zoomflow.source-visible.a', value: 'true' }, { name: 'zoomflow.source-visible.b', value: 'true' },
+      { name: 'zoomflow.canvas-hint-dismissed', value: 'true' }],
+  })) } },
   webServer: [
     {
       command: `${vite} apps/web --host 127.0.0.1 --port ${devPort} --strictPort`,

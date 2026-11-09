@@ -8,8 +8,9 @@ Start with the guide for the task you want to do:
 
 ## Workspace and drafts
 
-Use **Source** in the header to give the canvas the full workspace; the choice is
-remembered for each pane. Source-editing actions reveal the editor automatically.
+New workspaces start with the canvas filling the workspace. **Source** in the header
+opens the editor; the choice is remembered for each pane, including existing workspaces.
+**Create / open** groups flow and mind-map creation with file and folder opening. Source-editing actions reveal the editor automatically.
 **View** holds layout, theme, D2 reference, and keyboard shortcuts. On small screens,
 Preview and Source tabs keep the diagram and editor usable one at a time.
 

@@ -5,7 +5,7 @@ test.use({ hasTouch: true, viewport: { width: 390, height: 844 }, colorScheme: '
 
 test('the touch canvas exposes readable cues and a zoom hint before any gesture', { tag: '@visual' }, async ({ page, browserName }) => {
   await page.goto('/'); await previewReady(page);
-  await expect(page.locator('.zf-pan-hint')).toHaveText('Tap Checkout to explore · Pinch to zoom');
+  await expect(page.locator('.zf-pan-hint')).toHaveText('Tap the arrow on Checkout to explore · Pinch to zoom');
   if (comparesVisuals(browserName)) await expect(page).toHaveScreenshot('touch-canvas.png');
   await page.setViewportSize({ width: 844, height: 390 });
   // Link cues resize on the next animation frame after the viewport changes.

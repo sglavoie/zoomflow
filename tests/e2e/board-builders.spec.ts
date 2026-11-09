@@ -8,7 +8,9 @@ test.use({ viewport: { width: 1440, height: 900 } });
 
 async function approvalFlow(page: Page) {
   await page.goto('/'); await ready(page);
+  await page.locator('#create-open > summary').click();
   await page.getByRole('button', { name: 'New flow', exact: true }).click();
+  await page.getByRole('button', { name: 'Full builder', exact: true }).click();
   const dialog = page.getByRole('dialog', { name: 'Create a flow' });
   await dialog.getByRole('button', { name: 'Approval with Yes / No' }).click();
   await dialog.getByRole('button', { name: 'Create flow', exact: true }).click();
@@ -87,6 +89,7 @@ test('repairs missing detail imports when editing an existing attached mind map'
 
 test('adds flows and maps inside generated detail boards and keeps them after editing the parent outline', async ({ page }) => {
   await page.goto('/'); await ready(page);
+  await page.locator('#create-open > summary').click();
   await page.getByRole('button', { name: 'New mind map', exact: true }).click();
   const create = page.getByRole('dialog', { name: 'Create a mind map' });
   await create.getByRole('textbox', { name: 'Topics' }).fill('Plan\n  Area\n    Detail\n      Task');
@@ -99,6 +102,7 @@ test('adds flows and maps inside generated detail boards and keeps them after ed
   await shape(page, 'n_1').click();
   await page.getByRole('group', { name: 'Selected: Task' }).getByRole('button', { name: 'More shape actions' }).click();
   await page.getByRole('menuitem', { name: 'Add flow board…', exact: true }).click();
+  await page.getByRole('button', { name: 'Full builder', exact: true }).click();
   await page.getByRole('dialog', { name: 'Add a flow board' }).getByRole('button', { name: 'Add board', exact: true }).click();
   await ready(page);
   await board(page, 'root.layers.Area.layers.Detail.layers.Task');
@@ -142,7 +146,7 @@ test('offers the same actions from a context menu and the keyboard', async ({ pa
   await approvalFlow(page);
   await shape(page, 'step_4').click({ button: 'right' });
   const menu = page.getByRole('menu', { name: 'Actions for Request changes' });
-  await expect(menu.getByRole('menuitem')).toHaveText(['Rename', 'Add next step', 'Connect to…', 'Move branch…', 'Delete', 'Add flow board…', 'Add mind map board…', 'Hide from export', 'Select in source']);
+  await expect(menu.getByRole('menuitem')).toHaveText(['Rename', 'Add branch', 'Connect to…', 'Move branch…', 'Delete', 'Add flow board…', 'Add mind map board…', 'Hide from export', 'Select in source']);
   await expect(menu.getByRole('menuitem', { name: 'Rename' })).toBeFocused();
   await page.keyboard.press('ArrowUp');
   await expect(menu.getByRole('menuitem', { name: 'Select in source' })).toBeFocused();

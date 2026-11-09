@@ -22,11 +22,13 @@
     <header>
       <strong>Zoomflow</strong>
       <div class="header-controls">
+        <details id="create-open"><summary>Create / open</summary><div class="create-open-menu">
         <button id="new-flow" class="button-primary" type="button">New flow</button>
         <button id="new-mind-map" type="button">New mind map</button>
         <label class="file-button">Open .d2<input id="file" type="file" accept=".d2" /></label>
         <button id="open-folder" type="button">Open folder</button>
         <input id="folder" type="file" webkitdirectory multiple hidden />
+        </div></details>
         <div class="document-control">
         <details id="example-picker">
           <summary aria-label="Choose a diagram" title="Choose a built-in example or return to your file">
@@ -78,15 +80,16 @@
         </div>
       </div>
       <div class="header-actions">
-        <button id="toggle-source" type="button" class="button-quiet" aria-pressed="true" aria-controls="source-pane">Source</button>
+        <button id="toggle-source" type="button" class="button-quiet" aria-pressed="false" aria-controls="source-pane">Source</button>
+        <details id="workspace-view">
+          <summary>View</summary>
+          <div class="workspace-view-menu">
         <div id="theme" class="theme-control" role="group" aria-label="Theme">
           <button type="button" value="light" aria-pressed="false">Light</button>
           <button type="button" value="dark" aria-pressed="false">Dark</button>
           <button type="button" value="system" aria-pressed="true" title="Follow your device’s appearance">System</button>
         </div>
-        <details id="workspace-view">
-          <summary>View</summary>
-          <div class="workspace-view-menu">
+
             <label class="layout-control"><span class="zf-visually-hidden">Layout</span><select id="layout" aria-label="Layout" title="Workspace layout: one diagram, or two side by side"><option value="single">Single</option><option value="tabs">Split · tabs</option><option value="quad">Split · all views</option></select></label>
             <button id="toggle-reference" class="button-quiet" aria-expanded="false" aria-controls="d2-reference" title="D2 reference (⌘⇧/ or Ctrl+Shift+/)">D2 reference</button>
             <a class="workspace-docs" href="https://d2lang.com/tour/intro/" target="_blank" rel="noopener noreferrer">D2 documentation ↗</a>

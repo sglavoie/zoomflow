@@ -110,7 +110,7 @@ test('hover follows the shape while keyboard focus retains a visible selection',
   await expect(link.locator('[data-shape-id="Checkout"]')).not.toHaveCSS('filter', 'none');
   await expect(link.locator('[data-shape-id="Checkout"]')).toHaveCSS('outline-style', 'none');
   // Keyboard navigation back up restores focus to the link leading down.
-  await link.click();
+  await link.locator('.appendix-icon').click();
   await page.locator('.zf-breadcrumbs button').first().focus();
   await page.keyboard.press('Enter');
   await page.mouse.move(0, 0);
@@ -142,7 +142,7 @@ for (const offline of [false, true]) test(`link badges keep their screen size th
   await page.setViewportSize({ width: 1050, height: 600 });
   await expect.poll(async () => Math.abs(await size() - initial)).toBeLessThan(0.2);
   await page.getByRole('button', { name: 'Overview (fit diagram)', exact: true }).click();
-  await page.locator('a[data-link-direction="child"]').first().click();
+  await page.locator('a[data-link-direction="child"]').first().locator('.appendix-icon').click();
   await expect(page.locator('.zf-stage')).toHaveAttribute('data-board', 'root.layers.checkout');
 });
 

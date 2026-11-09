@@ -172,7 +172,7 @@ test('reference controls preserve board navigation and focus follows the current
   await page.keyboard.press('Meta+Shift+/');
   await page.keyboard.press('Escape');
   await expect(checkout).toBeFocused();
-  await checkout.click();
+  await checkout.locator('.appendix-icon').click();
   await expect(page.locator('.zf-stage')).toHaveAttribute('data-board', 'root.layers.checkout');
   await source(page).focus();
   await page.keyboard.press('Meta+Shift+/');
@@ -192,7 +192,7 @@ test('reference controls preserve board navigation and focus follows the current
   await expect(source(page)).toBeFocused();
   await openView(page);
   await toggle(page).click();
-  await page.locator('.zf-stage a[data-board="root.layers.checkout.layers.charge"]').click();
+  await page.locator('.zf-stage a[data-board="root.layers.checkout.layers.charge"]').locator('.appendix-icon').click();
   await expect(page.locator('.zf-stage')).toHaveAttribute('data-board', 'root.layers.checkout.layers.charge');
   await expect(panel(page)).toBeVisible();
 });
@@ -204,6 +204,7 @@ test('reference stays usable on narrow screens, in dark mode, and with storage b
   });
   await page.setViewportSize({ width: 390, height: 844 });
   await ready(page);
+  await openView(page);
   await expect(page.locator('#theme')).toBeVisible();
   await page.getByRole('group', { name: 'Theme', exact: true }).getByRole('button', { name: 'Dark', exact: true }).click();
   await openView(page);

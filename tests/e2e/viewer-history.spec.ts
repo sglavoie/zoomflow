@@ -23,7 +23,7 @@ for (const offline of [false, true]) {
     await openViewer(page, context, info, offline);
     const stage = page.locator('.zf-stage').first();
     const crumbs = page.getByRole('navigation', { name: 'Breadcrumb' });
-    await page.locator('.zf-stage a[data-board="root.layers.checkout"]').click();
+    await page.locator('.zf-stage a[data-board="root.layers.checkout"]').locator('.appendix-icon').click();
     await expect(stage).toHaveAttribute('data-board', 'root.layers.checkout');
     const length = await page.evaluate(() => history.length);
     await crumbs.getByRole('button', { name: 'checkout', exact: true }).click();
@@ -69,7 +69,7 @@ for (const offline of [false, true]) {
     await expect(message.locator('[role="status"]')).toHaveText('Board "nope/deeper" not found; showing Root');
     await expect(message.locator('[role="alert"]')).toBeEmpty();
     expect(await page.evaluate(() => location.hash)).toBe('#/');
-    await page.locator('.zf-stage a[data-board="root.layers.checkout"]').click();
+    await page.locator('.zf-stage a[data-board="root.layers.checkout"]').locator('.appendix-icon').click();
     await expect(stage).toHaveAttribute('data-board', 'root.layers.checkout');
     await expect(message).toBeEmpty();
   });

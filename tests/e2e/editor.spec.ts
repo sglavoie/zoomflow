@@ -11,8 +11,16 @@ async function replace(page: Page, text: string) {
   await source(page).press('ControlOrMeta+a');
   await page.keyboard.insertText(text);
 }
-/** Source edits disable branch dragging on the retained SVG; its diagram markup stays the same. */
-const previewMarkup = async (page: Page) => (await page.locator('.zf-stage').innerHTML()).replaceAll(' zf-branch-draggable', '');
+/** Editing affordances retire when source changes; compare the retained diagram itself. */
+const previewMarkup = async (page: Page) => page.locator('.zf-stage').evaluate(stage => {
+  const copy = stage.cloneNode(true) as HTMLElement;
+  for (const hit of copy.querySelectorAll('.zf-connection-hit')) hit.remove();
+  for (const edge of copy.querySelectorAll('[data-connection-id]')) {
+    for (const attribute of ['data-flow-connection', 'tabindex', 'role', 'aria-label']) edge.removeAttribute(attribute);
+  }
+  for (const link of copy.querySelectorAll('[data-follow]')) link.removeAttribute('data-follow');
+  return copy.innerHTML.replaceAll(' zf-branch-draggable', '');
+});
 async function findSource(page: Page, text: string) {
   await source(page).focus();
   await source(page).press('ControlOrMeta+f');
@@ -28,7 +36,7 @@ async function findSource(page: Page, text: string) {
 test('live edits retain the last good render on syntax errors and recover with diagnostics cleared', async ({ page }) => {
   await page.goto('/');
   await ready(page);
-  await page.locator('.zf-stage a[data-board="root.layers.checkout"]').click();
+  await page.locator('.zf-stage a[data-board="root.layers.checkout"]').locator('.appendix-icon').click();
   await ready(page, 'root.layers.checkout');
   await expect(page.locator('.zf-stage')).not.toHaveAttribute('data-transition');
   const before = await previewMarkup(page);
@@ -90,7 +98,7 @@ test('explicit reveal opens the selected source board, linked shapes still drill
   await checkout.click({ modifiers: ['Alt'] });
   await expect.poll(() => page.evaluate(() => window.getSelection()?.toString())).toBe('Checkout');
   await ready(page);
-  await checkout.click();
+  await checkout.locator('.appendix-icon').click();
   await ready(page, 'root.layers.checkout');
   await page.locator('#file').setInputFiles({ name: 'new.d2', mimeType: 'text/plain', buffer: Buffer.from('new: New document') });
   await expect(source(page)).toHaveText('new: New document');
@@ -249,9 +257,9 @@ test('formats nested boards with D2 rules, refreshes navigation, and supports un
   // during that debounce, so wait for the new diagnostics before navigating.
   await expect(page.locator('#lint-summary')).not.toHaveText('Lint pending…');
   await ready(page);
-  await page.locator('.zf-stage a[data-board="root.layers.checkout"]').click();
+  await page.locator('.zf-stage a[data-board="root.layers.checkout"]').locator('.appendix-icon').click();
   await ready(page, 'root.layers.checkout');
-  await page.locator('.zf-stage a[data-board="root.layers.checkout.layers.charge"]').click();
+  await page.locator('.zf-stage a[data-board="root.layers.checkout.layers.charge"]').locator('.appendix-icon').click();
   await ready(page, 'root.layers.checkout.layers.charge');
   await page.locator('.zf-stage a[data-board="root.layers.checkout.layers.charge.layers.capture"]').click();
   await ready(page, 'root.layers.checkout.layers.charge.layers.capture');

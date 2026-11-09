@@ -13,6 +13,7 @@ export function setupDiagramSearch(host: HTMLElement, scope: PaneScope, viewer: 
   button.type = 'button';
   button.className = 'diagram-search-trigger';
   button.textContent = 'Find in diagram';
+  button.setAttribute('aria-label', 'Find in diagram');
   button.disabled = true;
   button.setAttribute('aria-haspopup', 'dialog');
   button.setAttribute('aria-keyshortcuts', 'Meta+Shift+F Control+Shift+F');
@@ -21,6 +22,7 @@ export function setupDiagramSearch(host: HTMLElement, scope: PaneScope, viewer: 
   projectButton.type = 'button';
   projectButton.className = 'project-search-trigger';
   projectButton.textContent = 'Find in project';
+  projectButton.setAttribute('aria-label', 'Find in project');
   projectButton.hidden = true;
   projectButton.setAttribute('aria-haspopup', 'dialog');
   projectButton.title = 'Find a board or shape in any project file (⌘⇧F / Ctrl+Shift+F)';

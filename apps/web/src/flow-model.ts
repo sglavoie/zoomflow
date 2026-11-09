@@ -6,6 +6,9 @@ export type Look = Record<(typeof lookNames)[number], boolean>;
 export const plainLook = (): Look => ({ filled: false, compact: false, shadow: false });
 export type Flow = { direction: 'down' | 'right'; look: Look; steps: FlowStep[]; connections: FlowConnection[] };
 
+/** Named steps in older diagrams retain their identities when opened in a builder. */
+export const highestStepNumber = (flow: Flow) => Math.max(0, ...flow.steps.map(step => Number(/^step_(\d+)$/.exec(step.id)?.[1] ?? 0)));
+
 const heading = '# Created with the Zoomflow flow builder.';
 /** Steps use library classes, so restyling those classes restyles every flow. */
 const library = '...@zoomflow';
@@ -85,8 +88,8 @@ export function readFlow(source: string): Flow | undefined {
   const flow: Flow = { direction, look: plainLook(), steps: [], connections: [] };
   try {
     for (const line of lines.slice(legacy ? 2 : 3).filter(Boolean)) {
-      const step = line.match(/^(step_\d+): ("(?:[^"\\]|\\.)*") \{(shape|class): ([\w-]+|\[[\w; -]+\])\}$/);
-      const edge = line.match(/^(step_\d+) -> (step_\d+): ("(?:[^"\\]|\\.)*")(?: \{class: zf-(?:yes|no)\})?$/);
+      const step = line.match(/^([A-Za-z][\w]*): ("(?:[^"\\]|\\.)*") \{(shape|class): ([\w-]+|\[[\w; -]+\])\}$/);
+      const edge = line.match(/^([A-Za-z][\w]*) -> ([A-Za-z][\w]*): ("(?:[^"\\]|\\.)*")(?: \{class: zf-(?:yes|no)\})?$/);
       if (step) {
         const styled = step[3] === 'class' ? readLook(step[4]) : undefined;
         const name = styled ? styled.classes[0] : step[4];

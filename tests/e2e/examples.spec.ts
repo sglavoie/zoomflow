@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import { selectMenuOption, downloadExport } from './menu';
-import { d2Module, source, previewReady, stubAiStatus, openFolder } from './helpers';
+import { d2Module, source, previewReady, stubAiStatus, openFolder, openView } from './helpers';
 
 async function ready(page: Page, id = 'root') {
   await expect(page.locator('.zf-stage')).toHaveAttribute('data-board', id);
@@ -18,7 +18,7 @@ async function choose(page: Page, title: string | RegExp, name: string) {
 test('examples switch source and preview, start at root and export under their own name', async ({ page }) => {
   await page.goto('/');
   await ready(page);
-  await page.locator('.zf-stage a[data-board="root.layers.checkout"]').click();
+  await page.locator('.zf-stage a[data-board="root.layers.checkout"]').locator('.appendix-icon').click();
   await ready(page, 'root.layers.checkout');
   await choose(page, 'Database schema', 'schema.d2');
   await expect(page.locator('.zf-stage')).toContainText('Customers');
@@ -29,12 +29,12 @@ test('examples switch source and preview, start at root and export under their o
   await downloadExport(page);
   expect((await pending).suggestedFilename()).toBe('schema-root.svg');
   await choose(page, 'Layers, scenarios & steps', 'boards.d2');
-  await page.locator('.zf-stage a[data-board="root.scenarios.failure"]').click();
+  await page.locator('.zf-stage a[data-board="root.scenarios.failure"]').locator('.appendix-icon').click();
   await ready(page, 'root.scenarios.failure');
   await expect(page.locator('.zf-stage')).toContainText('API unavailable');
-  await page.locator('.zf-stage a[data-board="root.steps.cache"]').click();
+  await page.locator('.zf-stage a[data-board="root.steps.cache"]').locator('.appendix-icon').click();
   await ready(page, 'root.steps.cache');
-  await page.locator('.zf-stage a[data-board="root.steps.worker"]').click();
+  await page.locator('.zf-stage a[data-board="root.steps.worker"]').locator('.appendix-icon').click();
   await ready(page, 'root.steps.worker');
   await expect(page.locator('.zf-stage')).toContainText('Add cache');
   await expect(page.locator('.zf-stage')).toContainText('Add background jobs');
@@ -62,7 +62,7 @@ test('keeps edited examples and uploaded files, including a file with an example
 test('picker supports keyboard, Escape without navigating, outside dismissal, and narrow dark screens', async ({ page }) => {
   await page.goto('/');
   await ready(page);
-  await page.locator('.zf-stage a[data-board="root.layers.checkout"]').click();
+  await page.locator('.zf-stage a[data-board="root.layers.checkout"]').locator('.appendix-icon').click();
   await ready(page, 'root.layers.checkout');
   const summary = page.locator('#example-picker summary');
   await summary.focus();
@@ -90,6 +90,7 @@ test('picker supports keyboard, Escape without navigating, outside dismissal, an
   await page.keyboard.press('Escape');
   await page.setViewportSize({ width: 375, height: 720 });
   await expect(page.locator('#header-more-toggle')).toHaveAttribute('aria-expanded', 'false');
+  await openView(page);
   await expect(page.locator('#theme')).toBeVisible();
   await selectMenuOption(page, '#theme', 'dark');
   await summary.click();

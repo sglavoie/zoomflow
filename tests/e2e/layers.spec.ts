@@ -289,6 +289,7 @@ test('shares a child centre with its parent and restores it in a focused view', 
 
 test('merges repeated centres across generated detail boards while keeping the focused centre', async ({ page }) => {
   await open(page);
+  await page.locator('#create-open > summary').click();
   await page.getByRole('button', { name: 'New mind map', exact: true }).click();
   const dialog = page.getByRole('dialog', { name: 'Create a mind map' });
   await dialog.getByRole('textbox', { name: 'Topics' }).fill('Plan\n  Branch\n    Child\n      Leaf');

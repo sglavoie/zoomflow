@@ -8,7 +8,7 @@ type ConnectionHost = {
   source: () => string;
   update: (own: string) => string | undefined;
   clearShapes: () => void;
-  selectShape: (shape: string) => void;
+  selectShape: (shape: string, rename?: boolean) => void;
   status: (text: string) => void;
 };
 
@@ -42,13 +42,47 @@ export function setupCanvasConnections(viewer: Viewer, host: ConnectionHost) {
   const cancel = document.createElement('button');
   cancel.type = 'button';
   const buttons = document.createElement('div');
-  buttons.append(apply, remove, cancel);
+  const insert = document.createElement('button');
+  insert.type = 'button';
+  insert.textContent = 'Insert step';
+  buttons.append(insert, apply, remove, cancel);
   panel.append(heading, help, destinationField, labelField, buttons);
+
+  const insertHandle = document.createElement('button');
+  insertHandle.type = 'button';
+  insertHandle.className = 'canvas-insert';
+  insertHandle.textContent = '+';
+  insertHandle.hidden = true;
+  viewer.stage.after(insertHandle);
+  let hovered: SVGElement | undefined;
+  let hideTimer: ReturnType<typeof setTimeout> | undefined;
+  const hideHandle = () => { clearTimeout(hideTimer); hovered = undefined; insertHandle.hidden = true; };
+  function placeHandle() {
+    if (!hovered?.isConnected || connecting || viewer.stage.dataset.transition) { hideHandle(); return; }
+    const path = hovered.querySelector<SVGPathElement>('path.connection');
+    const matrix = path?.getScreenCTM();
+    if (!path || !matrix) { hideHandle(); return; }
+    const length = path.getTotalLength();
+    const point = path.getPointAtLength(length / 2).matrixTransform(matrix);
+    const before = path.getPointAtLength(Math.max(0, length / 2 - 1)).matrixTransform(matrix);
+    const after = path.getPointAtLength(Math.min(length, length / 2 + 1)).matrixTransform(matrix);
+    const dx = after.x - before.x, dy = after.y - before.y;
+    const distance = Math.hypot(dx, dy) || 1;
+    // Keep the arrow itself selectable; the nearby handle is an explicit insert action.
+    point.x += dy / distance * 24;
+    point.y -= dx / distance * 24;
+    const stage = viewer.stage.getBoundingClientRect();
+    const parent = insertHandle.offsetParent?.getBoundingClientRect() ?? stage;
+    if (point.x < stage.left + 18 || point.x > stage.right - 18 || point.y < stage.top + 18 || point.y > stage.bottom - 18) { hideHandle(); return; }
+    insertHandle.style.left = `${point.x - parent.left}px`;
+    insertHandle.style.top = `${point.y - parent.top}px`;
+    insertHandle.hidden = false;
+  }
 
   type Selection = { board: string; source: string; index: number };
   let selected: Selection | undefined;
   let connecting: { board: string; source: string; from: string } | undefined;
-  let pending: { board: string; source: string; index?: number; from: string } | undefined;
+  let pending: { board: string; source: string; index?: number; from: string; inserted?: string } | undefined;
   let historySource: string | undefined;
   let restoring = false;
   const flows = new Map<string, { own: string; flow: ReturnType<typeof readFlow> }>();
@@ -77,6 +111,7 @@ export function setupCanvasConnections(viewer: Viewer, host: ConnectionHost) {
     const from = connecting?.from;
     selected = connecting = undefined;
     panel.hidden = true;
+    hideHandle();
     markSelection();
     if (restore) {
       if (edge?.isConnected) {
@@ -104,6 +139,7 @@ export function setupCanvasConnections(viewer: Viewer, host: ConnectionHost) {
     label.value = edge.label;
     apply.textContent = 'Apply label';
     remove.hidden = false;
+    insert.hidden = false;
     cancel.textContent = 'Done';
     panel.hidden = false;
     markSelection();
@@ -118,10 +154,10 @@ export function setupCanvasConnections(viewer: Viewer, host: ConnectionHost) {
     if (!result) { clear(true); return; }
     const source = host.update(result.own);
     if (!source) return;
-    pending = { source, board: state.board, index: result.index, from: result.from };
+    pending = { source, board: state.board, index: result.index, from: result.from, inserted: result.inserted };
     clear();
     viewer.stage.focus({ preventScroll: true });
-    host.status(`${edit.type === 'add' ? 'Connection added' : edit.type === 'remove' ? 'Connection deleted' : 'Connection label changed'}. Undo with ⌘Z / Ctrl+Z.`);
+    host.status(`${edit.type === 'insert' ? 'Step inserted' : edit.type === 'add' ? 'Connection added' : edit.type === 'remove' ? 'Connection deleted' : 'Connection label changed'}. Undo with ⌘Z / Ctrl+Z.`);
   }
   function connect(to: string) {
     if (connecting) commit({ type: 'add', from: connecting.from, to, label: label.value });
@@ -132,6 +168,33 @@ export function setupCanvasConnections(viewer: Viewer, host: ConnectionHost) {
     else if (selected) commit({ type: 'label', index: selected.index, label: label.value });
   });
   remove.addEventListener('click', () => { if (selected) commit({ type: 'remove', index: selected.index }); });
+  insert.addEventListener('click', () => { if (selected) commit({ type: 'insert', index: selected.index }); });
+  insertHandle.addEventListener('click', () => {
+    if (!hovered) return;
+    selected = { board: hovered.dataset.connectionBoard!, index: Number(hovered.dataset.flowConnection), source: host.source() };
+    commit({ type: 'insert', index: selected.index });
+  });
+  viewer.stage.addEventListener('pointerover', event => {
+    if (event.pointerType === 'touch') return;
+    const edge = edgeAt(event.target);
+    if (!edge || edge.dataset.connectionBoard !== boardId() || !flowAt()) return;
+    clearTimeout(hideTimer);
+    hovered = edge;
+    const connection = flowAt()!.connections[Number(edge.dataset.flowConnection)];
+    insertHandle.setAttribute('aria-label', `Insert step between ${name(boardId(), connection.from)} and ${name(boardId(), connection.to)}`);
+    insertHandle.title = insertHandle.getAttribute('aria-label')!;
+    placeHandle();
+  });
+  viewer.stage.addEventListener('pointerout', event => {
+    if (event.relatedTarget === insertHandle || edgeAt(event.relatedTarget) === hovered) return;
+    // Allow crossing the small gap from the arrow to its insertion handle.
+    clearTimeout(hideTimer);
+    hideTimer = setTimeout(hideHandle, 160);
+  });
+  insertHandle.addEventListener('pointerenter', () => clearTimeout(hideTimer));
+  insertHandle.addEventListener('pointerleave', event => { if (edgeAt(event.relatedTarget) !== hovered) hideHandle(); });
+  viewer.stage.addEventListener('zf-viewportchange', placeHandle, { capture: true });
+  viewer.stage.addEventListener('zf-destroy', () => { hideHandle(); insertHandle.remove(); panel.remove(); });
   cancel.addEventListener('click', () => clear(true));
   panel.addEventListener('keydown', event => {
     if (event.isComposing) return;
@@ -204,6 +267,7 @@ export function setupCanvasConnections(viewer: Viewer, host: ConnectionHost) {
       label.value = '';
       apply.textContent = 'Add connection';
       remove.hidden = true;
+      insert.hidden = true;
       cancel.textContent = 'Cancel';
       panel.hidden = false;
       markSelection();
@@ -266,7 +330,7 @@ export function setupCanvasConnections(viewer: Viewer, host: ConnectionHost) {
       if (!show || show.source !== host.source() || show.board !== boardId()) return;
       const edge = show.index === undefined ? undefined : connectionElement(show.board, show.index);
       if (edge) selectEdge(edge);
-      else host.selectShape(show.from);
+      else host.selectShape(show.inserted ?? show.from, Boolean(show.inserted));
     },
     keys(target: Element) { return edgeAt(target) ? 'Enter or F2 edits the label · Delete removes the connection · Escape closes' : undefined; },
   };

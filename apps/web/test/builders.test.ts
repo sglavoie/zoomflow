@@ -15,6 +15,7 @@ it('refuses a step named only with spaces after its row is rebuilt', () => {
   let created: string | undefined;
   setupFlowBuilder(source => { created = source; }, async () => true);
   document.querySelector<HTMLButtonElement>('#new-flow')!.click();
+  document.querySelector<HTMLButtonElement>('[data-entry=full]')!.click();
   const first = document.querySelector<HTMLInputElement>('#flow-steps input')!;
   first.value = '   ';
   first.dispatchEvent(new Event('input'));
@@ -42,6 +43,7 @@ it('refuses a step named only with control characters, which the flow cannot wri
   let created: string | undefined;
   setupFlowBuilder(source => { created = source; }, async () => true);
   document.querySelector<HTMLButtonElement>('#new-flow')!.click();
+  document.querySelector<HTMLButtonElement>('[data-entry=full]')!.click();
   const first = document.querySelector<HTMLInputElement>('#flow-steps input')!;
   first.value = '\u0007';
   first.dispatchEvent(new Event('input'));

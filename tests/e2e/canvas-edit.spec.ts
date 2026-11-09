@@ -76,7 +76,7 @@ test('renames, adds and removes flow steps on the diagram, and undoes there', as
   // Keyboard guidance names the keys that edit steps.
   await shape(page, 'step_5').focus();
   await page.keyboard.press('Home');
-  await expect(page.locator('.zf-pan-hint')).toContainText('F2 renames · ⌘/Ctrl+Enter adds next step · Delete removes');
+  await expect(page.locator('.zf-pan-hint')).toContainText('F2 renames · ⌘/Ctrl+Enter adds branch · Delete removes');
 });
 
 test('a rename left unchanged by a press on another step does not take over the next edit', async ({ page }) => {

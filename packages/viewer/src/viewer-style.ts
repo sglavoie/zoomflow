@@ -50,4 +50,17 @@ export const viewerStyle = `
 .zf-stage-area:has(.zf-stage[data-link-preview="pointer"]) .zf-pan-hint { visibility: hidden; }
 .zf-board-snapshot { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: fill; pointer-events: none; }
 .zf-return-highlight { position: absolute; pointer-events: none; border: 2px solid var(--focus, #477de5); border-radius: 12px; }
+.zf-walkthrough { grid-row: 3; grid-column: 1 / -1; min-width: 0; padding: 12px 16px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); font-size: 13px; }
+.zf-walkthrough[hidden] { display: none; }
+.zf-walkthrough-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-weight: 600; }
+.zf-walkthrough-heading button { padding: 0; min-width: 32px; min-height: 32px; font-size: 20px; background: transparent; border: 0; }
+.zf-walkthrough p { margin: 2px 0 10px; color: var(--muted); }
+.zf-walkthrough-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+.zf-walkthrough-actions button { font-size: 13px; max-width: 100%; overflow-wrap: anywhere; }
+.zf-walkthrough-toolbar { padding: 6px 0; }
+.zf-walkthrough-current { filter: drop-shadow(0 0 4px var(--focus)); }
+.zf-walkthrough-muted { opacity: .22; }
+.zf-stage-area:has(.zf-stage[data-walkthrough]) > :is(.zf-pan-hint, .board-selection, .canvas-coach, .canvas-insert, .canvas-connections) { display: none; }
+.zf-walkthrough-trigger[aria-pressed="true"] { color: var(--focus); background: var(--hover); }
+@media (prefers-reduced-motion: no-preference) { .zf-walkthrough-muted, .zf-walkthrough-path { transition: opacity 160ms ease-out; } }
 `;

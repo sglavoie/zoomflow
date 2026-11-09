@@ -11,8 +11,8 @@ and reduced-motion preferences skip zooming. The root breadcrumb uses the docume
 trimming back to an earlier board whenever you revisit it so cycles do not repeat.
 Guidance below the canvas names a detail board to explore, explains source selection
 on hover or keyboard focus, and gives panning instructions after zooming. Touch
-guidance uses tap and pinch controls. Empty boards show a small connection example
-and **Edit source**, which focuses the editor without changing any source.
+guidance uses tap and pinch controls. Empty local boards offer **Add first step** and **Start mind map**. Custom empty
+boards retain their source guidance and **Edit source** action.
 Esc or Backspace goes to the tree parent, and browser back/forward retraces your
 navigation. Deep links such as `#/checkout/charge` open a board directly in the
 loaded diagram. Child-board links show a downward arrow badge, links to ancestors show
@@ -173,3 +173,17 @@ additional, off-by-default warning for layers with no link back to their parent.
 Use `...@zoomflow` to import the bundled boundary ports, state pieces and default
 theme; see [stdlib conventions and examples](../stdlib/README.md).
 
+
+## Walk through a process
+
+Choose **Walkthrough** above the canvas to begin at the selected step, or the first
+step of the board. **Next** follows a single connection; at a decision, choose the
+labelled branch to explain. **Explore** enters a linked detail board. At its last
+step, return to the parent process and continue. **Back** retraces your chosen path.
+You can also select another shape to change direction. Unvisited shapes and
+connections dim, keeping attention on the path. **Finish**, the close button, or
+Escape ends the walkthrough. Editing the source or navigating outside it ends it too.
+
+Interactive HTML exports include the same controls and graph, so readers can choose
+their own paths offline. Hidden export content is excluded. Walkthrough paths are
+chosen for the current viewing session; they do not alter the diagram source.

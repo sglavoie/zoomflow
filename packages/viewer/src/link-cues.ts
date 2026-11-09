@@ -20,7 +20,7 @@ export function splitHitArea(own: Rect, expanded: Rect, obstacles: readonly { bo
 
 /** Shared by the live viewer and serialized offline runtime. Call after mounting the SVG.
  * `split` is `splitHitArea`, passed in so this function stays self-contained. */
-export function decorateLinks(svg: Element, boards: Map<string, { name: string; parent?: string }>, current: string,
+export function decorateLinks(svg: Element, boards: Map<string, { name: string; parent?: string; diagram?: { shapes: readonly unknown[] }; searchShapes?: readonly unknown[] }>, current: string,
   split: typeof splitHitArea,
   /** Name a missing board target; defaults to its raw ID. */
   describe: (target: string) => string = (target) => target,
@@ -109,6 +109,22 @@ export function decorateLinks(svg: Element, boards: Map<string, { name: string; 
       arrow.setAttribute('transform', 'translate(4 4) scale(0.75)');
       arrow.setAttribute('stroke-width', '2'); arrow.setAttribute('stroke-linecap', 'round'); arrow.setAttribute('stroke-linejoin', 'round');
       badge.replaceChildren(circle, arrow);
+      const target = boards.get(link.dataset.board ?? '');
+      const count = target?.diagram?.shapes.length ?? target?.searchShapes?.length;
+      if (direction === 'child' && count !== undefined) {
+        const label = `${count} inside`;
+        const width = label.length * 5.5 + 12;
+        const pill = document.createElementNS(ns, 'rect');
+        pill.setAttribute('x', String(-width + 6)); pill.setAttribute('y', '5');
+        pill.setAttribute('width', String(width + 10)); pill.setAttribute('height', '22'); pill.setAttribute('rx', '11');
+        pill.setAttribute('fill', `var(--zf-badge-surface, ${surface})`);
+        pill.setAttribute('stroke', `var(--zf-badge-ink, ${ink})`); pill.setAttribute('stroke-opacity', '0.25');
+        const text = document.createElementNS(ns, 'text');
+        text.setAttribute('x', '0'); text.setAttribute('y', '19'); text.setAttribute('text-anchor', 'end');
+        text.setAttribute('font-size', '10'); text.setAttribute('font-family', 'system-ui, sans-serif');
+        text.setAttribute('fill', `var(--zf-badge-ink, ${ink})`); text.textContent = label;
+        badge.prepend(pill, text);
+      }
       badge.setAttribute('aria-hidden', 'true');
       // Make the badge itself activate the same link as its shape.
       link.append(badge);

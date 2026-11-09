@@ -12,6 +12,7 @@ test('saving asks before overwriting a file that changed on disk since it was op
       createWritable: async () => ({ write: async (text: string) => { disk.text = text; disk.modified++; }, close: async () => {}, abort: async () => {} }) }];
   });
   await page.goto('/'); await previewReady(page);
+  await page.locator('#create-open > summary').click();
   await page.locator('#file').click();
   await expect(page.locator('#filename')).toHaveText('shared.d2'); await previewReady(page);
   await source(page).fill('disk: First save');
@@ -70,7 +71,9 @@ test('a second tab checks the disk again after the first tab finishes saving', a
   });
   const second = await context.newPage();
   await page.goto('/'); await second.goto('/');
-  await page.locator('#file').click(); await second.locator('#file').click();
+  await page.locator('#create-open > summary').click();
+  await page.locator('#file').click(); await second.locator('#create-open > summary').click();
+  await second.locator('#file').click();
   await previewReady(page); await previewReady(second);
   await source(page).fill('shared: First tab');
   await source(second).fill('shared: Second tab');
@@ -104,10 +107,12 @@ test('simultaneous saves in both panes each ask before overwriting externally ch
     };
   });
   await page.goto('/'); await previewReady(page);
+  await page.locator('#create-open > summary').click();
   await page.locator('#file').click(); await previewReady(page);
   await selectMenuOption(page, '#layout', 'quad');
   await page.locator('#pane-choose-b').click();
   await page.keyboard.press('Escape');
+  await page.locator('#create-open > summary').click();
   await page.locator('#file').click(); await previewReady(page, 'b');
   await expect(page.locator('#pane-document-b')).toContainText('second.d2');
   await page.locator('#editor .cm-content').fill('first: Mine');
@@ -152,6 +157,7 @@ test('saving a file that was moved or deleted on disk asks where to save it', as
     };
   });
   await page.goto('/'); await previewReady(page);
+  await page.locator('#create-open > summary').click();
   await page.locator('#file').click();
   await expect(page.locator('#filename')).toHaveText('gone.d2'); await previewReady(page);
   await page.evaluate(() => { (window as any).state.deleted = true; });
@@ -186,6 +192,7 @@ test('Save writes back to an opened file after reload and still asks about outsi
   });
   await page.goto('/'); await previewReady(page);
   await page.evaluate(() => (window as any).writeDisk('kept: Original'));
+  await page.locator('#create-open > summary').click();
   await page.locator('#file').click();
   await expect(page.locator('#filename')).toHaveText('kept.d2'); await previewReady(page);
   await page.reload(); await previewReady(page);
@@ -233,6 +240,7 @@ test('after a reload, Open and Save wait for stored file handles, and handles of
     }
   });
   await page.goto('/'); await previewReady(page);
+  await page.locator('#create-open > summary').click();
   await page.locator('#file').click();
   await expect(page.locator('#filename')).toHaveText('kept.d2'); await previewReady(page);
   // A handle whose draft is gone, as after clearing site data.
@@ -261,6 +269,7 @@ test('after a reload, Open and Save wait for stored file handles, and handles of
     await writable.write('kept: Edited elsewhere'); await writable.close();
   });
   await page.reload();
+  await page.locator('#create-open > summary').click();
   await page.locator('#file').click();
   await expect(page.locator('#filename')).toHaveText('kept.d2'); await previewReady(page);
   expect(await draftRows(page, 'kept.d2')).toBe(1);
@@ -284,6 +293,7 @@ test('refusing to let Zoomflow write a file asks where to save, once', async ({ 
     };
   });
   await page.goto('/'); await previewReady(page);
+  await page.locator('#create-open > summary').click();
   await page.locator('#file').click();
   await expect(page.locator('#filename')).toHaveText('locked.d2'); await previewReady(page);
   await source(page).fill('locked: Mine');

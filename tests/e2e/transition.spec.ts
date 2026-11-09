@@ -21,7 +21,7 @@ for (const viewport of [{ width: 1280, height: 800 }, { width: 720, height: 600 
     await expect(stage).toHaveAttribute('data-board', 'root');
     await expect(page.locator('html')).not.toHaveAttribute('data-transitions');
     const originalBadgeWidth = (await stage.locator('a[data-board="root.layers.checkout"] .appendix-icon circle').boundingBox())!.width;
-    await stage.locator('a[data-board="root.layers.checkout"]').click();
+    await stage.locator('a[data-board="root.layers.checkout"]').locator('.appendix-icon').click();
     await expect(stage).toHaveAttribute('data-board', 'root.layers.checkout');
     await page.locator('.zf-breadcrumbs button').first().click();
     await expect(stage).toHaveAttribute('data-board', 'root');
@@ -45,7 +45,7 @@ test('reduced motion skips zooming and still highlights the return node', async 
   await page.goto('/');
   const stage = page.locator('.zf-stage');
   await expect(stage).toHaveAttribute('data-board', 'root');
-  await stage.locator('a[data-board="root.layers.checkout"]').click();
+  await stage.locator('a[data-board="root.layers.checkout"]').locator('.appendix-icon').click();
   await expect(stage).toHaveAttribute('data-board', 'root.layers.checkout');
   await expect(stage.locator('.zf-board-snapshot')).toHaveCount(0);
   expect(await stage.evaluate(el => el.getAnimations({ subtree: true }).length)).toBe(0);

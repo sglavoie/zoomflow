@@ -80,7 +80,7 @@ export function setupPanePreview(ctx: Context) {
     if (state === 'error' || state === 'unavailable') ctx.viewer.stage.dataset.previewState = 'stale';
     else if (state === 'loading') ctx.viewer.stage.dataset.previewState = 'loading';
     else delete ctx.viewer.stage.dataset.previewState;
-    ctx.viewer.stage.dispatchEvent(new Event('zf-sourcechange'));
+    ctx.viewer.stage.dispatchEvent(new Event('zf-previewstate'));
   }
 
   function setEditorDiagnostics(diagnostics: SourceDiagnostic[]) {

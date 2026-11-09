@@ -31,8 +31,8 @@ use **Retry preview** to try again without losing your source.
 
 ## Edit → explore → export
 
-1. **Create:** choose **New flow** to name steps and connect them without writing
-   diagram syntax. Start with a simple flow or an approval with Yes/No branches.
+1. **Create:** choose **Create / open → New flow** to type one step per line and connect them automatically. Start with a single step,
+   or switch to **Full builder** for decisions and Yes/No branches.
    Use **Edit flow** above the preview to keep editing in the form. **New mind map**
    turns an indented outline into a mind map whose deep branches open as their own
    boards; **Edit mind map** reopens the outline. Select or right-click any shape to
@@ -53,9 +53,11 @@ use **Retry preview** to try again without losing your source.
    ([atlas guide](docs/workspace.md#link-diagrams-into-an-atlas)); **New atlas in an empty
    folder** in the filename menu starts one from nothing. **D2 reference**
    contains searchable examples.
-2. **Explore:** click **Checkout** in the default diagram, then **Charge** to drill
-   deeper. On the Charge board, double-click a step to rename it, or select it
-   and choose **Add next step** to keep building. Use breadcrumbs or **Boards** to move around, hover a link to preview its
+2. **Explore:** use the arrow on **Checkout** in the default diagram, then **Charge** to drill
+   deeper. On any starter board, double-click a step to rename it, or select it
+   and choose **Add next step** or **Add branch** to keep building. Hover a connection
+   and click **+** to insert a step between its ends. **Walkthrough** lets you follow
+   a path, choose branches, and explore detail boards; it also works in exported HTML. Use breadcrumbs or **Boards** to move around, hover a link to preview its
    board, or zoom and drag to inspect the diagram. **Overview** fits the whole diagram at a
    comfortable scale; phones start closer when needed to keep labels readable. **Find in diagram** (⌘⇧F / Ctrl+Shift+F)
    finds board names and shape labels across the current document and jumps to a match.

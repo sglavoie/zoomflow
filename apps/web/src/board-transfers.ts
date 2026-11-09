@@ -1,7 +1,7 @@
 import { boardBlocks, boardKey, idSegments, type Board, type SourceRange } from '@zoomflow/core';
 import type { DocumentView } from '@zoomflow/viewer';
 import { blockText, boardSites, isFileAttachment, joinBoard, splitBoard, type Attachment, type BoardParts } from './board-model';
-import { flowSource, quote, readFlow, type Flow, type FlowStep } from './flow-model';
+import { flowSource, highestStepNumber, quote, readFlow, type Flow, type FlowStep } from './flow-model';
 import { mindMapSource, placedTopics, readMindMap, uniqueBoardName, type MindMap, type MindTopic } from './mind-map-model';
 
 type Unit = MindTopic | FlowStep | { id: string };
@@ -227,7 +227,7 @@ function documentModel(source: string, boards: Map<string, Board>, graph: unknow
     // A shape has one board link. Keep an existing board, and add a sibling branch in its owner's model.
     let unit: Unit;
     if (node.flow) {
-      const id = `step_${Math.max(0, ...node.flow.steps.map(step => Number(step.id.slice(5)))) + 1}`;
+      const id = `step_${highestStepNumber(node.flow) + 1}`;
       unit = { id, label, shape: sourcePlace.node.flow ? (sourcePlace.unit as FlowStep).shape : 'rectangle' } as FlowStep;
       node.flow.steps.push(unit as FlowStep);
       node.flow.connections.push({ from: (target.unit as FlowStep).id, to: id, label: '' });

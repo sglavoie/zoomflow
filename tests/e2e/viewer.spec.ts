@@ -276,7 +276,7 @@ layers: {empty: {}}`) });
   await page.keyboard.press('Escape');
   await board(page, 'root');
   await drill(page, 'root.layers.empty');
-  await expect(page.locator('.zf-stage')).toContainText('This board is empty.');
+  await expect(page.getByRole('button', { name: 'Add first step', exact: true })).toBeVisible();
 });
 
 test('destroying a viewer releases its viewport listeners and controls', async ({ page }) => {

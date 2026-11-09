@@ -103,7 +103,7 @@ it('writes looks as library classes that apply on every board', async () => {
   expect(source).toContain('n: "Product launch" {class: [zf-topic; zf-filled; zf-compact]}');
   const compiled = await compile(source);
   for (const board of indexBoards(compiled.diagram).values()) {
-    expect(board.diagram.shapes.every(shape => shape.fill === '#e2e8f0' && 'fontSize' in shape && shape.fontSize === 13)).toBe(true);
+    expect(board.diagram.shapes.every(shape => shape.fill === '#e9f0fa' && 'fontSize' in shape && shape.fontSize === 13)).toBe(true);
   }
   expect(readMindMap(source)).toEqual(map);
   const shadowed = { filled: false, compact: false, shadow: true };

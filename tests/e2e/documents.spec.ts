@@ -177,6 +177,7 @@ test('naming a diagram names its exports, keeps examples intact and makes Save a
   await expect(source(page)).toHaveText('named: Before');
 
   // A file opened from disk keeps its name there, so Save asks where to save under the new one.
+  await page.locator('#create-open > summary').click();
   await page.locator('#file').click();
   await expect(page.locator('#filename')).toHaveText('work.d2'); await previewReady(page);
   await openDownloads(page);
@@ -215,7 +216,7 @@ test('header stays stable while saving and preferences survive reload', async ({
   await previewReady(page);
   const before = await page.locator('header').boundingBox();
   const title = (await page.locator('header > strong').boundingBox())!;
-  const open = (await page.locator('.file-button').boundingBox())!;
+  const open = (await page.locator('#create-open > summary').boundingBox())!;
   const picker = (await page.locator('#example-picker summary').boundingBox())!;
   const center = (box: { y: number; height: number }) => box.y + box.height / 2;
   expect(Math.abs(center(title) - center(picker))).toBeLessThan(1);
@@ -259,10 +260,11 @@ test('removed file undo restores its save handle, board view and editor history'
       createWritable: async () => ({ write: async (value: string) => { target.written = value; }, close: async () => {}, abort: async () => {} }) }];
   }, text);
   await page.goto('/'); await previewReady(page);
+  await page.locator('#create-open > summary').click();
   await page.locator('#file').click();
   await expect(page.locator('#filename')).toHaveText('work.d2'); await previewReady(page);
   await source(page).fill(`${text}\n# Edited`); await previewReady(page);
-  await page.locator('.zf-stage a[data-board="root.layers.checkout"]').click();
+  await page.locator('.zf-stage a[data-board="root.layers.checkout"]').locator('.appendix-icon').click();
   await expect(page.locator('.zf-stage')).toHaveAttribute('data-board', 'root.layers.checkout');
   await page.getByRole('button', { name: 'Zoom in', exact: true }).click();
   const box = await page.locator('.zf-stage > svg').getAttribute('viewBox');
@@ -273,7 +275,9 @@ test('removed file undo restores its save handle, board view and editor history'
   await page.locator('#document-undo').getByRole('button', { name: 'Undo', exact: true }).click();
   await expect(page.locator('#filename')).toHaveText('work.d2'); await previewReady(page);
   await expect(page.locator('.zf-stage')).toHaveAttribute('data-board', 'root.layers.checkout');
-  await expect(page.locator('.zf-stage > svg')).toHaveAttribute('viewBox', box!);
+  // Badge fitting can differ by a fraction of a pixel after restoring a document.
+  await expect.poll(async () => (await page.locator('.zf-stage > svg').getAttribute('viewBox'))!.split(' ').map(value => Number(Number(value).toFixed(3))))
+    .toEqual(box!.split(' ').map(value => Number(Number(value).toFixed(3))));
   await source(page).press('ControlOrMeta+s');
   await expect.poll(() => page.evaluate(() => (window as typeof window & { written?: string }).written)).toBe(`${text}\n# Edited`);
   await source(page).press('ControlOrMeta+z');
@@ -416,15 +420,18 @@ test('reopening a picked file matches its file handle', async ({ page }) => {
     (window as any).showOpenFilePicker = async () => [handle((window as any).nextHandle)];
   });
   await page.goto('/'); await previewReady(page);
+  await page.locator('#create-open > summary').click();
   await page.locator('label.file-button').click(); await previewReady(page);
   await expect(page.locator('.zf-stage')).toContainText('First version');
   // The same file changed on disk: its unchanged draft is reused with the new contents.
   await page.evaluate(() => { (window as any).disk.first = 'picked: Second version'; });
+  await page.locator('#create-open > summary').click();
   await page.locator('label.file-button').click();
   await expect(page.locator('.zf-stage')).toContainText('Second version'); await previewReady(page);
   expect(await draftRows(page, 'picked.d2')).toBe(1);
   // Another file with the same name and contents is a separate draft.
   await page.evaluate(() => { (window as any).nextHandle = 'other'; });
+  await page.locator('#create-open > summary').click();
   await page.locator('label.file-button').click();
   await expect(page.locator('.zf-stage')).toContainText('First version'); await previewReady(page);
   expect(await draftRows(page, 'picked.d2')).toBe(2);

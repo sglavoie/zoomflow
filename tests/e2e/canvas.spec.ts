@@ -197,6 +197,7 @@ test('reading source leaves the board and history alone; explicit reveal works o
 
 test('keyboard selects ordinary and linked shapes and recompiles retain the focused shape', async ({ page }) => {
   await page.goto('/'); await previewReady(page);
+  await page.locator('#file').setInputFiles('fixtures/order.d2'); await previewReady(page);
   const browse = page.getByRole('button', { name: 'Select source for Browse', exact: true });
   await browse.focus(); await page.keyboard.press('Enter');
   await expect(source(page)).toBeFocused();
@@ -304,14 +305,14 @@ for (const offline of [false, true]) test(`compact breadcrumbs retain every ance
 test('canvas guidance follows navigation, mouse, keyboard and zoom context', async ({ page }) => {
   await page.goto('/'); await previewReady(page);
   const hint = page.locator('.zf-pan-hint');
-  await expect(hint).toHaveText('Click Checkout to explore');
+  await expect(hint).toHaveText('Click the arrow on Checkout to explore');
   await expect(page.locator('#workspace-view a[href="https://d2lang.com/tour/intro/"]')).toHaveCount(1);
   const browse = page.locator('.zf-stage [data-shape-id="Browse"]');
   await browse.hover();
-  await expect(hint).toHaveText('Click to select this shape’s source · Drag onto a new parent to move this branch');
-  await page.getByRole('link', { name: 'Open checkout board', exact: true }).click();
+  await expect(hint).toHaveText('Click to select · Double-click to rename · Drag onto a new parent to move this branch');
+  await page.getByRole('link', { name: 'Open checkout board', exact: true }).locator('.appendix-icon').click();
   await page.mouse.move(0, 0);
-  await expect(hint).toHaveText('Click Charge to explore');
+  await expect(hint).toHaveText('Click the arrow on Charge to explore');
   await page.locator('.zf-stage').focus();
   await page.keyboard.press('Home');
   await expect(hint).toContainText('Enter');
@@ -319,7 +320,7 @@ test('canvas guidance follows navigation, mouse, keyboard and zoom context', asy
   await page.getByRole('button', { name: 'Zoom in', exact: true }).click();
   await expect(hint).toHaveText('⌘/Ctrl + drag to pan · Space + drag while zoomed · Scroll to zoom');
   await page.getByRole('button', { name: 'Overview (fit diagram)', exact: true }).click();
-  await expect(hint).toHaveText('Click Charge to explore');
+  await expect(hint).toHaveText('Click the arrow on Charge to explore');
 });
 
 test('appearance is separate from export and desktop canvas controls stay outside the diagram', async ({ page }) => {

@@ -10,6 +10,7 @@ export async function openDownloads(page: Page) {
 
 export async function selectMenuOption(page: Page, selector: string, value: string) {
   if (selector === '#theme') {
+    await openView(page);
     await page.locator(`#theme button[value="${value}"]`).click();
     return;
   }

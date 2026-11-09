@@ -4,7 +4,7 @@ import { source, openView } from './helpers';
 test('shortcuts dialog contains keyboard focus and leaves the current board unchanged', async ({ page }) => {
   await page.goto('/');
   await expect(page.locator('#viewer')).toHaveAttribute('aria-busy', 'false');
-  await page.locator('.zf-stage a[data-board="root.layers.checkout"]').click();
+  await page.locator('.zf-stage a[data-board="root.layers.checkout"]').locator('.appendix-icon').click();
   const stage = page.locator('.zf-stage');
   await expect(stage).toHaveAttribute('data-board', 'root.layers.checkout');
   const source = await page.locator('.cm-content').innerText();
@@ -42,6 +42,7 @@ test('shortcuts dialog contains keyboard focus and leaves the current board unch
 test('shortcuts stay within a narrow viewport in dark mode', async ({ page }) => {
   await page.setViewportSize({ width: 320, height: 640 });
   await page.goto('/');
+  await openView(page);
   await page.getByRole('group', { name: 'Theme', exact: true }).getByRole('button', { name: 'Dark', exact: true }).click();
   await openView(page);
   await page.getByRole('button', { name: 'Keyboard shortcuts', exact: true }).click();

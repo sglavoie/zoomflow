@@ -9,6 +9,8 @@ import { followLink, linkTo, prepareLinks, resolveLink } from './links';
 import { sanitizeSvg } from './sanitize';
 import { fitExportBounds } from './export-bounds';
 import { setupBoardMotion } from './board-motion';
+import { libraryTheme } from './library-theme';
+import { setupWalkthrough } from './walkthrough';
 
 const placeholder = 'data:image/svg+xml;base64,' + btoa('<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64"><rect width="64" height="64" fill="#eee"/><path d="M8 8L56 56M56 8L8 56" stroke="#999" stroke-width="3"/></svg>');
 
@@ -24,7 +26,7 @@ function dataUrl(blob: Blob): Promise<string> {
 /** Embed resources before downloading or drawing onto a canvas. A `dark` boolean freezes the theme;
  * leaving it undefined keeps D2's `prefers-color-scheme` rules so the SVG follows its reader. */
 export async function prepareExportSvg(svg: string, dark?: boolean, { interactive = false, fit = false }: { interactive?: boolean; fit?: boolean } = {}): Promise<{ svg: string; warnings: string[] }> {
-  const doc = new DOMParser().parseFromString(svg, 'image/svg+xml');
+  const doc = new DOMParser().parseFromString(libraryTheme(svg), 'image/svg+xml');
   const root = doc.documentElement;
   if (doc.querySelector('parsererror') || !sanitizeSvg(root)) throw new Error('Invalid SVG from renderer');
   let removedLinks = false;
@@ -124,7 +126,7 @@ export async function rasterizeSvg(svg: string): Promise<Blob> {
 const runtime = { classifyHref, shapeClass, boardLabel, sanitizeSvg, restoreMissingLinks, simplifyTrail, renderParentContext,
   createViewport, clampBox, revealBox, decorateLinks, splitHitArea, setupBreadcrumbs, resolveRouteHash, routeFallbackNotice,
   normalizeRouteHash, restoreTrail, watchHistory, childToward, resolveLink, prepareLinks, followLink, linkTo, atlasHash, parseAtlasHash, resolveFilePath,
-  indexDiagramSearch, searchDiagram, setupOfflineSearch, setupBoardMotion };
+  indexDiagramSearch, searchDiagram, setupOfflineSearch, setupBoardMotion, setupWalkthrough };
 
 // Keep this runtime self-contained: its compiled function body is embedded in HTML.
 // It consumes the same board IDs, hashes, parent and visited-trail model as Viewer.
@@ -241,11 +243,16 @@ function offlineViewer(lib: typeof runtime) {
           const group = groups.get(lib.shapeClass(shape.id));
           if (group) {
             group.dataset.shapeId = shape.id;
+            group.dataset.shapeBoard = board.id;
             if (!group.closest('a')) {
               group.setAttribute('tabindex', '-1');
               group.setAttribute('aria-label', shape.label);
             }
           }
+        }
+        for (const edge of board.walkthrough?.connections ?? []) {
+          const group = groups.get(lib.shapeClass(edge.id));
+          if (group) { group.dataset.connectionId = edge.id; group.dataset.connectionBoard = board.id; }
         }
       }
     }
@@ -273,6 +280,7 @@ function offlineViewer(lib: typeof runtime) {
     history[replace || location.hash === board.hash ? 'replaceState' : 'pushState']({ zoomflowTrail: trail, zoomflowFiles: stack }, '', board.hash);
     const content = stage.querySelector(':scope > svg');
     if (content && previous !== board.id) motion.enter(snapshot, content, down ? 'in' : up ? 'out' : 'across', up ? lib.linkTo(stage, up) : undefined);
+    walkthrough.refresh();
   }
   /** Open an earlier file of the stack where it was left. */
   function returnTo(index: number) {
@@ -309,6 +317,15 @@ function offlineViewer(lib: typeof runtime) {
     target.setAttribute('tabindex', '0');
     target.focus({ preventScroll: true });
     viewport.reveal([shape]);
+  });
+  const walkthroughToolbar = document.createElement('div');
+  walkthroughToolbar.className = 'zf-walkthrough-toolbar';
+  area.before(walkthroughToolbar);
+  const walkthrough = lib.setupWalkthrough(stage, walkthroughToolbar, {
+    boards: () => new Map(doc.boards.map(board => [board.id, { id: board.id, name: board.name,
+      shapes: board.walkthrough?.shapes ?? board.searchShapes ?? [], connections: board.walkthrough?.connections ?? [] }])),
+    current: () => current.id,
+    navigate(id) { const board = doc.byId.get(id); if (board) show(board, ancestors(board)); },
   });
   const validVisit = (visit: unknown): visit is Visit => {
     const { file, trail: visits } = (visit ?? {}) as Partial<Visit>;

@@ -7,12 +7,16 @@ New and moved nodes and their incoming connections briefly stand out. Destructiv
 canvas edits offer an **Undo** confirmation beside the diagram, valid until the next edit.
 Adding a step or topic opens its name field immediately. A hint beside the field
 shows **Enter** to save, **⌘/Ctrl+Enter** to save and add another, and **Esc** to cancel
-the rename. The renamed shape stays in place while its layout updates.
+the rename. The renamed shape stays in place while its layout updates. Nearby shapes move into
+place over a short transition; typing, dragging, or reduced-motion preferences skip it.
+On an empty local board, **Add first step** starts inline editing and **Start mind map**
+opens the outline builder.
 
 ## Create a flow without diagram syntax
 
-Choose **New flow** in the header. Give the flow a name, choose a simple flow or
-an approval example, and replace the step names with your own. Step types are
+Choose **Create / open → New flow**. In **Quick start**, name the flow and type
+one step per line; Zoomflow connects them in order. One step is enough to begin.
+Choose **Full builder** for a simple example, an approval example, or custom branches. Step types are
 **Action**, **Decision**, and **Start / End**. Each connection draws an arrow
 between the selected steps; optional labels such as Yes and No describe branches.
 **Add step** connects the new step from the previous one automatically. Change
@@ -20,6 +24,8 @@ that connection or add others to make branches and loops. Removing a step also
 removes its connections. Layout can run top to bottom or left to right.
 After the steps and connections, expand **Appearance** and choose **Outline**, **Soft**, or **Elevated**. **Customize style**
 contains the individual **Filled shapes**, **Compact text**, and **Shadows** controls.
+The **Style** menu above the canvas changes these same presets without reopening
+the builder. The default filled palette follows light and dark mode.
 The live diagram beside the form updates as you edit; mind map detail boards can
 be explored there before applying changes. On phones the preview follows the fields. Connections labelled Yes or No are drawn green and dashed red.
 
@@ -45,7 +51,7 @@ discard those additions. Continue editing those diagrams in the source editor.
 
 ## Create a mind map from an outline
 
-Choose **New mind map** in the header, or **New mind map from an outline** in the
+Choose **Create / open → New mind map**, or **New mind map from an outline** in the
 filename menu on narrower screens, and write one topic per line. The first line is
 the central topic; indent a line to make it a subtopic of the line above it. Use spaces,
 the **Indent** and **Outdent** buttons, or ⌘] / Ctrl+] and ⌘[ / Ctrl+[ for the selected
@@ -319,3 +325,11 @@ replaces the bundled library for `...@zoomflow` in the browser and the
 the change. A class that nothing defines
 changes nothing, so lint warns about it.
 
+
+## Insert a step into a connection
+
+Hover an arrow and click its **+**, or select an arrow and choose **Insert step**.
+Name the step immediately. The original connection label stays on the incoming
+arrow, preserving Yes/No decisions; parallel connections are unchanged. Undo
+restores the original connection. **Add branch** on a step with outgoing arrows
+creates another branch; on a final step, **Add next step** extends the sequence.

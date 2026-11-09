@@ -16,8 +16,8 @@ for (const theme of ['light', 'dark'] as const) {
     await page.goto('about:blank');
     await context.setOffline(true);
     await page.goto(pathToFileURL(path).href);
-    await page.getByRole('link', { name: 'Open checkout board', exact: true }).click();
-    await page.getByRole('link', { name: 'Open charge board', exact: true }).click();
+    await page.getByRole('link', { name: 'Open checkout board', exact: true }).locator('.appendix-icon').click();
+    await page.getByRole('link', { name: 'Open charge board', exact: true }).locator('.appendix-icon').click();
     await page.getByRole('button', { name: 'Zoom in', exact: true }).click();
     for (const size of [
       { name: 'phone', width: 390, height: 844 },

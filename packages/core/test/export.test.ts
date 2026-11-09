@@ -21,6 +21,26 @@ it('exports source files with mixed-case D2 extensions without renaming them', (
 });
 
 describe('board tree exports', () => {
+  it('exports labelled branches, loops and nested targets for the offline walkthrough', async () => {
+    const { diagram } = await d2.compile(`start -> decision
+decision -> done: Yes
+decision -> start: Retry
+decision.link: layers.Detail
+layers: {Detail: {inside}}`, { layout: 'elk' });
+    const boards = await renderExportBoards(diagram, async () => '<svg/>');
+    const graph = boards[0].walkthrough!;
+    expect(graph.shapes.find(shape => shape.id === 'decision')?.link).toBe('root.layers.Detail');
+    expect(graph.connections.map(({ from, to, label }) => ({ from, to, label }))).toEqual([
+      { from: 'start', to: 'decision', label: '' },
+      { from: 'decision', to: 'done', label: 'Yes' },
+      { from: 'decision', to: 'start', label: 'Retry' },
+    ]);
+    expect(new Set(graph.connections.map(edge => edge.id)).size).toBe(3);
+    const html = exportBoardsHtml(boards, { title: 'Walkthrough', script: '', style: '' });
+    const data = /<script id="zoomflow-data" type="application\/json">([\s\S]*?)<\/script>/.exec(html)![1];
+    expect(JSON.parse(data)[0].walkthrough).toEqual(graph);
+  });
+
   it('embeds compiled shape labels and IDs for search, including inherited and empty boards', async () => {
     const { diagram } = await d2.compile(`plain
 x: "Café </script> [review]"

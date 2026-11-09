@@ -67,7 +67,7 @@ it('edits individual parallel connections and loops while keeping a losslessly e
 });
 
 it('renames, adds after and removes flow steps', () => {
-  expect(canvasShape(flow, [], 'step_2')).toEqual({ kind: 'flow', label: 'Approved?', add: 'Add next step', sibling: false, remove: true });
+  expect(canvasShape(flow, [], 'step_2')).toEqual({ kind: 'flow', label: 'Approved?', add: 'Add branch', sibling: false, remove: true });
   const renamed = editOnCanvas(flow, [], 'step_2', { type: 'rename', label: '  Approved   by lead? ' })!;
   expect(readFlow(renamed.own)!.steps[1].label).toBe('Approved by lead?');
   expect(renamed.select).toBe('step_2');
@@ -157,4 +157,21 @@ it('drops control characters from a new label before checking it, so the board s
   const own = mindMapSource(map('Plan\n  A\n  B'));
   // A control character after a space would leave a label that ends in one.
   expect(outline(editOnCanvas(own, [], 'n_1', { type: 'rename', label: 'x \u0008' })!.own)).toBe('Plan\n  x\n  B');
+});
+
+it('inserts into one parallel decision edge without changing its sibling or attached step identities', () => {
+  const own = flowSource({ ...flowTemplate('simple'), steps: [
+    { id: 'Choose', label: 'Ready?', shape: 'diamond' }, { id: 'Finish', label: 'Done', shape: 'oval' },
+  ], connections: [
+    { from: 'Choose', to: 'Finish', label: 'Yes' }, { from: 'Choose', to: 'Finish', label: 'Later' },
+  ] });
+  const result = editConnection(own, { type: 'insert', index: 0 })!;
+  const flow = readFlow(result.own)!;
+  expect(flow.steps.map(step => step.id)).toEqual(['Choose', 'step_1', 'Finish']);
+  expect(flow.connections).toEqual([
+    { from: 'Choose', to: 'step_1', label: 'Yes' }, { from: 'step_1', to: 'Finish', label: '' },
+    { from: 'Choose', to: 'Finish', label: 'Later' },
+  ]);
+  expect(editConnection(own, { type: 'insert', index: 8 })).toBeUndefined();
+  expect(editConnection(own + '\nChoose.style.fill: red', { type: 'insert', index: 0 })).toBeUndefined();
 });

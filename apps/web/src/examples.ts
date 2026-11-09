@@ -16,8 +16,7 @@ export interface DiagramExample {
 }
 
 export const examples: readonly DiagramExample[] = [
-  { name: 'order.d2', title: 'Order flow', description: 'Open Checkout, then Charge. Double-click a step there to rename it, or add the next step directly on the diagram.',
-    source: '# Explore Checkout, then Charge. On Charge, double-click a step to rename it.\n' + order },
+  { name: 'order.d2', title: 'Order flow', description: 'Double-click any step to rename it. Use the arrow on Checkout, then Charge, to explore the details.', source: order },
   // Builder output reopens in the builders only without a comment above it, so the description explains the demo.
   { name: 'mixed.d2', title: 'Flows & mind maps', description: 'A flow whose steps open a mind map and a flow. Select a shape to add boards; Edit flow and Edit mind map change the board on view.', source: mixed },
   { name: 'flowchart.d2', title: 'Flowchart basics', description: 'Shapes, decisions, edge labels and Markdown notes.', source: flowchart },

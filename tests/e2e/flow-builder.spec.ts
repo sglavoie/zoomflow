@@ -7,7 +7,9 @@ test('creates, revisits, edits and recovers a flow without typing diagram syntax
   await page.goto('/'); await ready(page);
   await source(page).fill('original: Keep my work');
   await ready(page);
+  await page.locator('#create-open > summary').click();
   await page.getByRole('button', { name: 'New flow', exact: true }).click();
+  await page.getByRole('button', { name: 'Full builder', exact: true }).click();
   const dialog = page.getByRole('dialog', { name: 'Create a flow' });
   await dialog.getByLabel('Flow name').fill('Holiday request');
   await dialog.getByRole('button', { name: 'Approval with Yes / No' }).click();
@@ -51,7 +53,9 @@ test('creates, revisits, edits and recovers a flow without typing diagram syntax
 
 test('adds steps and branches, validates names, removes dangling connections and cancels safely', async ({ page }) => {
   await page.goto('/'); await ready(page);
+  await page.locator('#create-open > summary').click();
   await page.getByRole('button', { name: 'New flow', exact: true }).click();
+  await page.getByRole('button', { name: 'Full builder', exact: true }).click();
   await page.getByRole('button', { name: 'Add step', exact: true }).click();
   await page.getByRole('button', { name: 'Create flow', exact: true }).click();
   await expect(page.getByLabel('Step 4 name')).toBeFocused();
@@ -83,7 +87,9 @@ test('adds steps and branches, validates names, removes dangling connections and
 test('works on a phone and keeps modal controls inside the viewport', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 640 });
   await page.goto('/'); await ready(page);
+  await page.locator('#create-open > summary').click();
   await page.getByRole('button', { name: 'New flow', exact: true }).click();
+  await page.getByRole('button', { name: 'Full builder', exact: true }).click();
   await page.getByLabel('Flow name').fill('Mobile flow');
   await page.getByLabel('Step 2 name').fill('A name with "quotes": and -> arrows');
   expect(await page.locator('#flow-builder').evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
@@ -99,7 +105,9 @@ test('works on a phone and keeps modal controls inside the viewport', async ({ p
 
 test('removing a connection keeps focus on the neighbouring connection', async ({ page }) => {
   await page.goto('/'); await ready(page);
+  await page.locator('#create-open > summary').click();
   await page.getByRole('button', { name: 'New flow', exact: true }).click();
+  await page.getByRole('button', { name: 'Full builder', exact: true }).click();
   const dialog = page.getByRole('dialog', { name: 'Create a flow' });
   await dialog.getByRole('button', { name: 'Approval with Yes / No' }).click();
   const remove = dialog.getByRole('button', { name: /^Remove connection/ });
@@ -117,11 +125,15 @@ test('closing the builder confirms before discarding changes, and closes at once
   await page.goto('/'); await ready(page);
   const builder = page.getByRole('dialog', { name: 'Create a flow' });
   const confirm = page.getByRole('dialog', { name: 'Discard this flow?' });
+  await page.locator('#create-open > summary').click();
   await page.getByRole('button', { name: 'New flow', exact: true }).click();
+  await page.getByRole('button', { name: 'Full builder', exact: true }).click();
   await builder.getByRole('button', { name: 'Cancel', exact: true }).click();
   await expect(builder).toBeHidden();
   await expect(confirm).toBeHidden();
+  await page.locator('#create-open > summary').click();
   await page.getByRole('button', { name: 'New flow', exact: true }).click();
+  await page.getByRole('button', { name: 'Full builder', exact: true }).click();
   await builder.getByLabel('Step 2 name').fill('Keep me');
   await builder.getByRole('button', { name: 'Close flow builder' }).click();
   await expect(confirm).toContainText('No draft is created.');
@@ -139,12 +151,14 @@ test('closing the builder confirms before discarding changes, and closes at once
   await confirm.getByRole('button', { name: 'Discard changes', exact: true }).click();
   await expect(builder).toBeHidden();
   await expect(page.locator('#filename')).toHaveText('order.d2');
-  await expect(page.getByRole('button', { name: 'New flow', exact: true })).toBeFocused();
+  await expect(page.locator('#create-open > summary')).toBeFocused();
 });
 
 test('Enter moves through the steps instead of submitting, and examples ask before replacing edited steps', async ({ page }) => {
   await page.goto('/'); await ready(page);
+  await page.locator('#create-open > summary').click();
   await page.getByRole('button', { name: 'New flow', exact: true }).click();
+  await page.getByRole('button', { name: 'Full builder', exact: true }).click();
   const dialog = page.getByRole('dialog', { name: 'Create a flow' });
   await dialog.getByLabel('Step 1 name').press('Enter');
   await expect(dialog.getByLabel('Step 2 name')).toBeFocused();
@@ -179,7 +193,9 @@ test('Enter moves through the steps instead of submitting, and examples ask befo
 
 test('a step added after removing the last one gets a new identifier, so boards never move to it', async ({ page }) => {
   await page.goto('/'); await ready(page);
+  await page.locator('#create-open > summary').click();
   await page.getByRole('button', { name: 'New flow', exact: true }).click();
+  await page.getByRole('button', { name: 'Full builder', exact: true }).click();
   const dialog = page.getByRole('dialog', { name: 'Create a flow' });
   await dialog.getByRole('button', { name: 'Remove step 3', exact: true }).click();
   await dialog.getByRole('button', { name: 'Add step', exact: true }).click();
@@ -188,7 +204,9 @@ test('a step added after removing the last one gets a new identifier, so boards 
 
 test('the save shortcut in the builder never reaches the browser, whatever the keyboard layout', async ({ page }) => {
   await page.goto('/'); await ready(page);
+  await page.locator('#create-open > summary').click();
   await page.getByRole('button', { name: 'New flow', exact: true }).click();
+  await page.getByRole('button', { name: 'Full builder', exact: true }).click();
   await expect(page.getByRole('dialog', { name: 'Create a flow' })).toBeVisible();
   // A Russian layout types ы on the S key.
   const prevented = await page.evaluate(() => {

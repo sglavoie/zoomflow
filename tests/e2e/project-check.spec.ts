@@ -43,6 +43,7 @@ async function chooseSecond(page: Page, path: string) {
   await page.locator(`.example-option[title="atlas/${path}"]`).click();
   await previewReady(page, 'b');
   await page.locator('#pane-document').click();
+  await page.keyboard.press('Escape');
 }
 
 test('checks unvisited and unlinked files, using fresh target boards, and opens an issue at its source', async ({ page }) => {
@@ -134,7 +135,7 @@ test('invalidates completed results after another pane edits, then activates its
   await expect(page.locator('#pane-b')).toHaveAttribute('data-active', '');
   await expect(page.locator('#editor-b .cm-content')).toBeFocused();
   await expect(page.locator('#pane-document')).toContainText('index.d2');
-  expect(await page.locator('#editor-b').evaluate(element => {
+  await expect.poll(() => page.locator('#editor-b').evaluate(element => {
     const view = (element.querySelector('.cm-content') as any).cmTile.root.view;
     return view.state.sliceDoc(view.state.selection.main.from, view.state.selection.main.to);
   })).toBe('shared');

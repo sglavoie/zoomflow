@@ -3,7 +3,7 @@ import { D2 } from '@d2lang/d2';
 import { boardLabel, classifyHref, exportAtlasHtml, exportAtlasZip, exportBoardsHtml, exportBoardsZip, exportGlyphSource, indexBoards, lint,
   linkSources, rebaseFileHref, renderExportBoards, resolveFilePath, shapeClass, type AtlasDocument, type CompileResponse, type Diagram, type ExportBoard,
   type LintOptions, type LintResult } from '@zoomflow/core';
-import { offlineViewerScript, offlineViewerStyle } from '@zoomflow/viewer';
+import { libraryTheme, offlineViewerScript, offlineViewerStyle } from '@zoomflow/viewer';
 import { execFile } from 'node:child_process';
 import { copyFile, lstat, mkdir, mkdtemp, readFile, realpath, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { availableParallelism, tmpdir } from 'node:os';
@@ -44,7 +44,7 @@ const unescapeXml = (text: string) => text.replace(/&(?:#(\d+)|#x([\da-f]+)|(amp
  * `files` says whether the export holds the file a link's relative path opens.
  */
 function safeLinks(svg: string, boards: boolean, files?: (path: string) => boolean): string {
-  return svg.replace(/<a\b(?:[^>"]|"[^"]*")*>/g, (anchor) => anchor.replace(/\s(?:xlink:)?href="([^"]*)"/g, (attribute, href: string) => {
+  return libraryTheme(svg).replace(/<a\b(?:[^>"]|"[^"]*")*>/g, (anchor) => anchor.replace(/\s(?:xlink:)?href="([^"]*)"/g, (attribute, href: string) => {
     const link = classifyHref(unescapeXml(href));
     return link.kind === 'external' || (boards && link.kind === 'board') || (link.kind === 'file' && files?.(link.path)) ? attribute : '';
   }));

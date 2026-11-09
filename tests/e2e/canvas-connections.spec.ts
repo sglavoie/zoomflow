@@ -10,7 +10,9 @@ const panel = (page: Page) => page.locator('.canvas-connections');
 
 async function createFlow(page: Page) {
   await page.goto('/'); await previewReady(page);
+  await page.locator('#create-open > summary').click();
   await page.getByRole('button', { name: 'New flow', exact: true }).click();
+  await page.getByRole('button', { name: 'Full builder', exact: true }).click();
   const builder = page.getByRole('dialog', { name: 'Create a flow' });
   await builder.getByLabel('Flow name').fill('Approval');
   await builder.getByLabel('Step 1 name').fill('Submit request');

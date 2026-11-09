@@ -1,4 +1,4 @@
-import { cleanLabel, flowSource, readFlow, type Flow } from './flow-model';
+import { cleanLabel, flowSource, highestStepNumber, readFlow, type Flow } from './flow-model';
 import { boardTopics, mindMapSource, placedTopics, readMindMap, type BoardTopic, type MindMap } from './mind-map-model';
 
 /** Edits made on the diagram of a builder board: rename a shape, add the next step or a subtopic,
@@ -23,10 +23,10 @@ export function flowConnectionIds(flow: Flow): string[] {
 }
 
 export type ConnectionEdit = { type: 'add'; from: string; to: string; label: string }
-  | { type: 'label'; index: number; label: string } | { type: 'remove'; index: number };
+  | { type: 'label'; index: number; label: string } | { type: 'remove'; index: number } | { type: 'insert'; index: number };
 
 /** Connection edits use the same lossless builder subset as step edits, including loops and parallel arrows. */
-export function editConnection(own: string, edit: ConnectionEdit): { own: string; index?: number; from: string } | undefined {
+export function editConnection(own: string, edit: ConnectionEdit): { own: string; index?: number; from: string; inserted?: string } | undefined {
   const flow = readFlow(own);
   if (!flow) return;
   const label = 'label' in edit ? cleanLabel(edit.label).replace(/\s+/g, ' ').trim() : '';
@@ -37,6 +37,12 @@ export function editConnection(own: string, edit: ConnectionEdit): { own: string
   }
   const edge = flow.connections[edit.index];
   if (!Number.isInteger(edit.index) || !edge) return;
+  if (edit.type === 'insert') {
+    const id = `step_${highestStepNumber(flow) + 1}`;
+    flow.steps.splice(flow.steps.findIndex(step => step.id === edge.from) + 1, 0, { id, label: 'New step', shape: 'rectangle' });
+    flow.connections.splice(edit.index, 1, { ...edge, to: id }, { from: id, to: edge.to, label: '' });
+    return { own: flowSource(flow), from: edge.from, inserted: id };
+  }
   if (edit.type === 'remove') flow.connections.splice(edit.index, 1);
   else {
     if (label === edge.label || edit.label === edge.label) return;
@@ -62,7 +68,7 @@ export function canvasShapes(own: string, trail: string[]): (shape: string) => C
   const flow = !trail.length ? readFlow(own) : undefined;
   if (flow) return shape => {
     const step = flow.steps.find(item => item.id === shape);
-    return step && { kind: 'flow', label: step.label, add: 'Add next step', sibling: false, remove: flow.steps.length > 1 };
+    return step && { kind: 'flow', label: step.label, add: flow.connections.some(edge => edge.from === shape) ? 'Add branch' : 'Add next step', sibling: false, remove: flow.steps.length > 1 };
   };
   const map = readMindMap(own);
   const topics = map && mapBoard(map, trail);
@@ -141,7 +147,7 @@ export function editOnCanvas(own: string, trail: string[], shape: string, edit: 
       flow.connections = flow.connections.filter(item => item.from !== shape && item.to !== shape);
       return { own: flowSource(flow), select };
     } else {
-      const id = `step_${Math.max(...flow.steps.map(item => Number(item.id.slice(5)))) + 1}`;
+      const id = `step_${highestStepNumber(flow) + 1}`;
       flow.steps.push({ id, label: 'New step', shape: 'rectangle' });
       flow.connections.push({ from: shape, to: id, label: '' });
       return { own: flowSource(flow), select: id };

@@ -15,6 +15,9 @@ import { setupDiagramSearch } from './diagram-search';
 import type { PaneScope } from './pane-scope';
 import { setupProjectCheck } from './project-check-dialog';
 import { setupCanvasFeedback } from './canvas-feedback';
+import { flowSource, flowTemplate } from './flow-model';
+import { setupBoardAppearance } from './board-appearance';
+import { setupWalkthrough } from '@zoomflow/viewer';
 
 export type { FileLinkHost } from './board-tools-shared';
 import { addKeys, undoHint, type BoardToolsOptions, type MoveState } from './board-tools-shared';
@@ -165,6 +168,16 @@ export function setupBoardTools(scope: PaneScope, viewer: Viewer, options: Board
     return boardSites(source, new Map([['root', { from: 0, to: source.length }]]), new Map());
   };
   const boardId = () => viewer.currentBoard?.id ?? 'root';
+  const appearance = setupBoardAppearance(toolbar, viewer, scope.id('board-look'), () => ready() && !options.readOnly?.() ? sites : undefined, options.update);
+  const walkthrough = setupWalkthrough(viewer.stage, toolbar, {
+    boards: () => new Map([...boards.values()].map(board => [board.id, {
+      id: board.id, name: board.name,
+      shapes: board.diagram.shapes.filter(shape => !viewer.isShapeHidden(shape.id, board.id)).map(shape => ({ id: shape.id, label: 'label' in shape && shape.label || shape.id, link: shape.link })),
+      connections: (board.diagram.connections ?? []).map(edge => ({ id: edge.id, from: edge.src, to: edge.dst, label: edge.label || '' })),
+    }])),
+    current: boardId,
+    navigate: board => viewer.navigate(board),
+  });
   const shapeLabel = (board: string, shape: string) => {
     const found = viewer.currentBoard?.id === board ? viewer.currentBoard.diagram.shapes.find(item => item.id === shape) : undefined;
     return (found && 'label' in found && found.label) || shape;
@@ -310,6 +323,31 @@ export function setupBoardTools(scope: PaneScope, viewer: Viewer, options: Board
 
   return {
     refresh,
+    startEmpty(kind: 'flow' | 'mind map', focus: HTMLElement) {
+      const board = boardId();
+      if (!ready() || options.readOnly?.() || !current().empty(board)) return false;
+      if (kind === 'flow') {
+        const flow = flowTemplate('simple');
+        flow.steps = [{ id: 'step_1', label: 'First step', shape: 'rectangle' }];
+        flow.connections = [];
+        flow.look.filled = true;
+        const result = current().update(board, flowSource(flow));
+        if ('error' in result) return false;
+        pending = { source: result.source, board, shape: 'step_1', rename: true };
+        options.update(result.source);
+        viewer.stage.focus({ preventScroll: true });
+      } else {
+        const before = options.source();
+        options.builders[kind].open({ mode: 'board', name: 'My mind map', apply(own) {
+          if (options.source() !== before || !current().empty(board)) return 'This board changed. Close and reopen the builder.';
+          const result = current().update(board, own);
+          if ('error' in result) return result.error;
+          options.update(result.source);
+        } }, focus, viewer.stage);
+      }
+      return true;
+    },
+    canStartEmpty: () => ready() && !options.readOnly?.() && current().empty(boardId()),
     refreshSearch() { search.refresh(); projectCheck?.refresh(); },
     revealSearchMatch,
     resetSearch() { ++searchRevision; search.reset(); projectCheck?.reset(); },
@@ -330,7 +368,7 @@ export function setupBoardTools(scope: PaneScope, viewer: Viewer, options: Board
       return keys.join(' · ');
     },
     /** The source changed: board actions wait for it to compile, except editing the root board. */
-    invalidate() { closeMenu(false); stopRename(false); connections.invalidate(); branches.clear(); branchLocations.clear(); pressed = undefined; followHistory(); refresh(); },
+    invalidate() { closeMenu(false); stopRename(false); connections.invalidate(); branches.clear(); branchLocations.clear(); pressed = undefined; followHistory(); refresh(); appearance.refresh(); },
     /** The document compiled: index its boards. */
     compiled(source: string, next: BoardSites, nextBoards: Map<string, Board>, graph: unknown = {}) {
       sites = next;
@@ -341,6 +379,8 @@ export function setupBoardTools(scope: PaneScope, viewer: Viewer, options: Board
       ++searchRevision;
       search.update(boards);
       refresh();
+      appearance.refresh();
+      walkthrough.refresh();
     },
     /** The preview shows the compiled document: open a board just added or renamed, then select a shape just made,
      * unless focus moved on meanwhile. Redrawing the diagram drops focus from the shape it was on, to the page. */
@@ -378,6 +418,8 @@ export function setupBoardTools(scope: PaneScope, viewer: Viewer, options: Board
       const shape = child && child !== board ? viewer.currentBoard?.diagram.shapes.find(item => item.link === child) : undefined;
       if (shape) options.selectSource(shape.id, false);
       refresh();
+      appearance.refresh();
+      walkthrough.refresh();
     },
     /** The shapes the source selection maps to on the board on view. */
     select(shapes: readonly string[]) {

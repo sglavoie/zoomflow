@@ -144,12 +144,12 @@ test('workspace is compact and stable, zoom explains its baseline, export descri
   const editor = (await page.locator('#editor').boundingBox())!;
   expect(editor.y - pane.y).toBeLessThan(145);
   await expect(page.locator('.zf-zoom-controls span')).toHaveText('Fit');
-  await expect(page.locator('.zf-pan-hint')).toHaveText('Click Checkout to explore');
+  await expect(page.locator('.zf-pan-hint')).toHaveText('Click the arrow on Checkout to explore');
   await page.getByRole('button', { name: 'Zoom in', exact: true }).click();
   await expect(page.locator('.zf-pan-hint')).toBeVisible();
   await expect(page.locator('.zf-zoom-controls span')).toHaveAttribute('aria-label', '150% of fitted size');
   await page.getByRole('button', { name: 'Overview (fit diagram)', exact: true }).click();
-  await page.getByRole('link', { name: 'Open checkout board', exact: true }).click();
+  await page.getByRole('link', { name: 'Open checkout board', exact: true }).locator('.appendix-icon').click();
   await openDownloads(page);
   await page.locator('#export-format input[value="svg"]').check();
   await expect(page.locator('#export-scope')).toHaveText('Current board: checkout · SVG');

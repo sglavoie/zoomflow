@@ -21,7 +21,9 @@ test('Source remembers a canvas-first workspace and source actions reveal it', a
 test('builder previews respond to edits and presets without changing the document', async ({ page }) => {
   await page.goto('/'); await previewReady(page);
   const before = await editorText(page);
+  await page.locator('#create-open > summary').click();
   await page.getByRole('button', { name: 'New flow', exact: true }).click();
+  await page.getByRole('button', { name: 'Full builder', exact: true }).click();
   const dialog = page.getByRole('dialog', { name: 'Create a flow' });
   const preview = dialog.getByRole('region', { name: 'Live diagram preview', exact: true });
   await dialog.getByLabel('Step 1 name').fill('Ship something delightful');
@@ -35,6 +37,7 @@ test('builder previews respond to edits and presets without changing the documen
   await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
   await page.getByRole('button', { name: 'Discard changes', exact: true }).click();
   await expect(page.locator('.zf-stage')).toHaveCount(1);
+  await page.locator('#create-open > summary').click();
   await page.getByRole('button', { name: 'New mind map', exact: true }).click();
   const map = page.getByRole('dialog', { name: 'Create a mind map' });
   await map.getByRole('textbox', { name: 'Topics', exact: true }).fill('Journey\n  Explore\n    Discover\n  Share');
@@ -112,7 +115,7 @@ test('adding a step briefly highlights the node and incoming connection', async 
   await page.goto('/'); await previewReady(page);
   await chooseExample(page, /^Flows & mind maps/); await previewReady(page);
   await page.locator('#viewer [data-shape-id="step_1"]').click();
-  await page.getByRole('button', { name: 'Add next step', exact: true }).click();
+  await page.getByRole('button', { name: 'Add branch', exact: true }).click();
   await expect(page.locator('#viewer [data-shape-id].zf-edit-highlight')).toHaveCount(1);
   await expect(page.locator('#viewer [data-connection-id].zf-edit-highlight')).toHaveCount(1);
   await expect(page.locator('#viewer .zf-edit-highlight')).toHaveCount(0);
@@ -178,9 +181,9 @@ test('hover offers one cropped preview with a readable account of the board', as
 test('the starter leads to direct editing and rename preserves the edited shape’s position and scale', async ({ page }) => {
   await page.goto('/'); await previewReady(page);
   await expect(page.locator('#viewer [data-shape-id="Docs"]')).toHaveCount(0);
-  await page.getByRole('link', { name: 'Open checkout board', exact: true }).click();
+  await page.getByRole('link', { name: 'Open checkout board', exact: true }).locator('.appendix-icon').click();
   await expect(page.locator('#viewer [data-shape-id="Back"]')).toHaveCount(0);
-  await page.getByRole('link', { name: 'Open charge board', exact: true }).click();
+  await page.getByRole('link', { name: 'Open charge board', exact: true }).locator('.appendix-icon').click();
   await expect(page.getByRole('button', { name: 'Edit flow', exact: true })).toBeVisible();
   const step = page.locator('#viewer [data-shape-id="step_2"]');
   await step.dblclick();

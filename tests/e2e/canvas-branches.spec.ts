@@ -12,6 +12,7 @@ async function focusedShape(element: Locator) {
 
 async function createMap(page: Page, outline = initial, split = '0') {
   await page.goto('/'); await previewReady(page);
+  await page.locator('#create-open > summary').click();
   await page.getByRole('button', { name: 'New mind map', exact: true }).click();
   const builder = page.getByRole('dialog', { name: 'Create a mind map' });
   await builder.getByLabel('Mind map name').fill('Plan');

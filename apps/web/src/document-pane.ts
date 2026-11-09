@@ -395,7 +395,7 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
     () => {
       if (root.hasAttribute('data-fullscreen')) root.querySelector<HTMLButtonElement>('.zf-fullscreen-toggle')!.click();
       showView('source'); editor.view.focus();
-    }, (target) => boardTools.canvasKeys(target));
+    }, (target) => boardTools.canvasKeys(target), { available: boardTools.canStartEmpty, start: boardTools.startEmpty });
   let previewAttempt: symbol;
   const { pane } = setupPaneLifecycle({
     get id() { return id; },
