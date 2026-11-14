@@ -18,7 +18,9 @@ export function setupBoardMotion(stage: HTMLElement) {
   function bounds(element?: Element) {
     if (!element) return;
     const outer = stage.getBoundingClientRect();
-    const box = element.getBoundingClientRect();
+    // A link also contains an expanded hit area, badges and animated depth sheets.
+    // Use the shape itself so hover/focus decorations cannot move the camera target.
+    const box = (element.querySelector('[data-shape-id]') ?? element).getBoundingClientRect();
     if (!box.width || !box.height || box.right < outer.left || box.left > outer.right || box.bottom < outer.top || box.top > outer.bottom) return;
     return { x: box.left - outer.left, y: box.top - outer.top, width: box.width, height: box.height };
   }
@@ -31,11 +33,19 @@ export function setupBoardMotion(stage: HTMLElement) {
     image.alt = '';
     image.setAttribute('aria-hidden', 'true');
     image.className = 'zf-board-snapshot';
-    image.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(new XMLSerializer().serializeToString(svg))}`;
+    const copy = svg.cloneNode(true) as SVGElement;
+    // Editor selection rings get their paint from the host stylesheet. Without it
+    // they become opaque black rectangles in an image and obscure the zoom target.
+    const rings = svg.querySelectorAll('.zf-selection');
+    copy.querySelectorAll<SVGElement>('.zf-selection').forEach((ring, index) => {
+      const style = getComputedStyle(rings[index]);
+      for (const property of ['fill', 'fill-opacity', 'stroke', 'stroke-width', 'vector-effect']) ring.style.setProperty(property, style.getPropertyValue(property));
+    });
+    image.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(new XMLSerializer().serializeToString(copy))}`;
     return { image, origin: bounds(anchor) };
   }
-  function animate(element: Element, frames: Keyframe[], duration = 260) {
-    const animation = element.animate(frames, { duration, easing: 'cubic-bezier(0.2, 0.75, 0.25, 1)', fill: 'both' });
+  function animate(element: Element, frames: Keyframe[], duration = 260, easing = 'cubic-bezier(0.2, 0.75, 0.25, 1)') {
+    const animation = element.animate(frames, { duration, easing, fill: 'both' });
     animations.add(animation);
     return animation.finished.catch(() => {}).finally(() => { animations.delete(animation); animation.cancel(); });
   }
@@ -62,14 +72,28 @@ export function setupBoardMotion(stage: HTMLElement) {
     const y = origin ? origin.y + origin.height / 2 - height * scale / 2 : height * (1 - scale) / 2;
     const small = `translate(${x}px, ${y}px) scale(${scale})`;
     const enlarged = `translate(${origin ? (width / 2 - origin.x - origin.width / 2) * 0.18 : -width * 0.06}px, ${origin ? (height / 2 - origin.y - origin.height / 2) * 0.18 : -height * 0.06}px) scale(1.12)`;
+    // Bring the linked shape towards filling the stage, with its centre at the stage centre.
+    const zoom = origin ? Math.max(1.12, Math.min(width / origin.width, height / origin.height)) : 1.12;
+    const through = origin ? `translate(${width / 2 - (origin.x + origin.width / 2) * zoom}px, ${height / 2 - (origin.y + origin.height / 2) * zoom}px) scale(${zoom})` : enlarged;
     const image = snapshot.image;
     stage.append(image);
     overlays.add(image);
     stage.dataset.transition = direction;
-    const base = { transform: 'none', transformOrigin: '0 0', opacity: 1 };
-    const incoming = animate(content, [{ transform: direction === 'out' ? enlarged : direction === 'in' ? small : 'scale(0.98)', transformOrigin: '0 0', opacity: 0 }, base]);
-    const outgoing = animate(image, [base, { transform: direction === 'out' ? small : enlarged, transformOrigin: '0 0', opacity: 0 }]);
-    void Promise.all([incoming, outgoing]).then(() => {
+    const base = { transform: 'none', transformOrigin: '0 0' };
+    const incoming = { transform: direction === 'out' ? enlarged : direction === 'in' ? small : 'scale(0.98)', transformOrigin: '0 0' };
+    const outgoing = { transform: direction === 'out' ? small : direction === 'in' ? through : enlarged, transformOrigin: '0 0' };
+    const pending = direction === 'across' ? [
+      animate(content, [{ ...incoming, opacity: 0 }, { ...base, opacity: 1 }]),
+      animate(image, [{ ...base, opacity: 1 }, { ...outgoing, opacity: 0 }]),
+    ] : [
+      animate(content, [incoming, base], 380),
+      animate(image, [base, outgoing], 380),
+      // Opacity uses wall-clock offsets; applying the movement easing here would advance
+      // the handoff too early. Only faint traces overlap between 35% and 45%.
+      animate(content, [{ opacity: 0 }, { opacity: 0, offset: 0.35 }, { opacity: 1 }], 380, 'linear'),
+      animate(image, [{ opacity: 1 }, { opacity: 0, offset: 0.45 }, { opacity: 0 }], 380, 'linear'),
+    ];
+    void Promise.all(pending).then(() => {
       // A later navigation may already own the stage. Only finish this snapshot's transition.
       if (!overlays.has(image)) return;
       image.remove(); overlays.delete(image); delete stage.dataset.transition;

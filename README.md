@@ -54,7 +54,9 @@ use **Retry preview** to try again without losing your source.
    folder** in the filename menu starts one from nothing. **D2 reference**
    contains searchable examples.
 2. **Explore:** use the arrow on **Checkout** in the default diagram, then **Charge** to drill
-   deeper. On any starter board, double-click a step to rename it, or select it
+   deeper. The view zooms into the linked shape and shrinks back into it on return,
+   with staggered fades that keep labels clear, including in offline HTML exports.
+   On any starter board, double-click a step to rename it, or select it
    and choose **Add next step** or **Add branch** to keep building. Hover a connection
    and click **+** to insert a step between its ends. **Walkthrough** lets you follow
    a path, choose branches, and explore detail boards. Choose **Present** for a focused

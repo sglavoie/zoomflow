@@ -4,9 +4,12 @@
 
 ## Explore a diagram
 
-Click a linked shape to drill into a board. The view zooms through the linked node;
-returning briefly highlights that node. Ordinary pointer movement lets the transition finish.
-Scrolling or dragging interrupts motion,
+Click a linked shape to drill into a board. The linked shape grows towards filling
+the canvas as the old board fades away, then the detail board appears. Returning
+shrinks the detail board into its linking shape and briefly highlights that shape.
+The move takes about 380 ms, with staggered fades to keep the boards' labels from
+overlapping; exported HTML uses the same motion. Sideways moves stay subtle.
+Ordinary pointer movement lets the transition finish. Scrolling, key presses or dragging interrupt motion,
 and reduced-motion preferences skip zooming. The root breadcrumb uses the document name. Breadcrumbs record the visited path,
 trimming back to an earlier board whenever you revisit it so cycles do not repeat.
 Guidance below the canvas names a detail board to explore, explains source selection
