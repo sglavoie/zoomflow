@@ -159,11 +159,16 @@ for (const mobile of [false, true]) for (const theme of ['light', 'dark'] as con
     let release!: () => void;
     const gate = new Promise<void>(resolve => { release = resolve; });
     await page.route(d2Module, async route => { await gate; await route.continue(); });
+    // Compare the same layout before and after startup. The delayed loading notice
+    // changes the stage height; slow-download behavior is covered separately above.
+    await page.clock.install();
+    await page.clock.pauseAt(new Date());
     let before: { label: string; x: number; y: number; width: number; height: number }[];
     try {
       await page.goto('/', { waitUntil: 'domcontentloaded' });
       const stage = page.locator('.zf-stage');
       await expect(stage).toHaveClass(/zf-starter-preview/);
+      await expect(page.locator('#engine-notice')).toBeHidden();
       // Lay out the background SVG invisibly at its actual CSS size to compare label bounds.
       before = await stage.evaluate(async element => {
         const style = getComputedStyle(element);
@@ -184,8 +189,12 @@ for (const mobile of [false, true]) for (const theme of ['light', 'dark'] as con
         const result = [...svg.querySelectorAll('text')].map(text => ({ label: text.textContent!, ...text.getBoundingClientRect().toJSON() }));
         box.remove(); return result;
       });
-    } finally { release(); }
+    } finally {
+      release();
+      await page.clock.resume();
+    }
     await previewReady(page);
+    await expect(page.locator('#engine-notice')).toBeHidden();
     expect(before.map(text => text.label)).toEqual(['Browse', 'Checkout', 'Receipt']);
     for (const old of before) {
       const live = await page.locator('.zf-stage text').getByText(old.label, { exact: true })
