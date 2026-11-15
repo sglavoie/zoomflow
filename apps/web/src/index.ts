@@ -1,4 +1,5 @@
 import { iconLabel } from './icons';
+import { setupCommandPalette } from './command-palette';
 import { viewerStyle, type ViewerRoute } from '@zoomflow/viewer';
 import { setupExamplePicker } from './example-picker';
 import './style.css';
@@ -361,6 +362,7 @@ updateTheme();
 exportMenu.updateExportLabel();
 panes.a.open(examplePicker.initial);
 applyLayout();
+setupCommandPalette(activePane);
 // Save writes back to the files drafts came from, after a reload too.
 void fileHandles.restore(examplePicker.hasDraft).then((restored) => { if (restored) examplePicker.refresh(); });
 // New linked files go into the folders projects came from, after a reload too.

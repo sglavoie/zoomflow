@@ -112,6 +112,23 @@ so an old diagram cannot select an outdated text range. Editor keyboard shortcut
 including undo, search, Escape and Backspace, stay in the editor. Tab indents the
 source; to leave the editor with the keyboard, press Esc, then Tab within two seconds.
 
+## Command palette
+
+Open **View → Command palette** or press **⌘K** on macOS / **Ctrl+K** on
+Windows and Linux, including while editing source. Type a case-insensitive
+substring to filter commands; matches at the start of a word come first.
+Use ↑/↓ to select and Enter to run, or click a result. Escape closes the
+palette and returns focus. Shortcuts appear beside commands that have one.
+
+Commands use the existing controls for creation, opening, saving, export,
+search, walkthrough, presentation, fullscreen, overview, source, formatting,
+themes, layouts, reference, keyboard help and board builders. Only available
+actions appear; Present becomes available during a walkthrough. **Go to board**
+uses each board's display name, and **Open example** uses the built-in picker
+entries, including your local edits. In split layouts commands follow the
+pane that last had focus. The palette stays closed during IME composition
+and while another modal dialog is open.
+
 ## Syntax reference and workspace layout
 
 The diagram is on the left and the source editor is on the right. Click **D2

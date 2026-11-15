@@ -3097,3 +3097,24 @@ header > strong { display: inline-flex; align-items: center; gap: 6px; font-size
 .board-layer-heading strong { color: var(--text); }
 .layer-depth-note { display: block; flex-basis: 100%; }
 .layer-depth-note[hidden] { display: none; }
+
+/* The command list keeps focus in its combobox while arrows select an action. */
+#command-palette {
+  width: min(560px, calc(100vw - 32px));
+  max-height: calc(100dvh - 32px);
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  color: inherit;
+  box-shadow: var(--shadow-dialog);
+  overflow-y: auto;
+}
+#command-palette::backdrop { background: var(--backdrop); }
+#command-query { width: 100%; margin: 16px 0 8px; padding: 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); color: inherit; font: inherit; }
+#command-query::placeholder { color: var(--muted); opacity: 1; }
+#command-results { max-height: min(400px, 50dvh); overflow-y: auto; }
+#command-results [role="option"] { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px; border-radius: 6px; cursor: pointer; }
+#command-results [aria-selected="true"] { background: var(--accent-soft); outline: 1px solid var(--accent); outline-offset: -1px; }
+#command-results kbd { flex-shrink: 0; color: var(--muted); font-size: var(--font-size-sm); }
+.command-help, .command-empty { color: var(--muted); font-size: var(--font-size-sm); margin: 12px 0 0; }

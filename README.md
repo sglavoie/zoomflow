@@ -67,6 +67,10 @@ use **Retry preview** to try again without losing your source.
    board, or zoom and drag to inspect the diagram. Board names follow their linking
    shape labels when those labels agree, with the document title at the root. **Overview** fits the whole diagram at a
    comfortable scale, up to 1.5×; phones start closer only when fitted labels fall below 11 px.
+   **Command palette** in View (⌘K on Mac / Ctrl+K elsewhere) finds commands,
+   boards by display name, and built-in examples from the canvas or source editor.
+   Type to filter, use ↑/↓ and Enter to run, or Escape to return to your work.
+   Commands follow the last focused pane and list only available actions.
    A quiet dot grid follows pan and zoom, including in offline HTML, and stays out of SVG and PNG images. **Find in diagram** (⌘⇧F / Ctrl+Shift+F)
    finds board names and shape labels across the current document and jumps to a match.
    In an open folder, **Find in project** searches every project file, including unsaved

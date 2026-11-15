@@ -28,6 +28,10 @@ isolation, per-document choices, and failed or superseded layer renders.
 
 ## Editing
 
+- `command-palette.spec.ts`: canvas/editor opening, filtering and ranking, existing
+  control dispatch, boards and examples, availability, IME/modal isolation, focus
+  return, split-pane targeting, and light/dark desktop/phone layouts.
+
 - `canvas-board-transfers.spec.ts`: the three flow/mind-map transfers from the
   reported connected canvas, attached-root moves, cross-board parent pickers,
   occupied targets, cycle rejection, save/reopen, export-visibility remapping,

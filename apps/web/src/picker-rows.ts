@@ -114,6 +114,7 @@ export function draftRow(item: Draft, actions: { choose: () => void; remove: () 
   elsewhere.hidden = true;
   button.append(timestamp, elsewhere);
   if (exampleSource(item.key) !== undefined) {
+    button.dataset.exampleCommand = item.key;
     const text = document.createElement('span');
     text.className = 'example-copy';
     text.append(...button.childNodes);
