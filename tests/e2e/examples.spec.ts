@@ -1,6 +1,73 @@
 import { expect, test, type Page } from '@playwright/test';
 import { selectMenuOption, downloadExport } from './menu';
-import { d2Module, source, previewReady, stubAiStatus, openFolder, openView } from './helpers';
+import { comparesVisuals, visualSkipReason, d2Module, source, previewReady, stubAiStatus, openFolder, openView } from './helpers';
+import { devURL } from './servers';
+
+async function picturesReady(page: Page, count = 9) {
+  await expect.poll(() => page.locator('.example-picture img').evaluateAll(images => images.filter(image =>
+    !(image as HTMLImageElement).hidden && (image as HTMLImageElement).naturalWidth > 0).length)).toBe(count);
+}
+
+test('example picker shows a picture of each example', async ({ page }) => {
+  await page.emulateMedia({ colorScheme: 'light' });
+  // Hold only the separate background worker, leaving the user's preview usable.
+  await page.route(url => url.pathname === '/src/compiler.ts', async route => {
+    const response = await route.fetch();
+    const body = await response.text();
+    expect(body).toContain('const d2 = new D2();');
+    await route.fulfill({ response, body: body.replace('const d2 = new D2();', `
+      const d2 = new D2();
+      window.exampleWorkers = (window.exampleWorkers || 0) + 1;
+      if (window.exampleWorkers > 1) {
+        const compile = d2.compile.bind(d2);
+        let first = true;
+        d2.compile = async (...args) => {
+          if (first) { first = false; await new Promise(resolve => { window.releaseExample = resolve; }); }
+          return compile(...args);
+        };
+      }
+    `) });
+  });
+  await page.goto(devURL); await previewReady(page);
+  expect(await page.evaluate(() => (window as any).exampleWorkers)).toBe(1);
+  await source(page).fill('draft: My private edited example'); await previewReady(page);
+  await page.locator('#example-picker summary').click();
+  await expect.poll(() => page.evaluate(() => typeof (window as any).releaseExample)).toBe('function');
+  const rows = page.locator('#example-options .example-row');
+  const heights = () => rows.evaluateAll(items => items.map(item => item.getBoundingClientRect().height));
+  const before = await heights();
+  await expect(page.locator('.example-picture img:not([hidden])')).toHaveCount(0);
+  await page.evaluate(() => (window as any).releaseExample());
+  await picturesReady(page);
+  expect(await heights()).toEqual(before);
+  const urls = () => page.locator('.example-picture img').evaluateAll(images => images.map(image => image.getAttribute('src')!));
+  const light = await urls();
+  const original = decodeURIComponent(light[0]);
+  expect(original).toContain('Checkout');
+  expect(original).not.toContain('My private edited example');
+  await expect(page.locator('.example-picture img:not([alt=""])')).toHaveCount(0);
+  await page.locator('#example-picker summary').click();
+  await page.locator('#example-picker summary').click();
+  expect(await urls()).toEqual(light);
+  await page.emulateMedia({ colorScheme: 'dark' });
+  await expect.poll(async () => (await urls()).every((url, index) => url !== light[index])).toBe(true);
+  await picturesReady(page);
+  expect(await heights()).toEqual(before);
+  // The intentional lint error still compiles and therefore has a picture.
+  await expect(page.locator('#example-options').getByRole('button', { name: 'Find & fix a broken link' }).locator('img')).not.toHaveAttribute('hidden', '');
+});
+
+for (const theme of ['light', 'dark'] as const) for (const width of [1440, 390]) {
+  test(`example picker pictures in ${theme} at ${width}`, { tag: '@visual' }, async ({ page, browserName }) => {
+    test.skip(!comparesVisuals(browserName), visualSkipReason);
+    await page.setViewportSize({ width, height: width === 390 ? 844 : 900 });
+    await page.emulateMedia({ colorScheme: theme, reducedMotion: 'reduce' });
+    await page.goto('/'); await ready(page);
+    await page.locator('#example-picker summary').click();
+    await picturesReady(page);
+    await expect(page.locator('.example-menu')).toHaveScreenshot(`example-pictures-${theme}-${width}.png`);
+  });
+}
 
 async function ready(page: Page, id = 'root') {
   await expect(page.locator('.zf-stage')).toHaveAttribute('data-board', id);

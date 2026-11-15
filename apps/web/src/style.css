@@ -1429,6 +1429,22 @@ select:focus-visible {
   color: var(--danger-text);
   font-size: var(--font-size-sm);
 }
+.example-with-picture {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+.example-copy { flex: 1; min-width: 0; }
+.example-picture {
+  flex: 0 0 72px;
+  width: 72px;
+  height: 54px;
+  overflow: hidden;
+  border: 1px solid var(--divider);
+  border-radius: 6px;
+  background: var(--hover);
+}
+.example-picture img { display: block; width: 100%; height: 100%; object-fit: contain; }
 .example-restore {
   align-self: center;
   margin-right: var(--space-1);

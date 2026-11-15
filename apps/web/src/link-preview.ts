@@ -1,5 +1,6 @@
 import { classifyHref, type Board } from '@zoomflow/core';
-import { normalizeRouteHash, prepareExportSvg, resolveRouteHash, type RenderBoard, type Viewer } from '@zoomflow/viewer';
+import { normalizeRouteHash, resolveRouteHash, type RenderBoard, type Viewer } from '@zoomflow/viewer';
+import { boardPicture } from './board-picture';
 import type { BoardSites } from './board-model';
 import { pageListeners } from './canvas-guidance';
 import type { PaneScope } from './pane-scope';
@@ -74,14 +75,13 @@ export function setupLinkPreview(scope: PaneScope, viewer: Viewer, files: Linked
   async function showPicture(anchor: Element, current: Map<string, Promise<string>>, key: string, render: () => Promise<string>) {
     const dark = document.documentElement.dataset.theme === 'dark';
     key = `${key}\n${dark ? 'dark' : 'light'}`;
-    if (!current.has(key)) current.set(key, render().then(async svg =>
-      (await prepareExportSvg(svg, dark, { fit: true })).svg));
+    if (!current.has(key)) current.set(key, render().then(svg => boardPicture(svg, dark)));
     const currentDocument = pictures;
     try {
-      const svg = await current.get(key)!;
+      const url = await current.get(key)!;
       // An image keeps the picture's styles and IDs apart from the diagram's.
       if (link !== anchor || currentDocument !== pictures) return;
-      picture.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+      picture.src = url;
       picture.hidden = false;
       place(anchor);
     } catch { current.delete(key); }

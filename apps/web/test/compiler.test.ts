@@ -42,3 +42,16 @@ it('tells engine failures apart from source errors', () => {
   expect(isEngineUnavailable(new Error('example.d2:1:9: maps must be terminated with }'))).toBe(false);
   expect(isEngineUnavailable('D2 instance has been disposed')).toBe(false);
 });
+
+it('aborts an initializing worker when background work is disposed', async () => {
+  let signal!: AbortSignal;
+  const load = vi.fn((value: AbortSignal) => {
+    signal = value;
+    return new Promise<never>((_resolve, reject) => value.addEventListener('abort', () => reject(value.reason)));
+  });
+  const compiler = createCompiler(load);
+  const result = compiler.get();
+  compiler.dispose();
+  expect(signal.aborted).toBe(true);
+  await expect(result).rejects.toBeInstanceOf(CompilerStartupError);
+});

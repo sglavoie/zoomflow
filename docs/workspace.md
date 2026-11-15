@@ -61,6 +61,11 @@ saved, while concurrent versions are retained. Existing browser backups migrate 
 active project or draft first,
 followed by other drafts ordered by edit time, then built-in examples. It marks
 modified examples and shows edit timestamps and distinct draft numbers for same-name uploads.
+Built-in examples have small pictures of their original root boards. Pictures load
+one at a time after the menu first opens and the main preview is ready; editing in
+either pane interrupts this background work. They stay in memory for the visit and
+follow the current theme. A neutral space reserves their size while loading or if
+an example cannot be drawn. Edited drafts do not change these example pictures.
 **Restore** resets an example after confirmation; opened file drafts
 can be removed from the dropdown. Confirmation dialogs name the affected document
 or project and report unsaved changes. A 30-second **Undo** notice restores removed

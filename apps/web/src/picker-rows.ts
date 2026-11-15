@@ -113,6 +113,20 @@ export function draftRow(item: Draft, actions: { choose: () => void; remove: () 
   elsewhere.textContent = 'Open in the other pane';
   elsewhere.hidden = true;
   button.append(timestamp, elsewhere);
+  if (exampleSource(item.key) !== undefined) {
+    const text = document.createElement('span');
+    text.className = 'example-copy';
+    text.append(...button.childNodes);
+    const slot = document.createElement('span');
+    slot.className = 'example-picture';
+    slot.setAttribute('aria-hidden', 'true');
+    const picture = document.createElement('img');
+    picture.alt = '';
+    picture.hidden = true;
+    slot.append(picture);
+    button.classList.add('example-with-picture');
+    button.append(slot, text);
+  }
   function refresh() {
     label.firstChild!.textContent = item.projectId
       ? `${item.path}${item.name !== item.path!.split('/').at(-1) ? ` → ${item.name}` : ''}${item.recoveredFrom ? ' (recovered)' : ''}` : item.title;

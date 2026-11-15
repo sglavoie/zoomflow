@@ -48,8 +48,9 @@ use **Retry preview** to try again without losing your source.
    keeps its own editor, including when moving between flows and mind maps.
    Or change the D2 source on the right and watch
    the preview update. Use the
-   filename menu for built-in examples, **Open .d2** for a file, or **Open folder** for
-   a project with relative imports. In a folder, **Link to diagram…** and **New linked
+   filename menu for built-in examples with small board pictures, **Open .d2** for a
+   file, or **Open folder** for a project with relative imports. In a folder,
+   **Link to diagram…** and **New linked
    diagram…** on a shape's menu make it open another file of the project
    ([atlas guide](docs/workspace.md#link-diagrams-into-an-atlas)); **New atlas in an empty
    folder** in the filename menu starts one from nothing. **D2 reference**

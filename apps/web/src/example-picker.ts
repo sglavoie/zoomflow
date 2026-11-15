@@ -6,6 +6,7 @@ import { createDraftLibrary, exampleSource, isOwnDraft } from './draft-library';
 import { flowFilename } from './flow-model';
 import { atlasMapName } from './atlas-map';
 import { setupPickerMenu } from './picker-menu';
+import { setupExamplePictures } from './example-pictures';
 import { plural, safeFilename, setText } from './text';
 import type { ProjectArchive } from '@zoomflow/core';
 import type { ProjectSaveSnapshot } from './project-save';
@@ -143,6 +144,7 @@ export function setupExamplePicker({ readSource, open, onState, forget, checkpoi
 
   for (const item of drafts.values()) addOption(item);
   activate(current.a!, 'a');
+  setupExamplePictures(picker, buttons);
 
   return {
     initial: { source: draftOf('a')!.source, name: draftOf('a')!.name, key: current.a! },
