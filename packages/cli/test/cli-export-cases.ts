@@ -135,7 +135,7 @@ export function registerCliExportCases() {
     const page = await browser.newPage({ offline: true });
     try {
       await page.goto(pathToFileURL(output).href);
-      for (const [target, board, label] of [['root.layers.missing', 'root', 'Root > missing'], ['root.layers.child.layers.absent', 'root.layers.child', 'Root > child > absent']]) {
+      for (const [target, board, label] of [['root.layers.missing', 'root', 'missing-links > missing'], ['root.layers.child.layers.absent', 'root.layers.child', 'missing-links > Open > absent']]) {
         if (board !== 'root') await page.locator(`.zf-stage a[data-board="${board}"]`).click();
         const link = page.locator(`.zf-stage a[data-board="${target}"]`);
         expect(await link.evaluate((node) => getComputedStyle(node).outlineStyle)).toBe('dashed');
@@ -237,7 +237,7 @@ require('node:module').syncBuiltinESMExports();`)]);
       await page.getByRole('button', { name: 'Find in atlas', exact: true }).click();
       await page.getByRole('searchbox').fill('Stage');
       const result = page.getByRole('list', { name: 'Search results' }).getByRole('button');
-      expect(await result.textContent()).toBe('StageShape · projects/zoomflow.d2 › Root › Viewer');
+      expect(await result.textContent()).toBe('StageShape · projects/zoomflow.d2 › projects/zoomflow › Viewer');
       await result.click();
       expect(await at()).toEqual(['projects/zoomflow.d2', 'root.layers.Viewer']);
       expect(await stage.locator('[data-shape-id="Stage"]').getAttribute('class')).toContain('zf-search-selected');

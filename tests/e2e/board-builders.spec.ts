@@ -133,10 +133,11 @@ test('adds flows and maps inside generated detail boards and keeps them after ed
   await edit.getByRole('button', { name: 'Apply changes', exact: true }).click();
   await ready(page);
   let destination = 'root';
-  for (const name of ['Renamed', 'Detail', 'Task', 'More', 'Branch', 'Leaf']) {
+  for (const [key, label] of [['Renamed', 'Renamed'], ['Detail', 'Detail'], ['Task', 'Task'],
+    ['More', 'Do something'], ['Branch', 'Branch'], ['Leaf', 'Leaf']]) {
     await board(page, destination);
-    await openFromBadge(page, `Open ${name} board`);
-    destination += `.layers.${name}`;
+    await openFromBadge(page, `Open ${label} board`);
+    destination += `.layers.${key}`;
   }
   await board(page, `root.layers.Renamed${suffix}`);
   await expect(page.getByRole('button', { name: 'Edit flow', exact: true })).toBeVisible();
@@ -167,7 +168,7 @@ test('offers the same actions from a context menu and the keyboard', async ({ pa
   // A shape that opens a builder board offers to edit it.
   await page.keyboard.press('Escape');
   await board(page, 'root');
-  await page.getByRole('link', { name: 'Open Changes board', exact: true }).click({ button: 'right' });
+  await page.getByRole('link', { name: 'Open Request changes board', exact: true }).click({ button: 'right' });
   await menu.getByRole('menuitem', { name: 'Edit flow board…' }).click();
   await expect(page.getByRole('dialog', { name: 'Edit flow' })).toBeVisible();
 });
