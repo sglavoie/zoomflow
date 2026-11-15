@@ -1512,7 +1512,8 @@ body.diagram-fullscreen {
   background-image: url('./order-preview.svg');
   background-position: center;
   background-repeat: no-repeat;
-  background-size: min(100%, 584px) auto;
+  /* Same 515 × 98 fitted crop and 1.5× ceiling as the live starter. */
+  background-size: min(100%, 772.5px) auto;
 }
 [data-theme="dark"] .zf-stage.zf-starter-preview {
   background-image: url('./order-preview-dark.svg');
@@ -3055,3 +3056,10 @@ header > strong { font-size: 18px; letter-spacing: -0.6px; }
 #export-presentation-hint { font-size: 11px; line-height: 1.5; color: var(--muted); }
 
 .zf-stage-area:has(.canvas-coach:not([hidden]), .canvas-rename:not([hidden])) .canvas-context-help { display: none; }
+
+/* Reserve the live breadcrumb and guidance rows while the starter image is visible. */
+[data-part="viewer"]:has(.zf-starter-preview) .zf-breadcrumbs { min-height: 36px; }
+.workspace-canvas:has(> .zf-starter-preview) > .zf-pan-hint[hidden] {
+  display: -webkit-box !important;
+  visibility: hidden;
+}

@@ -131,6 +131,11 @@ for (const runtime of ['live', 'offline']) for (const colorScheme of ['light', '
         return { shape, outer };
       });
       await expect(stage).toHaveAttribute('data-transition', 'in');
+      const backgrounds = await stage.locator('.zf-board-snapshot').evaluate((image: HTMLImageElement) => {
+        const copy = new DOMParser().parseFromString(decodeURIComponent(image.src.split(',')[1]), 'image/svg+xml');
+        return [...copy.documentElement.querySelectorAll<SVGElement>(':scope > rect, :scope > svg > rect')].map(rect => rect.style.opacity);
+      });
+      expect(backgrounds).toEqual(['0']);
       const start = await sampleMotion(page, 0);
       expect(start.incoming.scale).toBeLessThan(0.73);
       expect(start.outgoing.scale).toBe(1);

@@ -4,6 +4,7 @@ import { pathToFileURL } from 'node:url';
 import { readFileSync } from 'node:fs';
 import { board, drill, previewReady } from './helpers';
 import { devURL } from './servers';
+import { download } from './export-helpers';
 
 test('opening a board in another tab keeps the current board', async ({ page, context, browserName }) => {
   await page.goto('/');
@@ -395,3 +396,56 @@ test('a trackpad pinch at a zoom limit never zooms the page', async ({ page }) =
   expect(prevented).toEqual({ atMinimum: { pinch: true, scroll: false }, atMaximum: { pinch: true, scroll: false } });
   await expect(page.locator('.zf-zoom-controls span')).toHaveText('800%');
 });
+
+for (const theme of ['light', 'dark'] as const) {
+  test(`canvas grid follows zoom and stays out of exported images (${theme})`, async ({ page, context }, info) => {
+    await page.emulateMedia({ colorScheme: theme, reducedMotion: 'reduce' });
+    await page.goto('/'); await previewReady(page);
+    const checkGrid = async () => {
+      const stage = page.locator('.zf-stage');
+      const geometry = () => stage.evaluate(element => {
+        const style = getComputedStyle(element);
+        const matrix = element.querySelector('svg')!.getScreenCTM()!;
+        const bounds = element.getBoundingClientRect();
+        return { size: parseFloat(style.getPropertyValue('--zf-grid-size')),
+          x: parseFloat(style.getPropertyValue('--zf-grid-x')), y: parseFloat(style.getPropertyValue('--zf-grid-y')),
+          scale: matrix.a, originX: matrix.e - bounds.left - element.clientLeft,
+          originY: matrix.f - bounds.top - element.clientTop, image: style.backgroundImage };
+      });
+      await expect(stage).toHaveAttribute('data-canvas-grid', '');
+      const initialBox = await stage.locator(':scope > svg').getAttribute('viewBox');
+      const initial = await geometry();
+      expect(initial.image).toContain('radial-gradient');
+      await page.getByRole('button', { name: 'Zoom in', exact: true }).click();
+      const zoomed = await geometry();
+      expect(zoomed.size / initial.size).toBeCloseTo(1.5, 4);
+      await stage.focus(); await page.keyboard.press('Shift+ArrowRight');
+      const panned = await geometry();
+      expect(panned.x).not.toBeCloseTo(zoomed.x, 1);
+      expect(panned.size).toBeCloseTo(zoomed.size, 4);
+      expect(panned.size).toBeCloseTo(24 * panned.scale, 4);
+      expect(panned.x + panned.size / 2).toBeCloseTo(panned.originX, 4);
+      expect(panned.y + panned.size / 2).toBeCloseTo(panned.originY, 4);
+      await expect(stage.locator(':scope > svg > svg > rect')).toHaveCSS('opacity', '0');
+      // No autonomous motion, including under reduced motion. Input still moves the grid.
+      expect(await stage.evaluate(el => el.getAnimations({ subtree: true }).length)).toBe(0);
+      await page.keyboard.press('0');
+      const restored = (await stage.locator(':scope > svg').getAttribute('viewBox'))!.split(' ').map(Number);
+      // ResizeObserver refits can round differently across engines; allow a tenth of a screen pixel.
+      initialBox!.split(' ').map(Number).forEach((value, index) =>
+        expect(Math.abs(restored[index] - value) * initial.scale).toBeLessThan(0.1));
+      await expect(page.locator('.zf-zoom-controls span')).toHaveText('Fitted');
+    };
+    await checkGrid();
+    // Actual SVG and PNG downloads must be identical with the visible grid enabled or disabled.
+    const withGrid = new Map<string, Buffer>();
+    for (const format of ['svg', 'png']) withGrid.set(format, readFileSync(await download(page, format, info)));
+    expect(withGrid.get('svg')!.toString()).not.toMatch(/data-canvas-grid|zf-grid|radial-gradient/);
+    await page.locator('.zf-stage').evaluate(stage => stage.removeAttribute('data-canvas-grid'));
+    for (const format of ['svg', 'png']) expect(readFileSync(await download(page, format, info))).toEqual(withGrid.get(format));
+    const html = await download(page, 'html', info);
+    await page.goto('about:blank'); await context.setOffline(true);
+    await page.goto(pathToFileURL(html).href);
+    await checkGrid();
+  });
+}

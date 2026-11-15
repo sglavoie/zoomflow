@@ -188,30 +188,50 @@ test.describe('phone workspace', () => {
 
 test.describe('readable phone canvas', () => {
   test.use({ hasTouch: true, viewport: { width: 390, height: 844 }, reducedMotion: 'reduce' });
-  test('starts with readable labels and an explicit overview, then keeps a chosen view', async ({ page }) => {
+  test('shows the whole starter flow on a phone', async ({ page }) => {
     await page.goto('/'); await previewReady(page);
     const stage = page.locator('#viewer .zf-stage');
     const textSize = await stage.locator('[data-shape-id="Browse"] text').evaluate(node =>
       parseFloat(getComputedStyle(node).fontSize) * Math.abs((node as SVGGraphicsElement).getScreenCTM()!.a));
-    expect(textSize).toBeGreaterThanOrEqual(13.9);
+    expect(textSize).toBeGreaterThanOrEqual(11);
     const first = (await stage.locator('[data-shape-id="Browse"]').boundingBox())!;
     expect(first.x).toBeGreaterThanOrEqual((await stage.boundingBox())!.x);
     const overview = page.getByRole('button', { name: 'Overview (fit diagram)', exact: true });
     await expect(overview).toContainText('Overview');
-    await expect(overview).toBeEnabled();
-    await overview.click();
+    await expect(overview).toBeDisabled();
+    await expect(page.locator('.zf-zoom-controls span')).toHaveText('Fitted');
+    await expect(stage.locator('[data-shape-id]')).toHaveCount(3);
     const fitted = await stage.locator(':scope > svg').getAttribute('viewBox');
     for (const shape of await stage.locator('[data-shape-id]').all()) {
       const box = (await shape.boundingBox())!;
       const canvas = (await stage.boundingBox())!;
+      expect(box.y).toBeGreaterThanOrEqual(canvas.y);
+      expect(box.y + box.height).toBeLessThanOrEqual(canvas.y + canvas.height);
       expect(box.x).toBeGreaterThanOrEqual(canvas.x);
       expect(box.x + box.width).toBeLessThanOrEqual(canvas.x + canvas.width);
     }
+    await page.getByRole('button', { name: 'Zoom in', exact: true }).click();
+    await overview.click();
+    await expect(stage.locator(':scope > svg')).toHaveAttribute('viewBox', fitted!);
     await page.getByRole('link', { name: 'Open checkout board', exact: true }).locator('.appendix-icon').click();
     await page.locator('.zf-breadcrumbs button').first().click();
     await expect(stage).toHaveAttribute('data-board', 'root');
     const restored = (await stage.locator(':scope > svg').getAttribute('viewBox'))!.split(' ').map(Number);
     // Browser SVG matrix round trips can differ by fractions of a screen pixel.
     fitted!.split(' ').map(Number).forEach((value, i) => expect(Math.abs(restored[i] - value)).toBeLessThan(0.1));
+  });
+
+  test('only zooms the initial phone view when fitted labels fall below 11 px', async ({ page }) => {
+    await page.goto('/'); await previewReady(page);
+    await page.locator('#file').setInputFiles({ name: 'wide.d2', mimeType: 'text/plain',
+      buffer: Buffer.from('direction: right\na -> b -> c -> d -> e -> f') });
+    await previewReady(page);
+    const size = () => page.locator('.zf-stage text').first().evaluate(node =>
+      parseFloat(getComputedStyle(node).fontSize) * Math.abs((node as SVGGraphicsElement).getScreenCTM()!.a));
+    const initial = await size();
+    await expect(page.getByRole('button', { name: 'Overview (fit diagram)', exact: true })).toBeEnabled();
+    await page.getByRole('button', { name: 'Overview (fit diagram)', exact: true }).click();
+    expect(await size()).toBeLessThan(11);
+    expect(initial).toBeGreaterThan(await size());
   });
 });

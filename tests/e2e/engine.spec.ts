@@ -150,3 +150,47 @@ test('editing the other pane keeps a stalled pane\'s restart notice', async ({ p
   await expect(page.locator('#viewer .zf-stage')).toContainText('Stalled first pane');
   await expect(page.locator('#engine-notice')).toBeHidden();
 });
+
+for (const mobile of [false, true]) for (const theme of ['light', 'dark'] as const) {
+  test(`starter image matches the live fit on ${mobile ? 'phone' : 'desktop'} in ${theme}`, async ({ page }) => {
+    await page.setViewportSize(mobile ? { width: 390, height: 844 } : { width: 1440, height: 900 });
+    await page.emulateMedia({ colorScheme: theme, reducedMotion: 'reduce' });
+    await page.addInitScript(() => localStorage.clear());
+    let release!: () => void;
+    const gate = new Promise<void>(resolve => { release = resolve; });
+    await page.route(d2Module, async route => { await gate; await route.continue(); });
+    let before: { label: string; x: number; y: number; width: number; height: number }[];
+    try {
+      await page.goto('/', { waitUntil: 'domcontentloaded' });
+      const stage = page.locator('.zf-stage');
+      await expect(stage).toHaveClass(/zf-starter-preview/);
+      // Lay out the background SVG invisibly at its actual CSS size to compare label bounds.
+      before = await stage.evaluate(async element => {
+        const style = getComputedStyle(element);
+        const url = style.backgroundImage.slice(5, -2);
+        const source = await (await fetch(url)).text();
+        const svg = document.importNode(new DOMParser().parseFromString(source, 'image/svg+xml').documentElement, true);
+        const bounds = element.getBoundingClientRect();
+        const box = document.createElement('div');
+        box.style.cssText = `position:fixed;visibility:hidden;left:${bounds.left + element.clientLeft}px;top:${bounds.top + element.clientTop}px;width:${element.clientWidth}px;height:${element.clientHeight}px`;
+        svg.setAttribute('style', `position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:${style.backgroundSize.replace(/ auto$/, '')};height:auto`);
+        box.append(svg); document.body.append(box);
+        // WebKit's document.fonts.ready also waits for the deliberately held module request.
+        // Load just the starter's embedded fonts while preserving the cold-loading layout.
+        await Promise.all([...svg.querySelectorAll('text')].map(text => {
+          const font = getComputedStyle(text);
+          return document.fonts.load(`${font.fontSize} ${font.fontFamily}`, text.textContent ?? '');
+        }));
+        const result = [...svg.querySelectorAll('text')].map(text => ({ label: text.textContent!, ...text.getBoundingClientRect().toJSON() }));
+        box.remove(); return result;
+      });
+    } finally { release(); }
+    await previewReady(page);
+    expect(before.map(text => text.label)).toEqual(['Browse', 'Checkout', 'Receipt']);
+    for (const old of before) {
+      const live = await page.locator('.zf-stage text').getByText(old.label, { exact: true })
+        .evaluate(text => text.getBoundingClientRect().toJSON());
+      for (const key of ['x', 'y', 'width', 'height'] as const) expect(Math.abs(live[key] - old[key])).toBeLessThan(1);
+    }
+  });
+}

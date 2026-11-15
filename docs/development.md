@@ -18,12 +18,17 @@ tests run against the Vite dev server locally. In CI, and locally with
 The app build is written to `apps/web/dist`. D2 is loaded lazily, but its bundled
 compiler is still a large download (roughly 8.5 MB gzip).
 
-The untouched `order.d2` starter shows a small, static root-board SVG while D2
+The untouched `order.d2` starter shows a static root-board SVG while D2
 downloads. It is labelled as an example preview and is removed when the live
 preview arrives, the source changes, or startup fails. Other documents, saved
 export choices and non-root routes do not show it. The light and dark SVG assets
 in `apps/web/src/order-preview*.svg` are current-board SVG exports of `apps/web/src/examples/order.d2` in light and dark
 mode. Regenerate both through Export → Current board image (SVG) if the starter changes.
+For the loading preview, match the live fit's 16-unit margin: the current starter's
+outer SVG is 515 × 98 with viewBox `0 0 515 98`, and its nested SVG is 515 × 98
+with viewBox `-4 -4 515 98`. (Image downloads retain their larger export margin.)
+The CSS caps this crop at 772.5 px wide, matching the live 1.5× ceiling. Recheck
+the static-to-live shape bounds on desktop and phone after changing the starter.
 
 To measure cold loading, see `spike/first-preview.mjs`. On this Mac, against the
 local production preview at 10 Mbps and 40 ms latency, the pre-change median of

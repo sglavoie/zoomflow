@@ -127,7 +127,21 @@ export function createViewport(stage: HTMLElement, host: HTMLElement, clamp: typ
   signal.addEventListener('abort', () => windowEvents?.abort());
 
   function scale() { return base && box ? base.width / box.width : 1; }
+  function updateGrid() {
+    const matrix = svg?.getScreenCTM();
+    stage.toggleAttribute('data-canvas-grid', Boolean(matrix));
+    if (!matrix) return;
+    // Keep the grid outside the SVG: downloaded images retain their original background.
+    // CSS tiles use the stage's padding box, whereas the SVG matrix uses screen coordinates.
+    const bounds = stage.getBoundingClientRect();
+    const spacing = 24 * Math.abs(matrix.a);
+    stage.style.setProperty('--zf-grid-size', `${spacing}px`);
+    stage.style.setProperty('--zf-grid-radius', `${0.7 * Math.abs(matrix.a)}px`);
+    stage.style.setProperty('--zf-grid-x', `${matrix.e - bounds.left - stage.clientLeft - spacing / 2}px`);
+    stage.style.setProperty('--zf-grid-y', `${matrix.f - bounds.top - stage.clientTop - spacing / 2}px`);
+  }
   function updateControls() {
+    updateGrid();
     const currentScale = scale();
     const zoomed = Math.abs(currentScale - 1) > zoomEpsilon;
     const offset = Boolean(base && box && (Math.abs(box.x - base.x) > zoomEpsilon || Math.abs(box.y - base.y) > zoomEpsilon));
@@ -388,8 +402,8 @@ export function createViewport(stage: HTMLElement, host: HTMLElement, clamp: typ
     const margin = Math.max(16, Math.min(32, Math.min(right - left, bottom - top) * 0.12));
     const width = right - left + margin * 2;
     const height = bottom - top + margin * 2;
-    // Fitting is an overview, not an instruction to magnify a three-step flow to billboard size.
-    const padding = Math.max(1, Math.min(stage.clientWidth / width, stage.clientHeight / height) / 1.1);
+    // Fit every shape with breathing room, magnifying small diagrams by at most 1.5×.
+    const padding = Math.max(1, Math.min(stage.clientWidth / width, stage.clientHeight / height) / 1.5);
     return { x: (left + right - width * padding) / 2, y: (top + bottom - height * padding) / 2,
       width: width * padding, height: height * padding };
   }
@@ -411,11 +425,12 @@ export function createViewport(stage: HTMLElement, host: HTMLElement, clamp: typ
           y: base.y + base.height * previous.centerY - height / 2, width, height }, false);
       } else {
         svg.setAttribute('viewBox', `${base.x} ${base.y} ${base.width} ${base.height}`);
-        // On a phone, start at readable text size. Overview always returns to the whole diagram.
+        // On a phone, keep the whole diagram unless fitted labels fall below 11 px.
+        // When they do, aim for 14 px; Overview still returns to the whole diagram.
         if (touch && stage.clientWidth < 600 && !stage.dataset.layerRoot) {
           const text = svg.querySelector('text');
           const pixels = text && parseFloat(getComputedStyle(text).fontSize) * Math.abs(text.getScreenCTM()?.a ?? 1);
-          if (pixels && pixels < 14) {
+          if (pixels && pixels < 11) {
             const factor = Math.min(2.5, 14 / pixels);
             setBox({ x: base.x, y: base.y + base.height * (1 - 1 / factor) / 2,
               width: base.width / factor, height: base.height / factor });
@@ -537,6 +552,8 @@ export function createViewport(stage: HTMLElement, host: HTMLElement, clamp: typ
     controls.remove();
     hint.remove();
     stage.classList.remove('zf-pan-ready', 'zf-panning');
+    stage.removeAttribute('data-canvas-grid');
+    for (const name of ['size', 'radius', 'x', 'y']) stage.style.removeProperty(`--zf-grid-${name}`);
   }
   stage.addEventListener('zf-destroy', destroy, { signal });
   /** Release page-level listeners while the viewport is hidden; Viewer.suspend() and resume() forward here. */

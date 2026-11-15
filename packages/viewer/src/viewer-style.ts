@@ -37,6 +37,13 @@ export const viewerStyle = `
 .zf-stage.zf-panning *, .zf-stage.zf-panning { cursor: grabbing !important; }
 .zf-visually-hidden { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
 .zf-stage { grid-column: 1 / -1; position: relative; flex: 1; min-height: 0; overflow: hidden; display: grid; place-items: center; border: 1px solid #8192a433; border-radius: 10px; background: var(--surface); }
+/* Stage-only paint: shape fills remain opaque and image exports keep the D2 background. */
+.zf-stage[data-canvas-grid] {
+  background-image: radial-gradient(circle, color-mix(in srgb, var(--muted, #52657d) 25%, transparent) var(--zf-grid-radius), transparent calc(var(--zf-grid-radius) + .3px));
+  background-size: var(--zf-grid-size) var(--zf-grid-size);
+  background-position: var(--zf-grid-x) var(--zf-grid-y);
+}
+.zf-stage[data-canvas-grid] > svg > rect, .zf-stage[data-canvas-grid] > svg > svg > rect { opacity: 0; }
 .zf-stage:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
 .zf-stage > svg { display: block; width: 100%; height: 100%; max-width: 100%; max-height: 100%; }
 /* Badges keep their screen size while board viewports shrink with zoom. Clip at the stage only. */

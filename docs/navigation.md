@@ -32,11 +32,13 @@ selector is under **View** in the header, separate from **Export**, which closes
 Use the preview's +, − and **Overview** controls or the mouse wheel to zoom. Drag empty
 space to pan, or hold Space and drag a shape or link; middle-button dragging also
 pans. Touch dragging works after zooming. Small diagrams open at a comfortable
-reading size. Phones start closer when labels would otherwise be too small;
+reading size, up to 1.5×. Phones start closer only when fitted labels would be under 11 px;
 **Overview** (or **0**) shows the whole diagram. Edits preserve zoom and pan, and
 renaming a focused shape keeps its centre and scale in place through layout changes.
-Returning to a board restores its view.
-The zoom readout says **Fit** at the fitted baseline; percentages describe magnification
+Returning to a board restores its view. A quiet dot grid follows the diagram as you pan
+and zoom in either theme, in the app and offline HTML. It never animates on its own
+and is excluded from downloaded SVG and PNG images.
+The zoom readout says **Fitted** at the fitted baseline; percentages describe magnification
 relative to that fit. A hint below the canvas explains panning after zooming in.
 Deep breadcrumb trails keep the first board, parent and current board visible on
 one row. **Earlier boards** opens the intermediate visits; use arrows or Tab to

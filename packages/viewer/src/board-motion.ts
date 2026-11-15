@@ -41,6 +41,12 @@ export function setupBoardMotion(stage: HTMLElement) {
       const style = getComputedStyle(rings[index]);
       for (const property of ['fill', 'fill-opacity', 'stroke', 'stroke-width', 'vector-effect']) ring.style.setProperty(property, style.getPropertyValue(property));
     });
+    // Preserve the viewer's transparent canvas backgrounds in the isolated image too.
+    // Otherwise a navigation snapshot would briefly paint over the stage's dot grid.
+    const backgrounds = svg.querySelectorAll(':scope > rect, :scope > svg > rect');
+    copy.querySelectorAll<SVGElement>(':scope > rect, :scope > svg > rect').forEach((rect, index) => {
+      rect.style.opacity = getComputedStyle(backgrounds[index]).opacity;
+    });
     image.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(new XMLSerializer().serializeToString(copy))}`;
     return { image, origin: bounds(anchor) };
   }
