@@ -33,7 +33,7 @@ export function decorateLinks(svg: Element, boards: Map<string, { name: string; 
   const badgeScale = 4 / 3;
   // Read live: the primary pointer can change, and an attached viewport re-measures when it does.
   const coarse = matchMedia('(pointer: coarse)');
-  const cues: { link: SVGAElement; shape: SVGGraphicsElement; badge: SVGGElement; hit: SVGRectElement; x: number; y: number;
+  const cues: { link: SVGAElement; shape: SVGGraphicsElement; badge: SVGGElement; hit: SVGRectElement; x: number; y: number; countRight: number;
     toReference?: DOMMatrix; bounds?: Rect; obstacles: { node: Element; bounds: Rect; link: boolean; gap: number }[] }[] = [];
   function ancestor(parent: string, child: string): boolean {
     for (let id = boards.get(child)?.parent; id; id = boards.get(id)?.parent) if (id === parent) return true;
@@ -115,9 +115,11 @@ export function decorateLinks(svg: Element, boards: Map<string, { name: string; 
       badge.replaceChildren(circle, arrow);
       const target = boards.get(link.dataset.board ?? '');
       const count = target?.diagram?.shapes.length ?? target?.searchShapes?.length;
+      let countRight = 16;
       if (direction === 'child' && count !== undefined && !besideTooltip) {
         const label = `${count} inside`;
         const width = label.length * 5.5 + 12;
+        countRight = 16 + width + 10;
         const pill = document.createElementNS(ns, 'rect');
         // Extend outward from the corner, keeping the top and left entry arrows clear.
         pill.setAttribute('x', '16'); pill.setAttribute('y', '5');
@@ -159,7 +161,7 @@ export function decorateLinks(svg: Element, boards: Map<string, { name: string; 
         hit.setAttribute('fill', 'transparent');
         hit.setAttribute('aria-hidden', 'true');
         link.prepend(hit);
-        cues.push({ link, shape, badge, hit, x: matrix.e + 16, y: matrix.f + 16, obstacles: [] });
+        cues.push({ link, shape, badge, hit, x: matrix.e + 16, y: matrix.f + 16, countRight, obstacles: [] });
       }
     }
   }
@@ -217,6 +219,7 @@ export function decorateLinks(svg: Element, boards: Map<string, { name: string; 
     const screen = reference.getScreenCTM();
     if (!measured || !screen || !screen.a || !screen.d) return;
     const touch = coarse.matches;
+    const stageRight = (svg.closest('.zf-stage') ?? svg.parentElement)!.getBoundingClientRect().right - 4;
     // Expand touch targets to 44 screen pixels, expressed in reference units.
     const expand = (rect: Rect, enabled: boolean): Rect => {
       const dx = enabled ? Math.max(0, (44 / Math.abs(screen.a) - (rect.right - rect.left)) / 2) : 0;
@@ -240,13 +243,16 @@ export function decorateLinks(svg: Element, boards: Map<string, { name: string; 
       const fromReference = cue.toReference.inverse();
       const start = new DOMPoint(area.left, area.top).matrixTransform(fromReference);
       const end = new DOMPoint(area.right, area.bottom).matrixTransform(fromReference);
-      return [{ cue, scale: 1 / Math.abs(link.a), start, end }];
+      return [{ cue, scale: 1 / Math.abs(link.a), start, end, link }];
     });
-    for (const { cue, scale, start, end } of updates) {
+    for (const { cue, scale, start, end, link } of updates) {
       // Size badges in screen pixels, independently of diagram fit and zoom.
       const size = scale * badgeScale;
-      // On dense overviews the arrow remains available without covering neighboring labels.
-      const compact = (end.y - start.y) / scale < 44;
+      // Counts are optional: keep the arrow when the pill would leave the canvas or
+      // push the composite link's center beyond its own shape into empty space.
+      const outward = (cue.countRight - 16) * size;
+      const right = new DOMPoint(cue.x + outward, cue.y).matrixTransform(link).x;
+      const compact = (end.y - start.y) / scale < 44 || end.x - start.x < outward || right > stageRight;
       for (const label of cue.badge.querySelectorAll('rect, text')) label.setAttribute('display', compact ? 'none' : '');
       // Keep a fixed-size badge above the node's center even when the diagram is zoomed out.
       const y = Math.min(cue.y - 16 * size, start.y + (end.y - start.y) / 4 - 28 * size);

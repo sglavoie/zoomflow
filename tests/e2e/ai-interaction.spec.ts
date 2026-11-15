@@ -79,7 +79,7 @@ test('AI edits highlight only changed lines, preserve selection and undo, and re
   await expect(source(page)).toHaveText('other: Unrelated');
   await expect(page.locator('.zf-ai-changed')).toHaveCount(0);
   await page.locator('#example-picker > summary').click();
-  await page.getByRole('button', { name: /^Order flow/ }).click();
+  await page.locator('#example-picker').getByRole('button', { name: /^Order flow/ }).click();
   await expect(source(page)).toHaveText(after, { useInnerText: true });
   await expect(page.locator('.zf-ai-changed')).toHaveCount(0);
 });

@@ -28,6 +28,8 @@ highlights its shape. Board previews show a cropped thumbnail and the names of t
 steps or topics inside; hover the shape, arrow badge, or “N inside” pill to see it.
 The preview replaces redundant hover hints, and other link hints sit beside their
 shape. Keyboard focus keeps a distinct outline. Link badges also appear in exported HTML.
+The optional count pill yields to the arrow alone on narrow shapes, near the canvas
+edge, or beside an authored tooltip; zoom or pan to make room for it.
 Open a `.d2` file or drop one onto the page; dropping several files opens the first
 and says to drop one file at a time. Files are compiled locally
 with D2's WASM worker. Light, dark and system themes use D2's generated palettes.

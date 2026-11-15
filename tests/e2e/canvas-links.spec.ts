@@ -213,3 +213,26 @@ test('fallback link hints stay beside their subject and follow the viewport', as
   }).toBeLessThan(2);
   await check();
 });
+
+test('detail counts yield to narrow shapes and canvas edges while the arrow stays usable', async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.goto('/'); await previewReady(page);
+  await source(page).fill('a.link: layers.child\nlayers.child: {b}'); await previewReady(page);
+  const link = page.getByRole('link', { name: 'Open a board', exact: true });
+  const pill = link.locator('.appendix-icon rect');
+  await expect(pill).toBeHidden();
+  await page.getByRole('button', { name: 'Zoom in', exact: true }).click();
+  await expect(pill).toBeVisible();
+  const shape = (await link.locator('[data-shape-id]').boundingBox())!;
+  const stage = (await page.locator('.zf-stage').boundingBox())!;
+  const x = shape.x + shape.width / 2, y = shape.y + shape.height / 2;
+  // Keep the circle inside the stage while the optional count would overflow it.
+  await page.mouse.move(x, y);
+  await page.keyboard.down('ControlOrMeta'); await page.mouse.down();
+  await page.mouse.move(x + stage.x + stage.width - 30 - shape.x - shape.width, y, { steps: 8 });
+  await page.mouse.up(); await page.keyboard.up('ControlOrMeta');
+  await expect(pill).toBeHidden();
+  await expect(link.locator('.appendix-icon circle')).toBeVisible();
+  await link.locator('.appendix-icon').click();
+  await expect(page.locator('.zf-stage')).toHaveAttribute('data-board', 'root.layers.child');
+});
