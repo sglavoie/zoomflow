@@ -138,15 +138,19 @@ test.describe('with a held compiler', () => {
       expect(body).toContain('const d2 = new D2();');
       await route.fulfill({ response, body: body.replace('const d2 = new D2();', `
         const d2 = new D2();
-        const compile = d2.compile.bind(d2);
-        window.atlasProbe = { hold: false };
-        d2.compile = async (input, options) => {
-          if (window.atlasProbe.hold) {
-            window.atlasProbe.hold = false;
-            await new Promise(resolve => { window.atlasProbe.release = resolve; });
-          }
-          return compile(input, options);
-        };
+        // Only the first worker draws the user's documents. Picker pictures have
+        // their own worker and must neither reset nor consume this hold.
+        if (!window.atlasProbe) {
+          const probe = window.atlasProbe = { hold: false };
+          const compile = d2.compile.bind(d2);
+          d2.compile = async (input, options) => {
+            if (probe.hold) {
+              probe.hold = false;
+              await new Promise(resolve => { probe.release = resolve; });
+            }
+            return compile(input, options);
+          };
+        }
       `) });
     });
     await page.goto('/');
@@ -154,6 +158,10 @@ test.describe('with a held compiler', () => {
     await showing(page, 'index.d2');
     await page.evaluate(() => { (window as any).atlasProbe.hold = true; });
     await page.locator('#example-picker > summary').click();
+    // Start the background compiler while the foreground hold is armed. This
+    // makes probe isolation explicit instead of depending on worker startup timing.
+    await expect(page.locator('#example-options .example-picture img').first()).toBeVisible();
+    expect(await page.evaluate(() => (window as any).atlasProbe.hold)).toBe(true);
     await page.getByRole('button', { name: 'Atlas map of the atlas project' }).click();
     await expect.poll(() => page.evaluate(() => typeof (window as any).atlasProbe.release)).toBe('function');
 
