@@ -1,4 +1,4 @@
-import { expect, type Page } from '@playwright/test';
+import { expect, type Locator, type Page } from '@playwright/test';
 import { openView } from './helpers';
 
 export async function openDownloads(page: Page) {
@@ -31,4 +31,11 @@ export async function downloadSource(page: Page) {
   await openDownloads(page);
   await page.getByRole('button', { name: 'Download source (.d2)' }).click();
   await page.locator('#header-more-toggle').click();
+}
+
+/** Decorative icons and shortcut hints are excluded from each exact accessible name. */
+export async function expectMenuItems(menu: Locator, names: string[]) {
+  const items = menu.getByRole('menuitem');
+  await expect(items).toHaveCount(names.length);
+  for (const [index, name] of names.entries()) await expect(items.nth(index)).toHaveAccessibleName(name);
 }

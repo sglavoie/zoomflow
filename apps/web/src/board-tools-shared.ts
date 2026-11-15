@@ -1,3 +1,4 @@
+import type { icons } from './icons';
 import type { DocumentView } from '@zoomflow/viewer';
 import type { BuilderTarget } from './builder-dialog';
 import type { BuilderKind } from './board-model';
@@ -39,7 +40,7 @@ export type BoardToolsOptions = {
   /** The document is generated and read-only: shapes only open the files they link to. */
   readOnly?: () => boolean;
 };
-export type Item = (label: string, run: (returnFocus: HTMLElement) => void, options?: { relinks?: boolean; keys?: string }) => HTMLButtonElement;
+export type Item = (label: string, run: (returnFocus: HTMLElement) => void, options?: { relinks?: boolean; keys?: string; icon?: keyof typeof icons; group?: 'editing' | 'boards' | 'view' | 'delete' }) => HTMLButtonElement;
 
 export const stale = 'This board changed while the builder was open. Close and reopen the builder to use the latest version.';
 export const compiling = 'This diagram changed while the builder was open. Wait for the preview to update, then apply again.';

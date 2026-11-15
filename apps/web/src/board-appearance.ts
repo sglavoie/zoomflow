@@ -1,3 +1,4 @@
+import { iconLabel } from './icons';
 import type { Viewer } from '@zoomflow/viewer';
 import { lookControls, lookFields } from './builder-dialog';
 import { flowSource, readFlow } from './flow-model';
@@ -14,7 +15,11 @@ export function setupBoardAppearance(toolbar: HTMLElement, viewer: Viewer, prefi
   host.hidden = true;
   toolbar.append(host);
   const details = host.querySelector('details')!;
-  details.querySelector('summary')!.textContent = 'Style';
+  const summary = details.querySelector('summary')!;
+  iconLabel(summary, 'style', 'Style');
+  const chevron = document.createElement('span');
+  chevron.className = 'picker-chevron'; chevron.setAttribute('aria-hidden', 'true'); chevron.textContent = '⌄';
+  summary.append(chevron);
   const controls = lookControls(host, prefix);
   const read = () => {
     const sites = current();

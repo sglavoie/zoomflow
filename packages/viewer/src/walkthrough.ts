@@ -12,7 +12,7 @@ export function setupWalkthrough(stage: HTMLElement, toolbar: HTMLElement, host:
   navigate(board: string): void | Promise<void>;
 }) {
   const trigger = document.createElement('button');
-  trigger.type = 'button'; trigger.className = 'zf-walkthrough-trigger'; trigger.textContent = 'Walkthrough';
+  trigger.type = 'button'; trigger.className = 'zf-walkthrough-trigger'; trigger.innerHTML = '<svg class="ui-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m8 4 12 8-12 8V4Z"/></svg>Walkthrough';
   trigger.title = 'Walk through this diagram step by step';
   trigger.setAttribute('aria-label', 'Walkthrough');
   trigger.setAttribute('aria-pressed', 'false');

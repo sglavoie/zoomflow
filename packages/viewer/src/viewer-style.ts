@@ -1,5 +1,7 @@
 /** Canvas, navigation and controls shared by the workspace and standalone HTML. */
 export const viewerStyle = `
+.ui-icon { display: inline-block; width: 16px; height: 16px; flex-shrink: 0; vertical-align: -3px; margin-right: 6px; }
+
 /* One violet accent connects a detail node, its preview and the breadcrumb inside it. */
 .zf-detail-link, .zf-detail-crumb { --zf-detail-accent: #8272b4; }
 .zf-depth-sheet { pointer-events: none; transform: translate(4px, -4px); opacity: .7; }

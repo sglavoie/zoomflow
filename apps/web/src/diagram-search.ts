@@ -1,3 +1,4 @@
+import { iconLabel } from './icons';
 import { indexDiagramSearch, searchDiagram, type Board, type DiagramSearchEntry } from '@zoomflow/core';
 import type { Viewer } from '@zoomflow/viewer';
 import { pageListeners } from './canvas-guidance';
@@ -12,7 +13,7 @@ export function setupDiagramSearch(host: HTMLElement, scope: PaneScope, viewer: 
   const button = document.createElement('button');
   button.type = 'button';
   button.className = 'diagram-search-trigger';
-  button.textContent = 'Find in diagram';
+  iconLabel(button, 'search', 'Find in diagram');
   button.setAttribute('aria-label', 'Find in diagram');
   button.disabled = true;
   button.setAttribute('aria-haspopup', 'dialog');

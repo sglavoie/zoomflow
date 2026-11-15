@@ -588,6 +588,8 @@ header > strong {
   display: grid;
   width: max-content;
   max-width: min(320px, calc(100vw - 16px));
+  max-height: calc(100dvh - 16px);
+  overflow-y: auto;
   padding: var(--space-1);
   border: 1px solid var(--border-strong);
   border-radius: 10px;
@@ -610,6 +612,8 @@ header > strong {
   color: var(--muted);
 }
 .board-menu [role="menuitem"] {
+  display: flex;
+  align-items: center;
   justify-content: flex-start;
   padding: 6px var(--space-2);
   border: 0;
@@ -2949,7 +2953,8 @@ header > strong { letter-spacing: -0.7px; }
 
 /* The document is the header's anchor; creation and preferences live in compact menus. */
 header { padding: 10px 20px; gap: 18px; }
-header > strong { font-size: 18px; letter-spacing: -0.6px; }
+header > strong { display: inline-flex; align-items: center; gap: 6px; font-size: 18px; letter-spacing: -0.6px; }
+.brand-mark { flex-shrink: 0; }
 .header-controls { gap: 12px; flex-wrap: nowrap; }
 .document-control { order: -1; width: min(300px, 32vw); }
 #create-open { position: relative; flex-shrink: 0; }
@@ -2979,7 +2984,9 @@ header > strong { font-size: 18px; letter-spacing: -0.6px; }
 .board-appearance { position: relative; }
 .board-appearance[hidden] { display: none; }
 .board-appearance .builder-appearance { margin: 0; padding: 0; border: 0; }
-.board-appearance .builder-appearance > summary { padding: 8px 10px; font-weight: 400; font-size: 13px; color: var(--muted); }
+.board-appearance .builder-appearance > summary { display: flex; align-items: center; list-style: none; padding: 8px 10px; font-weight: 400; font-size: 13px; color: var(--muted); }
+.board-appearance .builder-appearance > summary::-webkit-details-marker { display: none; }
+.board-appearance .builder-appearance > summary .picker-chevron { display: inline; }
 .board-appearance .builder-look { position: absolute; z-index: var(--z-popover); top: 100%; left: 0; width: min(320px, calc(100vw - 48px)); padding: 14px; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; box-shadow: var(--shadow-dialog); }
 @media (max-width: 600px) {
   [data-part="mobile-view-switch"] { padding: 4px 12px; gap: 6px; }
@@ -2987,11 +2994,10 @@ header > strong { font-size: 18px; letter-spacing: -0.6px; }
   .flow-builder-toolbar { display: grid; grid-template-columns: auto auto minmax(0, 1fr) auto auto; gap: 2px; }
   .flow-builder-toolbar :is(button, summary) { padding-inline: 6px; font-size: 12px; }
   .flow-builder-toolbar .diagram-search-trigger, .flow-builder-toolbar .project-search-trigger { font-size: 0; min-width: 32px; }
-  .flow-builder-toolbar .diagram-search-trigger::after, .flow-builder-toolbar .project-search-trigger::after { content: '⌕'; font-size: 23px; }
+  .flow-builder-toolbar .project-search-trigger::after { content: '⌕'; font-size: 23px; }
   .flow-builder-toolbar .board-appearance { justify-self: end; }
   .board-appearance .builder-look { left: auto; right: -70px; }
   .flow-builder-toolbar .zf-walkthrough-trigger { font-size: 0; min-width: 36px; }
-  .flow-builder-toolbar .zf-walkthrough-trigger::after { content: '▷'; font-size: 20px; }
   .zf-breadcrumbs { min-height: 28px; }
 }
 @media (min-width: 1000px) {
@@ -2999,8 +3005,8 @@ header > strong { font-size: 18px; letter-spacing: -0.6px; }
   #flow-builder[data-entry="quick"]:has(.builder-body) > form { height: min(660px, calc(100dvh - 74px)); }
 }
 @media (max-width: 600px) {
-  #workspace[data-layout="single"] #pane-a > [data-part="mobile-view-switch"] { position: fixed; top: 8px; left: 108px; right: 84px; width: auto; padding: 0; border: 0; background: transparent; }
-  #workspace[data-layout="single"] #pane-a > [data-part="mobile-view-switch"] button { padding-inline: 4px; font-size: 12px; }
+  #workspace[data-layout="single"] #pane-a > [data-part="mobile-view-switch"] { position: fixed; top: 8px; left: 132px; right: 84px; width: auto; padding: 0; border: 0; background: transparent; }
+  #workspace[data-layout="single"] #pane-a > [data-part="mobile-view-switch"] button { flex: 1 0 auto; white-space: nowrap; padding-inline: 4px; font-size: 12px; }
 }
 @media (min-width: 601px) and (max-width: 999px) and (max-height: 500px) {
   header { display: flex; }
@@ -3063,3 +3069,10 @@ header > strong { font-size: 18px; letter-spacing: -0.6px; }
   display: -webkit-box !important;
   visibility: hidden;
 }
+
+/* Shape actions keep the same keyboard paths in the selection and context menus. */
+.board-menu [role="separator"] { height: 1px; background: var(--border); margin: 4px 6px; }
+.board-menu [data-menu-group="delete"] { color: var(--danger); }
+.board-menu [data-menu-group="delete"]:is(:hover, :focus-visible) { background: var(--danger-surface); }
+.menu-shortcut { display: none; margin-left: auto; padding-left: 18px; color: var(--muted); font-size: 11px; }
+@media (pointer: fine) { .menu-shortcut { display: inline; } }

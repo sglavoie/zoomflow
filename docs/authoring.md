@@ -3,6 +3,9 @@
 [Working with diagrams](workspace.md) · [Create and edit](authoring.md) · [Explore and inspect](navigation.md) · [Export and keyboard controls](exporting.md)
 
 Selecting a node shows its frequent actions beside it; **More** opens the full menu.
+The menu groups editing, boards and links, and view actions, with **Delete** last in
+its own group. On a mouse or trackpad, shortcut hints appear beside the actions;
+the same groups are available from right-click or **Shift+F10**.
 New and moved nodes and their incoming connections briefly stand out. Destructive
 canvas edits offer an **Undo** confirmation beside the diagram, valid until the next edit.
 Adding a step or topic opens its name field immediately. A hint beside the field

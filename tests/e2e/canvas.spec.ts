@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test';
 import { pathToFileURL } from 'node:url';
 import { readFileSync } from 'node:fs';
 import { selectMenuOption, downloadExport } from './menu';
-import { source, previewReady, stubAiStatus, selectSource, cursorAt, insideStage } from './helpers';
+import { comparesVisuals, source, previewReady, stubAiStatus, selectSource, cursorAt, insideStage } from './helpers';
 
 /** Diagram canvas: zoom, pan, fit, keyboard and touch navigation, and source reveal. */
 
@@ -365,4 +365,69 @@ test('an edge-clamped add handle leaves the selected shape clickable and returns
   await expect(add).toBeVisible();
   await add.click();
   await expect(page.getByRole('textbox', { name: 'Rename New step', exact: true })).toBeVisible();
+});
+
+
+test('shape menu groups actions and shows shortcut hints', { tag: '@visual' }, async ({ page, browserName }) => {
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await stubAiStatus(page);
+  await page.goto('/'); await previewReady(page);
+  const browse = page.locator('#viewer [data-shape-id="Browse"]');
+  const menu = page.getByRole('menu', { name: 'Actions for Browse', exact: true });
+  for (const open of ['selection', 'context']) {
+    await browse.click();
+    if (open === 'selection') await page.getByRole('button', { name: 'More shape actions', exact: true }).click();
+    else await browse.click({ button: 'right' });
+    await expect(menu).toBeVisible();
+    await expect(menu.getByRole('separator')).toHaveCount(3);
+    for (const [label, hint, keys] of [['Rename', 'F2', 'F2'], ['Hide from export', 'H', 'H'], ['Delete', 'Delete', 'Delete Backspace']]) {
+      const action = menu.getByRole('menuitem', { name: label, exact: true });
+      await expect(action).toHaveAttribute('aria-keyshortcuts', keys);
+      await expect(action.locator('.menu-shortcut')).toHaveText(hint);
+      await expect(action.locator('.menu-shortcut')).toBeVisible();
+      await expect(action.locator('.menu-shortcut')).toHaveAttribute('aria-hidden', 'true');
+    }
+    const items = menu.getByRole('menuitem');
+    await expect(items.last()).toHaveAccessibleName('Delete');
+    await expect(menu.getByRole('menuitem', { name: 'Select in source', exact: true })).toHaveAttribute('data-menu-group', 'view');
+    expect(await items.evaluateAll(items => items.every(item => item.querySelector('svg[aria-hidden="true"]')))).toBe(true);
+    expect(await items.evaluateAll(items => items.map(item => item.getAttribute('data-menu-group')))).toEqual([
+      'editing', 'editing', 'editing', 'editing', 'editing', 'boards', 'boards', 'view', 'view', 'delete',
+    ]);
+    await page.keyboard.press('End');
+    await expect(menu.getByRole('menuitem', { name: 'Delete', exact: true })).toBeFocused();
+    await page.keyboard.press('ArrowDown');
+    await expect(menu.getByRole('menuitem', { name: 'Rename', exact: true })).toBeFocused();
+    await page.keyboard.press('Escape');
+    await expect(menu).toBeHidden();
+  }
+  for (const label of ['Edit flow', 'Find in diagram', 'Walkthrough', 'Fullscreen', 'Export', 'Source']) {
+    await expect(page.getByRole('button', { name: label, exact: true }).locator('svg[aria-hidden="true"]')).toHaveCount(1);
+  }
+  await expect(page.locator('.board-outline summary')).toHaveAccessibleName('Boards (3)');
+  await expect(page.locator('.board-appearance .builder-appearance > summary')).toHaveAccessibleName('Style');
+  for (const theme of ['light', 'dark'] as const) for (const width of [1440, 390]) {
+    await page.emulateMedia({ colorScheme: theme });
+    await page.setViewportSize({ width, height: width === 390 ? 844 : 900 });
+    await expect(page.locator('.board-appearance summary .picker-chevron')).toBeVisible();
+    await browse.click({ button: 'right' });
+    const danger = await menu.getByRole('menuitem', { name: 'Delete', exact: true }).evaluate(item => getComputedStyle(item).color);
+    expect(danger).not.toBe(await menu.getByRole('menuitem', { name: 'Rename', exact: true }).evaluate(item => getComputedStyle(item).color));
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(width);
+    if (comparesVisuals(browserName)) await expect(page).toHaveScreenshot(`shape-menu-${theme}-${width}.png`);
+    await page.keyboard.press('Escape');
+  }
+});
+
+test('touch shape menus omit visual shortcut hints', async ({ browser }) => {
+  const context = await browser.newContext({ hasTouch: true, viewport: { width: 390, height: 844 } });
+  try {
+    const page = await context.newPage();
+    await page.goto('/'); await previewReady(page);
+    await page.locator('#viewer [data-shape-id="Browse"]').tap();
+    await page.getByRole('button', { name: 'More shape actions', exact: true }).tap();
+    const rename = page.getByRole('menuitem', { name: 'Rename', exact: true });
+    await expect(rename).toHaveAttribute('aria-keyshortcuts', 'F2');
+    await expect(rename.locator('.menu-shortcut')).toBeHidden();
+  } finally { await context.close(); }
 });

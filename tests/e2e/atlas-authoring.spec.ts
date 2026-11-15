@@ -1,3 +1,4 @@
+import { expectMenuItems } from './menu';
 import { expect, test, } from '@playwright/test';
 import { editorText, openFolder, previewReady } from './helpers';
 import { atlas, showing, crumbs, shapeMenu, } from './atlas-helpers';
@@ -14,11 +15,11 @@ test('links a shape to another file and board, changes and removes the link, and
   await showing(page, 'work/index.d2');
   // A link written in the shape itself only opens from here.
   let menu = await shapeMenu(page, 'Zoomflow', 'Zoomflow');
-  await expect(menu.getByRole('menuitem')).toHaveText(['Move branch…', 'Open diagram', 'Hide from export', 'Select in source']);
+  await expectMenuItems(menu, ['Move branch…', 'Open diagram', 'Hide from export', 'Select in source']);
   await page.keyboard.press('Escape');
 
   menu = await shapeMenu(page, 'Inbox', 'Inbox');
-  await expect(menu.getByRole('menuitem')).toHaveText(['Move branch…', 'Add flow board…', 'Add mind map board…', 'Link to diagram…', 'New linked diagram…', 'Hide from export', 'Select in source']);
+  await expectMenuItems(menu, ['Move branch…', 'Add flow board…', 'Add mind map board…', 'Link to diagram…', 'New linked diagram…', 'Hide from export', 'Select in source']);
   await menu.getByRole('menuitem', { name: 'Link to diagram…' }).click();
   const dialog = page.getByRole('dialog', { name: 'Link to a diagram' });
   await expect(dialog.getByLabel('Diagram file').locator('option')).toHaveText(['broken/links', 'health', 'index', 'projects/zoomflow']);
@@ -36,7 +37,7 @@ test('links a shape to another file and board, changes and removes the link, and
 
   // A linked shape opens, changes or removes its link.
   menu = await shapeMenu(page, 'Inbox', 'Inbox');
-  await expect(menu.getByRole('menuitem')).toHaveText(['Move branch…', 'Open diagram', 'Change linked diagram…', 'Remove link', 'Hide from export', 'Select in source']);
+  await expectMenuItems(menu, ['Move branch…', 'Open diagram', 'Change linked diagram…', 'Remove link', 'Hide from export', 'Select in source']);
   await menu.getByRole('menuitem', { name: 'Change linked diagram…' }).click();
   const change = page.getByRole('dialog', { name: 'Change linked diagram' });
   await expect(change.getByLabel('Diagram file')).toHaveValue('health.d2');

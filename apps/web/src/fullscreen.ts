@@ -1,3 +1,4 @@
+import { iconLabel } from './icons';
 /** Expand the preview without rebuilding the diagram or surrounding panels. */
 export function setupFullscreen(stage: HTMLElement, pane: HTMLElement) {
   const area = document.createElement('div');
@@ -6,7 +7,7 @@ export function setupFullscreen(stage: HTMLElement, pane: HTMLElement) {
   const button = document.createElement('button');
   button.type = 'button';
   button.className = 'zf-fullscreen-toggle';
-  button.textContent = 'Fullscreen';
+  iconLabel(button, 'fullscreen', 'Fullscreen');
   button.setAttribute('aria-pressed', 'false');
   area.append(stage, button);
 
@@ -19,7 +20,7 @@ export function setupFullscreen(stage: HTMLElement, pane: HTMLElement) {
     document.body.classList.toggle('diagram-fullscreen', value);
     pane.toggleAttribute('data-fullscreen', value);
     if (!value) workspace.scrollTop = workspaceScroll;
-    button.textContent = value ? 'Exit fullscreen' : 'Fullscreen';
+    iconLabel(button, 'fullscreen', value ? 'Exit fullscreen' : 'Fullscreen');
     button.setAttribute('aria-pressed', String(value));
     button.focus({ preventScroll: true });
   }

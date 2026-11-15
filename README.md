@@ -38,7 +38,8 @@ use **Retry preview** to try again without losing your source.
    boards; **Edit mind map** reopens the outline. Select or right-click any shape to
    give it a flow or mind map board of its own, so flows and mind maps can open from
    each other. On those boards, rename, add and remove steps and topics right on the
-   diagram with F2, ⌘/Ctrl+Enter, Enter and Delete. On flow boards, **Connect to…**
+   diagram with F2, ⌘/Ctrl+Enter, Enter and Delete. **More** and right-click open the
+   grouped shape menu, with shortcut hints and **Delete** at the end. On flow boards, **Connect to…**
    adds an arrow to another step; select an arrow to edit its label or delete it.
    Drag a node onto a new parent, or use **Move branch…** to choose from a list.
    Mind maps move the whole topic branch; flows and custom D2 diagrams change the

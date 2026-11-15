@@ -1,3 +1,4 @@
+import { iconLabel } from './icons';
 import { readFlow } from './flow-model';
 import type { BoardTransfers } from './board-transfers';
 import type { Board } from '@zoomflow/core';
@@ -128,45 +129,45 @@ export function setupBoardSelection(ctx: Context) {
   /** The actions for a shape, as buttons for the selection bar or items in the menu. */
   function actions(shape: string, item: Item, boardsOnly = false) {
     const items: HTMLButtonElement[] = [];
-    const visibility = boardsOnly ? [] : [item(ctx.viewer.isShapeHidden(shape) ? 'Unhide from export' : 'Hide from export', () => toggleVisibility(shape), { keys: 'H' })];
+    const visibility = boardsOnly ? [] : [item(ctx.viewer.isShapeHidden(shape) ? 'Unhide from export' : 'Hide from export', () => toggleVisibility(shape), { keys: 'H', icon: ctx.viewer.isShapeHidden(shape) ? 'show' : 'hide', group: 'view' })];
     if (ctx.options.readOnly?.()) {
       const action = ctx.shapeAction(shape);
       const files = ctx.options.files?.();
-      if (action.action === 'file' && files) items.push(item('Open diagram', () => files.open(action.link)));
+      if (action.action === 'file' && files) items.push(item('Open diagram', () => files.open(action.link), { icon: 'link', group: 'boards' }));
       return [...items, ...visibility];
     }
     const canvas = boardsOnly ? undefined : ctx.canvasTarget(shape);
     if (canvas) {
-      items.push(item('Rename', () => startRename(shape), { keys: 'F2' }),
-        item(canvas.add, () => ctx.applyCanvas(shape, [{ type: 'add' }]), { keys: 'Control+Enter Meta+Enter Insert' }));
-      if (canvas.sibling) items.push(item('Add sibling topic', () => ctx.applyCanvas(shape, [{ type: 'sibling' }]), { keys: 'Enter' }));
+      items.push(item('Rename', () => startRename(shape), { keys: 'F2', icon: 'edit', group: 'editing' }),
+        item(canvas.add, () => ctx.applyCanvas(shape, [{ type: 'add' }]), { keys: 'Control+Enter Meta+Enter Insert', icon: 'add', group: 'editing' }));
+      if (canvas.sibling) items.push(item('Add sibling topic', () => ctx.applyCanvas(shape, [{ type: 'sibling' }]), { keys: 'Enter', icon: 'branch', group: 'editing' }));
       if (canvas.kind === 'flow') {
-        if (canvas.add !== 'Add branch') items.push(item('Add branch', () => ctx.applyCanvas(shape, [{ type: 'branch' }])));
-        items.push(item('Connect to…', () => ctx.connections.start(shape)));
+        if (canvas.add !== 'Add branch') items.push(item('Add branch', () => ctx.applyCanvas(shape, [{ type: 'branch' }]), { icon: 'branch', group: 'editing' }));
+        items.push(item('Connect to…', () => ctx.connections.start(shape), { icon: 'connect', group: 'editing' }));
       }
     }
     if (!boardsOnly && ctx.branchOwner(ctx.boardId()) && (!ctx.mapCanvas(ctx.boardId()) || shape !== 'n' || ctx.mapCanvas(ctx.boardId())!.trail.length || ctx.transfers?.canMove(ctx.boardId(), shape))) {
-      items.push(item('Move branch…', () => ctx.branches.start(shape)));
+      items.push(item('Move branch…', () => ctx.branches.start(shape), { icon: 'move', group: 'editing' }));
     }
-    if (canvas?.remove) items.push(item('Delete', () => ctx.applyCanvas(shape, [{ type: 'remove' }]), { keys: 'Delete Backspace' }));
     const action = ctx.shapeAction(shape);
     const board = ctx.boardId();
     const files = ctx.options.files?.();
     if (action.action === 'add') {
-      items.push(...(['flow', 'mind map'] as const).map(kind => item(`Add ${kind} board…`, focus => ctx.add(kind, board, shape, focus), { relinks: true })));
+      items.push(...(['flow', 'mind map'] as const).map(kind => item(`Add ${kind} board…`, focus => ctx.add(kind, board, shape, focus), { relinks: true, icon: 'boards', group: 'boards' })));
       if (files) {
-        if (ctx.linkable(files).length) items.push(item('Link to diagram…', focus => void ctx.linkTo(board, shape, files, focus), { relinks: true }));
-        items.push(item('New linked diagram…', focus => void ctx.newLinked(board, shape, files, focus), { relinks: true }));
+        if (ctx.linkable(files).length) items.push(item('Link to diagram…', focus => void ctx.linkTo(board, shape, files, focus), { relinks: true, icon: 'link', group: 'boards' }));
+        items.push(item('New linked diagram…', focus => void ctx.newLinked(board, shape, files, focus), { relinks: true, icon: 'link', group: 'boards' }));
       }
-    } else if (action.action === 'edit') items.push(item(`Edit ${action.kind} board…`, focus => ctx.edit(action.board, focus)));
+    } else if (action.action === 'edit') items.push(item(`Edit ${action.kind} board…`, focus => ctx.edit(action.board, focus), { icon: 'edit', group: 'boards' }));
     else if (action.action === 'file' && files) {
-      items.push(item('Open diagram', () => files.open(action.link)));
+      items.push(item('Open diagram', () => files.open(action.link), { icon: 'link', group: 'boards' }));
       if (action.attached) {
-        items.push(item('Change linked diagram…', focus => void ctx.linkTo(board, shape, files, focus, action.link), { relinks: true }),
-          item('Remove link', () => ctx.applyLink(board, shape), { relinks: true }));
+        items.push(item('Change linked diagram…', focus => void ctx.linkTo(board, shape, files, focus, action.link), { relinks: true, icon: 'link', group: 'boards' }),
+          item('Remove link', () => ctx.applyLink(board, shape), { relinks: true, icon: 'unlink', group: 'boards' }));
       }
     }
-    return [...items, ...visibility];
+    const remove = canvas?.remove ? [item('Delete', () => ctx.applyCanvas(shape, [{ type: 'remove' }]), { keys: 'Delete Backspace', icon: 'delete', group: 'delete' })] : [];
+    return [...items, ...visibility, ...remove];
   }
 
   function refresh() {
@@ -175,7 +176,7 @@ export function setupBoardSelection(ctx: Context) {
     const kind = owner && ctx.current().builder(owner)?.kind;
     ctx.editGroup.hidden = !kind;
     if (kind) {
-      ctx.editBoard.textContent = `Edit ${kind}`;
+      iconLabel(ctx.editBoard, 'edit', `Edit ${kind}`);
       ctx.editBoard.dataset.board = owner;
       setText(ctx.editGroup.querySelector('span')!, kind === 'flow' ? 'Change steps and connections without writing code.'
         : 'Change topics as an outline, without writing code.');
@@ -314,13 +315,20 @@ export function setupBoardSelection(ctx: Context) {
   }
 
   function openMenu(shape: string, element: HTMLElement | SVGElement, x: number, y: number, boardsOnly = false) {
-    const item: Item = (label, run, { keys } = {}) => {
+    const item: Item = (label, run, { keys, icon, group } = {}) => {
       const button = document.createElement('button');
       button.type = 'button';
       button.setAttribute('role', 'menuitem');
       button.tabIndex = -1;
-      button.textContent = label;
-      if (keys) button.setAttribute('aria-keyshortcuts', keys);
+      if (icon) iconLabel(button, icon, label); else button.textContent = label;
+      button.dataset.menuGroup = group;
+      if (keys) {
+        button.setAttribute('aria-keyshortcuts', keys);
+        const hint = document.createElement('span');
+        hint.className = 'menu-shortcut'; hint.setAttribute('aria-hidden', 'true');
+        hint.textContent = keys.includes('Insert') ? addKeys : keys.split(' ')[0];
+        button.append(hint);
+      }
       button.addEventListener('click', () => {
         closeMenu();
         // The menu is gone when the builder closes, so focus returns to the diagram.
@@ -334,11 +342,25 @@ export function setupBoardSelection(ctx: Context) {
     const text = (content: string, className?: string) => Object.assign(document.createElement('p'),
       { textContent: content, ...className ? { className, id: ctx.scope.id('board-menu-note') } : {} });
     const heading = text(`${ctx.shapeLabel(ctx.boardId(), shape)}${ctx.viewer.isShapeHidden(shape) ? ' · Hidden from export' : ''}`);
-    const parts: HTMLElement[] = [heading, ...items];
+    if (!boardsOnly && ctx.options.inSource(shape)) {
+      const select = item('Select in source', () => ctx.options.selectSource(shape, true), { icon: 'source', group: 'view' });
+      const remove = items.findIndex(item => item.dataset.menuGroup === 'delete');
+      items.splice(remove < 0 ? items.length : remove, 0, select);
+    }
+    const parts: HTMLElement[] = [heading];
+    let previous: string | undefined;
+    for (const item of items) {
+      if (previous && previous !== item.dataset.menuGroup) {
+        const separator = document.createElement('div');
+        separator.setAttribute('role', 'separator');
+        parts.push(separator);
+      }
+      parts.push(item);
+      previous = item.dataset.menuGroup;
+    }
     const note = action.action === 'none' && !ctx.canvasTarget(shape) ? text(action.reason, 'board-menu-note') : undefined;
     if (note) parts.push(note);
     for (const part of [heading, note]) { part?.setAttribute('role', 'none'); part?.setAttribute('aria-hidden', 'true'); }
-    if (!boardsOnly && ctx.options.inSource(shape)) parts.push(item('Select in source', () => ctx.options.selectSource(shape, true)));
     // A shape with no actions, such as a link from an imported file, opens no menu.
     if (!parts.some(part => part.getAttribute('role') === 'menuitem')) return false;
     ctx.menu.replaceChildren(...parts);

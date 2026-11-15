@@ -1,3 +1,4 @@
+import { iconLabel } from './icons';
 import { viewerStyle, type ViewerRoute } from '@zoomflow/viewer';
 import { setupExamplePicker } from './example-picker';
 import './style.css';
@@ -18,6 +19,9 @@ import { setupProjectSave } from './project-save-dialog';
 import { restoreField } from './field-preference';
 import { projectFileSystem } from './project-files';
 import type { CompileBuilderPreview } from './builder-preview';
+
+iconLabel(document.querySelector('#header-more-toggle')!, 'export', 'Export');
+iconLabel(document.querySelector('#toggle-source')!, 'source', 'Source');
 
 const canvasStyle = document.createElement('style');
 canvasStyle.textContent = viewerStyle;

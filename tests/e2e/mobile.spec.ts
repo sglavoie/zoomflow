@@ -48,6 +48,16 @@ test('mobile first fit fills the canvas and diagnostics lead to the source', asy
   await page.locator('#mobile-source').click();
   await source(page).fill('broken: {');
   await expect(page.locator('#preview-status')).toHaveText('Preview out of date');
+  // The brand mark and the longer error label must share the original header row.
+  const header = await page.evaluate(() => {
+    const box = (selector: string) => document.querySelector(selector)!.getBoundingClientRect();
+    return { brandRight: box('header > strong').right, previewLeft: box('#mobile-preview').left,
+      sourceRight: box('#mobile-source').right, viewLeft: box('#workspace-view').left,
+      switchBottom: box('#mobile-view-switch').bottom, secondRowTop: box('.header-controls').top };
+  });
+  expect(header.brandRight).toBeLessThanOrEqual(header.previewLeft);
+  expect(header.sourceRight).toBeLessThanOrEqual(header.viewLeft);
+  expect(header.switchBottom).toBeLessThanOrEqual(header.secondRowTop);
   await page.locator('#mobile-preview').click();
   await expect(page.locator('.zf-stage')).toHaveAttribute('data-preview-state', 'stale');
   await page.locator('#mobile-source').click();

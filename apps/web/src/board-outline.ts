@@ -1,3 +1,4 @@
+import { iconLabel } from './icons';
 import type { Board } from '@zoomflow/core';
 import type { Viewer } from '@zoomflow/viewer';
 import type { BoardSites } from './board-model';
@@ -108,7 +109,7 @@ export function setupBoardOutline(host: HTMLElement, viewer: Viewer, edit: (boar
     details.hidden = boards.size < 2;
     showAll.hidden = ![...boards.values()].some(board => board.kind === 'layers');
     depthControls.hidden = showAll.hidden;
-    summary.textContent = `Boards (${boards.size})`;
+    iconLabel(summary, 'boards', `Boards (${boards.size})`);
     const list = (parent?: string): HTMLUListElement | undefined => {
       const children = [...boards.values()].filter(board => board.parent === parent);
       if (!children.length) return;

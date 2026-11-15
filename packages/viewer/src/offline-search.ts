@@ -9,6 +9,7 @@ export function setupOfflineSearch(host: HTMLElement, entries: OfflineSearchEntr
   button.type = 'button';
   button.className = 'zf-search-trigger';
   button.textContent = atlas ? 'Find in atlas' : 'Find in diagram';
+  button.insertAdjacentHTML('afterbegin', '<svg class="ui-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="10" cy="10" r="6"/><path d="m15 15 6 6"/></svg>');
   button.title = 'Find a board or shape (⌘⇧F / Ctrl+Shift+F)';
   button.setAttribute('aria-haspopup', 'dialog');
   button.setAttribute('aria-keyshortcuts', 'Meta+Shift+F Control+Shift+F');
