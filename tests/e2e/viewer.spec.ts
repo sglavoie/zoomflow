@@ -2,7 +2,7 @@ import { selectMenuOption, downloadExport } from './menu';
 import { expect, test } from '@playwright/test';
 import { pathToFileURL } from 'node:url';
 import { readFileSync } from 'node:fs';
-import { board, drill, editorText, previewReady } from './helpers';
+import { board, comparesVisuals, drill, editorText, previewReady, visualSkipReason } from './helpers';
 import { devURL } from './servers';
 import { download } from './export-helpers';
 
@@ -367,7 +367,7 @@ test('destroying a viewer releases its viewport listeners and controls', async (
     const before = space();
     viewer.destroy();
     const after = space();
-    const controls = host.querySelectorAll('.zf-zoom-controls, .zf-pan-hint').length;
+    const controls = host.querySelectorAll('.zf-zoom-controls, .zf-pan-hint, .zf-minimap').length;
     host.remove();
     return { before, after, controls };
   }, `/@fs${process.cwd()}/packages/viewer/src/index.ts`);
@@ -500,11 +500,12 @@ for (const theme of ['light', 'dark'] as const) {
       await expect(page.locator('.zf-zoom-controls span')).toHaveText('Fitted');
     };
     await checkGrid();
+    for (let i = 0; i < 4; i++) await page.getByRole('button', { name: 'Zoom in', exact: true }).click();
     // Actual SVG and PNG downloads must be identical with the visible grid enabled or disabled.
     const withGrid = new Map<string, Buffer>();
     for (const format of ['svg', 'png']) withGrid.set(format, readFileSync(await download(page, format, info)));
-    expect(withGrid.get('svg')!.toString()).not.toMatch(/data-canvas-grid|zf-grid|radial-gradient/);
-    await page.locator('.zf-stage').evaluate(stage => stage.removeAttribute('data-canvas-grid'));
+    expect(withGrid.get('svg')!.toString()).not.toMatch(/data-canvas-grid|zf-grid|radial-gradient|zf-minimap/);
+    await page.locator('.zf-stage').evaluate(stage => { stage.removeAttribute('data-canvas-grid'); stage.querySelector('.zf-minimap')!.remove(); });
     for (const format of ['svg', 'png']) expect(readFileSync(await download(page, format, info))).toEqual(withGrid.get(format));
     const html = await download(page, 'html', info);
     await page.goto('about:blank'); await context.setOffline(true);
@@ -512,3 +513,160 @@ for (const theme of ['light', 'dark'] as const) {
     await checkGrid();
   });
 }
+
+for (const offline of [false, true]) test(`minimap appears when zoomed in and pans the view${offline ? ' offline' : ''}`, async ({ page, context }, info) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.goto('/'); await previewReady(page);
+  if (offline) {
+    const html = await download(page, 'html', info);
+    await page.goto('about:blank'); await context.setOffline(true);
+    await page.goto(pathToFileURL(html).href);
+  }
+  const stage = page.locator('.zf-stage');
+  const map = stage.locator('.zf-minimap');
+  const svg = stage.locator(':scope > svg');
+  await expect(map).toBeHidden();
+  for (let i = 0; i < 4; i++) await page.getByRole('button', { name: 'Zoom in', exact: true }).click();
+  await expect(map).toBeVisible();
+  await expect(map).toHaveAttribute('aria-hidden', 'true');
+  expect(await map.evaluate(node => node.querySelectorAll('a, button, [tabindex]').length)).toBe(0);
+  await expect.poll(() => map.locator('img').evaluate((img: HTMLImageElement) => img.complete && img.naturalWidth > 0)).toBe(true);
+  const picture = await map.locator('img').getAttribute('src');
+  const geometry = async () => {
+    const result = await stage.evaluate(stage => {
+      const svg = stage.querySelector<SVGSVGElement>(':scope > svg')!;
+      const image = stage.querySelector<HTMLImageElement>('.zf-minimap img')!;
+      const copy = new DOMParser().parseFromString(decodeURIComponent(image.src.split(',')[1]), 'image/svg+xml');
+      const [x, y, width, height] = copy.documentElement.getAttribute('viewBox')!.split(' ').map(Number);
+      const bounds = svg.getBoundingClientRect();
+      const inverse = svg.getScreenCTM()!.inverse();
+      const start = new DOMPoint(bounds.left, bounds.top).matrixTransform(inverse);
+      const end = new DOMPoint(bounds.right, bounds.bottom).matrixTransform(inverse);
+      const left = Math.max(x, Math.min(x + width, start.x));
+      const top = Math.max(y, Math.min(y + height, start.y));
+      const rectangle = stage.querySelector<HTMLElement>('.zf-minimap-view')!;
+      return { actual: ['left', 'top', 'width', 'height'].map(key => parseFloat(rectangle.style.getPropertyValue(key))),
+        expected: [100 * (left - x) / width, 100 * (top - y) / height,
+          100 * Math.max(0, Math.min(x + width, end.x) - left) / width,
+          100 * Math.max(0, Math.min(y + height, end.y) - top) / height] };
+    });
+    result.actual.forEach((value, i) => expect(value).toBeCloseTo(result.expected[i], 3));
+  };
+  await geometry();
+  const before = (await svg.getAttribute('viewBox'))!.split(' ').map(Number);
+  const bounds = (await map.boundingBox())!;
+  await page.mouse.click(bounds.x + bounds.width * 0.8, bounds.y + bounds.height / 2);
+  const clicked = (await svg.getAttribute('viewBox'))!.split(' ').map(Number);
+  expect(clicked[0]).toBeGreaterThan(before[0]);
+  expect(clicked[2]).toBeCloseTo(before[2], 5);
+  await geometry();
+  await page.mouse.move(bounds.x + bounds.width * 0.8, bounds.y + bounds.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(bounds.x + bounds.width * 0.2, bounds.y + bounds.height * 0.3, { steps: 8 });
+  await page.mouse.up();
+  const dragged = (await svg.getAttribute('viewBox'))!.split(' ').map(Number);
+  expect(dragged[0]).toBeLessThan(clicked[0]);
+  expect(dragged[2]).toBeCloseTo(clicked[2], 5);
+  await geometry();
+  expect(await map.locator('img').getAttribute('src')).toBe(picture);
+  // This is a pointer shortcut, never a new keyboard stop or board navigation target.
+  await expect(stage).toHaveAttribute('data-board', 'root');
+  await expect(map).not.toBeFocused();
+  await page.getByRole('button', { name: 'Overview (fit diagram)', exact: true }).click();
+  await expect(map).toBeHidden();
+  await expect(page.locator('.zf-zoom-controls span')).toHaveText('Fitted');
+});
+
+test('minimap hides in presentation, layers, narrow stages and board transitions', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.goto('/'); await previewReady(page);
+  const stage = page.locator('.zf-stage');
+  const map = stage.locator('.zf-minimap');
+  for (let i = 0; i < 4; i++) await page.getByRole('button', { name: 'Zoom in', exact: true }).click();
+  await expect(map).toBeVisible();
+  await page.getByRole('button', { name: 'Walkthrough', exact: true }).click();
+  await page.getByRole('button', { name: 'Present', exact: true }).click();
+  await expect(map).toBeHidden();
+  await page.keyboard.press('Escape');
+  await page.getByRole('button', { name: 'End walkthrough', exact: true }).click();
+  await expect(map).toBeVisible();
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(map).toBeHidden();
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await expect(map).toBeVisible();
+  await page.locator('.board-outline > summary').click();
+  await page.getByRole('checkbox', { name: 'Show all layers', exact: true }).check();
+  await expect(stage).toHaveAttribute('data-layer-root', 'root');
+  await expect(map).toBeHidden();
+  await page.getByRole('checkbox', { name: 'Show all layers', exact: true }).uncheck();
+  await page.locator('.board-outline > summary').click();
+  await expect(map).toBeVisible();
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
+  // Hold only board animation completion long enough to inspect its real transition state.
+  await stage.evaluate(stage => {
+    new MutationObserver(() => {
+      if (stage.hasAttribute('data-transition')) stage.getAnimations({ subtree: true }).forEach(animation => animation.pause());
+    }).observe(stage, { attributes: true, attributeFilter: ['data-transition'] });
+  });
+  await page.getByRole('button', { name: 'Overview (fit diagram)', exact: true }).click();
+  await page.getByRole('link', { name: 'Open Checkout board', exact: true }).locator('.appendix-icon').click();
+  await expect(stage).toHaveAttribute('data-transition', 'in');
+  await expect(map).toBeHidden();
+  await stage.evaluate(stage => stage.getAnimations({ subtree: true }).forEach(animation => animation.finish()));
+  await expect(stage).not.toHaveAttribute('data-transition');
+  for (let i = 0; i < 4; i++) await page.getByRole('button', { name: 'Zoom in', exact: true }).click();
+  await expect(map).toBeVisible();
+  expect(await map.locator('img').evaluate((img: HTMLImageElement) => decodeURIComponent(img.src))).toContain('Cart');
+});
+
+for (const width of [1440, 390]) for (const theme of ['light', 'dark'] as const) {
+  test(`minimap canvas ${theme} at ${width}`, { tag: '@visual' }, async ({ page, browserName }) => {
+    test.skip(!comparesVisuals(browserName), visualSkipReason);
+    await page.setViewportSize({ width, height: width === 390 ? 844 : 900 });
+    await page.emulateMedia({ colorScheme: theme, reducedMotion: 'reduce' });
+    await page.goto('/'); await previewReady(page);
+    for (let i = 0; i < 4; i++) await page.getByRole('button', { name: 'Zoom in', exact: true }).click();
+    const map = page.locator('.zf-minimap');
+    if (width === 390) await expect(map).toBeHidden();
+    else {
+      await expect(map).toBeVisible();
+      await expect.poll(() => map.locator('img').evaluate((img: HTMLImageElement) => img.complete && img.naturalWidth > 0)).toBe(true);
+    }
+    await page.evaluate(() => document.fonts.ready);
+    await page.mouse.move(0, 0);
+    await expect(page.locator('.zf-stage-area')).toHaveScreenshot(`minimap-${theme}-${width}.png`);
+  });
+}
+
+test('minimap measures clipping instead of zoom percentage and includes letterboxing', async ({ page }) => {
+  await page.goto(`${devURL}/`); await previewReady(page);
+  const result = await page.evaluate(async url => {
+    const { setupViewport } = await import(url);
+    const host = document.createElement('div');
+    host.style.cssText = 'position:fixed;inset:0;width:800px;height:400px';
+    const stage = document.createElement('div');
+    stage.className = 'zf-stage';
+    stage.style.cssText = 'width:800px;height:400px';
+    stage.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><svg><g><rect width="20" height="20"/></g></svg></svg>';
+    host.append(stage); document.body.append(host);
+    setupViewport(stage, host);
+    const map = stage.querySelector('.zf-minimap')!;
+    const zoom = host.querySelector<HTMLButtonElement>('[aria-label="Zoom in"]')!;
+    zoom.click();
+    const zoomedButFits = { zoom: host.querySelector('[role="status"]')!.textContent, shown: map.hasAttribute('data-visible') };
+    for (let i = 0; i < 6; i++) zoom.click();
+    const clipped = map.hasAttribute('data-visible');
+    // The short square viewBox is letterboxed in this wide stage: horizontally it still fits.
+    const rectangle = stage.querySelector<HTMLElement>('.zf-minimap-view')!;
+    const view = { width: parseFloat(rectangle.style.width), height: parseFloat(rectangle.style.height) };
+    stage.dispatchEvent(new Event('zf-destroy')); host.remove();
+    return { zoomedButFits, clipped, view, controls: host.querySelectorAll('.zf-minimap, .zf-zoom-controls').length };
+  }, `/@fs${process.cwd()}/packages/viewer/src/index.ts`);
+  expect(result.zoomedButFits).toEqual({ zoom: '150%', shown: false });
+  expect(result.clipped).toBe(true);
+  expect(result.view.width).toBeCloseTo(100, 5);
+  expect(result.view.height).toBeLessThan(100);
+  expect(result.controls).toBe(0);
+});

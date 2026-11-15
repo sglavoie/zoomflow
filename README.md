@@ -71,6 +71,8 @@ use **Retry preview** to try again without losing your source.
    boards by display name, and built-in examples from the canvas or source editor.
    Type to filter, use ↑/↓ and Enter to run, or Escape to return to your work.
    Commands follow the last focused pane and list only available actions.
+   A small minimap appears when part of a board is outside the view; click or drag it to pan.
+   It also works offline and stays out of downloaded images.
    A quiet dot grid follows pan and zoom, including in offline HTML, and stays out of SVG and PNG images. **Find in diagram** (⌘⇧F / Ctrl+Shift+F)
    finds board names and shape labels across the current document and jumps to a match.
    In an open folder, **Find in project** searches every project file, including unsaved

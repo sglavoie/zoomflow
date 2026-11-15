@@ -1,9 +1,12 @@
 import { clampBox, revealBox, type Box } from './viewport-geometry';
+import { setupMinimap } from './minimap';
 export { clampBox, revealBox, type Box } from './viewport-geometry';
 
 /** Zoom the rendered SVG itself so links and shape selection keep working. */
 export function setupViewport(stage: HTMLElement, host: HTMLElement) {
-  return createViewport(stage, host, clampBox, revealBox);
+  const viewport = createViewport(stage, host, clampBox, revealBox);
+  setupMinimap(stage, viewport);
+  return viewport;
 }
 
 /** `setupViewport` with its pure geometry injected, so the offline HTML runtime can serialize it. */
@@ -57,6 +60,7 @@ export function createViewport(stage: HTMLElement, host: HTMLElement, clamp: typ
   let svg: SVGSVGElement | null = null;
   let base: Box | null = null;
   let box: Box | null = null;
+  let boardBounds: Box | null = null;
   type View = { scale: number; centerX: number; centerY: number };
   const views = new Map<string, View>();
   let documentKey = '';
@@ -427,6 +431,7 @@ export function createViewport(stage: HTMLElement, host: HTMLElement, clamp: typ
     const margin = Math.max(16, Math.min(32, Math.min(right - left, bottom - top) * 0.12));
     const width = right - left + margin * 2;
     const height = bottom - top + margin * 2;
+    boardBounds = { x: left - margin, y: top - margin, width, height };
     // Fit every shape with breathing room, magnifying small diagrams by at most 1.5×.
     const padding = Math.max(1, Math.min(stage.clientWidth / width, stage.clientHeight / height) / 1.5);
     return { x: (left + right - width * padding) / 2, y: (top + bottom - height * padding) / 2,
@@ -440,6 +445,7 @@ export function createViewport(stage: HTMLElement, host: HTMLElement, clamp: typ
     const values = svg?.getAttribute('viewBox')?.trim().split(/[\s,]+/).map(Number);
     const original = values?.length === 4 && values.every(Number.isFinite) && values[2] > 0 && values[3] > 0
       ? { x: values[0], y: values[1], width: values[2], height: values[3] } : null;
+    boardBounds = original;
     base = svg && original ? fittedBox(svg, original) : null;
     box = base && { ...base };
     if (svg && base) {
@@ -586,6 +592,19 @@ export function createViewport(stage: HTMLElement, host: HTMLElement, clamp: typ
   stage.addEventListener('zf-suspend', suspend, { signal });
   stage.addEventListener('zf-resume', listenToWindow, { signal });
   return {
+    mapView() {
+      const matrix = svg?.getScreenCTM();
+      if (!svg || !boardBounds || !matrix || !matrix.a || !matrix.d) return null;
+      const bounds = svg.getBoundingClientRect();
+      const inverse = matrix.inverse();
+      const start = new DOMPoint(bounds.left, bounds.top).matrixTransform(inverse);
+      const end = new DOMPoint(bounds.right, bounds.bottom).matrixTransform(inverse);
+      return { board: { ...boardBounds }, visible: { x: start.x, y: start.y, width: end.x - start.x, height: end.y - start.y } };
+    },
+    panTo(x: number, y: number) {
+      stopCamera();
+      if (box) setBox({ ...box, x: x - box.width / 2, y: y - box.height / 2 });
+    },
     reveal,
     destroy,
     suspend,

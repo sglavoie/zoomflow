@@ -11,6 +11,7 @@ import { fitExportBounds } from './export-bounds';
 import { setupBoardMotion } from './board-motion';
 import { libraryTheme } from './library-theme';
 import { setupWalkthrough } from './walkthrough';
+import { setupMinimap } from './minimap';
 
 const placeholder = 'data:image/svg+xml;base64,' + btoa('<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64"><rect width="64" height="64" fill="#eee"/><path d="M8 8L56 56M56 8L8 56" stroke="#999" stroke-width="3"/></svg>');
 
@@ -126,7 +127,7 @@ export async function rasterizeSvg(svg: string): Promise<Blob> {
 const runtime = { classifyHref, shapeClass, boardLabel, sanitizeSvg, restoreMissingLinks, simplifyTrail, renderParentContext,
   createViewport, clampBox, revealBox, decorateLinks, splitHitArea, setupBreadcrumbs, resolveRouteHash, routeFallbackNotice,
   normalizeRouteHash, restoreTrail, watchHistory, childToward, resolveLink, prepareLinks, followLink, linkTo, atlasHash, parseAtlasHash, resolveFilePath,
-  indexDiagramSearch, searchDiagram, setupOfflineSearch, setupBoardMotion, setupWalkthrough };
+  indexDiagramSearch, searchDiagram, setupOfflineSearch, setupBoardMotion, setupWalkthrough, setupMinimap };
 
 // Keep this runtime self-contained: its compiled function body is embedded in HTML.
 // It consumes the same board IDs, hashes, parent and visited-trail model as Viewer.
@@ -195,6 +196,7 @@ function offlineViewer(lib: typeof runtime) {
   stage.before(area);
   area.append(stage);
   const viewport = lib.createViewport(stage, area, lib.clampBox, lib.revealBox);
+  lib.setupMinimap(stage, viewport);
   // Each file keeps its own saved views, as in the live viewer, so same-named boards never share one.
   viewport.setDocument(doc.file);
   let current = boards[0];

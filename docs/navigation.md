@@ -44,6 +44,11 @@ renaming a focused shape keeps its centre and scale in place through layout chan
 Returning to a board restores its view. A quiet dot grid follows the diagram as you pan
 and zoom in either theme, in the app and offline HTML. It never animates on its own
 and is excluded from downloaded SVG and PNG images.
+When part of the board is outside the view, a minimap in the bottom-right corner
+shows the whole board and outlines the visible area. Click or drag it to pan;
+**Overview** restores the fitted view and fades the minimap away. It also works
+in offline HTML. It is hidden in Present, the layer view and stages narrower
+than 600 px, takes no keyboard focus and is excluded from SVG and PNG downloads.
 The zoom readout says **Fitted** at the fitted baseline; percentages describe magnification
 relative to that fit. A hint below the canvas explains panning after zooming in.
 Deep breadcrumb trails keep the first board, parent and current board visible on

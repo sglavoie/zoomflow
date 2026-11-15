@@ -141,7 +141,8 @@ isolation, per-document choices, and failed or superseded layer renders.
 ## Diagram
 
 - `viewer.spec.ts`: drill-down navigation, ancestor-link suggestions and inferred parent
-  connections, live and offline.
+  connections, live and offline; minimap clipping geometry, click/drag panning,
+  visibility, cleanup and exclusion from SVG/PNG downloads.
 - `canvas.spec.ts`: zoom, pan and fit, wheel and pinch input, spatial keyboard navigation,
   link badges (direction, tooltips, size through zoom), compact breadcrumbs, canvas
   guidance, explicit source reveal, and shape selection by keyboard and Alt+click.

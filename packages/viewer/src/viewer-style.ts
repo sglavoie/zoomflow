@@ -34,6 +34,14 @@ export const viewerStyle = `
 .zf-zoom-controls button { border: 0; min-width: 36px; min-height: 32px; padding: 5px; background: transparent; }
 .zf-zoom-controls span { min-width: 44px; text-align: center; font-size: 12px; }
 .zf-stage > svg { touch-action: none; }
+.zf-minimap { position: absolute; right: 12px; bottom: 12px; box-sizing: content-box; overflow: hidden; border: 1px solid var(--border, #8192a4); border-radius: 6px; background: var(--surface, #fff); box-shadow: 0 2px 10px #20304420; cursor: crosshair; touch-action: none; user-select: none; opacity: 0; visibility: hidden; pointer-events: none; }
+.zf-minimap[data-visible] { opacity: 1; visibility: visible; pointer-events: auto; }
+.zf-minimap[hidden], .zf-stage[data-transition] > .zf-minimap, [data-presentation] .zf-minimap { display: none; }
+.zf-minimap img { display: block; width: 100%; height: 100%; pointer-events: none; }
+.zf-minimap-view { position: absolute; box-sizing: border-box; border: 1.5px solid var(--focus, #6366f1); background: color-mix(in srgb, var(--focus, #6366f1) 12%, transparent); pointer-events: none; }
+@media (prefers-reduced-motion: no-preference) {
+  .zf-minimap { transition: opacity 160ms ease-out, visibility 160ms; }
+}
 .zf-stage.zf-panning { cursor: grabbing; }
 .zf-stage.zf-pan-ready *, .zf-stage.zf-pan-ready { cursor: grab !important; }
 .zf-stage.zf-panning *, .zf-stage.zf-panning { cursor: grabbing !important; }
