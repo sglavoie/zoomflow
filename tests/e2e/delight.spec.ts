@@ -181,13 +181,13 @@ test('walkthrough waits for branch choices, supports loops and backtracking, and
   await expect(guide.getByRole('button', { name: 'Retry → start', exact: true })).toBeVisible();
   await expect(page.locator('#viewer [data-connection-id]:not(.zf-walkthrough-muted)')).toHaveCount(1);
   await guide.getByRole('button', { name: 'Retry → start', exact: true }).click();
-  await expect(guide).toContainText('Step 3 · start');
+  await expect(guide.getByRole('status')).toHaveText('start');
   await guide.getByRole('button', { name: 'Back', exact: true }).click();
-  await expect(guide).toContainText('Step 2 · decision');
+  await expect(guide.getByRole('status')).toHaveText('decision');
   await expect(page.locator('#viewer [data-connection-id]:not(.zf-walkthrough-muted)')).toHaveCount(1);
   await guide.getByRole('button', { name: 'Yes → done', exact: true }).focus();
   await page.keyboard.press('Enter');
-  await expect(guide).toContainText('Step 3 · done');
+  await expect(guide.getByRole('status')).toHaveText('done');
   await guide.getByRole('button', { name: 'Finish', exact: true }).click();
   await expect(guide).toBeHidden();
   await expect(page.getByRole('button', { name: 'Walkthrough', exact: true })).toBeFocused();
@@ -205,7 +205,7 @@ test('walkthrough and zoom controls remain separate in fullscreen and on a narro
   const box = (await zoom.boundingBox())!;
   expect((await guide.boundingBox())!.y).toBeGreaterThanOrEqual(box.y + box.height);
   await guide.getByRole('button', { name: 'Next: Checkout', exact: true }).click();
-  await expect(guide).toContainText('Step 2 · Checkout');
+  await expect(guide.getByRole('status')).toHaveText('Checkout');
   await page.getByRole('button', { name: 'Exit fullscreen', exact: true }).click();
   await expect(guide).toBeVisible();
 });

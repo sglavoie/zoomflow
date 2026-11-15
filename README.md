@@ -61,7 +61,8 @@ use **Retry preview** to try again without losing your source.
    and choose **Add next step** or **Add branch** to keep building. Hover a connection
    and click **+** to insert a step between its ends. **Walkthrough** lets you follow
    a path, choose branches, and explore detail boards. Choose **Present** for a focused
-   canvas with smooth framing and compact controls; it also works in exported HTML. Use breadcrumbs or **Boards** to move around, hover a link or its badge to preview its
+   canvas that smoothly centres the current step alongside its outgoing steps, with readable
+   muted paths and a name-first card; it also works in exported HTML. Use breadcrumbs or **Boards** to move around, hover a link or its badge to preview its
    board, or zoom and drag to inspect the diagram. Board names follow their linking
    shape labels when those labels agree, with the document title at the root. **Overview** fits the whole diagram at a
    comfortable scale, up to 1.5×; phones start closer only when fitted labels fall below 11 px.

@@ -91,20 +91,20 @@ test('presentation opens details from nodes, badges and the keyboard, preserving
   const status = guide.getByRole('status');
   // Re-selecting the current ordinary node should not add duplicate steps.
   await shape(page, 'Browse').click();
-  await expect(status).toHaveText('Step 1 · Browse');
+  await expect(status).toHaveText('Browse');
   for (const activation of ['node', 'badge', 'Enter', ' ']) {
     const link = page.getByRole('link', { name: 'Open Checkout board', exact: true });
     if (activation === 'node') await shape(page, 'Checkout').click();
     else if (activation === 'badge') await link.locator('.appendix-icon').click();
     else { await link.focus(); await link.press(activation); }
-    await expect(status).toHaveText('Step 2 · Cart');
+    await expect(status).toHaveText('Cart');
     await expect(page.locator('.zf-stage-area[data-presentation]')).toBeVisible();
     await guide.getByRole('button', { name: 'Back', exact: true }).click();
-    await expect(status).toHaveText('Step 1 · Browse');
+    await expect(status).toHaveText('Browse');
   }
   await guide.getByRole('button', { name: 'Next: Checkout', exact: true }).click();
   await shape(page, 'Checkout').click();
-  await expect(status).toHaveText('Step 3 · Cart');
+  await expect(status).toHaveText('Cart');
   await shape(page, 'Charge').click();
   await expect(status).toContainText('Authorize');
   await guide.getByRole('button', { name: 'Next: Capture', exact: true }).click();
@@ -133,9 +133,12 @@ test('offline HTML keeps presentation metadata, opens the chosen board and respe
   await expect(offline.locator('.zf-stage-area[data-presentation]')).toBeVisible();
   await expect(offline.locator('.zf-present-title strong')).toHaveText(title);
   await expect(offline.locator('.zf-present-title span')).toHaveText('A customer’s journey');
+  await expectCentred(offline, 'Cart', ['Charge']);
+  await expect(offline.getByRole('heading', { name: 'Cart', exact: true })).toBeVisible();
   await offline.getByRole('link', { name: 'Open Charge board', exact: true }).locator('.appendix-icon').click();
   await expect(offline.locator('.zf-stage')).toHaveAttribute('data-board', 'root.layers.checkout.layers.charge');
-  await expect(offline.locator('.zf-walkthrough [role="status"]')).toHaveText('Step 2 · Authorize');
+  await expect(offline.locator('.zf-walkthrough [role="status"]')).toHaveText('Authorize');
+  await expectCentred(offline, 'step_1', ['step_2']);
   await offline.getByRole('button', { name: 'Back', exact: true }).click();
   await expect(offline.locator('.zf-stage')).toHaveAttribute('data-board', 'root.layers.checkout');
   await offline.getByRole('button', { name: 'Exit presentation', exact: true }).click();
@@ -241,4 +244,120 @@ for (const theme of ['light', 'dark'] as const) test(`detail badge clearance app
       await expect(page.locator('#viewer .zf-stage')).toHaveScreenshot(`detail-badges-${example}-${theme}-${width}.png`);
     }
   }
+});
+
+async function expectCentred(page: import('@playwright/test').Page, id: string, destinations: string[] = []) {
+  await expect(page.locator(`.zf-stage [data-shape-id="${id}"]`)).toBeVisible();
+  await expect.poll(() => page.locator('.zf-stage').evaluate((stage, id) => {
+    const bounds = stage.getBoundingClientRect();
+    const target = stage.querySelector(`[data-shape-id="${id}"]`)!.getBoundingClientRect();
+    return Math.max(Math.abs((target.x + target.width / 2 - bounds.x) / bounds.width - .5),
+      Math.abs((target.y + target.height / 2 - bounds.y) / bounds.height - .5));
+  }, id)).toBeLessThan(1 / 6);
+  for (const destination of [id, ...destinations]) {
+    await expect.poll(() => page.locator('.zf-stage').evaluate((stage, destination) => {
+      const bounds = stage.getBoundingClientRect();
+      const target = stage.querySelector(`[data-shape-id="${destination}"]`)!.getBoundingClientRect();
+      const card = stage.parentElement!.querySelector('.zf-walkthrough')!.getBoundingClientRect();
+      const title = stage.parentElement!.querySelector('.zf-present-title')!.getBoundingClientRect();
+      return target.left >= bounds.left && target.right <= bounds.right && target.top >= title.bottom && target.bottom <= card.top;
+    }, destination)).toBe(true);
+  }
+}
+
+for (const width of [1440, 390]) test.describe(`presentation at ${width}px`, () => {
+  test.use({ viewport: { width, height: width === 390 ? 844 : 900 } });
+  test('keeps the current step centred while presenting', async ({ page }) => {
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    await page.goto('/'); await previewReady(page);
+    await page.getByRole('button', { name: 'Walkthrough', exact: true }).click();
+    await page.getByRole('button', { name: 'Present', exact: true }).click();
+    await expectCentred(page, 'Browse', ['Checkout']);
+    await page.setViewportSize({ width: width === 390 ? 430 : 1280, height: width === 390 ? 900 : 800 });
+    await expectCentred(page, 'Browse', ['Checkout']);
+    await page.getByRole('button', { name: 'Next: Checkout', exact: true }).click();
+    await expectCentred(page, 'Checkout', ['Receipt']);
+    await page.getByRole('button', { name: 'Explore Checkout', exact: true }).click();
+    await expectCentred(page, 'Cart', ['Charge']);
+    await page.getByRole('button', { name: 'Next: Charge', exact: true }).click();
+    await expectCentred(page, 'Charge', ['Confirm']);
+    await page.getByRole('button', { name: 'Back', exact: true }).click();
+    await expectCentred(page, 'Cart', ['Charge']);
+    await page.getByRole('button', { name: 'End walkthrough', exact: true }).click();
+    // More than six destinations must all participate, including a returning loop.
+    if (width === 390) await page.locator('#mobile-source').click();
+    await source(page).fill('start -> decision\n' + Array.from({ length: 7 }, (_, i) => `decision -> outcome_${i}: Choice ${i}`).join('\n') + '\noutcome_0 -> start');
+    await previewReady(page);
+    if (width === 390) await page.locator('#mobile-preview').click();
+    await page.getByRole('button', { name: 'Walkthrough', exact: true }).click();
+    await page.getByRole('button', { name: 'Present', exact: true }).click();
+    await page.getByRole('button', { name: 'Next: decision', exact: true }).click();
+    await expectCentred(page, 'decision', Array.from({ length: 7 }, (_, i) => `outcome_${i}`));
+    await page.getByRole('button', { name: 'Choice 0 → outcome_0', exact: true }).click();
+    await expectCentred(page, 'outcome_0', ['start']);
+  });
+});
+
+for (const theme of ['light', 'dark'] as const) for (const example of ['order', 'flows']) for (const width of [1440, 390]) {
+  test.describe(`${example} walkthrough ${theme} ${width}px`, () => {
+    test.use({ viewport: { width, height: width === 390 ? 844 : 900 }, storageState: { cookies: [], origins: [] } });
+    test('muted steps stay readable', { tag: '@visual' }, async ({ page, browserName }) => {
+      await page.emulateMedia({ colorScheme: theme, reducedMotion: 'reduce' });
+      await page.goto('/'); await previewReady(page);
+      if (example === 'flows') { await chooseExample(page, /^Flows & mind maps/); await previewReady(page); }
+      await page.getByRole('button', { name: 'Walkthrough', exact: true }).click();
+      const guide = page.getByRole('region', { name: 'Diagram walkthrough' });
+      const currentName = await page.locator('.zf-walkthrough-current text').first().textContent();
+      await expect(guide.getByRole('heading', { level: 2 })).toHaveText(currentName!);
+      await expect(guide.getByRole('status')).toHaveText(currentName!);
+      const next = guide.getByRole('button', { name: /^Next:/ });
+      if (await next.count()) await expect(next).toHaveClass('zf-walkthrough-next');
+      const muted = page.locator('.zf-walkthrough-muted');
+      expect(await muted.count()).toBeGreaterThan(0);
+      for (const node of await muted.all()) {
+        const opacity = await node.evaluate(node => Number(getComputedStyle(node).opacity));
+        expect(opacity).toBeGreaterThanOrEqual(.7); expect(opacity).toBeLessThan(.9);
+      }
+      await expect(page.locator('.zf-walkthrough-current')).toHaveCSS('opacity', '1');
+      await page.mouse.move(0, 0);
+      if (comparesVisuals(browserName)) await expect(page.locator('.zf-stage-area')).toHaveScreenshot(`walkthrough-${example}-${theme}-${width}.png`);
+      await guide.getByRole('button', { name: 'Present', exact: true }).click();
+      if (comparesVisuals(browserName)) await expect(page.locator('.zf-stage-area')).toHaveScreenshot(`present-${example}-${theme}-${width}.png`);
+    });
+  });
+}
+
+for (const presenting of [false, true]) test(`walkthrough camera eases moves and yields to input ${presenting ? 'in Present' : 'in the editor'}`, async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.goto('/'); await previewReady(page);
+  if (!presenting) for (let i = 0; i < 4; ++i) await page.getByRole('button', { name: 'Zoom in', exact: true }).click();
+  await page.getByRole('button', { name: 'Walkthrough', exact: true }).click();
+  if (presenting) await page.getByRole('button', { name: 'Present', exact: true }).click();
+  const now = new Date();
+  await page.clock.install({ time: now });
+  await page.clock.pauseAt(new Date(now.getTime() + 100));
+  await page.clock.runFor(50);
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
+  const box = () => page.locator('.zf-stage > svg').evaluate(svg => svg.getAttribute('viewBox')!.split(' ').map(Number));
+  const before = await box();
+  await page.getByRole('button', { name: 'Next: Checkout', exact: true }).evaluate((button: HTMLButtonElement) => button.click());
+  expect(await box()).toEqual(before);
+  await page.clock.runFor(100); const during = await box();
+  await page.clock.runFor(250); const after = await box();
+  expect(during).not.toEqual(before); expect(during).not.toEqual(after);
+  const fraction = (during[0] - before[0]) / (after[0] - before[0]);
+  expect(fraction).toBeGreaterThan(.5); expect(fraction).toBeLessThan(1);
+  await page.getByRole('button', { name: 'Back', exact: true }).evaluate((button: HTMLButtonElement) => button.click());
+  await page.clock.runFor(80);
+  await page.locator('.zf-stage').dispatchEvent('wheel', { deltaY: 80 });
+  const interrupted = await box(); await page.clock.runFor(400);
+  expect(await box()).toEqual(interrupted);
+  await page.getByRole('button', { name: 'Next: Checkout', exact: true }).evaluate((button: HTMLButtonElement) => button.click());
+  await page.clock.runFor(80);
+  await page.getByRole('button', { name: 'End walkthrough', exact: true }).evaluate((button: HTMLButtonElement) => button.click());
+  await page.clock.runFor(50); const ended = await box(); await page.clock.runFor(400);
+  // Closing the card refits the stage; allow only subpixel SVG measurement noise.
+  const settled = await box();
+  const pixels = await page.locator('.zf-stage > svg').evaluate((svg: SVGSVGElement) => Math.abs(svg.getScreenCTM()!.a));
+  expect(Math.max(...settled.map((value, i) => Math.abs(value - ended[i]))) * pixels).toBeLessThan(.1);
 });

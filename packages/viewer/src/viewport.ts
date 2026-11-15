@@ -198,7 +198,7 @@ export function createViewport(stage: HTMLElement, host: HTMLElement, clamp: typ
     setBox({ ...box, x: box.x - dx / matrix.a, y: box.y - dy / matrix.d }, !modifierPan);
   }
   /** Frame targets with minimal movement; keep the current zoom whenever they fit. */
-  function reveal(targets: readonly SVGGraphicsElement[]) {
+  function reveal(targets: readonly SVGGraphicsElement[], animated = false) {
     if (!svg || !base || !box || !targets.length || !stage.clientWidth || !stage.clientHeight) return;
     const matrix = svg.getScreenCTM();
     if (!matrix) return;
@@ -219,7 +219,10 @@ export function createViewport(stage: HTMLElement, host: HTMLElement, clamp: typ
       { width: availableWidth, height: availableHeight }, minZoom);
     // Ignore subpixel measurement noise (notably SVG bounds in Firefox).
     if (Math.max(Math.abs(x - box.x), Math.abs(width - box.width)) * Math.abs(matrix.a) > 0.25 ||
-      Math.abs(y - box.y) * Math.abs(matrix.d) > 0.25) setBox({ x, y, width, height });
+      Math.abs(y - box.y) * Math.abs(matrix.d) > 0.25) {
+      if (animated) animateBox(clamp(base, { x, y, width, height }));
+      else setBox({ x, y, width, height });
+    }
   }
   function focusTargets() {
     return [...stage.querySelectorAll<SVGGraphicsElement>('a[tabindex], [data-shape-id][tabindex], [data-flow-connection][tabindex]')]
@@ -229,8 +232,25 @@ export function createViewport(stage: HTMLElement, host: HTMLElement, clamp: typ
   let cameraRevision = 0;
   const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
   const stopCamera = () => { ++cameraRevision; cancelAnimationFrame(cameraFrame); };
-  for (const type of ['pointerdown', 'wheel', 'keydown', 'zf-beforerender', 'zf-destroy']) stage.addEventListener(type, stopCamera, { signal });
+  for (const type of ['pointerdown', 'wheel', 'keydown', 'zf-beforerender', 'zf-walkthroughend', 'zf-destroy']) stage.addEventListener(type, stopCamera, { signal });
   reducedMotion.addEventListener('change', stopCamera, { signal });
+  function animateBox(next: Box) {
+    if (!box) return;
+    stopCamera();
+    const revision = cameraRevision;
+    const previous = { ...box };
+    if (reducedMotion.matches) { setBox(next, false); return; }
+    const start = performance.now();
+    const move = (time: number) => {
+      if (revision !== cameraRevision) return;
+      const progress = Math.min(1, (time - start) / 280);
+      const ease = 1 - (1 - progress) ** 3;
+      setBox({ x: previous.x + (next.x - previous.x) * ease, y: previous.y + (next.y - previous.y) * ease,
+        width: previous.width + (next.width - previous.width) * ease, height: previous.height + (next.height - previous.height) * ease }, false);
+      if (progress < 1) cameraFrame = requestAnimationFrame(move);
+    };
+    cameraFrame = requestAnimationFrame(move);
+  }
   stage.addEventListener('zf-presentationchange', event => {
     stopCamera();
     if ((event as CustomEvent).detail.active) { remember(); presentingView = true; }
@@ -247,8 +267,12 @@ export function createViewport(stage: HTMLElement, host: HTMLElement, clamp: typ
       });
     }
   }, { signal });
+  type WalkthroughStep = { shape: string; board: string; neighbors?: string[]; presenting?: boolean };
+  let presentationStep: WalkthroughStep | undefined;
   stage.addEventListener('zf-walkthroughstep', event => {
-    const { shape, board, neighbors = [], presenting } = (event as CustomEvent<{ shape: string; board: string; neighbors?: string[]; presenting?: boolean }>).detail;
+    const detail = (event as CustomEvent<WalkthroughStep>).detail;
+    const { shape, board, neighbors = [], presenting } = detail;
+    presentationStep = presenting ? detail : undefined;
     if (!presenting && cameraFrame) { cancelAnimationFrame(cameraFrame); cameraFrame = 0; }
     stopCamera();
     const revision = cameraRevision;
@@ -257,31 +281,30 @@ export function createViewport(stage: HTMLElement, host: HTMLElement, clamp: typ
       const shapes = [...stage.querySelectorAll<SVGGraphicsElement>('[data-shape-id]')].filter(node => !node.dataset.shapeBoard || node.dataset.shapeBoard === board);
       const target = shapes.find(node => node.dataset.shapeId === shape);
       if (!target) return;
-      if (!presenting || !svg || !box || !base) { reveal([target]); return; }
+      if (!presenting || !svg || !box || !base) { reveal([target], true); return; }
       const matrix = svg.getScreenCTM();
       if (!matrix) return;
       const inverse = matrix.inverse();
       const bounds = shapes.filter(node => node === target || neighbors.includes(node.dataset.shapeId!)).map(node => node.getBoundingClientRect());
       const from = new DOMPoint(Math.min(...bounds.map(b => b.left)), Math.min(...bounds.map(b => b.top))).matrixTransform(inverse);
       const to = new DOMPoint(Math.max(...bounds.map(b => b.right)), Math.max(...bounds.map(b => b.bottom))).matrixTransform(inverse);
-      const width = Math.max(to.x - from.x + 160, stage.clientWidth / 1.75);
-      const height = Math.max(to.y - from.y + 200, stage.clientHeight / 1.75);
-      // Match the stage aspect ratio and leave room for the floating controller.
-      const ratio = stage.clientWidth / Math.max(1, stage.clientHeight);
-      const w = Math.max(width, height * ratio), h = w / ratio;
-      const next = { x: (from.x + to.x - w) / 2, y: (from.y + to.y - h) / 2 + h * .07, width: w, height: h };
-      const previous = { ...box };
-      if (reducedMotion.matches) { setBox(next, false); return; }
-      const start = performance.now();
-      const move = (time: number) => {
-        if (revision !== cameraRevision) return;
-        const progress = Math.min(1, (time - start) / 280);
-        const ease = 1 - (1 - progress) ** 3;
-        setBox({ x: previous.x + (next.x - previous.x) * ease, y: previous.y + (next.y - previous.y) * ease,
-          width: previous.width + (next.width - previous.width) * ease, height: previous.height + (next.height - previous.height) * ease }, false);
-        if (progress < 1) cameraFrame = requestAnimationFrame(move);
-      };
-      cameraFrame = requestAnimationFrame(move);
+      const current = target.getBoundingClientRect();
+      const center = new DOMPoint(current.x + current.width / 2, current.y + current.height / 2).matrixTransform(inverse);
+      // Keep the current shape in the middle third, fitting every outgoing destination.
+      // Reserve symmetric space for the title and card so neither covers the path.
+      const area = stage.parentElement!;
+      const inset = Math.max(area.querySelector('.zf-walkthrough')?.getBoundingClientRect().height ?? 0,
+        area.querySelector('.zf-present-title')?.getBoundingClientRect().height ?? 0) + 24;
+      const availableWidth = Math.max(1, stage.clientWidth - 48);
+      const availableHeight = Math.max(1, stage.clientHeight - 2 * inset);
+      const width = Math.max(to.x - from.x, 1.51 * Math.max(center.x - from.x, to.x - center.x)) + 32;
+      const height = 2 * Math.max(center.y - from.y, to.y - center.y) + 32;
+      const pixels = Math.min(1.75, availableWidth / width, availableHeight / height);
+      const w = stage.clientWidth / pixels, h = stage.clientHeight / pixels;
+      // Allow a small horizontal shift towards the destinations to keep phone labels larger.
+      const cameraX = Math.max(center.x - w / 6.1, Math.min(center.x + w / 6.1, (from.x + to.x) / 2));
+      const next = { x: cameraX - w / 2, y: center.y - h / 2, width: w, height: h };
+      animateBox(next);
     });
   }, { signal });
   function resetFocus() {
@@ -355,7 +378,9 @@ export function createViewport(stage: HTMLElement, host: HTMLElement, clamp: typ
   const resize = new ResizeObserver(() => {
     // Refit the baseline as the available space changes, retaining the chosen magnification
     // and position. Otherwise desktop padding shrinks the content to tiny text on a phone.
-    if (svg && base && box && stage.clientWidth && stage.clientHeight) {
+    if (presentingView && presentationStep) {
+      stage.dispatchEvent(new CustomEvent('zf-walkthroughstep', { detail: presentationStep }));
+    } else if (svg && base && box && stage.clientWidth && stage.clientHeight) {
       const next = fittedBox(svg, base);
       const magnification = scale();
       const centerX = (box.x + box.width / 2 - base.x) / base.width;
@@ -462,9 +487,9 @@ export function createViewport(stage: HTMLElement, host: HTMLElement, clamp: typ
   }
   stage.addEventListener('zf-boardchange', reset, { signal });
   reset();
-  out.addEventListener('click', () => zoom(1 / 1.5));
-  inside.addEventListener('click', () => zoom(1.5));
-  fit.addEventListener('click', () => { if (base) setBox({ ...base }); });
+  out.addEventListener('click', () => { stopCamera(); zoom(1 / 1.5); });
+  inside.addEventListener('click', () => { stopCamera(); zoom(1.5); });
+  fit.addEventListener('click', () => { stopCamera(); if (base) setBox({ ...base }); });
   stage.addEventListener('wheel', (event) => {
     if (!svg || !(event.target instanceof Node) || !svg.contains(event.target)) return;
     const unit = event.deltaMode === WheelEvent.DOM_DELTA_LINE ? 16

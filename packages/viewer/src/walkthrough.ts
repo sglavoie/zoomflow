@@ -19,9 +19,9 @@ export function setupWalkthrough(stage: HTMLElement, toolbar: HTMLElement, host:
   toolbar.append(trigger);
   const panel = document.createElement('section');
   panel.className = 'zf-walkthrough'; panel.hidden = true; panel.setAttribute('aria-label', 'Diagram walkthrough');
-  panel.innerHTML = '<div class="zf-walkthrough-heading"><span role="status" aria-live="polite"></span><div><button type="button" class="zf-present-toggle" aria-pressed="false">Present</button><button type="button" aria-label="End walkthrough">×</button></div></div><p></p><div class="zf-walkthrough-actions"></div>';
+  panel.innerHTML = '<div class="zf-walkthrough-heading"><div role="status" aria-live="polite"><h2></h2></div><div><button type="button" class="zf-present-toggle" aria-pressed="false">Present</button><button type="button" aria-label="End walkthrough">×</button></div></div><p></p><div class="zf-walkthrough-actions"></div>';
   stage.after(panel);
-  const status = panel.querySelector('span')!;
+  const status = panel.querySelector('h2')!;
   const help = panel.querySelector('p')!;
   const actions = panel.querySelector('.zf-walkthrough-actions')!;
   type Stop = { board: string; shape: string; edge?: string; returns: { board: string; shape: string }[] };
@@ -100,6 +100,7 @@ export function setupWalkthrough(stage: HTMLElement, toolbar: HTMLElement, host:
     edgeAnimation?.cancel();
     panel.hidden = true; delete stage.dataset.walkthrough;
     trigger.setAttribute('aria-pressed', 'false'); clearMarks();
+    stage.dispatchEvent(new Event('zf-walkthroughend'));
     if (focus) trigger.focus({ preventScroll: true });
   }
   function button(label: string, run: () => void, disabled = false) {
@@ -117,7 +118,7 @@ export function setupWalkthrough(stage: HTMLElement, toolbar: HTMLElement, host:
     title.querySelector('strong')!.textContent = document.querySelector('body > header > h1')?.textContent ?? toolbar.parentElement?.querySelector('.zf-breadcrumbs button')?.textContent ?? document.title;
     title.querySelector('span')!.textContent = document.querySelector('body > header > p')?.textContent ?? (model.id === 'root' ? 'Follow the idea, one step at a time' : model.name);
     panel.hidden = false; stage.dataset.walkthrough = 'true'; trigger.setAttribute('aria-pressed', 'true');
-    status.textContent = `Step ${position + 1} · ${shape.label}`;
+    status.textContent = shape.label;
     const path = new Set(stops.slice(0, position + 1).filter(stop => stop.board === here.board).map(stop => stop.shape));
     const edges = new Set(stops.slice(0, position + 1).filter(stop => stop.board === here.board).map(stop => stop.edge));
     for (const element of stage.querySelectorAll<SVGGraphicsElement>('[data-shape-id]')) {
@@ -141,7 +142,7 @@ export function setupWalkthrough(stage: HTMLElement, toolbar: HTMLElement, host:
     for (const edge of outgoing) {
       const label = model.shapes.find(shape => shape.id === edge.to)!.label;
       button(outgoing.length === 1 ? `Next: ${label}` : `${edge.label || 'Continue'} → ${label}`,
-        () => visit({ ...here, shape: edge.to, edge: edge.id }));
+        () => visit({ ...here, shape: edge.to, edge: edge.id })).classList.toggle('zf-walkthrough-next', outgoing.length === 1);
     }
     if (!outgoing.length && here.returns.length) {
       const parent = here.returns.at(-1)!;
@@ -152,9 +153,9 @@ export function setupWalkthrough(stage: HTMLElement, toolbar: HTMLElement, host:
       : !outgoing.length ? 'End of this path. Choose another step, go back, or finish.'
       : 'Follow this path, explore its details, or select another step.';
     if (stops.length >= 500) help.textContent = 'This walkthrough has 500 steps. End it and start a new path to continue.';
-    const neighbors = model.connections.filter(edge => edge.from === here.shape || edge.to === here.shape).flatMap(edge => [edge.from, edge.to]);
+    const neighbors = outgoing.map(edge => edge.to);
     stage.dispatchEvent(new CustomEvent('zf-walkthroughstep', { detail: { board: here.board, shape: here.shape,
-      neighbors: [...new Set(neighbors)].slice(0, 6), presenting } }));
+      neighbors: [...new Set(neighbors)], presenting } }));
     edgeAnimation?.cancel();
     if (here.edge && !matchMedia('(prefers-reduced-motion: reduce)').matches) {
       const edge = [...stage.querySelectorAll<SVGElement>('[data-connection-id]')].find(element => element.dataset.connectionId === here.edge);

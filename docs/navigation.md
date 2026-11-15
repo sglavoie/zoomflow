@@ -192,8 +192,15 @@ step of the board. **Next** follows a single connection; at a decision, choose t
 labelled branch to explain. **Explore** enters a linked detail board. At its last
 step, return to the parent process and continue. **Back** retraces your chosen path.
 You can also select another shape to change direction. Unvisited shapes and
-connections dim, keeping attention on the path. **Finish**, the close button, or
-Escape ends the walkthrough from anywhere inside the viewer, including its start
+connections dim while staying readable in both themes. The card leads with the
+current step’s name and makes **Next** the primary action, without numbering a
+branching path. Moves ease into view unless reduced motion is enabled.
+
+Choose **Present** to isolate the canvas and centre the current shape together with
+its outgoing steps, leaving room for the title and controls. Escape exits Present
+first and restores the editor view; a second Escape ends the walkthrough.
+
+**Finish**, the close button, or Escape ends the walkthrough from anywhere inside the viewer, including its start
 button. An open menu or dialog handles Escape first. Editing the source or
 navigating outside it ends it too.
 
