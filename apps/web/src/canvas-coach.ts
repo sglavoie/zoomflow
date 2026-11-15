@@ -34,12 +34,13 @@ export function setupCanvasCoach(stage: HTMLElement, keys: (target: Element) => 
     origin = stage.dataset.board;
     place();
   });
+  const pane = stage.closest('.document-pane') ?? stage.parentElement!.parentElement!;
   let scheduled = 0;
   const schedule = () => { cancelAnimationFrame(scheduled); scheduled = requestAnimationFrame(place); };
   function place() {
     coach.hidden = true;
     if (phase === 3 || stage.dataset.transition || stage.dataset.walkthrough ||
-      stage.parentElement?.querySelector('.canvas-rename:not([hidden])')) return;
+      pane.querySelector('.canvas-rename:not([hidden]), .board-menu:not([hidden]), .flow-builder-toolbar > details[open], .board-appearance > details[open], dialog[open]')) return;
     const selected = stage.querySelector<SVGGraphicsElement>('.zf-canvas-selected');
     const shape = phase === 2 ? stage.querySelector<SVGGraphicsElement>('a[data-link-direction="child"]')
       : selected && keys(selected)?.includes('F2 renames') ? selected
@@ -74,9 +75,9 @@ export function setupCanvasCoach(stage: HTMLElement, keys: (target: Element) => 
     coach.style.left = `${fits.x - outer.left}px`;
     coach.style.top = `${fits.y - outer.top}px`;
   }
-  const observer = new MutationObserver(schedule);
-  observer.observe(stage.parentElement!.parentElement!, { attributes: true, subtree: true,
-    attributeFilter: ['aria-busy', 'data-preview-state', 'data-transition', 'class', 'data-walkthrough'] });
+  const observer = new MutationObserver(records => { if (records.some(record => record.target !== coach)) schedule(); });
+  observer.observe(pane, { attributes: true, subtree: true,
+    attributeFilter: ['aria-busy', 'data-preview-state', 'data-transition', 'class', 'data-walkthrough', 'open', 'hidden'] });
   stage.addEventListener('zf-viewportchange', schedule, { capture: true });
   const resize = new ResizeObserver(schedule); resize.observe(stage);
   stage.addEventListener('zf-destroy', () => { cancelAnimationFrame(scheduled); observer.disconnect(); resize.disconnect(); coach.remove(); });

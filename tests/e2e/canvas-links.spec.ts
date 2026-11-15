@@ -83,6 +83,8 @@ test('link badges preserve diagram tooltips and support Alt+click source selecti
   const badge = page.getByRole('link', { name: 'Open a board', exact: true }).locator('.appendix-icon');
   await expect(badge).toHaveCount(1);
   await expect(page.locator('.appendix-icon > title')).toHaveText('Keep this tooltip');
+  // The optional count must leave the adjacent authored tooltip unobscured.
+  await expect(badge.locator('rect')).toHaveCount(0);
   await badge.click({ modifiers: ['Alt'] });
   await expect(page.locator('.zf-stage')).toHaveAttribute('data-board', 'root');
   await expect(source(page)).toBeFocused();
@@ -96,6 +98,7 @@ test('link badges preserve diagram tooltips and support Alt+click source selecti
   await offline.goto(pathToFileURL(path).href);
   await expect(offline.locator('.appendix-icon > title')).toHaveText('Keep this tooltip');
   await expect(offline.getByRole('link', { name: 'Open a board' }).locator('.appendix-icon')).toHaveCount(1);
+  await expect(offline.getByRole('link', { name: 'Open a board' }).locator('.appendix-icon rect')).toHaveCount(0);
 });
 
 test('hover follows the shape while keyboard focus retains a visible selection', async ({ page }) => {
@@ -185,3 +188,28 @@ for (const mode of ['live', 'connected layers', 'offline'] as const) test(`link 
   await expect(page.locator('.zf-stage')).toHaveAttribute('data-board', mode === 'connected layers' ? 'root' : 'root.layers.detail');
 });
 
+
+test('fallback link hints stay beside their subject and follow the viewport', async ({ page }) => {
+  await page.goto('/'); await previewReady(page);
+  await source(page).fill('direction: right\nFirst -> Docs -> Last\nDocs.link: https://example.com');
+  await previewReady(page);
+  const link = page.getByRole('link', { name: 'Open external link: Docs (new tab)', exact: true });
+  await link.hover();
+  const hint = page.locator('.zf-link-hint');
+  await expect(hint).toBeVisible();
+  const check = async () => {
+    const box = (await link.locator('[data-shape-id]').boundingBox())!;
+    const label = (await hint.boundingBox())!;
+    expect(Math.abs(label.x + label.width / 2 - box.x - box.width / 2)).toBeLessThan(2);
+    expect(Math.min(Math.abs(label.y - box.y - box.height), Math.abs(box.y - label.y - label.height))).toBeLessThan(12);
+  };
+  await check();
+  const before = (await link.boundingBox())!.width;
+  await page.mouse.wheel(0, -180);
+  await expect.poll(async () => (await link.boundingBox())!.width).toBeGreaterThan(before);
+  await expect.poll(async () => {
+    const box = (await link.locator('[data-shape-id]').boundingBox())!, label = (await hint.boundingBox())!;
+    return Math.abs(label.x + label.width / 2 - box.x - box.width / 2);
+  }).toBeLessThan(2);
+  await check();
+});

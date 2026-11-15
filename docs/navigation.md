@@ -25,8 +25,9 @@ loaded diagram. Child-board links show a downward arrow badge, links to ancestor
 an upward arrow, and links to other boards show a sideways arrow. External links show
 an outward arrow. Hover or focus a link to identify its destination; hovering a shape
 highlights its shape. Board previews show a cropped thumbnail and the names of the
-steps or topics inside; the preview replaces redundant hover hints. Keyboard focus
-keeps a distinct outline. Link badges also appear in exported HTML.
+steps or topics inside; hover the shape, arrow badge, or “N inside” pill to see it.
+The preview replaces redundant hover hints, and other link hints sit beside their
+shape. Keyboard focus keeps a distinct outline. Link badges also appear in exported HTML.
 Open a `.d2` file or drop one onto the page; dropping several files opens the first
 and says to drop one file at a time. Files are compiled locally
 with D2's WASM worker. Light, dark and system themes use D2's generated palettes.
@@ -190,7 +191,9 @@ labelled branch to explain. **Explore** enters a linked detail board. At its las
 step, return to the parent process and continue. **Back** retraces your chosen path.
 You can also select another shape to change direction. Unvisited shapes and
 connections dim, keeping attention on the path. **Finish**, the close button, or
-Escape ends the walkthrough. Editing the source or navigating outside it ends it too.
+Escape ends the walkthrough from anywhere inside the viewer, including its start
+button. An open menu or dialog handles Escape first. Editing the source or
+navigating outside it ends it too.
 
 Interactive HTML exports include the same controls and graph, so readers can choose
 their own paths offline. Hidden export content is excluded. Walkthrough paths are

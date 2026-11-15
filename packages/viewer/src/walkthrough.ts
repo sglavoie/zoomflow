@@ -199,6 +199,13 @@ export function setupWalkthrough(stage: HTMLElement, toolbar: HTMLElement, host:
     if (presenting) { presentation(true); present.focus({ preventScroll: true }); }
   }
   trigger.addEventListener('click', () => { if (active()) end(); else start(); });
+  // Bubble after menus/dialogs have handled Escape, before page-level board navigation.
+  const viewer = area.parentElement!;
+  viewer.addEventListener('keydown', event => {
+    if (event.key !== 'Escape' || event.defaultPrevented || !active() ||
+      event.target instanceof Element && event.target.closest('dialog, [role="dialog"], [role="menu"], details[open]')) return;
+    event.preventDefault(); event.stopPropagation(); end();
+  }, { signal: events.signal });
   panel.querySelector('[aria-label="End walkthrough"]')!.addEventListener('click', () => end());
   panel.addEventListener('keydown', event => {
     // Keep viewer Backspace/Escape navigation out of presentation controls.

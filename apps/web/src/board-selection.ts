@@ -83,9 +83,10 @@ export function setupBoardSelection(ctx: Context) {
     const place = () => {
       const box = element.getBoundingClientRect();
       const area = ctx.rename.offsetParent?.getBoundingClientRect() ?? { left: 0, top: 0 };
-      const width = Math.max(box.width, 140);
+      const ring = ctx.viewer.stage.querySelector('.zf-selection-ring')?.getBoundingClientRect();
+      const width = Math.max(box.width, ring?.width ?? 0, 140);
       const stage = ctx.viewer.stage.getBoundingClientRect();
-      const fitted = Math.min(width, stage.width - 16);
+      const fitted = Math.max(box.width, Math.min(width, stage.width - 16));
       const left = Math.max(stage.left + 8, Math.min(box.left + (box.width - fitted) / 2, stage.right - fitted - 8));
       ctx.rename.style.left = `${left - area.left}px`;
       ctx.rename.style.top = `${box.top - area.top + box.height / 2 - ctx.rename.offsetHeight / 2}px`;

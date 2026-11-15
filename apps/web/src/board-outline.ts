@@ -12,7 +12,7 @@ export function setupBoardOutline(host: HTMLElement, viewer: Viewer, edit: (boar
   const details = document.createElement('details');
   details.className = 'board-outline';
   details.hidden = true;
-  details.innerHTML = '<summary></summary><div class="board-outline-panel"><nav aria-label="Boards"></nav><div class="board-layer-settings"></div></div>';
+  details.innerHTML = '<summary></summary><div class="board-outline-panel"><p class="board-layer-heading"><strong>Show layers</strong> · Check to include descendants</p><nav aria-label="Boards"></nav><div class="board-layer-settings"></div></div>';
   const settings = details.querySelector('.board-layer-settings')!;
   host.prepend(details);
   const showAll = document.createElement('label');
@@ -27,8 +27,11 @@ export function setupBoardOutline(host: HTMLElement, viewer: Viewer, edit: (boar
   depthControls.setAttribute('role', 'group');
   depthControls.setAttribute('aria-label', 'Layer depth controls');
   depthControls.hidden = true;
-  depthControls.innerHTML = '<label>Depth <input type="number" min="0" step="1" inputmode="numeric" aria-label="Layer depth" placeholder="Custom" /></label><button type="button" aria-label="Decrease layer depth">−</button><button type="button" aria-label="Increase layer depth">+</button>';
+  depthControls.innerHTML = '<label>Levels below <input type="number" min="0" step="1" inputmode="numeric" aria-label="Layer depth" placeholder="Custom" /></label><button type="button" aria-label="Decrease layer depth">−</button><button type="button" aria-label="Increase layer depth">+</button>';
   settings.append(depthControls);
+  const depthNote = document.createElement('small');
+  depthNote.className = 'layer-depth-note';
+  settings.append(depthNote);
   const focusBoard = document.createElement('button');
   focusBoard.type = 'button';
   focusBoard.textContent = 'Focus this board';
@@ -80,6 +83,7 @@ export function setupBoardOutline(host: HTMLElement, viewer: Viewer, edit: (boar
     depthInput.max = String(state.maxDepth);
     if (!depthEdited) depthInput.value = state.depth === null ? '' : String(state.depth);
     depthInput.title = `Levels below ${rootName ?? 'the starting board'}. 0 shows only that board.`;
+    depthNote.textContent = `0 = ${rootName ?? 'starting board'} only`;
     decreaseDepth.disabled = state.depth === 0;
     increaseDepth.disabled = state.depth !== null && state.depth >= state.maxDepth;
     const focused = [decreaseDepth, increaseDepth].find(button => button === document.activeElement);
@@ -109,6 +113,8 @@ export function setupBoardOutline(host: HTMLElement, viewer: Viewer, edit: (boar
     details.hidden = boards.size < 2;
     showAll.hidden = ![...boards.values()].some(board => board.kind === 'layers');
     depthControls.hidden = showAll.hidden;
+    depthNote.hidden = showAll.hidden;
+    details.querySelector<HTMLElement>('.board-layer-heading')!.hidden = showAll.hidden;
     iconLabel(summary, 'boards', `Boards (${boards.size})`);
     const list = (parent?: string): HTMLUListElement | undefined => {
       const children = [...boards.values()].filter(board => board.parent === parent);

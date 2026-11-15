@@ -352,3 +352,40 @@ test('undo with the background focused keeps focus off the first shape', async (
   await page.keyboard.press('Delete');
   await expect(stage(page)).toContainText('New idea');
 });
+
+test('rename spans its shape and keeps its center through resizing without a second selection ring', async ({ page }) => {
+  await mixed(page);
+  const target = shape(page, 'step_2');
+  await target.dblclick();
+  const rename = page.getByRole('textbox', { name: 'Rename Plan the launch', exact: true });
+  await expect(rename).toBeVisible();
+  const check = async () => {
+    const box = (await target.boundingBox())!;
+    const field = (await rename.boundingBox())!;
+    expect(field.width).toBeGreaterThanOrEqual(box.width - 0.1);
+    expect(Math.abs(field.x + field.width / 2 - box.x - box.width / 2)).toBeLessThan(1);
+    await expect(page.locator('.zf-selection-ring')).toBeHidden();
+  };
+  await check();
+  await page.setViewportSize({ width: 1600, height: 1000 });
+  await expect.poll(async () => {
+    const box = (await target.boundingBox())!, field = (await rename.boundingBox())!;
+    return Math.abs(field.x + field.width / 2 - box.x - box.width / 2);
+  }).toBeLessThan(1);
+  await check();
+  await rename.press('Escape');
+  await expect(page.locator('.zf-selection-ring')).toBeVisible();
+});
+
+test('both the count pill and arrow badge show the link preview without a detached chip', async ({ page }) => {
+  await mixed(page);
+  const link = page.getByRole('link', { name: 'Open Plan the launch board', exact: true });
+  for (const selector of ['.appendix-icon rect', '.appendix-icon circle']) {
+    await page.mouse.move(0, 0);
+    await link.locator(selector).hover();
+    await expect(page.locator('.link-preview')).toBeVisible();
+    await expect(page.locator('.link-preview strong')).toHaveText('Plan the launch');
+    await expect(page.locator('.zf-link-hint')).toBeHidden();
+    await expect(page.locator('.link-preview img')).toBeVisible();
+  }
+});

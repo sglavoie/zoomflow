@@ -2907,7 +2907,7 @@ header > strong { letter-spacing: -0.7px; }
 .zf-stage [data-shape-id][tabindex]:not(.zf-canvas-selected):focus-visible { outline: 3px solid var(--focus); }
 .canvas-rename-help { position: absolute; z-index: var(--z-raised); padding: 6px 10px; border-radius: 8px; background: var(--surface); color: var(--muted); box-shadow: 0 4px 16px var(--menu-shadow); font-size: 11px; line-height: 1.5; pointer-events: none; text-align: center; }
 .canvas-rename-help[hidden] { display: none; }
-.zf-stage-area:has(.canvas-rename:not([hidden])) .board-selection { visibility: hidden; }
+.zf-stage-area:has(.canvas-rename:not([hidden])) :is(.board-selection, .zf-selection-ring) { visibility: hidden; }
 .builder-appearance { border-top: 1px solid var(--border); margin-top: 20px; padding-top: 12px; }
 .builder-appearance > summary { padding: 6px 0; cursor: pointer; font-weight: 600; }
 .builder-appearance > summary span { color: var(--muted); font-size: 12px; font-weight: 400; margin-left: 8px; }
@@ -3076,3 +3076,8 @@ header > strong { display: inline-flex; align-items: center; gap: 6px; font-size
 .board-menu [data-menu-group="delete"]:is(:hover, :focus-visible) { background: var(--danger-surface); }
 .menu-shortcut { display: none; margin-left: auto; padding-left: 18px; color: var(--muted); font-size: 11px; }
 @media (pointer: fine) { .menu-shortcut { display: inline; } }
+
+.board-layer-heading { margin: 0 0 6px; font-size: var(--font-size-sm); color: var(--muted); }
+.board-layer-heading strong { color: var(--text); }
+.layer-depth-note { display: block; flex-basis: 100%; }
+.layer-depth-note[hidden] { display: none; }

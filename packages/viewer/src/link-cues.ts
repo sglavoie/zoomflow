@@ -88,6 +88,9 @@ export function decorateLinks(svg: Element, boards: Map<string, { name: string; 
         return (Math.abs(dx) < 2 || Math.abs(dx - 32) < 2) && Math.abs(f + 16 - bounds.y) < 2;
       });
       if (index < 0) continue;
+      // D2 shifts a link badge left when an authored tooltip occupies the same corner.
+      // Keep both icons usable there; the optional count yields to the authored tooltip.
+      const besideTooltip = Math.abs(bounds.x + bounds.width - icons[index].e - 16) > 2;
       const badge = icons.splice(index, 1)[0].icon;
       const circle = document.createElementNS(ns, 'circle');
       circle.setAttribute('cx', '16'); circle.setAttribute('cy', '16'); circle.setAttribute('r', '12');
@@ -112,16 +115,17 @@ export function decorateLinks(svg: Element, boards: Map<string, { name: string; 
       badge.replaceChildren(circle, arrow);
       const target = boards.get(link.dataset.board ?? '');
       const count = target?.diagram?.shapes.length ?? target?.searchShapes?.length;
-      if (direction === 'child' && count !== undefined) {
+      if (direction === 'child' && count !== undefined && !besideTooltip) {
         const label = `${count} inside`;
         const width = label.length * 5.5 + 12;
         const pill = document.createElementNS(ns, 'rect');
-        pill.setAttribute('x', String(-width + 6)); pill.setAttribute('y', '5');
+        // Extend outward from the corner, keeping the top and left entry arrows clear.
+        pill.setAttribute('x', '16'); pill.setAttribute('y', '5');
         pill.setAttribute('width', String(width + 10)); pill.setAttribute('height', '22'); pill.setAttribute('rx', '11');
         pill.setAttribute('fill', `var(--zf-badge-surface, ${surface})`);
         pill.setAttribute('stroke', `var(--zf-badge-ink, ${ink})`); pill.setAttribute('stroke-opacity', '0.25');
         const text = document.createElementNS(ns, 'text');
-        text.setAttribute('x', '0'); text.setAttribute('y', '19'); text.setAttribute('text-anchor', 'end');
+        text.setAttribute('x', '32'); text.setAttribute('y', '19'); text.setAttribute('text-anchor', 'start');
         text.setAttribute('font-size', '10'); text.setAttribute('font-family', 'system-ui, sans-serif');
         text.setAttribute('fill', `var(--zf-badge-ink, ${ink})`); text.textContent = label;
         badge.prepend(pill, text);
@@ -277,10 +281,20 @@ export function decorateLinks(svg: Element, boards: Map<string, { name: string; 
   let focusLast = false;
   const anchor = (target: EventTarget | null) => target instanceof Element ? target.closest('a[data-link-kind]') : null;
   const update = () => {
-    const label = (focusLast ? focused ?? hovered : hovered ?? focused)?.getAttribute('aria-label');
+    const subject = focusLast ? focused ?? hovered : hovered ?? focused;
+    const label = subject?.getAttribute('aria-label');
     if (hint.textContent !== (label ?? '')) hint.textContent = label ?? '';
     hint.hidden = !label;
+    if (!subject || !label) return;
+    const box = (subject.querySelector('[data-shape-id]') ?? subject).getBoundingClientRect();
+    const stage = svg.parentElement!.getBoundingClientRect();
+    if (box.right < stage.left || box.left > stage.right || box.bottom < stage.top || box.top > stage.bottom) { hint.hidden = true; return; }
+    const outer = hint.offsetParent?.getBoundingClientRect() ?? stage;
+    hint.style.left = `${Math.max(stage.left + 8, Math.min(box.left + box.width / 2 - hint.offsetWidth / 2, stage.right - hint.offsetWidth - 8)) - outer.left}px`;
+    const below = box.bottom + 8;
+    hint.style.top = `${(below + hint.offsetHeight <= stage.bottom - 8 ? below : Math.max(stage.top + 8, box.top - hint.offsetHeight - 8)) - outer.top}px`;
   };
+  svg.addEventListener('zf-viewportchange', () => requestAnimationFrame(() => { if (svg.isConnected) update(); }));
   svg.addEventListener('pointerover', (event) => { hovered = anchor(event.target); focusLast = false; update(); });
   svg.addEventListener('pointermove', (event) => { hovered = anchor(event.target); focusLast = false; update(); });
   svg.addEventListener('pointerout', (event) => { hovered = anchor((event as PointerEvent).relatedTarget); update(); });

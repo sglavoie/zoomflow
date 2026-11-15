@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
-import { editorText, previewReady, source } from './helpers';
+import { chooseExample, comparesVisuals, visualSkipReason, editorText, previewReady, source } from './helpers';
 import { flowSource, flowTemplate, readFlow } from '../../apps/web/src/flow-model';
 
 const shape = (page: import('@playwright/test').Page, id: string) => page.locator(`#viewer [data-shape-id="${id}"]`);
@@ -195,4 +195,50 @@ test('leaving presentation restores the editor zoom and keeps it when returning 
   await page.getByRole('button', { name: 'End walkthrough', exact: true }).click();
   await page.locator('.zf-breadcrumbs button').first().click();
   await expect(page.locator('#viewer .zf-zoom-controls span')).toHaveText(zoom!);
+});
+
+for (const example of ['Order flow', 'Flows & mind maps']) test(`detail pills clear arrowheads in ${example}, live and offline`, async ({ page, context }, info) => {
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.goto('/'); await previewReady(page);
+  if (example === 'Flows & mind maps') {
+    await chooseExample(page, /^Flows & mind maps/); await previewReady(page);
+  }
+  await page.getByRole('button', { name: 'Export', exact: true }).click();
+  const pending = page.waitForEvent('download');
+  await page.getByRole('button', { name: 'Download HTML', exact: true }).click();
+  const file = info.outputPath('badge-clearance.html'); await (await pending).saveAs(file);
+  const offline = await context.newPage(); await context.setOffline(true);
+  await offline.goto(`file://${file}`);
+  for (const target of [page, offline]) {
+    await expect(target.locator('.appendix-icon rect').first()).toBeVisible();
+    const collisions = await target.locator('.zf-stage').evaluate(stage => {
+      const pills = [...stage.querySelectorAll('.appendix-icon rect')].map(node => node.getBoundingClientRect()).filter(box => box.width);
+      const arrowheads = [...stage.querySelectorAll<SVGPathElement>('path.connection[marker-end]')].map(path => {
+        const matrix = path.getScreenCTM()!;
+        const tip = path.getPointAtLength(path.getTotalLength()).matrixTransform(matrix);
+        return { x: tip.x, y: tip.y, pad: 10 * Math.abs(matrix.a) };
+      });
+      return pills.flatMap(box => arrowheads.filter(tip => tip.x + tip.pad > box.left && tip.x - tip.pad < box.right && tip.y + tip.pad > box.top && tip.y - tip.pad < box.bottom));
+    });
+    expect(collisions).toEqual([]);
+    await expect(target.locator('.zf-depth-stack').first().locator('.zf-depth-sheet')).toHaveCount(2);
+    const trigger = target.getByRole('button', { name: 'Walkthrough', exact: true });
+    await trigger.click(); await target.keyboard.press('Escape');
+    await expect(target.getByRole('region', { name: 'Diagram walkthrough' })).toBeHidden();
+  }
+});
+
+for (const theme of ['light', 'dark'] as const) test(`detail badge clearance appearance in ${theme}`, { tag: '@visual' }, async ({ page, browserName }) => {
+  test.skip(!comparesVisuals(browserName), visualSkipReason);
+  await page.emulateMedia({ colorScheme: theme, reducedMotion: 'reduce' });
+  await page.goto('/'); await previewReady(page);
+  await page.locator('#toggle-source').click();
+  for (const example of ['order', 'flows']) {
+    if (example === 'flows') { await chooseExample(page, /^Flows & mind maps/); await previewReady(page); }
+    for (const width of [1440, 390]) {
+      await page.setViewportSize({ width, height: width === 390 ? 844 : 900 });
+      await page.mouse.move(0, 0);
+      await expect(page.locator('#viewer .zf-stage')).toHaveScreenshot(`detail-badges-${example}-${theme}-${width}.png`);
+    }
+  }
 });

@@ -57,7 +57,7 @@ export const viewerStyle = `
 /* Chromium outlines focused SVG links by default, even when focus came from the mouse. */
 .zf-stage a:where(:focus:not(:focus-visible)) { outline: none; }
 .zf-stage a[data-missing] { outline: 2px dashed #d64e52; }
-.zf-link-hint { position: absolute; top: 12px; left: 12px; max-width: calc(100% - 24px); padding: 6px 10px; border-radius: var(--radius); background: #203044; color: #fff; font-size: 12px; pointer-events: none; overflow-wrap: anywhere; }
+.zf-link-hint { position: absolute; max-width: calc(100% - 24px); padding: 6px 10px; border-radius: var(--radius); background: #203044; color: #fff; font-size: 12px; pointer-events: none; overflow-wrap: anywhere; }
 .zf-pan-hint { grid-row: 3; grid-column: 1 / -1; font-size: 12px; color: var(--muted); }
 .zf-zoom-controls button svg { display: block; margin: auto; }
 .zf-zoom-controls .zf-fit { display: flex; align-items: center; gap: 5px; padding-inline: 8px; font-size: 12px; }

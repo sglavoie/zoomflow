@@ -209,3 +209,44 @@ test('walkthrough and zoom controls remain separate in fullscreen and on a narro
   await page.getByRole('button', { name: 'Exit fullscreen', exact: true }).click();
   await expect(guide).toBeVisible();
 });
+
+test('coach hides for shape menus and toolbar overlays and returns when they close', async ({ page }) => {
+  await open(page);
+  const coach = page.locator('.canvas-coach');
+  await expect(coach).toBeVisible();
+  await shape(page, 'Browse').click();
+  await page.getByRole('button', { name: 'More shape actions', exact: true }).click();
+  await expect(coach).toBeHidden();
+  await page.keyboard.press('Escape');
+  await expect(coach).toBeVisible();
+  await shape(page, 'Browse').click({ button: 'right' });
+  await expect(coach).toBeHidden();
+  await page.keyboard.press('Escape');
+  await expect(coach).toBeVisible();
+  for (const selector of ['.board-outline > summary', '.board-appearance > details > summary', '.diagram-search-trigger']) {
+    await page.locator('#viewer').locator(selector).click();
+    await expect(coach).toBeHidden();
+    if (selector.includes('board-appearance')) await page.locator('#viewer').getByText('Customize style', { exact: true }).click();
+    await page.keyboard.press('Escape');
+    await expect(coach).toBeVisible();
+  }
+});
+
+test('Escape ends a mouse-started walkthrough from the trigger and viewer toolbar, after dismissing overlays', async ({ page }) => {
+  await open(page);
+  const trigger = page.getByRole('button', { name: 'Walkthrough', exact: true });
+  const guide = page.getByRole('region', { name: 'Diagram walkthrough' });
+  await trigger.click();
+  await page.keyboard.press('Escape');
+  await expect(guide).toBeHidden();
+  await trigger.click();
+  for (const selector of ['.board-outline > summary', '.board-appearance > details > summary', '.diagram-search-trigger']) {
+    await page.locator('#viewer').locator(selector).click();
+    await page.keyboard.press('Escape');
+    await expect(guide).toBeVisible();
+  }
+  await page.getByRole('button', { name: 'Zoom in', exact: true }).focus();
+  await page.keyboard.press('Escape');
+  await expect(guide).toBeHidden();
+  await expect(trigger).toBeFocused();
+});

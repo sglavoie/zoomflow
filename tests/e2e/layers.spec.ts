@@ -390,3 +390,27 @@ for (const theme of ['light', 'dark'] as const) test(`connected canvas appearanc
   await expect(stage(page)).toHaveScreenshot(`connected-layers-${theme}.png`);
   await expect(page.locator('.flow-builder-toolbar')).toHaveScreenshot(`layer-depth-controls-${theme}.png`);
 });
+
+test('Boards explains layer checkboxes and the number of levels in visible text', async ({ page }) => {
+  await open(page);
+  await openBoards(page);
+  await expect(page.locator('.board-layer-heading')).toHaveText('Show layers · Check to include descendants');
+  await expect(page.locator('.board-layer-heading')).toBeVisible();
+  await expect(page.locator('.layer-depth-controls label')).toHaveText('Levels below');
+  await expect(page.locator('.layer-depth-note')).toHaveText('0 = Flows & mind maps only');
+  await expect(page.locator('.layer-depth-note')).toBeVisible();
+  expect((await page.locator('.board-outline-panel').boundingBox())!.width).toBeLessThanOrEqual(420);
+});
+
+for (const theme of ['light', 'dark'] as const) test(`Boards explanations appearance in ${theme}`, { tag: '@visual' }, async ({ page, browserName }) => {
+  test.skip(!comparesVisuals(browserName), visualSkipReason);
+  await page.emulateMedia({ colorScheme: theme });
+  await open(page);
+  for (const width of [1440, 390]) {
+    await page.setViewportSize({ width, height: width === 390 ? 844 : 900 });
+    await openBoards(page);
+    await expect(page.locator('.board-outline-panel')).toHaveScreenshot(`boards-explanations-${theme}-${width}.png`);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(width);
+    await closeBoards(page);
+  }
+});
