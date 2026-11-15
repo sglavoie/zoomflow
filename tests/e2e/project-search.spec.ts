@@ -55,7 +55,7 @@ test('finds a shape in an unvisited, unlinked file, frames it and returns throug
   await query(page).fill('  REFUND APPROVAL  ');
   await expect(matches(page)).toHaveCount(2);
   await settled(page);
-  await expect(matches(page).first()).toHaveText('Refund approvalShape · finance/C# refunds.d2 · Root › Refunds');
+  await expect(matches(page).first()).toHaveText('Refund approvalShape · finance/C# refunds.d2 · C# refunds › Refunds');
   await query(page).press('ArrowDown');
   await page.keyboard.press('Enter');
   await expect(dialog(page)).toBeHidden();
@@ -90,7 +90,7 @@ test('reports broken files, keeps other results usable and remains available whe
   const before = await editorText(page);
   await find(page, 'Refunds');
   await settled(page);
-  await expect(matches(page)).toHaveText(['RefundsBoard · finance/C# refunds.d2 · Root › Refunds']);
+  await expect(matches(page)).toHaveText(['C# refundsBoard · finance/C# refunds.d2 · C# refunds', 'RefundsBoard · finance/C# refunds.d2 · C# refunds › Refunds']);
   await expect(dialog(page)).toContainText('Could not search broken.d2:');
   await expect(dialog(page)).toContainText('index.d2:');
   await expect(dialog(page).getByRole('button', { name: 'Retry search' })).toBeVisible();
@@ -98,7 +98,7 @@ test('reports broken files, keeps other results usable and remains available whe
   await expect(page.getByRole('button', { name: 'Find in project', exact: true })).toBeFocused();
   expect(await editorText(page)).toBe(before);
   await find(page, 'Refunds');
-  await matches(page).first().click();
+  await matches(page).getByText('Refunds', { exact: true }).click();
   await expect(stage(page)).toHaveAttribute('data-board', 'root.layers.Refunds');
   await previewReady(page);
 });
@@ -118,8 +118,8 @@ test('refreshes labels from unsaved imports, including edits in the other pane w
   await expect(matches(page)).toHaveCount(2);
   await settled(page);
   await expect(matches(page)).toHaveText([
-    'Fresh imported labelShape · imported.d2 · Root',
-    'Fresh imported labelShape · lib/labels.d2 · Root',
+    'Fresh imported labelShape · imported.d2 · Imported',
+    'Fresh imported labelShape · lib/labels.d2 · Labels',
   ]);
   await matches(page).first().click();
   await expect(page.locator('#filename')).toHaveAttribute('title', 'atlas/imported.d2');

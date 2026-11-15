@@ -36,10 +36,11 @@ async function find(page: Page, text: string) {
 test('finds a nested shape by label, frames it and preserves its board ancestry without following its link', async ({ page }) => {
   await start(page);
   await find(page, '  REFUND APPROVAL  ');
-  await expect(matches(page)).toHaveCount(2);
+  await expect(matches(page)).toHaveCount(3);
   await expect(matches(page)).toHaveText([
-    'Refund approvalShape · Root › Payments',
-    'Refund approvalShape · Root › Payments › Refunds',
+    'Refund approvalShape · Order flow › Payments',
+    'Refund approvalShape · Order flow › Payments › Refunds',
+    'Refund approvalBoard · Order flow › Payments › Refund approval',
   ]);
   await matches(page).nth(1).click();
   await expect(dialog(page)).toBeHidden();
@@ -64,7 +65,7 @@ test('opens board matches from the keyboard and closes search without navigating
   await source(page).press('ControlOrMeta+Shift+f');
   await expect(query(page)).toBeFocused();
   await query(page).fill('Refunds');
-  await expect(matches(page)).toHaveText(['RefundsBoard · Root › Payments › Refunds']);
+  await expect(matches(page)).toHaveText(['RefundsBoard · Order flow › Payments › Refunds']);
   await query(page).press('Enter');
   await board(page, 'root.layers.Payments.layers.Refunds');
   await expect(page.locator('.zf-stage')).toBeFocused();
@@ -73,7 +74,7 @@ test('opens board matches from the keyboard and closes search without navigating
   await query(page).press('ArrowDown');
   await expect(matches(page).first()).toBeFocused();
   await page.keyboard.press('ArrowDown');
-  await expect(matches(page).last()).toBeFocused();
+  await expect(matches(page).nth(1)).toBeFocused();
   await page.keyboard.press('ArrowUp');
   await expect(matches(page).first()).toBeFocused();
   await page.keyboard.press('ArrowUp');
@@ -145,7 +146,7 @@ test('finds imported shapes without selecting a different source file', async ({
   const before = await editorText(page);
   await find(page, '');
   await query(page).fill('From a local import');
-  await matches(page).filter({ hasText: 'Shape · Root' }).first().click();
+  await matches(page).filter({ hasText: 'Shape · Main' }).first().click();
   await expect(shape(page, 'Imported')).toHaveClass(/zf-source-selected/);
   expect(await editorText(page)).toBe(before);
 });
@@ -157,7 +158,7 @@ test('works on a narrow screen in dark mode', async ({ page }) => {
   await find(page, 'approval');
   await expect(dialog(page)).toBeInViewport({ ratio: 1 });
   await expect(matches(page).last()).toBeInViewport();
-  await matches(page).last().click();
+  await matches(page).nth(1).click();
   await board(page, 'root.layers.Payments.layers.Refunds');
   await expect(page.locator('#pane-a')).toHaveAttribute('data-view', 'preview');
   await expect(shape(page, 'same')).toBeInViewport();
@@ -169,7 +170,7 @@ test('frames a match on a zoomed board without changing its source', async ({ pa
   const zoom = page.getByRole('button', { name: 'Zoom in', exact: true });
   for (let i = 0; i < 6; i++) await zoom.click();
   await find(page, 'Receipt');
-  await matches(page).filter({ hasText: 'Shape · Root' }).first().click();
+  await matches(page).filter({ hasText: 'Shape · Order flow' }).first().click();
   await insideStage(page, '[data-shape-id="Receipt"]');
   await expect(shape(page, 'Receipt')).toHaveClass(/zf-source-selected/);
   expect(await editorText(page)).toBe(before);
@@ -205,5 +206,5 @@ test('search follows the active split pane and hidden panes release their shortc
   await expect(page.locator('#diagram-find-dialog')).toBeVisible();
   await expect(page.locator('#diagram-find-dialog-b')).not.toHaveAttribute('open', '');
   await query(page).fill('approval');
-  await expect(matches(page)).toHaveCount(2);
+  await expect(matches(page)).toHaveCount(3);
 });

@@ -26,8 +26,8 @@ for (const offline of [false, true]) {
     await page.locator('.zf-stage a[data-board="root.layers.checkout"]').locator('.appendix-icon').click();
     await expect(stage).toHaveAttribute('data-board', 'root.layers.checkout');
     const length = await page.evaluate(() => history.length);
-    await crumbs.getByRole('button', { name: 'checkout', exact: true }).click();
-    await crumbs.getByRole('button', { name: 'checkout', exact: true }).click();
+    await crumbs.getByRole('button', { name: 'Checkout', exact: true }).click();
+    await crumbs.getByRole('button', { name: 'Checkout', exact: true }).click();
     await expect(stage).toHaveAttribute('data-board', 'root.layers.checkout');
     expect(await page.evaluate(() => history.length)).toBe(length);
     await crumbs.getByRole('button').first().click();
@@ -65,8 +65,8 @@ for (const offline of [false, true]) {
     const stage = page.locator('.zf-stage').first();
     const message = page.locator('.zf-message').first();
     await expect(stage).toHaveAttribute('data-board', 'root');
-    await expect(message).toHaveText('Board "nope/deeper" not found; showing Root');
-    await expect(message.locator('[role="status"]')).toHaveText('Board "nope/deeper" not found; showing Root');
+    await expect(message).toHaveText('Board "nope/deeper" not found; showing Order flow');
+    await expect(message.locator('[role="status"]')).toHaveText('Board "nope/deeper" not found; showing Order flow');
     await expect(message.locator('[role="alert"]')).toBeEmpty();
     expect(await page.evaluate(() => location.hash)).toBe('#/');
     await page.locator('.zf-stage a[data-board="root.layers.checkout"]').locator('.appendix-icon').click();

@@ -252,7 +252,7 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
         return project === undefined || project === '' ? undefined : { id: project, fs: picker().projectSources(project).fs };
       },
       compile: async (path, fs) => {
-        const boards = indexBoards((await compileSource(fs[path], { inputPath: path, fs })).diagram);
+        const boards = indexBoards((await compileSource(fs[path], { inputPath: path, fs })).diagram, displayTitle(path));
         return indexDiagramSearch(boards).map(entry => ({ ...entry, hash: boards.get(entry.board)!.hash }));
       },
       activate: openProjectMatch,

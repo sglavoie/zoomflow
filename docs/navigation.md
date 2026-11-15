@@ -10,7 +10,10 @@ shrinks the detail board into its linking shape and briefly highlights that shap
 The move takes about 380 ms, with staggered fades to keep the boards' labels from
 overlapping; exported HTML uses the same motion. Sideways moves stay subtle.
 Ordinary pointer movement lets the transition finish. Scrolling, key presses or dragging interrupt motion,
-and reduced-motion preferences skip zooming. The root breadcrumb uses the document name. Breadcrumbs record the visited path,
+and reduced-motion preferences skip zooming. The root board uses the document title throughout the viewer. Other boards use the
+label shared by every shape linking to them; missing, empty or conflicting labels
+keep the authored board key. This applies to breadcrumbs, Boards, search, link
+previews and walkthroughs, including offline HTML. Routes and source keys stay the same. Breadcrumbs record the visited path,
 trimming back to an earlier board whenever you revisit it so cycles do not repeat.
 Guidance below the canvas names a detail board to explore, explains source selection
 on hover or keyboard focus, and gives panning instructions after zooming. Touch

@@ -2,9 +2,72 @@ import { selectMenuOption, downloadExport } from './menu';
 import { expect, test } from '@playwright/test';
 import { pathToFileURL } from 'node:url';
 import { readFileSync } from 'node:fs';
-import { board, drill, previewReady } from './helpers';
+import { board, drill, editorText, previewReady } from './helpers';
 import { devURL } from './servers';
 import { download } from './export-helpers';
+
+test('boards are named after the shape that opens them', async ({ page, context }, info) => {
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.goto('/'); await previewReady(page);
+  const original = await editorText(page);
+  await page.locator('.board-outline > summary').click();
+  await expect(page.getByRole('navigation', { name: 'Boards', exact: true }).locator('.board-outline-open > span')).toHaveText(['Order flow', 'Checkout', 'Charge']);
+  await page.locator('.board-outline > summary').click();
+  await page.getByRole('button', { name: 'Find in diagram', exact: true }).click();
+  const search = page.getByRole('dialog', { name: 'Find in diagram', exact: true });
+  await search.getByRole('searchbox').fill('Charge');
+  await expect(search.getByRole('list', { name: 'Search results' }).getByRole('button')).toHaveText([
+    'ChargeShape · Order flow › Checkout', 'ChargeBoard · Order flow › Checkout › Charge',
+  ]);
+  await search.getByRole('searchbox').press('Escape');
+  await page.getByRole('link', { name: 'Open Checkout board', exact: true }).hover();
+  await expect(page.locator('.link-preview strong')).toHaveText('Checkout');
+  await page.getByRole('link', { name: 'Open Checkout board', exact: true }).press('Enter');
+  await page.getByRole('link', { name: 'Open Charge board', exact: true }).press('Enter');
+  await expect(page.locator('.zf-breadcrumbs button')).toHaveText(['Order flow', 'Checkout', 'Charge']);
+  await expect(page).toHaveURL(/#\/checkout\/charge$/);
+  expect(await editorText(page)).toBe(original);
+  expect(await download(page, 'svg', info)).toMatch(/order-charge\.svg$/);
+  await selectMenuOption(page, '#export-format', 'html');
+  await expect(page.locator('#export-opening-board option')).toHaveText(['Order flow', 'Checkout', 'Checkout › Charge']);
+  const html = await download(page, 'html', info);
+  expect(html).toMatch(/order\.html$/);
+  await page.goto('about:blank'); await context.setOffline(true);
+  await page.goto(pathToFileURL(html).href);
+  await expect(page).toHaveTitle('Order flow');
+  await expect(page.locator('.zf-stage')).toHaveAttribute('aria-label', 'Order flow diagram');
+  await page.getByRole('link', { name: 'Open Checkout board', exact: true }).press('Enter');
+  await page.getByRole('link', { name: 'Open Charge board', exact: true }).press('Enter');
+  await expect(page.locator('.zf-breadcrumbs button')).toHaveText(['Order flow', 'Checkout', 'Charge']);
+  await expect(page).toHaveURL(/#\/checkout\/charge$/);
+  await page.getByRole('button', { name: 'Find in diagram', exact: true }).click();
+  await search.getByRole('searchbox').fill('Charge');
+  await expect(search.getByRole('list', { name: 'Search results' }).getByRole('button')).toHaveText([
+    'ChargeShape · Order flow › Checkout', 'ChargeBoard · Order flow › Checkout › Charge',
+  ]);
+});
+
+test('conflicting and empty linking labels keep authored board keys live and offline', async ({ page, context }, info) => {
+  await page.goto('/'); await previewReady(page);
+  await page.locator('#file').setInputFiles({ name: 'fallback.d2', mimeType: 'text/plain', buffer: Buffer.from(
+    'first: First {link: layers.shared}\nsecond: Second {link: layers.shared}\nblank: "" {link: layers.empty}\nlayers.shared: {inside}\nlayers.empty: {inside}') });
+  await previewReady(page);
+  const verify = async () => {
+    await expect(page.getByRole('link', { name: 'Open shared board', exact: true })).toHaveCount(2);
+    await expect(page.getByRole('link', { name: 'Open empty board', exact: true })).toHaveCount(1);
+    await page.getByRole('link', { name: 'Open shared board', exact: true }).first().press('Enter');
+    await expect(page.locator('.zf-breadcrumbs button')).toHaveText(['Fallback', 'shared']);
+    await expect(page).toHaveURL(/#\/shared$/);
+    await page.getByRole('navigation', { name: 'Breadcrumb' }).getByRole('button', { name: 'Fallback', exact: true }).click();
+  };
+  await page.getByRole('link', { name: 'Open shared board', exact: true }).first().hover();
+  await expect(page.locator('.link-preview strong')).toHaveText('shared');
+  await verify();
+  const html = await download(page, 'html', info);
+  await page.goto('about:blank'); await context.setOffline(true);
+  await page.goto(pathToFileURL(html).href);
+  await verify();
+});
 
 test('opening a board in another tab keeps the current board', async ({ page, context, browserName }) => {
   await page.goto('/');
@@ -99,11 +162,11 @@ for (const offline of [false, true]) {
     }
     await visit('root.layers.checkout', ['Order', 'checkout']);
     for (let i = 0; i < 3; i++) {
-      await visit('root.layers.checkout.layers.charge', ['Order', 'checkout', 'charge']);
+      await visit('root.layers.checkout.layers.charge', ['Order', 'checkout', 'Charge']);
       await visit('root.layers.checkout', ['Order', 'checkout']);
     }
     await page.goBack();
-    await expect(crumbs.getByRole('button')).toHaveText(['Order', 'checkout', 'charge']);
+    await expect(crumbs.getByRole('button')).toHaveText(['Order', 'checkout', 'Charge']);
     await page.goForward();
     await expect(crumbs.getByRole('button')).toHaveText(['Order', 'checkout']);
 
@@ -165,10 +228,10 @@ test('missing board link has a dashed outline and names its target in the viewer
     await expect(page.locator('.zf-message')).toHaveText(`Missing board: ${label}`);
   }
   async function checkLinks() {
-    await missing('root.layers.missing', 'root', 'Root > missing');
+    await missing('root.layers.missing', 'root', 'Missing links > missing');
     await page.locator('.zf-stage a[data-board="root.layers.child"]').click();
     await expect(page.locator('.zf-stage')).toHaveAttribute('data-board', 'root.layers.child');
-    await missing('root.layers.child.layers.absent', 'root.layers.child', 'Root > child > absent');
+    await missing('root.layers.child.layers.absent', 'root.layers.child', 'Missing links > Open > absent');
     await page.locator('.zf-stage a[data-board="root"]').click();
     await expect(page.locator('.zf-stage')).toHaveAttribute('data-board', 'root');
   }
@@ -222,7 +285,7 @@ test('opens order.d2, drills three levels and returns by breadcrumb, Esc and bro
 test('opens a deep link directly and restores it on reload', async ({ page }) => {
   await page.goto('/#/checkout/charge');
   await board(page, 'root.layers.checkout.layers.charge');
-  await expect(page.getByRole('navigation').getByRole('button')).toHaveText(['Order flow', 'checkout', 'charge']);
+  await expect(page.getByRole('navigation').getByRole('button')).toHaveText(['Order flow', 'Checkout', 'Charge']);
   await expect(page.locator('.zf-stage')).toContainText('Capture');
   await page.reload();
   await board(page, 'root.layers.checkout.layers.charge');
@@ -234,7 +297,7 @@ test('handles external links, theme changes, invalid files and missing deep link
   await page.goto('/#/checkout/missing');
   await board(page, 'root.layers.checkout');
   await expect(page).toHaveURL(/#\/checkout$/);
-  await expect(page.locator('.zf-message')).toHaveText('Board "checkout/missing" not found; showing checkout');
+  await expect(page.locator('.zf-message')).toHaveText('Board "checkout/missing" not found; showing Checkout');
   await page.keyboard.press('Escape');
   await board(page, 'root');
   await expect(page.locator('.zf-message')).toBeEmpty();

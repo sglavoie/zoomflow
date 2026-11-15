@@ -86,12 +86,16 @@ export function setupLinkPreview(scope: PaneScope, viewer: Viewer, files: Linked
       place(anchor);
     } catch { current.delete(key); }
   }
+  viewer.stage.addEventListener('zf-namechange', () => {
+    const root = compiledDocument?.boards.get('root');
+    if (root) root.name = viewer.documentTitle;
+  });
   async function show(anchor: Element) {
     const target = classifyHref(anchor.getAttribute('data-board') ?? anchor.getAttribute('data-file') ?? anchor.getAttribute('href') ?? anchor.getAttribute('xlink:href') ?? '');
     if (target.kind === 'file') { await showFile(anchor, target.path, target.hash); return; }
     const board = target.kind === 'board' ? compiledDocument?.boards.get(target.target) : undefined;
     if (!board || !compiledDocument) return;
-    open(anchor, anchor.querySelector('text')?.textContent?.trim() || board.name, describe(board));
+    open(anchor, board.name, describe(board));
     describeContents(board);
     cue.textContent = 'Open board ↗';
     await showPicture(anchor, pictures, board.id, () => compiledDocument!.render(board.target));

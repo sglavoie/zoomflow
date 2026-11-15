@@ -96,7 +96,7 @@ test('documents restore boards, breadcrumbs, zoom and pan; returning to a board 
   await page.mouse.up(); await page.keyboard.up('Space');
   const rootBox = await stage.locator(':scope > svg').getAttribute('viewBox');
   // Use the keyboard to avoid depending on the shape's zoomed position.
-  await page.getByRole('link', { name: 'Open checkout board', exact: true }).focus();
+  await page.getByRole('link', { name: 'Open Checkout board', exact: true }).focus();
   await page.keyboard.press('Enter');
   await expect(stage).toHaveAttribute('data-board', 'root.layers.checkout');
   await page.getByRole('button', { name: 'Zoom in', exact: true }).click();
@@ -109,7 +109,7 @@ test('documents restore boards, breadcrumbs, zoom and pan; returning to a board 
   await expect(stage).toHaveAttribute('data-board', 'root.layers.checkout');
   await expect(page.locator('.zf-zoom-controls span')).toHaveText('225%');
   await expectView(page, childBox!);
-  await expect(page.locator('.zf-breadcrumbs button')).toHaveText(['Order flow', 'checkout']);
+  await expect(page.locator('.zf-breadcrumbs button')).toHaveText(['Order flow', 'Checkout']);
   await page.locator('.zf-breadcrumbs').getByRole('button').first().click();
   await expect(stage).toHaveAttribute('data-board', 'root');
   await expect(page.locator('.zf-zoom-controls span')).toHaveText('150%');
@@ -149,10 +149,10 @@ test('workspace is compact and stable, zoom explains its baseline, export descri
   await expect(page.locator('.zf-pan-hint')).toBeVisible();
   await expect(page.locator('.zf-zoom-controls span')).toHaveAttribute('aria-label', '150% of fitted size');
   await page.getByRole('button', { name: 'Overview (fit diagram)', exact: true }).click();
-  await page.getByRole('link', { name: 'Open checkout board', exact: true }).locator('.appendix-icon').click();
+  await page.getByRole('link', { name: 'Open Checkout board', exact: true }).locator('.appendix-icon').click();
   await openDownloads(page);
   await page.locator('#export-format input[value="svg"]').check();
-  await expect(page.locator('#export-scope')).toHaveText('Current board: checkout · SVG');
+  await expect(page.locator('#export-scope')).toHaveText('Current board: Checkout · SVG');
   await page.locator('#export-format input[value="html"]').check();
   await expect(page.locator('#export-scope')).toHaveText('Entire diagram · 3 boards · Interactive HTML');
   await expect(page.getByRole('radio', { name: /Interactive diagram HTML/ })).toHaveAccessibleName(/drill-down navigation/);
@@ -181,7 +181,7 @@ test('offline HTML restores each board view and explains zoom', async ({ page, c
   await expect(offline.locator('.zf-zoom-controls span')).toHaveText('Fitted');
   await offline.getByRole('button', { name: 'Zoom in', exact: true }).click();
   await expect(offline.locator('.zf-pan-hint')).toBeVisible();
-  await offline.getByRole('link', { name: 'Open checkout board', exact: true }).focus();
+  await offline.getByRole('link', { name: 'Open Checkout board', exact: true }).focus();
   await offline.keyboard.press('Enter');
   await expect(offline.locator('.zf-stage')).toHaveAttribute('data-board', 'root.layers.checkout');
   await expect(offline.locator('.zf-zoom-controls span')).toHaveText('Fitted');

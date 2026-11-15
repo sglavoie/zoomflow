@@ -10,7 +10,7 @@ test('detail sheets reveal depth on hover and carry their accent into the destin
   await page.goto('/'); await previewReady(page);
   await expect(page.locator('#document-title')).toHaveText('Order flow');
   await expect(page.locator('#filename')).toHaveText('order.d2');
-  const link = page.getByRole('link', { name: 'Open checkout board', exact: true });
+  const link = page.getByRole('link', { name: 'Open Checkout board', exact: true });
   await expect(link.locator('.zf-depth-sheet')).toHaveCount(2);
   const before = await link.locator('.zf-depth-2').evaluate(node => getComputedStyle(node).transform);
   await link.hover();
@@ -70,7 +70,7 @@ test('presentation isolates the canvas, supports choices and restores controls a
   await expect(area.locator('.zf-present-title')).toContainText('Order flow');
   await expect(area.locator('.zf-present-title span')).toHaveText('Follow the idea, one step at a time');
   await area.getByRole('button', { name: 'Next: Checkout', exact: true }).click();
-  await area.getByRole('button', { name: 'Explore checkout', exact: true }).click();
+  await area.getByRole('button', { name: 'Explore Checkout', exact: true }).click();
   await expect(shape(page, 'Cart')).toBeVisible();
   await page.keyboard.press('Escape');
   await expect(area).toHaveCount(0);
@@ -93,7 +93,7 @@ test('presentation opens details from nodes, badges and the keyboard, preserving
   await shape(page, 'Browse').click();
   await expect(status).toHaveText('Step 1 · Browse');
   for (const activation of ['node', 'badge', 'Enter', ' ']) {
-    const link = page.getByRole('link', { name: 'Open checkout board', exact: true });
+    const link = page.getByRole('link', { name: 'Open Checkout board', exact: true });
     if (activation === 'node') await shape(page, 'Checkout').click();
     else if (activation === 'badge') await link.locator('.appendix-icon').click();
     else { await link.focus(); await link.press(activation); }
@@ -109,7 +109,7 @@ test('presentation opens details from nodes, badges and the keyboard, preserving
   await expect(status).toContainText('Authorize');
   await guide.getByRole('button', { name: 'Next: Capture', exact: true }).click();
   await guide.getByRole('button', { name: 'Next: Receipt', exact: true }).click();
-  await guide.getByRole('button', { name: 'Return to checkout', exact: true }).click();
+  await guide.getByRole('button', { name: 'Return to Checkout', exact: true }).click();
   await expect(status).toContainText('Charge');
   await guide.getByRole('button', { name: 'End walkthrough', exact: true }).click();
   expect(await editorText(page)).toBe(original);
@@ -133,7 +133,7 @@ test('offline HTML keeps presentation metadata, opens the chosen board and respe
   await expect(offline.locator('.zf-stage-area[data-presentation]')).toBeVisible();
   await expect(offline.locator('.zf-present-title strong')).toHaveText(title);
   await expect(offline.locator('.zf-present-title span')).toHaveText('A customer’s journey');
-  await offline.getByRole('link', { name: 'Open charge board', exact: true }).locator('.appendix-icon').click();
+  await offline.getByRole('link', { name: 'Open Charge board', exact: true }).locator('.appendix-icon').click();
   await expect(offline.locator('.zf-stage')).toHaveAttribute('data-board', 'root.layers.checkout.layers.charge');
   await expect(offline.locator('.zf-walkthrough [role="status"]')).toHaveText('Step 2 · Authorize');
   await offline.getByRole('button', { name: 'Back', exact: true }).click();
@@ -191,7 +191,7 @@ test('leaving presentation restores the editor zoom and keeps it when returning 
   await page.getByRole('button', { name: 'Walkthrough', exact: true }).click();
   await page.getByRole('button', { name: 'Present', exact: true }).click();
   await page.getByRole('button', { name: 'Next: Checkout', exact: true }).click();
-  await page.getByRole('button', { name: 'Explore checkout', exact: true }).click();
+  await page.getByRole('button', { name: 'Explore Checkout', exact: true }).click();
   await page.getByRole('button', { name: 'End walkthrough', exact: true }).click();
   await page.locator('.zf-breadcrumbs button').first().click();
   await expect(page.locator('#viewer .zf-zoom-controls span')).toHaveText(zoom!);

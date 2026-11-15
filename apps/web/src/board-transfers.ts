@@ -304,14 +304,15 @@ function documentModel(source: string, boards: Map<string, Board>, graph: unknow
 }
 
 /** Cross-board moves preserve a branch's builder type by moving its editable board under the new parent. */
-export function boardTransfers(source: string, boards: Map<string, Board>, graph: unknown) {
+export function boardTransfers(source: string, boards: Map<string, Board>, graph: unknown,
+  nameOf = (id: string) => boards.get(id)?.name ?? 'Root') {
   const model = documentModel(source, boards, graph);
   const cache = new Map<string, ReturnType<typeof choices>>();
   function choices(board: string, shape: string) {
     const origin = model.byPosition.get(positionKey(board, shape));
     if (!origin) return [];
     return model.destinations(origin).map(place => ({ id: transferKey(place), board: place.board, owner: place.node.id,
-      shape: place.shape, trail: place.trail, label: `${boards.get(place.board)?.name ?? 'Root'} › ${place.label}` }));
+      shape: place.shape, trail: place.trail, get label() { return `${nameOf(place.board)} › ${place.label}`; } }));
   }
   return {
     key(board: string, shape: string) { const place = model.byPosition.get(positionKey(board, shape)); return place && transferKey(place); },

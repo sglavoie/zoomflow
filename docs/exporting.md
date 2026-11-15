@@ -40,7 +40,10 @@ the editable source and view settings together so they can be restored elsewhere
 Export offers **Interactive diagram (HTML)** for one navigable file with every
 board, **Current board image (SVG)** and **Current board image (PNG)** for the
 board on screen, and **All boards as SVG or PNG (ZIP)** for separate images. Project
-files also offer **Interactive atlas (HTML)**. The main button names the download.
+files also offer **Interactive atlas (HTML)**. HTML uses the document title shown in
+the header by default, including “Order flow” for the starter. Renaming the export
+or setting an explicit display title overrides that default; filenames and board
+routes keep their existing rules. The main button names the download.
 When PNG is selected, **Copy PNG** puts the same current board image on the clipboard
 for pasting into another app. It uses the shown theme, export visibility and visible
 layer layout. If clipboard access fails, use **Download PNG**. The HTML opens directly

@@ -1,6 +1,5 @@
 import { indexBoards } from '@zoomflow/core';
 import type { DocumentPane } from './document-pane';
-import { displayTitle } from './text';
 
 export type ExportPresentation = { title: string; subtitle: string; opening: string; mode: 'explore' | 'walkthrough' | 'presentation'; frame: boolean };
 
@@ -33,15 +32,18 @@ export function setupExportPresentation(active: () => DocumentPane | undefined, 
       frame.checked = saved.frame === true;
       preferredOpening = typeof saved.opening === 'string' ? saved.opening : 'root';
     }
-    title.placeholder = pane ? displayTitle(pane.name) : 'Diagram title';
+    title.placeholder = pane ? pane.viewer.documentTitle : 'Diagram title';
     const loaded = pane?.documentExport;
-    const boards = pane && loaded ? [...indexBoards(pane.viewer.exportView(loaded.diagram, loaded.render).diagram).values()] : [];
+    const boards = pane && loaded ? [...indexBoards(pane.viewer.exportView(loaded.diagram, loaded.render).diagram, pane.viewer.documentTitle).values()] : [];
     const next = JSON.stringify(boards.map(board => [board.id, board.name, board.diagram.shapes.length]));
     if (next !== choices) {
       choices = next; opening.replaceChildren();
       for (const board of boards.filter(board => board.id === 'root' || board.diagram.shapes.length)) {
         const option = document.createElement('option'); option.value = board.id;
-        option.textContent = board.id === 'root' ? 'Main board' : board.id.split('.layers.').slice(1).join(' › ') || board.name;
+        const trail = [board.name];
+        for (let parent = board.parent; parent && parent !== 'root'; parent = boards.find(item => item.id === parent)?.parent)
+          trail.unshift(boards.find(item => item.id === parent)!.name);
+        option.textContent = trail.join(' › ');
         opening.append(option);
       }
       opening.value = [...opening.options].some(option => option.value === preferredOpening) ? preferredOpening : 'root';

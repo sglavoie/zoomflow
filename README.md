@@ -62,7 +62,8 @@ use **Retry preview** to try again without losing your source.
    and click **+** to insert a step between its ends. **Walkthrough** lets you follow
    a path, choose branches, and explore detail boards. Choose **Present** for a focused
    canvas with smooth framing and compact controls; it also works in exported HTML. Use breadcrumbs or **Boards** to move around, hover a link to preview its
-   board, or zoom and drag to inspect the diagram. **Overview** fits the whole diagram at a
+   board, or zoom and drag to inspect the diagram. Board names follow their linking
+   shape labels when those labels agree, with the document title at the root. **Overview** fits the whole diagram at a
    comfortable scale, up to 1.5×; phones start closer only when fitted labels fall below 11 px.
    A quiet dot grid follows pan and zoom, including in offline HTML, and stays out of SVG and PNG images. **Find in diagram** (⌘⇧F / Ctrl+Shift+F)
    finds board names and shape labels across the current document and jumps to a match.

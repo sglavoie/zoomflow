@@ -101,7 +101,7 @@ test('offers cross-board parents for an attached root and accepts a click on ano
   await openShapeActions(page);
   await page.getByRole('menuitem', { name: 'Move branch…', exact: true }).click();
   const picker = page.locator('.canvas-branches');
-  await expect(picker.getByLabel('New parent topic').locator('option')).toContainText(['Root › New idea']);
+  await expect(picker.getByLabel('New parent topic').locator('option')).toContainText(['Order flow › New idea']);
   await shape(page, 'root', 'step_1').click(); await previewReady(page);
   await expect(picker).toBeHidden();
   await connection(page, map, 'root', 'step_1');

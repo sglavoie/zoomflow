@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { readFile } from 'node:fs/promises';
-import { selectMenuOption, downloadExport } from './menu';
+import { selectMenuOption, downloadExport, openDownloads } from './menu';
 import { previewReady, board, drill, openFolder } from './helpers';
 import { download } from './export-helpers';
 
@@ -136,7 +136,7 @@ test('exported HTML retains keyboard focus during drill-down', async ({ page, co
   await link.press('Enter');
   await expect(offline.locator('.zf-stage')).toHaveAttribute('data-board', 'root.layers.checkout');
   await expect(offline.locator('.zf-stage')).toBeFocused();
-  await expect(offline.locator('.zf-visually-hidden')).toHaveText('checkout board');
+  await expect(offline.locator('.zf-visually-hidden')).toHaveText('Checkout board');
   const copied = await context.newPage();
   await copied.goto(pathToFileURL(path).href + href);
   await expect(copied.locator('.zf-stage')).toHaveAttribute('data-board', 'root.layers.checkout');
@@ -215,11 +215,23 @@ test('exported HTML restyles its canvas and link badges when the reader switches
   await expect.poll(colors).toEqual(light);
 });
 
-test('interactive HTML is titled with the document name without its .d2 extension', async ({ page }, info) => {
+test('interactive HTML uses the document title unless the export name or display title is edited', async ({ page }, info) => {
   await page.goto('/'); await previewReady(page);
   const html = await readFile(await download(page, 'html', info), 'utf8');
-  expect(html).toContain('<title>Order</title>');
-  expect(html).toContain('<header><h1>Order</h1></header>');
+  expect(html).toContain('<title>Order flow</title>');
+  expect(html).toContain('<header><h1>Order flow</h1></header>');
+  await openDownloads(page);
+  await page.locator('#export-name').fill('Review plan');
+  await page.locator('#export-name').press('Enter');
+  await expect(page.locator('#document-title')).toHaveText('Review plan');
+  await expect(page.locator('.zf-breadcrumbs button')).toHaveText(['Review plan']);
+  const renamed = await readFile(await download(page, 'html', info), 'utf8');
+  expect(renamed).toContain('<title>Review plan</title>');
+  await openDownloads(page);
+  await page.locator('.export-presentation > summary').click();
+  await page.locator('#export-title').fill('Explicit review');
+  const titled = await readFile(await download(page, 'html', info), 'utf8');
+  expect(titled).toContain('<title>Explicit review</title>');
 });
 
 test('exports a folder project as one offline atlas and links file SVGs in the ZIP', async ({ page, context }, info) => {
@@ -254,20 +266,20 @@ test('exports a folder project as one offline atlas and links file SVGs in the Z
   await offline.locator('.zf-stage a[data-file="./work/index.d2"]').click();
   await expect(stage).toHaveAttribute('data-file', 'work/index.d2');
   expect(await offline.evaluate(() => location.hash)).toBe('#/@file/work%2Findex.d2');
-  await expect(crumbs).toHaveText(['index', 'work/index']);
+  await expect(crumbs).toHaveText(['index', 'Index']);
   // The fragment opens the linked file's board.
   await offline.locator('.zf-stage a[data-file="../projects/zoomflow.d2#/Viewer"]').click();
   await expect(stage).toHaveAttribute('data-file', 'projects/zoomflow.d2');
   await expect(stage).toHaveAttribute('data-board', 'root.layers.Viewer');
-  await expect(crumbs).toHaveText(['index', '…', 'work/index', 'projects/zoomflow', 'Viewer']);
+  await expect(crumbs).toHaveText(['index', '…', 'work/index', 'Zoomflow', 'Viewer']);
   // Back moves across files; a reload keeps the place and its trail.
   await offline.goBack();
   await expect(stage).toHaveAttribute('data-file', 'work/index.d2');
   await offline.reload();
   await expect(stage).toHaveAttribute('data-file', 'work/index.d2');
-  await expect(crumbs).toHaveText(['index', 'work/index']);
+  await expect(crumbs).toHaveText(['index', 'Index']);
   await stage.focus();
   await offline.keyboard.press('Escape');
   await expect(stage).toHaveAttribute('data-file', 'index.d2');
-  await expect(crumbs).toHaveText(['index']);
+  await expect(crumbs).toHaveText(['Index']);
 });

@@ -146,6 +146,7 @@ function offlineViewer(lib: typeof runtime) {
     // Routes within the file, as its own links name them.
     owner.byRoute.set(lib.parseAtlasHash(board.hash).hash, board);
   }
+  for (const owner of docs.values()) owner.byId.get('root')!.name = names.get(owner.file) || document.title;
   const entry = docs.get(boards[0].file ?? '')!;
   let doc = entry;
   /** The project path a file link of the shown file opens, when the export holds that file. */
@@ -266,9 +267,9 @@ function offlineViewer(lib: typeof runtime) {
     const visited = trail;
     const shown = doc;
     const files = stack;
-    breadcrumbs.render([...files.map((visit, index) => ({ name: names.get(visit.file) ?? visit.file, activate: () => returnTo(index) })),
-      // Like the live viewer, a file's root crumb is named after the file.
-      ...visited.map((id, index) => ({ detail: id !== 'root', name: id === 'root' && (names.get(shown.file) || document.title) || shown.byId.get(id)!.name,
+    breadcrumbs.render([...files.map((visit, index) => ({ name: visit.file.replace(/\.d2$/i, ''), activate: () => returnTo(index) })),
+      // Board names already include the document title at the root.
+      ...visited.map((id, index) => ({ detail: id !== 'root', name: shown.byId.get(id)!.name,
         activate: () => show(shown.byId.get(id)!, visited.slice(0, index + 1)) }))]);
     if (focusStage || focusCrumb) {
       // Going up keeps the keyboard position: focus the link leading back down, which the

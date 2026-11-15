@@ -84,8 +84,8 @@ test('keyboard board navigation retains focus and announces the new board', asyn
   await link.press('Enter');
   await expect(page.locator('.zf-stage')).toHaveAttribute('data-board', 'root.layers.checkout');
   await expect(page.locator('.zf-stage')).toBeFocused();
-  await expect(page.locator('.zf-stage')).toHaveAttribute('aria-label', 'checkout diagram');
-  await expect(page.locator('#viewer .zf-visually-hidden')).toHaveText('checkout board');
+  await expect(page.locator('.zf-stage')).toHaveAttribute('aria-label', 'Checkout diagram');
+  await expect(page.locator('#viewer .zf-visually-hidden')).toHaveText('Checkout board');
   await page.keyboard.press('Escape');
   await expect(page.locator('.zf-stage')).toHaveAttribute('data-board', 'root');
   // Going up returns to the link that led down, not the stage.
@@ -287,7 +287,7 @@ for (const offline of [false, true]) test(`compact breadcrumbs retain every ance
     await expect(page.locator('.zf-stage')).toHaveAttribute('data-board', id);
   }
   expect((await crumbs.boundingBox())!.height).toBe(initialHeight);
-  await expect(crumbs.getByRole('button')).toHaveText(['Nested', '…', 'charge', 'capture']);
+  await expect(crumbs.getByRole('button')).toHaveText(['Nested', '…', 'charge', 'Capture']);
   const earlier = crumbs.getByRole('button', { name: 'Earlier boards', exact: true });
   await earlier.click();
   const menu = crumbs.getByRole('group', { name: 'Earlier boards' });
@@ -310,7 +310,7 @@ test('canvas guidance follows navigation, mouse, keyboard and zoom context', asy
   const browse = page.locator('.zf-stage [data-shape-id="Browse"]');
   await browse.hover();
   await expect(hint).toHaveText('Click to select · Double-click to rename · Drag onto a new parent to move this branch');
-  await page.getByRole('link', { name: 'Open checkout board', exact: true }).locator('.appendix-icon').click();
+  await page.getByRole('link', { name: 'Open Checkout board', exact: true }).locator('.appendix-icon').click();
   await page.mouse.move(0, 0);
   await expect(hint).toHaveText('Click the arrow on Charge to explore');
   await page.locator('.zf-stage').focus();

@@ -181,9 +181,9 @@ test('hover offers one cropped preview with a readable account of the board', as
 test('the starter leads to direct editing and rename preserves the edited shape’s position and scale', async ({ page }) => {
   await page.goto('/'); await previewReady(page);
   await expect(page.locator('#viewer [data-shape-id="Docs"]')).toHaveCount(0);
-  await page.getByRole('link', { name: 'Open checkout board', exact: true }).locator('.appendix-icon').click();
+  await page.getByRole('link', { name: 'Open Checkout board', exact: true }).locator('.appendix-icon').click();
   await expect(page.locator('#viewer [data-shape-id="Back"]')).toHaveCount(0);
-  await page.getByRole('link', { name: 'Open charge board', exact: true }).locator('.appendix-icon').click();
+  await page.getByRole('link', { name: 'Open Charge board', exact: true }).locator('.appendix-icon').click();
   await expect(page.getByRole('button', { name: 'Edit flow', exact: true })).toBeVisible();
   const step = page.locator('#viewer [data-shape-id="step_2"]');
   await step.dblclick();

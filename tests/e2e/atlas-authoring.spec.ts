@@ -61,7 +61,7 @@ test('links a shape to another file and board, changes and removes the link, and
 
   await (await shapeMenu(page, 'Inbox', 'Inbox')).getByRole('menuitem', { name: 'Open diagram' }).click();
   await showing(page, 'health.d2', 'root.layers.Sleep');
-  await expect(crumbs(page)).toHaveText(['index', '…', 'work/index', 'health', 'Sleep']);
+  await expect(crumbs(page)).toHaveText(['index', '…', 'work/index', 'Health', 'Sleep']);
 });
 
 test('creates a new linked flow that opens, stays editable, and links on from its steps', async ({ page }) => {
@@ -193,7 +193,7 @@ test('the atlas map draws every project file and file link, groups unlinked file
 
   await stage.locator('a[data-file="./health.d2"]').click();
   await showing(page, 'health.d2');
-  await expect(crumbs(page)).toHaveText(['health']);
+  await expect(crumbs(page)).toHaveText(['Health']);
   await expect(page.locator('#save-file')).toBeVisible();
   // Back returns to the map, as it would to a file.
   await page.goBack();

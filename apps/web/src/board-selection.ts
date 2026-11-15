@@ -45,6 +45,7 @@ interface Context {
   ready: () => boolean;
   sites: BoardSites | undefined;
   boards: Map<string, Board>;
+  displayBoards: Map<string, Board>;
   search: ReturnType<typeof setupDiagramSearch>;
   projectCheck: ReturnType<typeof setupProjectCheck> | undefined;
   toolbar: HTMLDivElement;
@@ -181,7 +182,7 @@ export function setupBoardSelection(ctx: Context) {
       setText(ctx.editGroup.querySelector('span')!, kind === 'flow' ? 'Change steps and connections without writing code.'
         : 'Change topics as an outline, without writing code.');
     }
-    ctx.outline.render(ctx.ready() ? ctx.sites : undefined, ctx.boards, ctx.boardId());
+    ctx.outline.render(ctx.ready() ? ctx.sites : undefined, ctx.displayBoards, ctx.boardId());
     ctx.search.refresh();
     ctx.projectCheck?.refresh();
     ctx.toolbar.hidden = ctx.editGroup.hidden && ctx.outline.hidden && ctx.search.empty && (!ctx.projectCheck || ctx.projectCheck.empty);

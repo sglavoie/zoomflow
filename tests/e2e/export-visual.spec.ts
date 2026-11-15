@@ -16,10 +16,11 @@ for (const theme of ['light', 'dark'] as const) {
     await page.goto('about:blank');
     await context.setOffline(true);
     await page.goto(pathToFileURL(path).href);
-    await page.getByRole('link', { name: 'Open checkout board', exact: true }).locator('.appendix-icon').click();
-    await page.getByRole('link', { name: 'Open charge board', exact: true }).locator('.appendix-icon').click();
+    await page.getByRole('link', { name: 'Open Checkout board', exact: true }).locator('.appendix-icon').click();
+    await page.getByRole('link', { name: 'Open Charge board', exact: true }).locator('.appendix-icon').click();
     await page.getByRole('button', { name: 'Zoom in', exact: true }).click();
     for (const size of [
+      { name: 'desktop', width: 1440, height: 900 },
       { name: 'phone', width: 390, height: 844 },
       { name: 'short', width: 390, height: 450 },
       { name: 'landscape', width: 844, height: 390 },
@@ -37,7 +38,7 @@ for (const theme of ['light', 'dark'] as const) {
       expect(await page.evaluate(() => document.documentElement.scrollHeight)).toBe(size.height);
       if (comparesVisuals(browserName)) await expect(page).toHaveScreenshot(`offline-${theme}-${size.name}.png`);
     }
-    await page.getByRole('navigation', { name: 'Breadcrumb' }).getByRole('button', { name: 'checkout', exact: true }).focus();
+    await page.getByRole('navigation', { name: 'Breadcrumb' }).getByRole('button', { name: 'Checkout', exact: true }).focus();
     await page.keyboard.press('Enter');
     await expect(page.locator('.zf-stage')).toHaveAttribute('data-board', 'root.layers.checkout');
   });

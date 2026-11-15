@@ -172,7 +172,24 @@ export class Viewer {
   setSourceShapes(sources: readonly ShapeSource[]) { this.sourceShapes = sources; }
 
   get currentBoard() { return this.boards.get(this.current); }
-  refreshName() { if (this.trail.length) this.updateCrumbs(); }
+  get documentTitle() { return this.settings.name?.() ?? this.settings.files?.name?.() ?? 'Root'; }
+  refreshName() {
+    const root = this.boards.get('root');
+    if (root) root.name = this.documentTitle;
+    if (this.trail.length) this.updateCrumbs();
+    const board = this.currentBoard;
+    if (board && !this.layerView.root) this.stage.setAttribute('aria-label', `${board.name} diagram`);
+    if (board) this.announcement.textContent = `${board.name} board`;
+    for (const link of this.stage.querySelectorAll('[data-board="root"]')) {
+      const direction = (link as SVGElement).dataset.linkDirection;
+      link.setAttribute('aria-label', direction === 'parent' ? `Return to ${this.documentTitle}` : `Visit ${this.documentTitle} board`);
+    }
+    const layer = this.stage.querySelector('[data-layer-board="root"]');
+    layer?.setAttribute('aria-label', `${this.documentTitle} layer`);
+    const label = layer?.querySelector(':scope > .zf-layer-label');
+    if (label) label.textContent = this.documentTitle;
+    this.stage.dispatchEvent(new Event('zf-namechange'));
+  }
   get hasExportVisibilityChoices() { return this.view.hasExportVisibilityChoices; }
   isShapeHidden(shape: string, board = this.current) { return this.view.isShapeHidden(shape, board); }
   toggleShapeHidden(shape: string, board = this.current) { return this.view.toggleShapeHidden(shape, board); }
@@ -233,7 +250,7 @@ export class Viewer {
   async setDocument(diagram: Diagram, render: RenderBoard, diagnostics: readonly LintDiagnostic[] = [], preserveViewport = false) {
     const previous = { boards: this.boards, diagnostics: this.diagnostics, render: this.render, cache: this.cache,
       layerView: this.layerView, layerDocument: this.layerDocument, hiddenShapes: this.hiddenShapes };
-    const boards = this.boards = indexBoards(diagram);
+    const boards = this.boards = indexBoards(diagram, this.documentTitle);
     const key = this.settings.document?.key() ?? '';
     if (key !== this.layerDocument) {
       if (this.layerDocument !== undefined) this.layerViews.set(this.layerDocument, this.layerView);
@@ -435,8 +452,7 @@ export class Viewer {
 
   private updateCrumbs() {
     const trail = this.trail;
-    const file = this.settings.files?.name?.() ?? this.settings.name?.();
-    this.breadcrumbs.render([...this.trailPrefix, ...trail.map((id, index) => ({ detail: id !== 'root', name: id === 'root' && file || this.boards.get(id)!.name,
+    this.breadcrumbs.render([...this.trailPrefix, ...trail.map((id, index) => ({ detail: id !== 'root', name: this.boards.get(id)!.name,
       activate: () => { void this.navigate(id, 'push', trail.slice(0, index + 1)); } }))]);
   }
 

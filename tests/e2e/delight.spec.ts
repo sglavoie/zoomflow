@@ -25,8 +25,8 @@ test('fresh workspace teaches direct editing, keeps attached boards, and remembe
   await page.getByRole('textbox', { name: 'Rename New step', exact: true }).fill('Choose items');
   await page.getByRole('textbox', { name: 'Rename New step', exact: true }).press('Enter'); await previewReady(page);
   await expect(page.locator('.canvas-coach')).toContainText('There’s more inside');
-  await page.getByRole('link', { name: 'Open checkout board', exact: true }).locator('.appendix-icon').click();
-  await page.getByRole('link', { name: 'Open charge board', exact: true }).locator('.appendix-icon').click();
+  await page.getByRole('link', { name: 'Open Checkout board', exact: true }).locator('.appendix-icon').click();
+  await page.getByRole('link', { name: 'Open Charge board', exact: true }).locator('.appendix-icon').click();
   await expect(shape(page, 'step_2')).toContainText('Capture');
   await page.locator('#toggle-source').click();
   await page.reload(); await previewReady(page);
@@ -128,12 +128,12 @@ test('walkthrough follows choices, visits nested boards, returns, and works offl
   await page.getByRole('button', { name: 'Walkthrough', exact: true }).click();
   const guide = page.getByRole('region', { name: 'Diagram walkthrough' });
   await guide.getByRole('button', { name: 'Next: Checkout', exact: true }).click();
-  await guide.getByRole('button', { name: 'Explore checkout', exact: true }).click();
+  await guide.getByRole('button', { name: 'Explore Checkout', exact: true }).click();
   await guide.getByRole('button', { name: 'Next: Charge', exact: true }).click();
-  await guide.getByRole('button', { name: 'Explore charge', exact: true }).click();
+  await guide.getByRole('button', { name: 'Explore Charge', exact: true }).click();
   await guide.getByRole('button', { name: 'Next: Capture', exact: true }).click();
   await guide.getByRole('button', { name: 'Next: Receipt', exact: true }).click();
-  await guide.getByRole('button', { name: 'Return to checkout', exact: true }).click();
+  await guide.getByRole('button', { name: 'Return to Checkout', exact: true }).click();
   await expect(guide).toContainText('Charge');
   await guide.getByRole('button', { name: 'End walkthrough', exact: true }).click();
   await page.getByRole('button', { name: 'Export', exact: true }).click();
@@ -144,7 +144,7 @@ test('walkthrough follows choices, visits nested boards, returns, and works offl
   const offline = await context.newPage(); await offline.goto(`file://${path}`);
   await offline.getByRole('button', { name: 'Walkthrough', exact: true }).click();
   await offline.getByRole('button', { name: 'Next: Checkout', exact: true }).click();
-  await offline.getByRole('button', { name: 'Explore checkout', exact: true }).click();
+  await offline.getByRole('button', { name: 'Explore Checkout', exact: true }).click();
   await expect(offline.locator('.zf-walkthrough')).toContainText('Cart');
   await expect(offline.locator('.zf-walkthrough-muted').first()).toBeAttached();
 });
@@ -153,7 +153,7 @@ test('style controls preserve attachments and filled shapes follow dark mode', a
   await open(page);
   await page.locator('.board-appearance > details > summary').click();
   await page.locator('.board-appearance').getByRole('button', { name: 'Elevated', exact: true }).click(); await previewReady(page);
-  await expect(page.getByRole('link', { name: 'Open checkout board', exact: true })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Open Checkout board', exact: true })).toBeVisible();
   await page.locator('#workspace-view > summary').click();
   await page.locator('#theme button[value="dark"]').click();
   await expect.poll(() => shape(page, 'Browse').locator('.shape rect').evaluate(node => getComputedStyle(node).fill)).toBe('rgb(38, 54, 76)');

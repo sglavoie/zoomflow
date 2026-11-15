@@ -1,7 +1,7 @@
 import { setupBoardEvents } from './board-events';
 import { setupBoardSelection } from './board-selection';
 import { setupBoardActions } from './board-actions';
-import { boardKey, type Board, type DiagramSearchEntry } from '@zoomflow/core';
+import { boardKey, indexBoards, type Board, type DiagramSearchEntry } from '@zoomflow/core';
 import type { DocumentView, Viewer } from '@zoomflow/viewer';
 import { boardSites, type BoardSites } from './board-model';
 import { branchChoices, moveBranch, type CanvasShape } from './canvas-model';
@@ -61,6 +61,7 @@ export function setupBoardTools(scope: PaneScope, viewer: Viewer, options: Board
     get ready() { return ready; },
     get sites() { return sites; }, set sites(value) { sites = value; },
     get boards() { return boards; }, set boards(value) { boards = value; },
+    get displayBoards() { return displayBoards; },
     get search() { return search; },
     get projectCheck() { return projectCheck; },
     get toolbar() { return toolbar; },
@@ -138,6 +139,14 @@ export function setupBoardTools(scope: PaneScope, viewer: Viewer, options: Board
   /** The compiled document's boards, or only the root board's text until the current source compiles. */
   let sites: BoardSites | undefined;
   let boards = new Map<string, Board>();
+  let displayBoards = new Map<string, Board>();
+  viewer.stage.addEventListener('zf-namechange', () => {
+    const root = boards.get('root');
+    displayBoards = root ? indexBoards(root.diagram, viewer.documentTitle) : new Map();
+    search.update(displayBoards);
+    refresh();
+    walkthrough.refresh();
+  });
   let compiledSource: string | undefined;
   let selected: string | undefined;
   /** What to show once `source` compiles: a board just added or renamed, and a shape to select or rename. */
@@ -170,7 +179,7 @@ export function setupBoardTools(scope: PaneScope, viewer: Viewer, options: Board
   const boardId = () => viewer.currentBoard?.id ?? 'root';
   const appearance = setupBoardAppearance(toolbar, viewer, scope.id('board-look'), () => ready() && !options.readOnly?.() ? sites : undefined, options.update);
   const walkthrough = setupWalkthrough(viewer.stage, toolbar, {
-    boards: () => new Map([...boards.values()].map(board => [board.id, {
+    boards: () => new Map([...displayBoards.values()].map(board => [board.id, {
       id: board.id, name: board.name,
       shapes: board.diagram.shapes.filter(shape => !viewer.isShapeHidden(shape.id, board.id)).map(shape => ({ id: shape.id, label: 'label' in shape && shape.label || shape.id, link: shape.link })),
       connections: (board.diagram.connections ?? []).map(edge => ({ id: edge.id, from: edge.src, to: edge.dst, label: edge.label || '' })),
@@ -373,11 +382,12 @@ export function setupBoardTools(scope: PaneScope, viewer: Viewer, options: Board
     compiled(source: string, next: BoardSites, nextBoards: Map<string, Board>, graph: unknown = {}) {
       sites = next;
       boards = nextBoards;
+      displayBoards = indexBoards(boards.get('root')!.diagram, viewer.documentTitle);
       compiledSource = source;
       graphMoves = graphBranches(source, boards.get('root')!.diagram, graph);
-      transfers = boardTransfers(source, boards, graph);
+      transfers = boardTransfers(source, boards, graph, id => displayBoards.get(id)?.name ?? 'Root');
       ++searchRevision;
-      search.update(boards);
+      search.update(displayBoards);
       refresh();
       appearance.refresh();
       walkthrough.refresh();

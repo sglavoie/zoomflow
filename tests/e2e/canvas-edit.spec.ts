@@ -315,12 +315,13 @@ test('a step that opens a board selects and renames on click, and opens from its
   await expect(stage(page)).toContainText('Plan it');
   expect(await editorText(page)).toContain('step_2.link: layers."Plan the launch"');
   // The arrow badge opens the board, and Enter on the focused link does too.
-  await openFromBadge(page, 'Open Plan the launch board');
+  await openFromBadge(page, 'Open Plan it board');
   await board(page, 'root.layers.Plan the launch');
   await page.keyboard.press('Escape');
   await board(page, 'root');
-  await link.press('Enter');
+  await page.getByRole('link', { name: 'Open Plan it board', exact: true }).press('Enter');
   await board(page, 'root.layers.Plan the launch');
+  await expect(page.locator('.zf-breadcrumbs button')).toHaveText(['Flows & mind maps', 'Plan it']);
   // A topic that opens a board renames on double-click too, and Enter opens its board.
   const label = shape(page, 'n_3_2').locator('text');
   if (browserName === 'webkit') {

@@ -37,8 +37,9 @@ export function shapeClass(id: string): string {
     .replace(/\+/g, '-').replace(/\//g, '_');
 }
 
-/** Enumerate the board tree, never the potentially cyclic graph of links. */
-export function indexBoards(diagram: Diagram): Map<string, Board> {
+/** Enumerate the board tree, never the potentially cyclic graph of links.
+ * With a document title, return presentation names; omit it for authoring and filenames. */
+export function indexBoards(diagram: Diagram, title?: string): Map<string, Board> {
   const boards = new Map<string, Board>();
   function visit(node: Diagram, id: string, target: string, hash: string,
     kind: Board['kind'], parent?: string) {
@@ -54,7 +55,27 @@ export function indexBoards(diagram: Diagram): Map<string, Board> {
     }
   }
   visit(diagram, 'root', '', '#/', 'root');
+  if (title !== undefined) {
+    const names = boardDisplayNames([...boards.values()].map(board => ({ ...board, shapes: board.diagram.shapes })), title);
+    for (const board of boards.values()) board.name = names.get(board.id)!;
+  }
   return boards;
+}
+
+/** Presentation names only: routes, authored keys and source remain unchanged.
+ * Empty or conflicting labels fall back to the authored key. Self-contained for offline HTML. */
+export function boardDisplayNames(boards: readonly { id: string; name: string; shapes: readonly { label?: string; link?: string }[] }[], title: string): Map<string, string> {
+  const labels = new Map<string, Set<string>>();
+  for (const board of boards) for (const shape of board.shapes) {
+    if (!shape.link) continue;
+    if (!labels.has(shape.link)) labels.set(shape.link, new Set());
+    labels.get(shape.link)!.add(shape.label ?? '');
+  }
+  return new Map(boards.map(board => {
+    const links = labels.get(board.id);
+    const label = links?.size === 1 ? [...links][0] : '';
+    return [board.id, board.id === 'root' ? title : label.trim() ? label : board.name];
+  }));
 }
 
 export type ClassifiedHref =

@@ -15,7 +15,7 @@ layers: {
   }
   peer: {Back: {link: _}}
 }`);
-  await expect(page.getByRole('link', { name: 'Open child board', exact: true })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Open Child board', exact: true })).toBeVisible();
   await previewReady(page);
   await selectMenuOption(page, '#export-format', 'html');
   const pending = page.waitForEvent('download'); await downloadExport(page);
@@ -24,12 +24,12 @@ layers: {
   await context.setOffline(true);
   await offline.goto(pathToFileURL(file).href);
   for (const target of [page, offline]) {
-    const child = target.getByRole('link', { name: 'Open child board', exact: true });
+    const child = target.getByRole('link', { name: 'Open Child board', exact: true });
     await expect(child).toHaveAttribute('data-link-direction', 'child');
     await child.click();
-    const parent = target.getByRole('link', { name: 'Return to Root', exact: true });
-    const peer = target.getByRole('link', { name: 'Visit peer board', exact: true });
-    const deeper = target.getByRole('link', { name: 'Open deep board', exact: true });
+    const parent = target.getByRole('link', { name: 'Return to Order flow', exact: true });
+    const peer = target.getByRole('link', { name: 'Visit Peer board', exact: true });
+    const deeper = target.getByRole('link', { name: 'Open Deeper board', exact: true });
     await expect(parent).toHaveAttribute('data-link-direction', 'parent');
     await expect(peer).toHaveAttribute('data-link-direction', 'peer');
     const arrows = await Promise.all([parent, peer, deeper].map((link) => link.locator('.appendix-icon path').getAttribute('d')));
@@ -38,11 +38,11 @@ layers: {
     // a delayed pointerover from the preceding click must not become the last input.
     await target.mouse.move(0, 0);
     await parent.focus();
-    await expect(target.locator('.zf-link-hint')).toHaveText('Return to Root');
+    await expect(target.locator('.zf-link-hint')).toHaveText('Return to Order flow');
     await peer.hover();
-    await expect(target.locator('.zf-link-hint')).toHaveText('Visit peer board');
+    await expect(target.locator('.zf-link-hint')).toHaveText('Visit Peer board');
     await deeper.click();
-    await target.getByRole('link', { name: 'Return to Root', exact: true }).click();
+    await target.getByRole('link', { name: 'Return to Order flow', exact: true }).click();
     await expect(target.locator('.zf-stage')).toHaveAttribute('data-board', 'root');
   }
 });
@@ -80,7 +80,7 @@ test('link badges preserve diagram tooltips and support Alt+click source selecti
   await previewReady(page);
   await source(page).fill('a: {link: layers.child; tooltip: Keep this tooltip}\nlayers.child: {b}');
   await previewReady(page);
-  const badge = page.getByRole('link', { name: 'Open child board', exact: true }).locator('.appendix-icon');
+  const badge = page.getByRole('link', { name: 'Open a board', exact: true }).locator('.appendix-icon');
   await expect(badge).toHaveCount(1);
   await expect(page.locator('.appendix-icon > title')).toHaveText('Keep this tooltip');
   await badge.click({ modifiers: ['Alt'] });
@@ -95,7 +95,7 @@ test('link badges preserve diagram tooltips and support Alt+click source selecti
   await context.setOffline(true);
   await offline.goto(pathToFileURL(path).href);
   await expect(offline.locator('.appendix-icon > title')).toHaveText('Keep this tooltip');
-  await expect(offline.getByRole('link', { name: 'Open child board' }).locator('.appendix-icon')).toHaveCount(1);
+  await expect(offline.getByRole('link', { name: 'Open a board' }).locator('.appendix-icon')).toHaveCount(1);
 });
 
 test('hover follows the shape while keyboard focus retains a visible selection', async ({ page }) => {
@@ -164,7 +164,7 @@ for (const mode of ['live', 'connected layers', 'offline'] as const) test(`link 
     await context.setOffline(true);
     await page.goto(pathToFileURL(path).href);
   }
-  const link = page.getByRole('link', { name: mode === 'connected layers' ? 'Return to Root' : 'Open detail board', exact: true });
+  const link = page.getByRole('link', { name: mode === 'connected layers' ? 'Return to Badge edges' : 'Open Open detail board', exact: true });
   const circle = link.locator('.appendix-icon circle');
   const out = page.getByRole('button', { name: 'Zoom out', exact: true });
   for (let i = 0; i <= 6; i++) {

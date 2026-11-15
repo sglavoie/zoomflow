@@ -171,7 +171,7 @@ describe('offline atlas runtime', () => {
 
     load('#/@file/nowhere.d2');
     expect([stage().dataset.file, stage().dataset.board]).toEqual(['index.d2', 'root']);
-    expect(document.querySelector('[role="status"]')!.textContent).toBe('Missing file: nowhere.d2; showing Root');
+    expect(document.querySelector('[role="status"]')!.textContent).toBe('Missing file: nowhere.d2; showing index');
   });
 
   it('opens each file fitted and restores its own view on return, though their boards share IDs', () => {

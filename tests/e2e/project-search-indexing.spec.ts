@@ -51,7 +51,7 @@ test('shows progress, stops queued work on close and preserves result focus as i
   await page.evaluate(() => { const probe = (window as any).projectSearchProbe; probe.hold = true; probe.release = undefined; });
   await page.getByRole('button', { name: 'Find in project', exact: true }).click();
   await dialog.getByRole('searchbox').fill('Home');
-  const match = dialog.getByRole('button', { name: 'Home Shape · broken/links.d2 · Root', exact: true });
+  const match = dialog.getByRole('button', { name: 'Home Shape · broken/links.d2 · Links', exact: true });
   await dialog.getByRole('searchbox').press('ArrowDown');
   await expect(match).toBeFocused();
   await expect.poll(() => page.evaluate(() => typeof (window as any).projectSearchProbe.release)).toBe('function');

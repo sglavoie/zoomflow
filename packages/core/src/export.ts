@@ -47,6 +47,7 @@ export interface RenderExportOptions {
 export async function renderExportBoards(diagram: Diagram, render: (target: string) => Promise<string>,
   diagnostics: readonly LintDiagnostic[] = [], options: RenderExportOptions = {}): Promise<ExportBoard[]> {
   const boards = indexBoards(diagram);
+  const displayed = indexBoards(diagram, 'Root');
   const extension = `.${options.extension ?? 'svg'}`;
   // Names compare case-insensitively (Windows, macOS); a file and folder may not share one.
   const used = new Set<string>();
@@ -73,7 +74,7 @@ export async function renderExportBoards(diagram: Diagram, render: (target: stri
     const parent = board.parent ? folder(board.parent, board.kind) : '';
     const name = board.parent ? claim(parent, segment(board.name), [extension, '']) : claim(parent, 'root', [extension]);
     places.set(board.id, { folder: parent, name });
-    result.push({ id: board.id, name: board.name, hash: board.hash, parent: board.parent,
+    result.push({ id: board.id, name: displayed.get(board.id)!.name, hash: board.hash, parent: board.parent,
       path: `${parent}${name}${extension}`, empty: board.diagram.shapes.length === 0, svg: '',
       searchShapes: board.diagram.shapes.map((shape) => ({ id: shape.id, label: ('label' in shape && shape.label) || shape.id })),
       walkthrough: {

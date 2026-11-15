@@ -317,7 +317,7 @@ export function setupExportMenu(activePane: () => DocumentPane | undefined, pick
     reportExport(`Preparing ${formatName} ${preview ? 'preview' : 'download'}…`, 'info', pane);
     const dark = document.documentElement.dataset.theme === 'dark';
     const exportName = pane.name.replace(/\.d2$/i, '');
-    const htmlPresentation = { title: settings.title || displayTitle(exportName), subtitle: settings.subtitle,
+    const htmlPresentation = { title: settings.title || pane.viewer.documentTitle, subtitle: settings.subtitle,
       initialBoard: indexBoards(view.diagram).get(settings.opening)?.hash, startMode: settings.mode };
     const warnings: string[] = [];
     // Interactive HTML follows its reader's color scheme; images keep the theme shown here.
@@ -366,7 +366,7 @@ export function setupExportMenu(activePane: () => DocumentPane | undefined, pick
         if (canceled()) return undefined;
         const boards = await renderExportBoards(file.diagram, prepareWith(file.render), file.diagnostics, renderOptions);
         if (canceled()) return undefined;
-        documents.push({ path, name: path.replace(/\.d2$/i, ''), boards });
+        documents.push({ path, name: displayTitle(path), boards });
         for (const linked of linkedFiles(file.diagram, path)) if (Object.hasOwn(fs, linked) && !queue.includes(linked)) queue.push(linked);
       }
       return documents;
@@ -378,7 +378,8 @@ export function setupExportMenu(activePane: () => DocumentPane | undefined, pick
         const prepared = await boardImage(pane, view.render, board.target, dark, settings);
         warnings.push(...prepared.warnings);
         blob = format === 'png' ? await rasterizeSvg(prepared.svg) : new Blob([prepared.svg], { type: 'image/svg+xml' });
-        name += `-${prepared.layers ? 'layers' : board.name === 'Root' ? 'root' : safeFilename(board.name)}.${format}`;
+        const authoredName = board.diagram.name || 'Root';
+        name += `-${prepared.layers ? 'layers' : authoredName === 'Root' ? 'root' : safeFilename(authoredName)}.${format}`;
       } else if (format === 'atlas' || (zip && isProject(pane))) {
         const documents = await atlasDocuments();
         if (!documents) {

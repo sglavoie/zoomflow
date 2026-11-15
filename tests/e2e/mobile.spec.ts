@@ -148,7 +148,7 @@ test.describe('phone workspace', () => {
   test('touch guidance and empty boards lead back to source without inserting text', async ({ page }) => {
     await page.goto('/'); await previewReady(page);
     await expect(page.locator('.zf-pan-hint')).toHaveText('Tap the arrow on Checkout to explore · Pinch to zoom');
-    await page.getByRole('link', { name: 'Open checkout board', exact: true }).locator('.appendix-icon').tap();
+    await page.getByRole('link', { name: 'Open Checkout board', exact: true }).locator('.appendix-icon').tap();
     await expect(page.locator('.zf-stage')).toHaveAttribute('data-board', 'root.layers.checkout');
     await page.locator('#mobile-source').tap();
     expect((await page.locator('#editor').boundingBox())!.y).toBeLessThan(260);
@@ -223,7 +223,7 @@ test.describe('readable phone canvas', () => {
     await page.getByRole('button', { name: 'Zoom in', exact: true }).click();
     await overview.click();
     await expect(stage.locator(':scope > svg')).toHaveAttribute('viewBox', fitted!);
-    await page.getByRole('link', { name: 'Open checkout board', exact: true }).locator('.appendix-icon').click();
+    await page.getByRole('link', { name: 'Open Checkout board', exact: true }).locator('.appendix-icon').click();
     await page.locator('.zf-breadcrumbs button').first().click();
     await expect(stage).toHaveAttribute('data-board', 'root');
     const restored = (await stage.locator(':scope > svg').getAttribute('viewBox'))!.split(' ').map(Number);

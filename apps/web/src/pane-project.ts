@@ -8,7 +8,7 @@ import { boardRoute } from './link-preview';
 import { createProjectFile } from './file-handles';
 import { atlasMapName, atlasMapSource, fileLinks as linksOfFile, type AtlasFile } from './atlas-map';
 import type { PaneId } from './pane-scope';
-import { describeError, plural } from './text';
+import { displayTitle, describeError, plural } from './text';
 import type { ProjectSearchEntry } from './project-search';
 import { compiledBoards, siblingKey, projectLabel, type FileVisit, type PaneContext, type DocumentExport } from './document-pane-shared';
 
@@ -91,7 +91,7 @@ export function setupPaneProject(ctx: Context) {
       const { d2 } = await ctx.shared.compiler.get();
       const compiled = await ctx.compileSource(source, { inputPath: path, fs: context.fs });
       const diagram = rebaseFileLinks(compiled, path);
-      const boards = indexBoards(diagram);
+      const boards = indexBoards(diagram, displayTitle(path));
       compiledBoards.set(key, new Set([...boards.values()].map((board) => board.hash)));
       const render: RenderBoard = (target) => d2.render(diagram, { ...compiled.renderOptions, target, noXMLTag: true });
       return { boards, render };

@@ -48,7 +48,7 @@ steps: {Later: {same: Step approval}}`);
   await previewReady(page);
   const network = await exportHtml(page, info);
   await find(page, '  REFUND APPROVAL  ');
-  await expect(matches(page)).toHaveText(['Refund approvalShape · Root › Payments › Refunds']);
+  await expect(matches(page)).toHaveText(['Refund approvalShape · Order flow › Payments › Refunds']);
   await query(page).press('Enter');
   await board(page, 'root.layers.Payments.layers.Refunds');
   const shape = page.locator('[data-shape-id="same"]');
@@ -81,8 +81,8 @@ test('offline atlas search distinguishes duplicate labels by file path and navig
   const network = await exportHtml(page, info, 'atlas');
   await find(page, 'approval');
   await expect(matches(page)).toHaveText([
-    'Refund approvalShape · a/shared.d2 › Root › Details',
-    'Refund approvalShape · b/shared.d2 › Root › Details',
+    'Refund approvalShape · a/shared.d2 › Shared › Details',
+    'Refund approvalShape · b/shared.d2 › Shared › Details',
   ]);
   await query(page).press('ArrowDown');
   await expect(matches(page).first()).toBeFocused();

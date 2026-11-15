@@ -236,7 +236,7 @@ export function setupPanePreview(ctx: Context) {
         ctx.blocks = boardBlocks(compiled.graph, source, compiled.inputPath);
         const sites = boardSites(source, ctx.blocks, boards);
         ctx.boardTools.compiled(source, sites, boards, compiled.graph);
-        ctx.linkPreview.compiled(boards, sites, render);
+        ctx.linkPreview.compiled(indexBoards(diagram, ctx.viewer.documentTitle), sites, render);
         ctx.showBoardSource(false);
         void ctx.highlightSelection(false);
         const renderSource = async (glyphs: string) => {
