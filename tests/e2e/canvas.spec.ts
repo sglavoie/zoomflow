@@ -337,3 +337,32 @@ test('appearance is separate from export and desktop canvas controls stay outsid
   await page.locator('#header-more-toggle').click();
   await expect(page.locator('#header-more-content #theme')).toHaveCount(0);
 });
+
+test('an edge-clamped add handle leaves the selected shape clickable and returns after fitting', async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.goto('/'); await previewReady(page);
+  const stage = page.locator('#viewer .zf-stage');
+  const browse = stage.locator('[data-shape-id="Browse"]');
+  await browse.click();
+  const add = page.getByRole('button', { name: 'Add next step after Browse', exact: true });
+  await expect(add).toBeVisible();
+  const shape = (await browse.boundingBox())!;
+  const canvas = (await stage.boundingBox())!;
+  const x = shape.x + shape.width / 2, y = shape.y + shape.height / 2;
+  await page.mouse.move(x, y);
+  await page.keyboard.down('ControlOrMeta');
+  await page.mouse.down();
+  await page.mouse.move(canvas.x + canvas.width - 16, y, { steps: 8 });
+  await page.mouse.up();
+  await page.keyboard.up('ControlOrMeta');
+  await expect(add).toBeHidden();
+  // The duplicate action remains available, and a real right-click reaches the shape.
+  await expect(page.getByRole('button', { name: 'Add next step', exact: true })).toBeVisible();
+  await browse.click({ button: 'right' });
+  await expect(page.getByRole('menu', { name: 'Actions for Browse', exact: true })).toBeVisible();
+  await page.keyboard.press('Escape');
+  await page.getByRole('button', { name: 'Overview (fit diagram)', exact: true }).click();
+  await expect(add).toBeVisible();
+  await add.click();
+  await expect(page.getByRole('textbox', { name: 'Rename New step', exact: true })).toBeVisible();
+});

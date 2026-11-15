@@ -217,7 +217,8 @@ test('a blank or unedited name keeps an opened file linked to it', async ({ page
   await page.locator('#export-name').press('ControlOrMeta+s');
   await expect(page.locator('#draft-status')).toHaveText('Saved to file');
   await expect(page.locator('#filename')).toHaveText('Work.D2');
-  expect(await page.evaluate(() => (window as typeof window & { written?: string[] }).written)).toEqual(['a -> b']);
+  // An unchanged opened file already says Saved to file while the new write is pending.
+  await expect.poll(() => page.evaluate(() => (window as typeof window & { written?: string[] }).written)).toEqual(['a -> b']);
 });
 
 test('a slow save preserves later edits and does not rename a document opened in the meantime', async ({ page }) => {

@@ -286,11 +286,16 @@ export function setupBoardSelection(ctx: Context) {
     const gap = 8;
     const own = ctx.current().canvas(ctx.boardId())?.own;
     const down = own && readFlow(own)?.direction === 'down';
-    const handleX = box.right + 22;
-    const handleY = down ? box.bottom + 10 : box.top + box.height / 2;
-    addHandle.style.visibility = ctx.shapeGroup.style.visibility;
-    addHandle.style.left = `${Math.min(stage.right - 22, handleX) - bounds.left}px`;
-    addHandle.style.top = `${Math.min(stage.bottom - 22, handleY) - bounds.top}px`;
+    const handleX = Math.min(stage.right - 22, box.right + 22);
+    const handleY = Math.min(stage.bottom - 22, down ? box.bottom + 10 : box.top + box.height / 2);
+    const halfWidth = addHandle.offsetWidth / 2, halfHeight = addHandle.offsetHeight / 2;
+    // At an edge, clamping the handle can put it over the shape's label and swallow
+    // selection or right-clicks. The selection bar still offers the same Add action.
+    const overlaps = handleX - halfWidth < box.right && handleX + halfWidth > box.left &&
+      handleY - halfHeight < box.bottom && handleY + halfHeight > box.top;
+    addHandle.style.visibility = overlaps ? 'hidden' : ctx.shapeGroup.style.visibility;
+    addHandle.style.left = `${handleX - bounds.left}px`;
+    addHandle.style.top = `${handleY - bounds.top}px`;
     const below = box.bottom + gap + height <= stage.bottom || box.top - gap - height < stage.top;
     const top = below ? Math.min(box.bottom + gap, stage.bottom - height - gap) : box.top - gap - height;
     const left = Math.max(stage.left + gap, Math.min(box.left + box.width / 2 - width / 2, stage.right - width - gap));
