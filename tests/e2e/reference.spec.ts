@@ -13,6 +13,16 @@ async function ready(page: Page) {
   await expect(page.locator('.zf-stage')).toHaveAttribute('data-board', 'root');
 }
 
+/** Check saved reference state independently of the dev server's module cache. */
+async function reloadReference(page: Page) {
+  // Firefox can fail to link a cached Vite module after a 304 on reload, before
+  // the app starts. Routing forwards requests unchanged and disables HTTP caching;
+  // localStorage (the persistence under test) survives the real page reload.
+  await page.route('**/*', route => route.continue());
+  await page.reload();
+  await previewReady(page);
+}
+
 async function editorState(page: Page) {
   return withEditorView(page, view => ({ source: view.state.doc.toString() as string, selection: view.state.selection.toJSON() }));
 }
@@ -84,7 +94,7 @@ test('reference search restores its text and matching results after reload', asy
   await toggle(page).click();
   await search(page).fill('arrows');
   const count = await page.locator('#reference-count').textContent();
-  await page.reload(); await previewReady(page);
+  await reloadReference(page);
   await openView(page);
   await toggle(page).click();
   await expect(search(page)).toHaveValue('arrows');
@@ -110,7 +120,7 @@ test('divider supports dragging, keyboard bounds, and remembers its size after r
   await divider(page).press('ArrowDown');
   await expect(divider(page)).toHaveAttribute('aria-valuenow', '75');
   await divider(page).press('ArrowUp');
-  await page.reload();
+  await reloadReference(page);
   await openView(page);
   await toggle(page).click();
   await expect(divider(page)).toHaveAttribute('aria-valuenow', '70');
@@ -124,7 +134,7 @@ test('double-clicking the reference divider resets and saves its default size', 
   await expect(divider(page)).toHaveAttribute('aria-valuenow', '75');
   await divider(page).dblclick();
   await expect(divider(page)).toHaveAttribute('aria-valuenow', '60');
-  await page.reload();
+  await reloadReference(page);
   await openView(page);
   await toggle(page).click();
   await expect(divider(page)).toHaveAttribute('aria-valuenow', '60');

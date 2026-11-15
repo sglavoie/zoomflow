@@ -60,6 +60,9 @@ isolation, per-document choices, and failed or superseded layer renders.
   restoration, search, copy feedback, resizing, offline use, narrow and dark layouts, and
   tablet pane switching. `apps/web/test/reference.test.ts` compiles and renders every
   reference snippet, and `apps/web/test/examples.test.ts` covers the bundled examples.
+  Reference reload checks bypass HTTP caching and wait for preview initialization,
+  isolating saved search and divider state from Firefox/Vite cached-module failures.
+  Browser storage still survives the real page reload.
 - `flow-builder.spec.ts`: building flows from the form and editing them again, and focus
   that moves to the neighbouring connection after a removal.
 - `mind-map-builder.spec.ts`: mind maps from an outline, drilling into a detail board,
