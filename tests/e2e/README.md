@@ -13,22 +13,48 @@ The workspace-only visual spec checks platform support with a worker-fixture ski
 before creating pages or contexts. Unsupported engines still report skipped cases,
 without browser setup for tests that cannot compare those baselines.
 
-On macOS, both WebKit projects launch with `-WebKitDebugScreenTimeEnabled false`.
-Two macOS 27.0.1 native crash reports (2026-11-16 at 00:44:29 and 02:18:24)
-showed `SIGABRT` in `STScreenTimeConfigurationObserver dealloc`, called by
-`WKWebView _uninstallScreenTimeWebpageController` during window teardown. Playwright
-then failed context setup with “Cannot find parent object browser … to create
-debugger,” before the app loaded. WebKit's
-[ScreenTimeEnabled preference](https://github.com/WebKit/WebKit/blob/main/Source/WTF/Scripts/Preferences/UnifiedWebPreferences.yaml)
-gates observer installation, and its
+On macOS 27 (Darwin 27), both WebKit projects use a test-only native workaround
+for `SIGABRT` in `STScreenTimeConfigurationObserver dealloc`, called by
+`WKWebView _uninstallScreenTimeWebpageController` during window teardown.
+Three native reports on 2026-11-16 (00:44, 02:18 and 12:36) showed this stack;
+Playwright can subsequently report “Cannot find parent object browser … to create
+debugger” before the app loads.
+
+The previous `-WebKitDebugScreenTimeEnabled false` argument was **ineffective**:
+a probe against the bundled framework read the argument as false while the actual
+feature remained enabled. WebKit's
 [Cocoa preference loader](https://github.com/WebKit/WebKit/blob/main/Source/WebKit/UIProcess/Cocoa/WebPreferencesCocoa.mm)
-reads the `WebKitDebug` launch preference. This avoids that native integration only
-in spawned test browsers; it writes no persistent macOS settings. Keep this
-workaround until an updated WebKit/macOS combination resolves the teardown crash.
-`webkit-macos.sh` forwards Playwright's arguments to the same bundled executable
-and appends the preference: passing its separate `false` value directly through
-`launchOptions.args` is rejected as a page URL. Default arguments and headed mode
-remain available.
+only applies such arguments to preferences marked `defaultsOverridable`, and
+[ScreenTimeEnabled](https://github.com/WebKit/WebKit/blob/main/Source/WTF/Scripts/Preferences/UnifiedWebPreferences.yaml)
+is not one of them.
+
+`webkit-macos.ts` compiles `webkit-macos.m` with Xcode Command Line Tools once per
+source/architecture/OS version into ignored `dist/webkit-macos/`. It launches the
+same Playwright app and bundled frameworks directly, loading the small library
+only for our test process. Before each `WKWebView` initialization, the library uses
+WebKit's private feature API to disable `ScreenTimeEnabled` and reads it back;
+it exits with an error if the feature API changes or disabling fails. This prevents
+the Screen Time observer from being installed. It changes no macOS defaults or
+shared browser files. Other macOS versions and Linux use Playwright's normal launch.
+Headless and headed launches retain Playwright's normal arguments. This is a
+workaround for the native integration, not a fix to Apple's Screen Time framework;
+remove it when an updated WebKit/macOS combination resolves the crash.
+
+Run the bounded regression check after changing this code or upgrading WebKit:
+
+```sh
+node tests/e2e/webkit-macos-check.mjs
+```
+
+It creates and closes 200 contexts across four headless browsers, then five headed
+contexts. Every page must render and respond to a click, all browsers must exit
+cleanly, and captured native diagnostics must confirm the preference is disabled
+at all 205 view initializations. It has a three-minute limit and saves diagnostics
+to `dist/webkit-macos/lifecycle-check.log`; it needs no app server or full suite.
+On 2026-11-16, this check passed in 19.3 seconds, followed by 35 WebKit
+canvas-connection cases (five repetitions, 49.7 seconds) and both production smoke
+cases (6.2 seconds), all without retries. The native check verifies the setting
+itself, since successful stress runs alone did not expose the ineffective flag.
 
 The dev server listens on port 4173 and the production preview on 4174. To run separate
 Playwright invocations at the same time, give each its own base port (the preview uses
@@ -53,8 +79,9 @@ production smoke gate passed in 10.2 seconds, versus 58.6 minutes plus a one-hou
 timeout for the preceding duplicated workflow. That faster matrix was **not a
 passing acceptance run**: 1,543 cases passed, 72 were skipped, and two failed
 (Firefox editor setup and native WebKit context creation). The editor setup was
-then repaired and passed five repetitions in each engine; the native WebKit
-failure still needs resolution before claiming full acceptance. Timing evidence
+then repaired and passed five repetitions in each engine. The native WebKit
+workaround above replaces the ineffective flag; full acceptance still requires
+a subsequent passing matrix. Timing evidence
 must not be treated as evidence that the complete suite passed.
 To repeat the comparison, run these sequentially, without other Zoomflow tests:
 

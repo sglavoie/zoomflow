@@ -1,7 +1,7 @@
-import { defineConfig, devices, webkit } from '@playwright/test';
-import { fileURLToPath } from 'node:url';
+import { defineConfig, devices } from '@playwright/test';
 import { availableParallelism } from 'node:os';
 import { devPort, devURL, previewPort, previewURL } from './tests/e2e/servers';
+import { macOSWebKitLaunchOptions } from './tests/e2e/webkit-macos';
 
 // Vite is a devDependency of apps/web only, so the root has no `vite` bin. Run that
 // package's copy directly instead of through a nested `pnpm --filter` process.
@@ -13,11 +13,9 @@ const production = Boolean(process.env.CI || process.env.ZOOMFLOW_PRODUCTION_E2E
 const appURL = production ? previewURL : devURL;
 const productionSpec = /production\.spec\.ts$/;
 // macOS 27 WebKit can abort in STScreenTimeConfigurationObserver dealloc when
-// closing a WKWebView. Scope the preference to test-browser launch arguments;
-// see tests/e2e/README.md for the native crash evidence and WebKit preference.
-const webkitLaunchOptions = process.platform === 'darwin'
-  ? { executablePath: fileURLToPath(new URL('./tests/e2e/webkit-macos.sh', import.meta.url)),
-      env: { ...process.env, ZOOMFLOW_WEBKIT_EXECUTABLE: webkit.executablePath() } } : {};
+// closing a WKWebView. Disable that integration in the test browser before view
+// initialization; tests/e2e/README.md explains the native workaround and check.
+const webkitLaunchOptions = macOSWebKitLaunchOptions();
 
 export default defineConfig({
   testDir: './tests/e2e',
