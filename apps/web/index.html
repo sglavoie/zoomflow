@@ -22,7 +22,7 @@
     <header>
       <strong><svg class="brand-mark" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="20" height="20" aria-hidden="true" focusable="false"><rect width="32" height="32" rx="7" fill="#235db8"/><rect x="7" y="7" width="18" height="18" rx="3" fill="none" stroke="#fff" stroke-width="2.5"/><rect x="13" y="13" width="6" height="6" rx="1" fill="#fff"/></svg>Zoomflow</strong>
       <div class="header-controls">
-        <details id="create-open"><summary>Create / open</summary><div class="create-open-menu">
+        <details id="create-open"><summary>Create / open<span class="picker-chevron" aria-hidden="true"></span></summary><div class="create-open-menu">
         <button id="new-flow" class="button-primary" type="button">New flow</button>
         <button id="new-mind-map" type="button">New mind map</button>
         <label class="file-button">Open .d2<input id="file" type="file" accept=".d2" /></label>
@@ -32,7 +32,7 @@
         <div class="document-control">
         <details id="example-picker">
           <summary aria-label="Choose a diagram" title="Choose a built-in example or return to your file">
-            <span class="document-titles"><span id="document-title">Order flow</span><span id="filename">order.d2</span></span><span id="document-unsaved" class="draft-unsaved" role="img" aria-label="Unsaved changes" title="Unsaved changes — save a disk copy" hidden>•</span><span class="picker-chevron" aria-hidden="true">⌄</span>
+            <span class="document-titles"><span id="document-title">Order flow</span><span id="filename">order.d2</span></span><span id="document-unsaved" class="draft-unsaved" role="img" aria-label="Unsaved changes" title="Unsaved changes — save a disk copy" hidden>•</span><span class="picker-chevron" aria-hidden="true"></span>
           </summary>
           <section class="example-menu" aria-label="Diagrams and projects">
             <div class="example-menu-heading">Built-in examples</div>
@@ -95,7 +95,7 @@
       <div class="header-actions">
         <button id="toggle-source" type="button" class="button-quiet" aria-pressed="false" aria-controls="source-pane">Source</button>
         <details id="workspace-view">
-          <summary>View</summary>
+          <summary>View<span class="picker-chevron" aria-hidden="true"></span></summary>
           <div class="workspace-view-menu">
         <div id="theme" class="theme-control" role="group" aria-label="Theme">
           <button type="button" value="light" aria-pressed="false">Light</button>
@@ -189,7 +189,7 @@
     <main id="workspace" data-layout="single">
       <div id="pane-a" class="document-pane" data-pane="a">
       <div class="pane-header" hidden>
-        <button id="pane-document" class="pane-document button-quiet" type="button" title="Choose a diagram for this pane"><span class="pane-document-name"></span><span class="draft-unsaved" role="img" aria-label="Unsaved changes" hidden>•</span><span class="picker-chevron" aria-hidden="true">⌄</span></button>
+        <button id="pane-document" class="pane-document button-quiet" type="button" title="Choose a diagram for this pane"><span class="pane-document-name"></span><span class="draft-unsaved" role="img" aria-label="Unsaved changes" hidden>•</span><span class="picker-chevron" aria-hidden="true"></span></button>
         <button id="pane-switch" class="pane-switch button-quiet" type="button">Show the other diagram</button>
       </div>
       <div id="pane-empty" class="pane-empty">

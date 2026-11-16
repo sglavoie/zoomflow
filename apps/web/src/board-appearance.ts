@@ -18,7 +18,7 @@ export function setupBoardAppearance(toolbar: HTMLElement, viewer: Viewer, prefi
   const summary = details.querySelector('summary')!;
   iconLabel(summary, 'style', 'Style');
   const chevron = document.createElement('span');
-  chevron.className = 'picker-chevron'; chevron.setAttribute('aria-hidden', 'true'); chevron.textContent = '⌄';
+  chevron.className = 'picker-chevron'; chevron.setAttribute('aria-hidden', 'true');
   summary.append(chevron);
   const controls = lookControls(host, prefix);
   const read = () => {

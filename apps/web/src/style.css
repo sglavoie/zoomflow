@@ -1211,9 +1211,19 @@ select:focus-visible {
 #document-unsaved {
   margin-left: -10px;
 }
+/* A rounded vector chevron stays centered and crisp at every text size. */
 .picker-chevron {
+  display: inline-block;
+  flex: 0 0 16px;
+  width: 16px;
+  height: 16px;
   color: var(--subtle);
   margin-left: auto;
+  background: currentColor;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='m6 9 6 6 6-6' fill='none' stroke='black' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center / contain no-repeat;
+}
+details[open] > summary > .picker-chevron {
+  transform: rotate(180deg);
 }
 #example-picker[open] summary,
 #example-picker summary:hover {
@@ -2792,6 +2802,9 @@ footer {
 /* Workspace commands stay close; secondary preferences share a single popover. */
 #workspace-view { position: relative; }
 #workspace-view > summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   cursor: pointer;
   list-style: none;
   padding: 7px 12px;
@@ -2799,7 +2812,7 @@ footer {
   border-radius: var(--radius);
 }
 #workspace-view > summary::-webkit-details-marker { display: none; }
-#workspace-view > summary::after { content: '⌄'; margin-left: 8px; color: var(--muted); }
+#workspace-view > summary .picker-chevron { color: var(--muted); }
 #workspace-view > summary:hover, #workspace-view[open] > summary { background: var(--hover); }
 #workspace-view > summary:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 .workspace-view-menu {
@@ -2974,9 +2987,9 @@ header > strong { display: inline-flex; align-items: center; gap: 6px; font-size
 .header-controls { gap: 12px; flex-wrap: nowrap; }
 .document-control { order: -1; width: min(300px, 32vw); }
 #create-open { position: relative; flex-shrink: 0; }
-#create-open > summary { cursor: pointer; list-style: none; padding: 8px 12px; border-radius: 8px; background: var(--accent); color: var(--on-accent); white-space: nowrap; }
+#create-open > summary { display: flex; align-items: center; gap: 10px; cursor: pointer; list-style: none; padding: 8px 12px; border-radius: 8px; background: var(--accent); color: var(--on-accent); white-space: nowrap; }
 #create-open > summary::-webkit-details-marker { display: none; }
-#create-open > summary::after { content: '⌄'; margin-left: 10px; }
+#create-open > summary .picker-chevron { color: inherit; }
 .create-open-menu { position: absolute; left: 0; top: calc(100% + 8px); z-index: var(--z-popover); display: grid; gap: 6px; padding: 8px; min-width: 220px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); box-shadow: var(--shadow-dialog); }
 .create-open-menu :is(button, .file-button) { display: block; width: 100%; margin: 0; text-align: left; border-color: transparent; background: transparent; color: var(--text); font-size: 14px; padding: 9px 12px; }
 .create-open-menu :is(button, .file-button):hover { background: var(--hover); }
@@ -3002,7 +3015,6 @@ header > strong { display: inline-flex; align-items: center; gap: 6px; font-size
 .board-appearance .builder-appearance { margin: 0; padding: 0; border: 0; }
 .board-appearance .builder-appearance > summary { display: flex; align-items: center; list-style: none; padding: 8px 10px; font-weight: 400; font-size: 13px; color: var(--muted); }
 .board-appearance .builder-appearance > summary::-webkit-details-marker { display: none; }
-.board-appearance .builder-appearance > summary .picker-chevron { display: inline; }
 .board-appearance .builder-look { position: absolute; z-index: var(--z-popover); top: 100%; left: 0; width: min(320px, calc(100vw - 48px)); padding: 14px; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; box-shadow: var(--shadow-dialog); }
 @media (max-width: 600px) {
   [data-part="mobile-view-switch"] { padding: 4px 12px; gap: 6px; }
