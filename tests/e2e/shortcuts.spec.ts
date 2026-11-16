@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { source, openView } from './helpers';
+import { source, openView, previewReady, editorText } from './helpers';
 
 test('shortcuts dialog contains keyboard focus and leaves the current board unchanged', async ({ page }) => {
   await page.goto('/');
@@ -63,7 +63,13 @@ test('shortcuts stay within a narrow viewport in dark mode', async ({ page }) =>
 
 test('comment shortcut toggles D2 comments and remains undoable', async ({ page }) => {
   await page.goto('/');
-  await source(page).fill('a -> b\nb -> c');
+  await previewReady(page);
+  // Wait for startup and replace CodeMirror's complete document through its input
+  // handling. DOM fill can leave the starter text behind under browser load.
+  await source(page).focus();
+  await source(page).press('ControlOrMeta+a');
+  await page.keyboard.insertText('a -> b\nb -> c');
+  await expect.poll(() => editorText(page)).toBe('a -> b\nb -> c');
   await source(page).press('ControlOrMeta+a');
   await source(page).press('ControlOrMeta+/');
   await expect(source(page)).toHaveText('# a -> b# b -> c');

@@ -48,6 +48,14 @@ the machine's full CPU count when other browser or simulator jobs share it.
 On 2026-11-16, the same 36 diagram-search and theme cases across all three engines
 passed with zero retries in 95.2 seconds with two workers and 52.0 seconds with four
 (45% less wall time). This is a subset measurement, not a full-suite time guarantee.
+The subsequent runner-owned matrix finished in 37.1 minutes, and the selected
+production smoke gate passed in 10.2 seconds, versus 58.6 minutes plus a one-hour
+timeout for the preceding duplicated workflow. That faster matrix was **not a
+passing acceptance run**: 1,543 cases passed, 72 were skipped, and two failed
+(Firefox editor setup and native WebKit context creation). The editor setup was
+then repaired and passed five repetitions in each engine; the native WebKit
+failure still needs resolution before claiming full acceptance. Timing evidence
+must not be treated as evidence that the complete suite passed.
 To repeat the comparison, run these sequentially, without other Zoomflow tests:
 
 ```sh
