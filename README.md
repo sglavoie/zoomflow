@@ -139,13 +139,18 @@ pnpm lint
 pnpm test:unit
 pnpm test:e2e
 pnpm build
-ZOOMFLOW_PRODUCTION_E2E=1 pnpm test:e2e
+pnpm test:e2e:production
 ```
 
 Install test browsers with `pnpm exec playwright install`. CLI export tests also
 require native D2 v0.9.0; see the [CLI setup](docs/cli.md). Production output is in
-`apps/web/dist`;
-every push to `main` deploys it to GitHub Pages once typecheck, lint, unit tests and the
+`apps/web/dist`. The last command runs two production smoke tests, not a second
+full browser suite. To run the full matrix against the built app instead, use
+`pnpm build && pnpm test:e2e:built` in place of the two browser commands above;
+CI uses that production mode. For iteration, pass the affected spec to
+`pnpm test:e2e tests/e2e/diagram-search.spec.ts`.
+
+Every push to `main` deploys it to GitHub Pages once typecheck, lint, unit tests and the
 production smoke tests pass.
 
 ## Contributing and security

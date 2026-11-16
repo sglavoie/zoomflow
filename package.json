@@ -13,6 +13,8 @@
     "test:unit": "vitest run",
     "test:coverage": "vitest run --coverage",
     "test:e2e": "playwright test",
+    "test:e2e:production": "ZOOMFLOW_PRODUCTION_E2E=1 playwright test --project=production --project=production-webkit",
+    "test:e2e:built": "ZOOMFLOW_PRODUCTION_E2E=1 playwright test",
     "typecheck": "tsc -p packages/core && tsc -p packages/viewer && tsc -p packages/cli && tsc -p apps/web && tsc -p apps/web/tsconfig.node.json && tsc -p .",
     "lint": "biome check .",
     "dev": "pnpm --filter @zoomflow/web dev",

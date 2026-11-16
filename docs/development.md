@@ -6,6 +6,7 @@ pnpm test:e2e
 pnpm typecheck
 pnpm lint
 pnpm build
+pnpm test:e2e:production
 ```
 
 `pnpm test` runs unit tests followed by browser tests. Playwright covers Chromium,
@@ -15,6 +16,13 @@ tests run against the Vite dev server locally. In CI, and locally with
 `vite preview` instead. The `production` and `production-webkit` projects add
 bundle smoke tests in Chromium and WebKit; tests that need source-module access
 still use the dev server.
+For routine local validation, run the full suite once and then
+`pnpm test:e2e:production`, which selects only the two bundle smoke tests.
+`pnpm test:e2e:built` explicitly runs the entire matrix against the build instead;
+use it as an alternative full pass, not an additional gate after `pnpm test:e2e`.
+During a repair, run the affected spec first, and repeat the full gate only after
+the focused checks pass. See the [browser testing guide](../tests/e2e/README.md)
+for test selection and concurrency.
 `pnpm lint` runs Biome's linter (formatting is not enforced; see `biome.jsonc`). Node
 26 is required; `.node-version` pins the version CI uses.
 The app build is written to `apps/web/dist`. D2 is loaded lazily, but its bundled

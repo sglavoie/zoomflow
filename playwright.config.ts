@@ -1,5 +1,6 @@
 import { defineConfig, devices, webkit } from '@playwright/test';
 import { fileURLToPath } from 'node:url';
+import { availableParallelism } from 'node:os';
 import { devPort, devURL, previewPort, previewURL } from './tests/e2e/servers';
 
 // Vite is a devDependency of apps/web only, so the root has no `vite` bin. Run that
@@ -29,7 +30,10 @@ export default defineConfig({
   // Tests share no state, so they spread across workers and shards one by one rather
   // than file by file; otherwise the largest spec file sets the length of a CI shard.
   fullyParallel: true,
-  workers: 2,
+  // Cap local concurrency: four workers improved the measured three-engine subset
+  // without launching one browser worker per CPU on shared developer machines.
+  // CI retains its existing defaults and explicit per-job --workers overrides.
+  workers: process.env.CI ? 2 : Math.min(4, availableParallelism()),
   // Most regression tests exercise source editing. Keep that returning-user layout
   // explicit; delight.spec.ts uses empty storage to verify the new canvas-first start.
   use: { baseURL: appURL, trace: 'retain-on-failure', storageState: { cookies: [], origins: [devURL, previewURL].map(origin => ({

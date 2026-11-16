@@ -42,6 +42,19 @@ Specs are grouped by feature. Add a test to the file for the feature it exercise
 shared helpers live in `helpers.ts` (source editor, preview readiness, project fixtures,
 CodeMirror access through `withEditorView`, selection) and `menu.ts` (export menu and downloads).
 
+Local runs use at most four workers; CI retains its job-specific concurrency.
+Override with `--workers=2` on a constrained host. Avoid multiplying workers by
+the machine's full CPU count when other browser or simulator jobs share it.
+On 2026-11-16, the same 36 diagram-search and theme cases across all three engines
+passed with zero retries in 95.2 seconds with two workers and 52.0 seconds with four
+(45% less wall time). This is a subset measurement, not a full-suite time guarantee.
+To repeat the comparison, run these sequentially, without other Zoomflow tests:
+
+```sh
+pnpm test:e2e tests/e2e/diagram-search.spec.ts tests/e2e/theme.spec.ts --workers=2
+pnpm test:e2e tests/e2e/diagram-search.spec.ts tests/e2e/theme.spec.ts --workers=4
+```
+
 For an exact source replacement in a short CodeMirror viewport, focus the editor,
 press `ControlOrMeta+a`, then use `page.keyboard.insertText`. WebKit's DOM-based
 `fill()` can leave a leading blank line there. Check `editorText(page)` before
@@ -206,6 +219,18 @@ isolation, per-document choices, and failed or superseded layer renders.
 
 ## Production build
 
+Use one full browser matrix per validation pass. The routine local sequence is
+`pnpm test:e2e`, `pnpm build`, then `pnpm test:e2e:production`. The last command
+selects only the Chromium and WebKit bundle smoke tests. Setting
+`ZOOMFLOW_PRODUCTION_E2E=1` alone does **not** select those projects: it runs the
+whole matrix again against the bundle and then adds the two smoke tests.
+
+For a full production regression pass instead, run `pnpm build` followed by
+`pnpm test:e2e:built`. CI retains full production coverage across all three engines.
+Use a focused spec while repairing a failure, for example
+`pnpm test:e2e tests/e2e/diagram-search.spec.ts --project=webkit`; run the full
+matrix after the repair is stable. Neither command changes assertions or retries.
+
 Production mode serves `pnpm build` output through `vite preview`. CI always uses it;
 locally, build first and set `ZOOMFLOW_PRODUCTION_E2E=1`. The behavioral projects then
 load the bundle instead of the dev server's modules, which starts each page about a third
@@ -218,7 +243,7 @@ bundle can break: the lazy D2 worker, WASM, fonts and the offline export runtime
 
 ```sh
 pnpm build
-ZOOMFLOW_PRODUCTION_E2E=1 pnpm exec playwright test --project=production --project=production-webkit
+pnpm test:e2e:production
 ```
 
 ## Visual baselines
