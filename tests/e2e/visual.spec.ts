@@ -2,10 +2,11 @@ import { expect, test } from '@playwright/test';
 import { comparesVisuals, source, visualSkipReason, openView } from './helpers';
 
 // Keep visual coverage small and intentional. Behavioral tests still run in all browsers.
+// Decide from worker fixtures before creating a page/context for unsupported engines.
+test.skip(({ browserName }) => !comparesVisuals(browserName), visualSkipReason);
 test.use({ reducedMotion: 'reduce', locale: 'en-US', timezoneId: 'UTC' });
 for (const mobile of [false, true]) for (const theme of ['light', 'dark'] as const) {
-  test(`${mobile ? 'phone' : 'desktop'} ${theme} workspace`, { tag: '@visual' }, async ({ page, browserName }) => {
-    test.skip(!comparesVisuals(browserName), visualSkipReason);
+  test(`${mobile ? 'phone' : 'desktop'} ${theme} workspace`, { tag: '@visual' }, async ({ page }) => {
     await page.setViewportSize(mobile ? { width: 390, height: 844 } : { width: 1440, height: 900 });
     await page.emulateMedia({ colorScheme: theme });
     // Availability depends on local CLIs, so keep that external response deterministic.

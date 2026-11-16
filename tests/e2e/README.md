@@ -9,6 +9,10 @@ their behavioral checks in every engine but compare baselines only in Chromium o
 the `@visual` tag, which decides where CI runs it. Install browsers with
 `pnpm exec playwright install` and run `pnpm test:e2e` from the workspace root.
 
+The workspace-only visual spec checks platform support with a worker-fixture skip
+before creating pages or contexts. Unsupported engines still report skipped cases,
+without browser setup for tests that cannot compare those baselines.
+
 The dev server listens on port 4173 and the production preview on 4174. To run separate
 Playwright invocations at the same time, give each its own base port (the preview uses
 the next one) and its own output directory:
