@@ -13,6 +13,23 @@ The workspace-only visual spec checks platform support with a worker-fixture ski
 before creating pages or contexts. Unsupported engines still report skipped cases,
 without browser setup for tests that cannot compare those baselines.
 
+On macOS, both WebKit projects launch with `-WebKitDebugScreenTimeEnabled false`.
+Two macOS 27.0.1 native crash reports (2026-11-16 at 00:44:29 and 02:18:24)
+showed `SIGABRT` in `STScreenTimeConfigurationObserver dealloc`, called by
+`WKWebView _uninstallScreenTimeWebpageController` during window teardown. Playwright
+then failed context setup with “Cannot find parent object browser … to create
+debugger,” before the app loaded. WebKit's
+[ScreenTimeEnabled preference](https://github.com/WebKit/WebKit/blob/main/Source/WTF/Scripts/Preferences/UnifiedWebPreferences.yaml)
+gates observer installation, and its
+[Cocoa preference loader](https://github.com/WebKit/WebKit/blob/main/Source/WebKit/UIProcess/Cocoa/WebPreferencesCocoa.mm)
+reads the `WebKitDebug` launch preference. This avoids that native integration only
+in spawned test browsers; it writes no persistent macOS settings. Keep this
+workaround until an updated WebKit/macOS combination resolves the teardown crash.
+`webkit-macos.sh` forwards Playwright's arguments to the same bundled executable
+and appends the preference: passing its separate `false` value directly through
+`launchOptions.args` is rejected as a page URL. Default arguments and headed mode
+remain available.
+
 The dev server listens on port 4173 and the production preview on 4174. To run separate
 Playwright invocations at the same time, give each its own base port (the preview uses
 the next one) and its own output directory:
@@ -24,6 +41,11 @@ ZOOMFLOW_E2E_PORT=4600 pnpm exec playwright test tests/e2e/editor.spec.ts --outp
 Specs are grouped by feature. Add a test to the file for the feature it exercises;
 shared helpers live in `helpers.ts` (source editor, preview readiness, project fixtures,
 CodeMirror access through `withEditorView`, selection) and `menu.ts` (export menu and downloads).
+
+For an exact source replacement in a short CodeMirror viewport, focus the editor,
+press `ControlOrMeta+a`, then use `page.keyboard.insertText`. WebKit's DOM-based
+`fill()` can leave a leading blank line there. Check `editorText(page)` before
+testing a precise diff; rendered text assertions can normalize that whitespace.
 
 `layers.spec.ts` covers the connected layer view, individual and subtree visibility,
 editing shapes whose IDs repeat across boards, undo, visible-layer SVG/PNG exports,

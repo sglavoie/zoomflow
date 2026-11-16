@@ -1,4 +1,5 @@
-import { defineConfig, devices } from '@playwright/test';
+import { defineConfig, devices, webkit } from '@playwright/test';
+import { fileURLToPath } from 'node:url';
 import { devPort, devURL, previewPort, previewURL } from './tests/e2e/servers';
 
 // Vite is a devDependency of apps/web only, so the root has no `vite` bin. Run that
@@ -10,6 +11,12 @@ const vite = 'node apps/web/node_modules/vite/bin/vite.js';
 const production = Boolean(process.env.CI || process.env.ZOOMFLOW_PRODUCTION_E2E);
 const appURL = production ? previewURL : devURL;
 const productionSpec = /production\.spec\.ts$/;
+// macOS 27 WebKit can abort in STScreenTimeConfigurationObserver dealloc when
+// closing a WKWebView. Scope the preference to test-browser launch arguments;
+// see tests/e2e/README.md for the native crash evidence and WebKit preference.
+const webkitLaunchOptions = process.platform === 'darwin'
+  ? { executablePath: fileURLToPath(new URL('./tests/e2e/webkit-macos.sh', import.meta.url)),
+      env: { ...process.env, ZOOMFLOW_WEBKIT_EXECUTABLE: webkit.executablePath() } } : {};
 
 export default defineConfig({
   testDir: './tests/e2e',
@@ -46,13 +53,13 @@ export default defineConfig({
   projects: [
     { name: 'chromium', testIgnore: productionSpec, use: { ...devices['Desktop Chrome'] } },
     { name: 'firefox', testIgnore: productionSpec, use: { ...devices['Desktop Firefox'] } },
-    { name: 'webkit', testIgnore: productionSpec, use: { ...devices['Desktop Safari'] } },
+    { name: 'webkit', testIgnore: productionSpec, use: { ...devices['Desktop Safari'], launchOptions: webkitLaunchOptions } },
     // WebKit also loads the bundle: the vendored D2 build carries a WebKit-specific patch.
     ...production ? [
       { name: 'production', testMatch: productionSpec,
         use: { ...devices['Desktop Chrome'], baseURL: previewURL } },
       { name: 'production-webkit', testMatch: productionSpec,
-        use: { ...devices['Desktop Safari'], baseURL: previewURL } },
+        use: { ...devices['Desktop Safari'], baseURL: previewURL, launchOptions: webkitLaunchOptions } },
     ] : [],
   ],
 });

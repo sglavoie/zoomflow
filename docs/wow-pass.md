@@ -15,12 +15,21 @@ dependencies, changes no D2 storage semantics, and is left unpushed for review.
 | 8 | `fdb4abe` | Searchable command palette with existing actions, boards and examples. |
 | 9 | `c529aff` | A minimap for clipped boards, with matching offline behavior and stable snapshot coordinates. |
 | 10 | `1d1d04a` | Single-file share links that preserve board routes and open independent drafts. |
-| 11 | `5a3fc93` and the follow-up described below | Final visual review, offline snapshot fonts and colors, unclipped phone Style menu, selection actions clear of the minimap, refreshed screenshot and guides. |
+| 11 | `5a3fc93`, `fec8d64` and the follow-up described below | Final visual review, offline snapshot fonts and colors, unclipped phone Style menu, selection actions clear of the minimap, refreshed screenshot and guides; browser-test setup repairs. |
 
-The session 11 follow-up, `test(e2e): skip unsupported workspace visuals before page setup`,
-moves the existing platform guard ahead of browser context creation. A WebKit
-context setup error had failed an otherwise skipped visual test; supported
-Chromium comparisons and their baselines remain unchanged.
+The first session 11 follow-up, `fec8d64`, moves the existing workspace visual
+platform guard ahead of browser context creation. Supported Chromium comparisons
+and their baselines remain unchanged.
+
+The next follow-up, `test(e2e): stabilize WebKit setup and isolate native teardown`,
+uses CodeMirror's select-all command to set up the short-phone AI deletion test,
+then verifies its exact starting source. WebKit's DOM-based fill had intermittently
+left a leading blank line, correctly producing an additional deletion highlight.
+Matching native crash reports also traced the context-setup failures to macOS
+Screen Time observer teardown. Both macOS WebKit test projects now launch the same
+bundled browser with a process-local preference avoiding that integration; see the
+[test guide](../tests/e2e/README.md). Assertions, retry limits and completion gates
+remain intact.
 
 The final review walks a fresh workspace in light and dark at 1440×900 and
 390×844: rename, add, drill and return, Boards, Find, Style, Walkthrough, Present,

@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { source, previewReady, stubAiStatus, selectSource, withEditorView, openView } from './helpers';
+import { source, previewReady, stubAiStatus, selectSource, withEditorView, openView, editorText } from './helpers';
 
 test.beforeEach(async ({ page }) => {
   await page.route('**/api/ai/status', (route) => route.fulfill({ status: 200,
@@ -90,7 +90,13 @@ test('AI deletions reveal their location and Undo on a short phone screen', asyn
   await page.route('**/api/ai', route => route.fulfill({ json: { source: 'a: Keep\nc: Keep', reply: 'Removed the middle node.' } }));
   await page.goto('/'); await previewReady(page);
   await page.locator('#mobile-source').click();
-  await source(page).fill('a: Keep\nb: Remove\nc: Keep'); await previewReady(page);
+  // Select the CodeMirror document, not its rendered DOM: WebKit fill() can
+  // leave a leading blank line in this short, virtualized editor.
+  await source(page).focus();
+  await source(page).press('ControlOrMeta+a');
+  await page.keyboard.insertText('a: Keep\nb: Remove\nc: Keep');
+  await expect.poll(() => editorText(page)).toBe('a: Keep\nb: Remove\nc: Keep');
+  await previewReady(page);
   await page.locator('#ai-assistant > summary').click();
   await page.locator('#ai-prompt').fill('Remove the middle node');
   await page.locator('#ai-send').click();
