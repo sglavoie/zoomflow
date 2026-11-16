@@ -175,6 +175,47 @@ for (const runtime of ['live', 'offline']) for (const colorScheme of ['light', '
   });
 }
 
+for (const colorScheme of ['light', 'dark'] as const) test(`offline images retain label fonts and colors in ${colorScheme}`, async ({ page, context }, info) => {
+  await page.emulateMedia({ colorScheme, reducedMotion: 'no-preference' });
+  await freezeBoardMotion(page);
+  await page.goto('/');
+  await expect(page.locator('.zf-stage')).toHaveAttribute('data-board', 'root');
+  const path = await download(page, 'html', info);
+  await context.setOffline(true);
+  await page.goto(pathToFileURL(path).href);
+  const stage = page.locator('.zf-stage');
+  const expected = await stage.locator(':scope > svg text').first().evaluate(async (text: SVGTextElement) => {
+    await document.fonts.ready;
+    const style = getComputedStyle(text);
+    return { family: style.fontFamily, fill: style.fill, width: text.getComputedTextLength() };
+  });
+  const minimap = await stage.locator('.zf-minimap img').getAttribute('src');
+  await stage.locator('a[data-board="root.layers.checkout"] .appendix-icon').click();
+  const snapshot = await stage.locator('.zf-board-snapshot').getAttribute('src');
+  for (const image of [minimap, snapshot]) {
+    // Load each serialized image as its own SVG document: like an img, it
+    // cannot inherit font faces or theme classes from the export page.
+    const actual = await page.evaluate(async image => {
+      const frame = document.createElement('iframe');
+      frame.style.cssText = 'position:fixed;left:-10000px;width:1000px;height:600px';
+      frame.srcdoc = decodeURIComponent(image!.split(',')[1]);
+      const loaded = new Promise<void>(resolve => { frame.onload = () => resolve(); });
+      document.body.append(frame);
+      try {
+        await loaded;
+        const doc = frame.contentDocument!;
+        const text = doc.querySelector('text') as SVGTextElement;
+        const style = frame.contentWindow!.getComputedStyle(text);
+        await doc.fonts.load(`${style.fontSize} ${style.fontFamily}`, text.textContent!);
+        return { family: style.fontFamily, fill: style.fill, width: text.getComputedTextLength() };
+      } finally { frame.remove(); }
+    }, image);
+    expect(actual.family).toBe(expected.family);
+    expect(actual.fill).toBe(expected.fill);
+    expect(actual.width).toBeCloseTo(expected.width, 1);
+  }
+});
+
 test('wheel, keys and dragging cancel every part of the zoom immediately', async ({ page }) => {
   await page.emulateMedia({ reducedMotion: 'no-preference' });
   await freezeBoardMotion(page);

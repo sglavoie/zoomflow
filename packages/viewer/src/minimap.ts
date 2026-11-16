@@ -49,6 +49,14 @@ export function setupMinimap(stage: HTMLElement, viewport: Pick<ReturnType<typeo
     if (svg && board && !stage.dataset.layerRoot) {
       const { x, y, width, height } = board;
       const copy = svg.cloneNode(true) as SVGSVGElement;
+      // Offline boards share fonts and theme rules in the document head; images
+      // cannot inherit them, so include them in this board's cached picture.
+      const shared = document.getElementById('zoomflow-svg-style');
+      if (shared) {
+        const style = document.createElementNS('http://www.w3.org/2000/svg', 'style');
+        style.textContent = shared.textContent;
+        copy.prepend(style);
+      }
       copy.setAttribute('viewBox', `${x} ${y} ${width} ${height}`);
       copy.setAttribute('width', String(width));
       copy.setAttribute('height', String(height));

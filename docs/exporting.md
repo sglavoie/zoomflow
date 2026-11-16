@@ -78,8 +78,7 @@ Until you choose a format, multi-board diagrams default to interactive HTML and
 single-board diagrams default to SVG. An explicit format choice takes precedence
 and is remembered when browser storage is available. One scope statement beside
 Download identifies the current board or the whole diagram; while the source has
-errors it says **Fix source errors to export.** Interactive HTML is titled with the
-document name without its `.d2` extension.
+errors it says **Fix source errors to export.**
 SVG, PNG and ZIP exports keep the theme shown in the workspace; interactive HTML
 follows its reader's light or dark color scheme. Remote images are embedded when
 accessible; failed fetches produce a placeholder and a visible warning. ZIP paths follow the

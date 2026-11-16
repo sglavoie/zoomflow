@@ -46,7 +46,7 @@ use **Retry preview** to try again without losing your source.
    node's incoming connections and keep its downstream branch attached.
    Move flow or mind-map branches onto parents on other boards too; each branch
    keeps its own editor, including when moving between flows and mind maps.
-   Or change the D2 source on the right and watch
+   Or open **Source** to change the D2 source and watch
    the preview update. Use the
    filename menu for built-in examples with small board pictures, **Open .d2** for a
    file, or **Open folder** for a project with relative imports. In a folder,
@@ -139,6 +139,7 @@ pnpm lint
 pnpm test:unit
 pnpm test:e2e
 pnpm build
+ZOOMFLOW_PRODUCTION_E2E=1 pnpm test:e2e
 ```
 
 Install test browsers with `pnpm exec playwright install`. CLI export tests also

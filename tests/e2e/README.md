@@ -1,7 +1,7 @@
 # Browser tests
 
 Playwright starts the Vite app and runs the behavioral specs in Chromium, Firefox and
-WebKit. `production.spec.ts` runs only in its own project (see below), and screenshot
+WebKit. `production.spec.ts` runs only in its production projects (see below), and screenshot
 comparisons run in Chromium on macOS only: `visual.spec.ts` and `controls-visual.spec.ts`
 skip elsewhere, while `export.spec.ts`, `export-visual.spec.ts` and `touch.spec.ts` run
 their behavioral checks in every engine but compare baselines only in Chromium on macOS
@@ -142,11 +142,13 @@ isolation, per-document choices, and failed or superseded layer renders.
 
 - `viewer.spec.ts`: drill-down navigation, ancestor-link suggestions and inferred parent
   connections, live and offline; minimap clipping geometry, click/drag panning,
-  visibility, cleanup and exclusion from SVG/PNG downloads.
+  visibility, cleanup, selection-bar clearance and exclusion from SVG/PNG downloads.
 - `canvas.spec.ts`: zoom, pan and fit, wheel and pinch input, spatial keyboard navigation,
   link badges (direction, tooltips, size through zoom), compact breadcrumbs, canvas
   guidance, explicit source reveal, and shape selection by keyboard and Alt+click.
-- `transition.spec.ts`: board changes fade in place, with reduced-motion support.
+- `transition.spec.ts`: linked-shape zooms in and out with staggered fades, live
+  and offline, plus input cancellation, reduced-motion support, and isolated offline
+  snapshot/minimap label fonts and colors.
 - `fullscreen.spec.ts`: the fullscreen diagram.
 - `engine.spec.ts`: slow first download, module and worker startup failures with retry,
   restarting a stalled preview without losing edits, and an engine notice that stays with
@@ -185,12 +187,12 @@ faster. Tests that import or rewrite source modules (`/@fs/…`, `/src/compiler.
 `devURL` from `servers.ts`, which both modes keep running. Intercept the D2 module through
 `d2Module` from `helpers.ts`, which matches it in both modes.
 
-`production.spec.ts` runs only in the `production` project. It checks what only the
+`production.spec.ts` runs in the `production` (Chromium) and `production-webkit` projects. It checks what only the
 bundle can break: the lazy D2 worker, WASM, fonts and the offline export runtime:
 
 ```sh
 pnpm build
-ZOOMFLOW_PRODUCTION_E2E=1 pnpm exec playwright test --project=production
+ZOOMFLOW_PRODUCTION_E2E=1 pnpm exec playwright test --project=production --project=production-webkit
 ```
 
 ## Visual baselines

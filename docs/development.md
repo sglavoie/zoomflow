@@ -12,7 +12,9 @@ pnpm build
 Firefox and WebKit; install them with `pnpm exec playwright install` if needed. Browser
 tests run against the Vite dev server locally. In CI, and locally with
 `ZOOMFLOW_PRODUCTION_E2E=1` after `pnpm build`, they load the built app through
-`vite preview` instead, and a `production` project adds a smoke test of the bundle.
+`vite preview` instead. The `production` and `production-webkit` projects add
+bundle smoke tests in Chromium and WebKit; tests that need source-module access
+still use the dev server.
 `pnpm lint` runs Biome's linter (formatting is not enforced; see `biome.jsonc`). Node
 26 is required; `.node-version` pins the version CI uses.
 The app build is written to `apps/web/dist`. D2 is loaded lazily, but its bundled
@@ -29,6 +31,11 @@ outer SVG is 515 × 98 with viewBox `0 0 515 98`, and its nested SVG is 515 × 9
 with viewBox `-4 -4 515 98`. (Image downloads retain their larger export margin.)
 The CSS caps this crop at 772.5 px wide, matching the live 1.5× ceiling. Recheck
 the static-to-live shape bounds on desktop and phone after changing the starter.
+
+The README screenshot, `docs/images/workspace.png`, shows the untouched Order flow
+at 1440×900 in light mode with Source open and the editing hint dismissed. Capture
+a fresh workspace after the live preview and fonts finish loading, with menus closed
+and no shape selected. Keep this same view when refreshing the image.
 
 To measure cold loading, see `spike/first-preview.mjs`. On this Mac, against the
 local production preview at 10 Mbps and 40 ms latency, the pre-change median of

@@ -3007,12 +3007,12 @@ header > strong { display: inline-flex; align-items: center; gap: 6px; font-size
 @media (max-width: 600px) {
   [data-part="mobile-view-switch"] { padding: 4px 12px; gap: 6px; }
   [data-part="mobile-view-switch"] button { min-height: 32px; padding: 4px 8px; }
-  .flow-builder-toolbar { display: grid; grid-template-columns: auto auto minmax(0, 1fr) auto auto; gap: 2px; }
+  .flow-builder-toolbar { position: relative; display: grid; grid-template-columns: auto auto minmax(0, 1fr) auto auto; gap: 2px; }
   .flow-builder-toolbar :is(button, summary) { padding-inline: 6px; font-size: 12px; }
   .flow-builder-toolbar .diagram-search-trigger, .flow-builder-toolbar .project-search-trigger { font-size: 0; min-width: 32px; }
   .flow-builder-toolbar .project-search-trigger::after { content: '⌕'; font-size: 23px; }
-  .flow-builder-toolbar .board-appearance { justify-self: end; }
-  .board-appearance .builder-look { left: auto; right: -70px; }
+  .flow-builder-toolbar .board-appearance { position: static; justify-self: end; }
+  .board-appearance .builder-look { left: auto; right: 0; }
   .flow-builder-toolbar .zf-walkthrough-trigger { font-size: 0; min-width: 36px; }
   .zf-breadcrumbs { min-height: 28px; }
 }

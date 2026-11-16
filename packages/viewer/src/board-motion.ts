@@ -34,6 +34,14 @@ export function setupBoardMotion(stage: HTMLElement) {
     image.setAttribute('aria-hidden', 'true');
     image.className = 'zf-board-snapshot';
     const copy = svg.cloneNode(true) as SVGElement;
+    // Offline exports hoist shared fonts and theme rules out of the board SVG.
+    // An isolated image needs those rules too, or labels flash in a fallback font.
+    const shared = document.getElementById('zoomflow-svg-style');
+    if (shared) {
+      const style = document.createElementNS('http://www.w3.org/2000/svg', 'style');
+      style.textContent = shared.textContent;
+      copy.prepend(style);
+    }
     // Editor selection rings get their paint from the host stylesheet. Without it
     // they become opaque black rectangles in an image and obscure the zoom target.
     const rings = svg.querySelectorAll('.zf-selection');

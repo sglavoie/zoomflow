@@ -4,7 +4,9 @@
 
 ## Explore a diagram
 
-Click a linked shape to drill into a board. The linked shape grows towards filling
+On editable flows and mind maps, click a linked shape’s arrow badge to drill into
+a board; clicking the shape selects it for editing. Hand-written diagrams and
+offline HTML also open the board when you click the shape. The linked shape grows towards filling
 the canvas as the old board fades away, then the detail board appears. Returning
 shrinks the detail board into its linking shape and briefly highlights that shape.
 The move takes about 380 ms, with staggered fades to keep the boards' labels from
@@ -111,8 +113,9 @@ on the current board without navigating. Use **Reveal in diagram** or **⌘⇧En
 Ctrl+Shift+Enter** to open the selected identifier's board. Reveal brings the selected
 shape into view with minimal panning and zooms out only when needed to fit it. On
 phones, this also opens
-Preview. Linked shapes still navigate; Alt+click selects
-their source without navigating. Source links pause while edits are uncompiled,
+Preview. In hand-written diagrams, linked shapes navigate; Alt+click selects
+their source without navigating. On editable flows and mind maps, use the arrow
+badge to navigate and the shape itself to select. Source links pause while edits are uncompiled,
 so an old diagram cannot select an outdated text range. Editor keyboard shortcuts,
 including undo, search, Escape and Backspace, stay in the editor. Tab indents the
 source; to leave the editor with the keyboard, press Esc, then Tab within two seconds.
@@ -136,8 +139,9 @@ and while another modal dialog is open.
 
 ## Syntax reference and workspace layout
 
-The diagram is on the left and the source editor is on the right. Click **D2
-reference** or press **⌘⇧/** on macOS, or **Ctrl+Shift+/** on Windows/Linux,
+New workspaces show the canvas first. **Source** in the header opens the source
+editor on the right on desktop; phones switch between Preview and Source.
+Click **D2 reference** or press **⌘⇧/** on macOS, or **Ctrl+Shift+/** on Windows/Linux,
 to toggle a syntax reference below the diagram. This shortcut also works while editing;
 **⌘/** or **Ctrl+/** toggles D2 line comments in the editor.
 The default desktop split gives each pane equal space near 1,100px, gradually
@@ -162,9 +166,9 @@ in fullscreen. Export controls stay in their menu so the editor remains visible.
 
 ## Two diagrams side by side
 
-Choose a **Layout** in the header to build two diagrams at once:
+Choose **View → Layout** in the header to build two diagrams at once:
 
-- **Single** shows one diagram beside its source.
+- **Single** shows one diagram, with its source beside it when Source is enabled.
 - **Split · tabs** shows two documents side by side. Each pane has its own
   **Preview** and **Source** tabs.
 - **Split · all views** shows both diagrams above their sources, so all four views

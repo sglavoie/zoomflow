@@ -152,6 +152,13 @@ test('walkthrough follows choices, visits nested boards, returns, and works offl
 test('style controls preserve attachments and filled shapes follow dark mode', async ({ page }) => {
   await open(page);
   await page.locator('.board-appearance > details > summary').click();
+  // Anchor the phone popover to the toolbar, not an offset past its trigger.
+  for (const width of [320, 390]) {
+    await page.setViewportSize({ width, height: 844 });
+    const menu = (await page.locator('.board-appearance .builder-look').boundingBox())!;
+    expect(menu.x).toBeGreaterThanOrEqual(0);
+    expect(menu.x + menu.width).toBeLessThanOrEqual(width);
+  }
   await page.locator('.board-appearance').getByRole('button', { name: 'Elevated', exact: true }).click(); await previewReady(page);
   await expect(page.getByRole('link', { name: 'Open Checkout board', exact: true })).toBeVisible();
   await page.locator('#workspace-view > summary').click();

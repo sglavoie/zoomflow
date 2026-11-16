@@ -300,8 +300,15 @@ export function setupBoardSelection(ctx: Context) {
     addHandle.style.left = `${handleX - bounds.left}px`;
     addHandle.style.top = `${handleY - bounds.top}px`;
     const below = box.bottom + gap + height <= stage.bottom || box.top - gap - height < stage.top;
-    const top = below ? Math.min(box.bottom + gap, stage.bottom - height - gap) : box.top - gap - height;
-    const left = Math.max(stage.left + gap, Math.min(box.left + box.width / 2 - width / 2, stage.right - width - gap));
+    let top = below ? Math.min(box.bottom + gap, stage.bottom - height - gap) : box.top - gap - height;
+    let left = Math.max(stage.left + gap, Math.min(box.left + box.width / 2 - width / 2, stage.right - width - gap));
+    // A large selected shape can clamp the bar over the bottom-right minimap.
+    // Keep both pointer controls usable, preferring the space beside the map.
+    const map = ctx.viewer.stage.querySelector<HTMLElement>('.zf-minimap[data-visible]:not([hidden])')?.getBoundingClientRect();
+    if (map?.width && left < map.right && left + width > map.left && top < map.bottom && top + height > map.top) {
+      if (map.left - width - gap >= stage.left + gap) left = map.left - width - gap;
+      else top = map.top - height - gap;
+    }
     ctx.shapeGroup.style.left = `${left - bounds.left}px`;
     ctx.shapeGroup.style.top = `${Math.max(stage.top + gap, top) - bounds.top}px`;
   }

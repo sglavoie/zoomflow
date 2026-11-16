@@ -578,6 +578,30 @@ for (const offline of [false, true]) test(`minimap appears when zoomed in and pa
   await expect(page.locator('.zf-zoom-controls span')).toHaveText('Fitted');
 });
 
+test('selection actions leave the minimap reachable when a shape fills the stage', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto('/'); await previewReady(page);
+  await page.locator('#viewer [data-shape-id="Browse"]').click();
+  await page.getByRole('button', { name: 'Add next step', exact: true }).click();
+  await page.getByRole('textbox', { name: 'Rename New step', exact: true }).press('Enter');
+  await previewReady(page);
+  await page.locator('#toggle-source').click();
+  await page.locator('#viewer [data-shape-id="Checkout"]').click();
+  for (let i = 0; i < 4; i++) await page.getByRole('button', { name: 'Zoom in', exact: true }).click();
+  const map = page.locator('.zf-minimap');
+  await expect(map).toBeVisible();
+  await expect.poll(() => map.evaluate(map => {
+    const box = map.getBoundingClientRect();
+    const bar = document.querySelector('.board-selection')!.getBoundingClientRect();
+    return bar.right <= box.left || bar.left >= box.right || bar.bottom <= box.top || bar.top >= box.bottom;
+  })).toBe(true);
+  // A real click must reach the map, rather than the shape action above it.
+  const svg = page.locator('.zf-stage > svg');
+  const before = await svg.getAttribute('viewBox');
+  await map.click({ position: { x: 20, y: 10 } });
+  await expect(svg).not.toHaveAttribute('viewBox', before!);
+});
+
 test('minimap hides in presentation, layers, narrow stages and board transitions', async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.emulateMedia({ reducedMotion: 'reduce' });
