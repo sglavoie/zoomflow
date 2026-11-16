@@ -23,7 +23,11 @@ const shape = (page: Page, id: string) => page.locator(`.zf-stage [data-shape-id
 async function start(page: Page, text = diagram) {
   await page.goto('/'); await previewReady(page);
   if (!await source(page).isVisible()) await page.locator('#mobile-source').click();
-  await source(page).fill(text);
+  // Replace the CodeMirror document, not its rendered DOM: WebKit fill() can
+  // leave a leading blank line when the source pane has just opened on a phone.
+  await source(page).focus();
+  await source(page).press('ControlOrMeta+a');
+  await page.keyboard.insertText(text);
   await expect.poll(() => editorText(page)).toBe(text);
   await previewReady(page);
   if (await page.locator('#mobile-preview').isVisible()) await page.locator('#mobile-preview').click();
