@@ -15,7 +15,7 @@ dependencies, changes no D2 storage semantics, and is left unpushed for review.
 | 8 | `fdb4abe` | Searchable command palette with existing actions, boards and examples. |
 | 9 | `c529aff` | A minimap for clipped boards, with matching offline behavior and stable snapshot coordinates. |
 | 10 | `1d1d04a` | Single-file share links that preserve board routes and open independent drafts. |
-| 11 | `5a3fc93`, `fec8d64`, `c6c2890` and the follow-up described below | Final visual review, offline snapshot fonts and colors, unclipped phone Style menu, selection actions clear of the minimap, refreshed screenshot and guides; browser-test setup repairs. |
+| 11 | `5a3fc93`, `fec8d64`, `c6c2890`, `f6cb5ab`, `e958b50`, `f2d0191`, `d20dbd0` | Final visual review, offline snapshot fonts and colors, unclipped phone Style menu, selection actions clear of the minimap, refreshed screenshot and guides; browser-test setup repairs, bounded local validation and a native macOS WebKit workaround. |
 
 The first session 11 follow-up, `fec8d64`, moves the existing workspace visual
 platform guard ahead of browser context creation. Supported Chromium comparisons
@@ -26,16 +26,35 @@ uses CodeMirror's select-all command to set up the short-phone AI deletion test,
 then verifies its exact starting source. WebKit's DOM-based fill had intermittently
 left a leading blank line, correctly producing an additional deletion highlight.
 Matching native crash reports also traced the context-setup failures to macOS
-Screen Time observer teardown. Both macOS WebKit test projects now launch the same
-bundled browser with a process-local preference avoiding that integration; see the
-[test guide](../tests/e2e/README.md). Assertions, retry limits and completion gates
-remain intact.
+Screen Time observer teardown. That commit attempted a launch-preference workaround,
+but a later probe proved the flag ineffective. The current workaround is the native
+shim in [tests/e2e/webkit-macos.m](../tests/e2e/webkit-macos.m), introduced by
+`d20dbd0` below; see the [test guide](../tests/e2e/README.md).
 
-The follow-up `test(e2e): stabilize diagram search source setup` applies the same
+The follow-up `f6cb5ab` (`test(e2e): stabilize diagram search source setup`) applies the same
 select-all setup to diagram search's shared starter helper. Its exact-source
 assertion caught another leading blank line from WebKit fill on a phone viewport,
 before any search interaction. The source assertion and all search checks remain
 unchanged.
+
+The follow-up `e958b50` adds `pnpm test:e2e:production` to select only the Chromium
+and WebKit bundle smoke projects, avoiding a duplicate full matrix in local
+validation. Full production regression remains available through `pnpm test:e2e:built`
+and in CI. It caps local workers at four and clarifies the CI worker-override comment
+while preserving CI concurrency, browser coverage, assertions and retries.
+
+The follow-up `f2d0191` stabilizes the comment-shortcut test by waiting for preview
+readiness, replacing the complete editor document through keyboard input and checking
+its exact source before the existing comment and undo assertions. It also records
+validation timings without presenting the earlier failed matrix as a passing run.
+
+The follow-up `d20dbd0` replaces the ineffective `webkit-macos.sh` wrapper with the
+native shim above and the `webkit-macos.ts` launcher. On macOS 27, both WebKit projects
+use the same bundled browser with a process-local library that disables Screen Time
+before each `WKWebView` initialization and verifies the setting. Other platforms keep
+the stock launcher; persistent OS settings and shared browser files are unchanged.
+The commit also adds a bounded lifecycle check covering 205 headless and headed
+contexts, including verification that the native feature is disabled.
 
 The final review walks a fresh workspace in light and dark at 1440×900 and
 390×844: rename, add, drill and return, Boards, Find, Style, Walkthrough, Present,
