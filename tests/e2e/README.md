@@ -163,6 +163,9 @@ isolation, per-document choices, and failed or superseded layer renders.
 
 ## Export
 
+- `share-link.spec.ts`: copied source and board in a fresh context, fresh unsaved
+  identities with existing draft records unchanged, Unicode, malformed/truncated
+  links, folder and URL length limits, clipboard failures, and light/dark Export panels.
 - `export.spec.ts`: real SVG, PNG, ZIP and HTML downloads, PNG clipboard copies,
   HTML opened over `file://`
   offline with nested and cyclic navigation, remote-image embedding and fallback, export

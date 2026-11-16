@@ -1,3 +1,4 @@
+import { decodeShareSource } from './share-link';
 import { iconLabel } from './icons';
 import { setupCommandPalette } from './command-palette';
 import { viewerStyle, type ViewerRoute } from '@zoomflow/viewer';
@@ -20,6 +21,12 @@ import { setupProjectSave } from './project-save-dialog';
 import { restoreField } from './field-preference';
 import { projectFileSystem } from './project-files';
 import type { CompileBuilderPreview } from './builder-preview';
+
+// Capture the incoming board before either viewer can normalize the URL.
+const incomingURL = new URL(location.href);
+const incomingShare = incomingURL.searchParams.has('d')
+  ? decodeShareSource(incomingURL.searchParams.get('d')!).then(source => ({ source }), () => ({ error: true as const }))
+  : undefined;
 
 iconLabel(document.querySelector('#header-more-toggle')!, 'export', 'Export');
 iconLabel(document.querySelector('#toggle-source')!, 'source', 'Source');
@@ -363,6 +370,25 @@ exportMenu.updateExportLabel();
 panes.a.open(examplePicker.initial);
 applyLayout();
 setupCommandPalette(activePane);
+if (incomingShare) {
+  const pane = panes.a;
+  const opens = pane.documentOpens;
+  const initialSource = pane.source;
+  void incomingShare.then(result => {
+    const url = new URL(location.href);
+    url.searchParams.delete('d');
+    history.replaceState(history.state, '', url);
+    // A deliberate open or edit while decoding takes precedence over startup.
+    if (pane.documentOpens !== opens || pane.source !== initialSource) return;
+    if ('error' in result) {
+      files.setFileError('Could not open share link: the diagram data is invalid or incomplete.', pane);
+      return;
+    }
+    const name = 'Shared diagram.d2';
+    const key = examplePicker.rememberFile(name, result.source, '', undefined, 'a');
+    void pane.replaceDocument(result.source, name, key, false, { hash: incomingURL.hash || '#/' });
+  });
+}
 // Save writes back to the files drafts came from, after a reload too.
 void fileHandles.restore(examplePicker.hasDraft).then((restored) => { if (restored) examplePicker.refresh(); });
 // New linked files go into the folders projects came from, after a reload too.

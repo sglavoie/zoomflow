@@ -1,3 +1,4 @@
+import { encodeShareSource, shareURL, shareLinkLimit } from './share-link';
 import { setupExportPresentation, type ExportPresentation } from './export-presentation';
 import { classifyHref, exportAtlasHtml, exportAtlasZip, exportBoardsHtml, exportBoardsZip, exportGlyphSource, exportProjectArchive,
   renderExportBoards, indexBoards, resolveFilePath, type AtlasDocument, type Diagram, type ExportBoard } from '@zoomflow/core';
@@ -32,7 +33,7 @@ export function setupExportMenu(activePane: () => DocumentPane | undefined, pick
   function setMoreOpen(open: boolean) {
     moreContent.hidden = !open;
     moreToggle.setAttribute('aria-expanded', String(open));
-    if (open) void updateThumbnail(); else ++thumbnailRevision;
+    if (open) { void updateThumbnail(); void updateShareLink(); } else { ++thumbnailRevision; ++shareRevision; }
   }
   moreToggle.addEventListener('click', () => { showName(); presentation.refresh(exportFormat.value); setMoreOpen(Boolean(moreContent.hidden)); });
   document.addEventListener('click', (event) => { if (event.target instanceof Node && !more.contains(event.target)) setMoreOpen(false); });
@@ -78,6 +79,58 @@ export function setupExportMenu(activePane: () => DocumentPane | undefined, pick
     pane.setActivity(message, kind);
     setExportStatus(message, kind);
   }
+
+  const shareButton = document.querySelector<HTMLButtonElement>('#copy-share-link')!;
+  const shareHint = document.querySelector<HTMLElement>('#share-link-hint')!;
+  let shareRevision = 0;
+  let preparedShare: { pane: DocumentPane; source: string; hash: string; url: string } | undefined;
+  let encodedSource: { source: string; result: Promise<string> } | undefined;
+  function shareMessage(message: string) {
+    shareHint.textContent = message;
+    shareHint.hidden = !message;
+  }
+  async function updateShareLink() {
+    const revision = ++shareRevision;
+    preparedShare = undefined;
+    shareButton.disabled = true;
+    if (moreContent.hidden) return;
+    const pane = activePane();
+    if (!pane?.key) { shareMessage('Open a diagram to share it.'); return; }
+    if (isProject(pane)) {
+      shareMessage('A folder project cannot be shared as a link. Choose Interactive atlas (HTML) above.');
+      return;
+    }
+    const source = pane.source;
+    const hash = pane.viewer.route.hash;
+    shareMessage('Preparing share link…');
+    try {
+      if (encodedSource?.source !== source) encodedSource = { source, result: encodeShareSource(source) };
+      const url = shareURL(await encodedSource.result, location.href, hash);
+      if (revision !== shareRevision) return;
+      if (url.length > shareLinkLimit) {
+        shareMessage('This link exceeds 8,000 characters. Choose Interactive diagram (HTML) above.');
+        return;
+      }
+      preparedShare = { pane, source, hash, url };
+      shareMessage('');
+      shareButton.disabled = false;
+    } catch {
+      if (revision === shareRevision) shareMessage('Could not prepare a share link. Choose Interactive diagram (HTML) above.');
+    }
+  }
+  shareButton.addEventListener('click', async () => {
+    const ready = preparedShare;
+    const pane = activePane();
+    if (!ready || pane !== ready.pane || pane.source !== ready.source || pane.viewer.route.hash !== ready.hash) {
+      void updateShareLink();
+      return;
+    }
+    // Prepare before the click so clipboard access retains the browser's user activation.
+    try {
+      await navigator.clipboard.writeText(ready.url);
+      reportExport('Share link copied to clipboard.', 'info', pane);
+    } catch { reportExport('Could not copy share link. Check clipboard permission and try again.', 'error', pane); }
+  });
 
   /** Downloads and clipboard copies use the same visible board, theme and hidden-shape choices. */
   async function boardImage(pane: DocumentPane, render: RenderBoard, target: string, dark: boolean, options = presentation.read()) {
@@ -232,6 +285,7 @@ export function setupExportMenu(activePane: () => DocumentPane | undefined, pick
     previewButton.disabled = !canExport();
     presentation.refresh(exportFormat.value);
     void updateThumbnail();
+    void updateShareLink();
   }
   function rememberExportFormat() {
     explicitExportFormat = true;

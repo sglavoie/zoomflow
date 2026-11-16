@@ -1083,7 +1083,7 @@ header > strong {
 .export-sources button {
   font-size: var(--font-size-sm);
 }
-#archive-hint {
+#archive-hint, #share-link-privacy, #share-link-hint {
   flex-basis: 100%;
   margin: 0;
   color: var(--muted);

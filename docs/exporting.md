@@ -37,6 +37,23 @@ Saving or downloading `.d2` source does not include view settings, and clearing
 browser storage removes their browser backup. **Download Zoomflow project** keeps
 the editable source and view settings together so they can be restored elsewhere.
 
+**Copy share link** in Export copies a URL containing the current single-file D2
+source and board route. The source is compressed, not encrypted: anyone with the
+link can read it, including content hidden from exports. View settings, theme and
+presentation options are not included. Creating a link happens in your browser,
+without a sharing service; the recipient needs access to the app to open the URL.
+
+Opening a link creates a fresh, unsaved **Shared diagram** draft and navigates to
+the linked board through the normal compilation and sanitizing path. Existing
+drafts stay intact. The source parameter is removed from the address bar after
+reading it; other query parameters remain. Invalid or truncated links show a
+message and leave the normal starting document available.
+
+Links longer than **8,000 characters** are disabled; choose **Interactive diagram
+(HTML)** instead. Folder projects cannot be shared as links; choose **Interactive
+atlas (HTML)** to include linked files. Clipboard failures appear in Export so you
+can allow clipboard access and retry.
+
 Export offers **Interactive diagram (HTML)** for one navigable file with every
 board, **Current board image (SVG)** and **Current board image (PNG)** for the
 board on screen, and **All boards as SVG or PNG (ZIP)** for separate images. Project

@@ -96,6 +96,11 @@ use **Retry preview** to try again without losing your source.
    together in a `.zoomflow.zip` archive. Use **Open Zoomflow project** in the
    filename menu, or drop the archive, to open a separate project copy on any computer.
    This backup includes hidden content; diagram exports below omit it.
+   **Export → Copy share link** puts a single-file diagram and its current board in
+   a URL. Anyone with the link can read all its source, including hidden content.
+   Opening it creates a new unsaved **Shared diagram**, preserving existing drafts.
+   Links are limited to 8,000 characters; use interactive HTML for larger diagrams
+   and atlas HTML for folder projects.
    In **Export**, choose
    **Interactive diagram (HTML)** for one file with offline drill-down navigation,
    **Interactive atlas (HTML)** for a project file and every file it links to,
