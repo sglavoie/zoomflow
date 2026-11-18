@@ -424,9 +424,12 @@ export class Viewer {
       this.stage.dataset.board = id;
       this.stage.dataset.layerRoot = this.layerView.root ?? '';
       // Viewports keep a view per board, so re-rendering the same board keeps its viewport anyway.
-      this.stage.dispatchEvent(new Event('zf-boardchange'));
       this.recordRoute(mode, this.trail);
       this.updateCrumbs();
+      renderParentContext(this.context, parentContext(board, this.boards));
+      this.setMessage(notice);
+      // Fit the viewport after all surrounding layout has reached this board's size.
+      this.stage.dispatchEvent(new Event('zf-boardchange'));
       // Going up keeps the keyboard position: focus the link leading back down, which an
       // attached viewport reveals as it receives focus. Other crumb moves keep focus in the trail.
       const child = keepFocus && !sameBoard ? childToward(previous, id, (item) => this.boards.get(item)?.parent) : undefined;
@@ -438,8 +441,6 @@ export class Viewer {
         target.focus({ preventScroll: true });
       }
       else if (keepFocus && focusCrumb) (link || this.crumbs.querySelector<HTMLButtonElement>('button[aria-current]'))?.focus({ preventScroll: true });
-      renderParentContext(this.context, parentContext(board, this.boards));
-      this.setMessage(notice);
       this.stage.dispatchEvent(new Event('zf-layerchange'));
       this.saveLayers();
       if (!sameBoard) this.motion.enter(snapshot, content, down ? 'in' : up ? 'out' : 'across', up ? linkTo(this.stage, up) : undefined);

@@ -132,6 +132,8 @@ export function createViewport(stage: HTMLElement, host: HTMLElement, clamp: typ
 
   function scale() { return base && box ? base.width / box.width : 1; }
   function updateGrid() {
+    // Navigation's CSS camera is temporary; retain the board's final grid scale.
+    if (stage.dataset.transition) return;
     const matrix = svg?.getScreenCTM();
     stage.toggleAttribute('data-canvas-grid', Boolean(matrix));
     if (!matrix) return;
@@ -144,6 +146,7 @@ export function createViewport(stage: HTMLElement, host: HTMLElement, clamp: typ
     stage.style.setProperty('--zf-grid-x', `${matrix.e - bounds.left - stage.clientLeft - spacing / 2}px`);
     stage.style.setProperty('--zf-grid-y', `${matrix.f - bounds.top - stage.clientTop - spacing / 2}px`);
   }
+  stage.addEventListener('zf-viewportchange', updateGrid, { capture: true, signal });
   function updateControls() {
     updateGrid();
     const currentScale = scale();

@@ -6,11 +6,12 @@
 
 On editable flows and mind maps, click a linked shape’s arrow badge to drill into
 a board; clicking the shape selects it for editing. Hand-written diagrams and
-offline HTML also open the board when you click the shape. The linked shape grows towards filling
-the canvas as the old board fades away, then the detail board appears. Returning
+offline HTML also open the board when you click the shape. The linked shape’s frame grows to fill
+the canvas, keeping its fill, outline and rounded corners as the other shapes scale
+past the edges. Its fill fades to reveal the detail board inside. Returning
 shrinks the detail board into its linking shape and briefly highlights that shape.
-The move takes about 380 ms, with staggered fades to keep the boards' labels from
-overlapping; exported HTML uses the same motion. Sideways moves stay subtle.
+The move takes about 520 ms with a soft settle and staggered fades to keep the boards' labels from
+overlapping; exported HTML uses the same motion. Sideways moves stay subtle at 260 ms.
 Ordinary pointer movement lets the transition finish. Scrolling, key presses or dragging interrupt motion,
 and reduced-motion preferences skip zooming. The root board uses the document title throughout the viewer. Other boards use the
 label shared by every shape linking to them; missing, empty or conflicting labels

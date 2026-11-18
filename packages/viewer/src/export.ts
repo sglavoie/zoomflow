@@ -262,7 +262,6 @@ function offlineViewer(lib: typeof runtime) {
     syncBackground();
     stage.dataset.board = board.id;
     if (names.size) stage.dataset.file = doc.file;
-    stage.dispatchEvent(new Event('zf-boardchange'));
     stage.setAttribute('aria-label', `${board.name} diagram`);
     announcement.textContent = `${board.name} board`;
     lib.renderParentContext(context, board.parentContext ?? []);
@@ -273,6 +272,8 @@ function offlineViewer(lib: typeof runtime) {
       // Board names already include the document title at the root.
       ...visited.map((id, index) => ({ detail: id !== 'root', name: shown.byId.get(id)!.name,
         activate: () => show(shown.byId.get(id)!, visited.slice(0, index + 1)) }))]);
+    // Fit after breadcrumbs and context have established the final stage bounds.
+    stage.dispatchEvent(new Event('zf-boardchange'));
     if (focusStage || focusCrumb) {
       // Going up keeps the keyboard position: focus the link leading back down, which the
       // viewport reveals as it receives focus. Other crumb moves keep focus in the trail.

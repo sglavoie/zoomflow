@@ -78,6 +78,7 @@ export const viewerStyle = `
 .zf-stage[data-link-preview] .zf-link-hint { display: none; }
 .zf-stage-area:has(.zf-stage[data-link-preview="pointer"]) .zf-pan-hint { visibility: hidden; }
 .zf-board-snapshot { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: fill; pointer-events: none; }
+.zf-board-frame { position: absolute; box-sizing: border-box; border-style: solid; pointer-events: none; }
 .zf-return-highlight { position: absolute; pointer-events: none; border: 2px solid var(--focus, #477de5); border-radius: 12px; }
 .zf-walkthrough { grid-row: 3; grid-column: 1 / -1; min-width: 0; padding: 12px 16px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); font-size: 13px; }
 .zf-walkthrough[hidden] { display: none; }

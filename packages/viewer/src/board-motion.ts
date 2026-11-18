@@ -22,7 +22,21 @@ export function setupBoardMotion(stage: HTMLElement) {
     // Use the shape itself so hover/focus decorations cannot move the camera target.
     const box = (element.querySelector('[data-shape-id]') ?? element).getBoundingClientRect();
     if (!box.width || !box.height || box.right < outer.left || box.left > outer.right || box.bottom < outer.top || box.top > outer.bottom) return;
-    return { x: box.left - outer.left, y: box.top - outer.top, width: box.width, height: box.height };
+    return { x: box.left - outer.left - stage.clientLeft, y: box.top - outer.top - stage.clientTop, width: box.width, height: box.height };
+  }
+  function paint(anchor?: Element) {
+    const shape = anchor?.querySelector('[data-shape-id]') ?? anchor;
+    const surface = shape?.querySelector<SVGGraphicsElement>('rect, ellipse, circle, polygon, path');
+    if (!surface) return;
+    const style = getComputedStyle(surface);
+    const matrix = surface.getScreenCTM();
+    const scale = matrix ? Math.hypot(matrix.a, matrix.b) : 1;
+    const box = surface.getBoundingClientRect();
+    // SVG radii are in diagram units. Paths (diamonds, cylinders, etc.) keep a
+    // simple bounding frame; even an oval's radius is bounded to a gentle corner.
+    const radius = Number.parseFloat(style.getPropertyValue('rx') || style.borderTopLeftRadius) || 0;
+    return { fill: style.fill === 'none' ? 'transparent' : style.fill, stroke: style.stroke === 'none' ? 'transparent' : style.stroke, strokeWidth: (Number.parseFloat(style.strokeWidth) || 0) * scale,
+      radius: Math.min(radius * scale, box.width / 2, box.height / 2, surface.localName === 'rect' ? Infinity : 24) };
   }
   function capture(anchor?: Element) {
     cancel();
@@ -55,8 +69,15 @@ export function setupBoardMotion(stage: HTMLElement) {
     copy.querySelectorAll<SVGElement>(':scope > rect, :scope > svg > rect').forEach((rect, index) => {
       rect.style.opacity = getComputedStyle(backgrounds[index]).opacity;
     });
+    // The frame replaces the whole clicked link, including its label and badges.
+    // Hiding only the paint would leave a second label riding over the frame.
+    const shape = anchor?.querySelector('[data-shape-id]') ?? anchor;
+    const index = [...svg.querySelectorAll('[data-shape-id]')].indexOf(shape!);
+    const copied = copy.querySelectorAll<SVGElement>('[data-shape-id]')[index];
+    if (copied) (copied.closest('a') ?? copied).style.opacity = '0';
     image.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(new XMLSerializer().serializeToString(copy))}`;
-    return { image, origin: bounds(anchor) };
+    const stageBox = stage.getBoundingClientRect();
+    return { image, origin: bounds(anchor), paint: paint(anchor), left: stageBox.left + stage.clientLeft, top: stageBox.top + stage.clientTop, width: stage.clientWidth, height: stage.clientHeight };
   }
   function animate(element: Element, frames: Keyframe[], duration = 260, easing = 'cubic-bezier(0.2, 0.75, 0.25, 1)') {
     const animation = element.animate(frames, { duration, easing, fill: 'both' });
@@ -78,39 +99,74 @@ export function setupBoardMotion(stage: HTMLElement) {
   }
   function enter(snapshot: ReturnType<typeof capture>, content: Element, direction: 'in' | 'out' | 'across', target?: Element) {
     if (reduced.matches || !snapshot) { if (direction === 'out') highlight(target); return; }
-    const origin = direction === 'out' ? bounds(target) : snapshot.origin;
+    const outer = stage.getBoundingClientRect();
+    // Breadcrumbs and parent context can move the stage between boards. Keep the
+    // starting frame on the clicked shape's screen coordinates across that layout.
+    const origin = direction === 'out' ? bounds(target) : snapshot.origin && { ...snapshot.origin,
+      x: snapshot.origin.x + snapshot.left - outer.left - stage.clientLeft,
+      y: snapshot.origin.y + snapshot.top - outer.top - stage.clientTop };
     const width = stage.clientWidth;
     const height = stage.clientHeight;
-    const scale = origin ? Math.max(0.12, Math.min(0.72, Math.max(origin.width / width, origin.height / height))) : 0.92;
-    const x = origin ? origin.x + origin.width / 2 - width * scale / 2 : width * (1 - scale) / 2;
-    const y = origin ? origin.y + origin.height / 2 - height * scale / 2 : height * (1 - scale) / 2;
-    const small = `translate(${x}px, ${y}px) scale(${scale})`;
-    const enlarged = `translate(${origin ? (width / 2 - origin.x - origin.width / 2) * 0.18 : -width * 0.06}px, ${origin ? (height / 2 - origin.y - origin.height / 2) * 0.18 : -height * 0.06}px) scale(1.12)`;
-    // Bring the linked shape towards filling the stage, with its centre at the stage centre.
-    const zoom = origin ? Math.max(1.12, Math.min(width / origin.width, height / origin.height)) : 1.12;
+    const small = origin ? `translate(${origin.x}px, ${origin.y}px) scale(${origin.width / width}, ${origin.height / height})` : 'scale(0.92)';
+    const enlarged = `translate(${-width * 0.06}px, ${-height * 0.06}px) scale(1.12)`;
+    // Fill both stage axes so siblings actually travel past the stage edges.
+    const zoom = origin ? Math.max(1.12, width / origin.width, height / origin.height) : 1.12;
     const through = origin ? `translate(${width / 2 - (origin.x + origin.width / 2) * zoom}px, ${height / 2 - (origin.y + origin.height / 2) * zoom}px) scale(${zoom})` : enlarged;
     const image = snapshot.image;
+    Object.assign(image.style, { width: `${snapshot.width}px`, height: `${snapshot.height}px` });
     stage.append(image);
     overlays.add(image);
     stage.dataset.transition = direction;
     const base = { transform: 'none', transformOrigin: '0 0' };
-    const incoming = { transform: direction === 'out' ? enlarged : direction === 'in' ? small : 'scale(0.98)', transformOrigin: '0 0' };
-    const outgoing = { transform: direction === 'out' ? small : direction === 'in' ? through : enlarged, transformOrigin: '0 0' };
+    const incoming = { transform: direction === 'out' ? through : direction === 'in' ? small : 'scale(0.98)', transformOrigin: '0 0' };
+    const imageBase = { transform: `translate(${snapshot.left - outer.left - stage.clientLeft}px, ${snapshot.top - outer.top - stage.clientTop}px)`, transformOrigin: '0 0' };
+    const imageThrough = snapshot.origin ? `translate(${width / 2 - (snapshot.origin.x + snapshot.origin.width / 2) * zoom}px, ${height / 2 - (snapshot.origin.y + snapshot.origin.height / 2) * zoom}px) scale(${zoom})` : enlarged;
+    const imageSmall = origin ? `translate(${origin.x}px, ${origin.y}px) scale(${origin.width / snapshot.width}, ${origin.height / snapshot.height})` : small;
+    const outgoing = { transform: direction === 'out' ? imageSmall : direction === 'in' ? imageThrough : enlarged, transformOrigin: '0 0' };
+    const duration = 520;
+    // A soft spring-like settle with no overshoot beyond the stage.
+    const easing = 'cubic-bezier(0.22, 0.85, 0.24, 1)';
+    // Capture paint before the incoming SVG acquires its camera transform.
+    const colors = direction === 'out' ? paint(target) : snapshot.paint;
     const pending = direction === 'across' ? [
       animate(content, [{ ...incoming, opacity: 0 }, { ...base, opacity: 1 }]),
       animate(image, [{ ...base, opacity: 1 }, { ...outgoing, opacity: 0 }]),
     ] : [
-      animate(content, [incoming, base], 380),
-      animate(image, [base, outgoing], 380),
-      // Opacity uses wall-clock offsets; applying the movement easing here would advance
-      // the handoff too early. Only faint traces overlap between 35% and 45%.
-      animate(content, [{ opacity: 0 }, { opacity: 0, offset: 0.35 }, { opacity: 1 }], 380, 'linear'),
-      animate(image, [{ opacity: 1 }, { opacity: 0, offset: 0.45 }, { opacity: 0 }], 380, 'linear'),
+      animate(content, [incoming, base], duration, easing),
+      animate(image, [imageBase, outgoing], duration, easing),
+      // Keep labels separate in wall-clock time, independent of the movement ease.
+      animate(content, [{ opacity: 0 }, { opacity: 0, offset: 0.45 }, { opacity: 1 }], duration, 'linear'),
+      animate(image, [{ opacity: 1 }, { opacity: 0, offset: 0.4 }, { opacity: 0 }], duration, 'linear'),
     ];
+    let frame: HTMLDivElement | undefined;
+    if (direction !== 'across' && origin && colors) {
+      frame = document.createElement('div');
+      frame.className = 'zf-board-frame';
+      frame.setAttribute('aria-hidden', 'true');
+      Object.assign(frame.style, { borderColor: colors.stroke, borderWidth: `${colors.strokeWidth}px` });
+      stage.append(frame);
+      overlays.add(frame);
+      const shapeBox = { left: `${origin.x}px`, top: `${origin.y}px`, width: `${origin.width}px`, height: `${origin.height}px`, borderRadius: `${colors.radius}px` };
+      const stageBox = { left: '0px', top: '0px', width: `${width}px`, height: `${height}px`, borderRadius: getComputedStyle(stage).borderTopLeftRadius };
+      pending.push(animate(frame, direction === 'in' ? [shapeBox, stageBox] : [stageBox, shapeBox], duration, easing));
+      pending.push(animate(frame, direction === 'in' ? [
+        { backgroundColor: colors.fill, opacity: 1 },
+        { backgroundColor: colors.fill, opacity: 1, offset: 0.3 },
+        { backgroundColor: 'transparent', opacity: 1, offset: 0.8 },
+        { backgroundColor: 'transparent', opacity: 0 },
+      ] : [
+        { backgroundColor: 'transparent', opacity: 0 },
+        { backgroundColor: colors.fill, opacity: 1, offset: 0.4 },
+        { backgroundColor: colors.fill, opacity: 1, offset: 0.65 },
+        { backgroundColor: 'transparent', opacity: 0 },
+      ], duration, 'linear'));
+    }
     void Promise.all(pending).then(() => {
       // A later navigation may already own the stage. Only finish this snapshot's transition.
       if (!overlays.has(image)) return;
-      image.remove(); overlays.delete(image); delete stage.dataset.transition;
+      image.remove(); overlays.delete(image);
+      if (frame) { frame.remove(); overlays.delete(frame); }
+      delete stage.dataset.transition;
       refreshGeometry();
       if (direction === 'out') highlight(target);
     });

@@ -283,3 +283,49 @@ test('exports a folder project as one offline atlas and links file SVGs in the Z
   await expect(stage).toHaveAttribute('data-file', 'index.d2');
   await expect(crumbs).toHaveText(['Index']);
 });
+
+test('grows the shape frame in exported HTML', async ({ page, context }, info) => {
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
+  await page.goto('/');
+  await board(page, 'root');
+  const path = await download(page, 'html', info);
+  await page.addInitScript(() => {
+    const animate = Element.prototype.animate;
+    Element.prototype.animate = function (...args: Parameters<typeof animate>) {
+      const animation = animate.apply(this, args);
+      if (this.parentElement?.classList.contains('zf-stage')) { animation.pause(); animation.currentTime = 0; }
+      return animation;
+    };
+  });
+  await context.setOffline(true);
+  await page.goto(pathToFileURL(path).href);
+  await board(page, 'root');
+  const stage = page.locator('.zf-stage');
+  const shape = await stage.locator('a[data-board="root.layers.checkout"]').evaluate(link => {
+    const shape = link.querySelector('[data-shape-id]')!.getBoundingClientRect().toJSON();
+    link.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+    return shape;
+  });
+  await expect(stage).toHaveAttribute('data-transition', 'in');
+  const frame = stage.locator('.zf-board-frame');
+  await expect(frame).toHaveAttribute('aria-hidden', 'true');
+  const start = (await frame.boundingBox())!;
+  for (const key of ['x', 'y', 'width', 'height'] as const) expect(start[key]).toBeCloseTo(shape[key], 0);
+  await stage.evaluate(stage => {
+    for (const animation of stage.getAnimations({ subtree: true })) animation.currentTime = 260;
+  });
+  const middle = (await frame.boundingBox())!;
+  expect(middle.width).toBeGreaterThan(start.width);
+  expect(middle.height).toBeGreaterThan(start.height);
+  await stage.evaluate(stage => {
+    for (const animation of stage.getAnimations({ subtree: true })) animation.finish();
+  });
+  await expect(frame).toHaveCount(0);
+  await expect(stage).toHaveAttribute('data-board', 'root.layers.checkout');
+  await page.goBack();
+  await expect(stage).toHaveAttribute('data-transition', 'out');
+  await expect(frame).toHaveCount(1);
+  await stage.dispatchEvent('wheel', { deltaY: 1 });
+  await expect(stage.locator('.zf-board-frame, .zf-board-snapshot')).toHaveCount(0);
+  await expect(stage.locator(':scope > svg')).toHaveCSS('transform', 'none');
+});
