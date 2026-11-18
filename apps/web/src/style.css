@@ -1580,6 +1580,12 @@ body.diagram-fullscreen {
   /* Same 548 × 100 fitted crop and 1.5× ceiling as the live starter. */
   background-size: min(100%, 822px) auto;
 }
+@media (pointer: coarse) {
+  .zf-stage.zf-starter-preview {
+    /* Match the phone fit's reduced padding: 548 crop units × 11.01 / 16 label units. */
+    background-size: min(822px, max(100%, 377.085px)) auto;
+  }
+}
 [data-theme="dark"] .zf-stage.zf-starter-preview {
   background-image: url('./order-preview-dark.svg');
 }

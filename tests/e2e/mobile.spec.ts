@@ -1,5 +1,7 @@
 import { expect, test } from '@playwright/test';
 import { openDownloads } from './menu';
+import { pathToFileURL } from 'node:url';
+import { download } from './export-helpers';
 import { source, previewReady, chooseProjectFile, openFolder } from './helpers';
 
 /** Phone layouts: the Preview/Source switch, compact tools and the on-screen keyboard. */
@@ -198,8 +200,14 @@ test.describe('phone workspace', () => {
 
 test.describe('readable phone canvas', () => {
   test.use({ hasTouch: true, viewport: { width: 390, height: 844 }, reducedMotion: 'reduce' });
-  test('shows the whole starter flow on a phone', async ({ page }) => {
+  for (const offline of [false, true]) test(`shows the whole starter flow on a phone${offline ? ' offline' : ''}`, async ({ page, context }, info) => {
     await page.goto('/'); await previewReady(page);
+    if (offline) {
+      const path = await download(page, 'html', info);
+      await context.setOffline(true);
+      await page.goto(pathToFileURL(path).href);
+      await expect(page.locator('.zf-stage')).toHaveAttribute('data-board', 'root');
+    }
     const stage = page.locator('#viewer .zf-stage');
     const textSize = await stage.locator('[data-shape-id="Browse"] text').evaluate(node =>
       parseFloat(getComputedStyle(node).fontSize) * Math.abs((node as SVGGraphicsElement).getScreenCTM()!.a));

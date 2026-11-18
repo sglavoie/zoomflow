@@ -431,7 +431,18 @@ export function createViewport(stage: HTMLElement, host: HTMLElement, clamp: typ
       }
     }
     if (![left, top, right, bottom].every(Number.isFinite) || right <= left || bottom <= top) return fallback;
-    const margin = Math.max(16, Math.min(32, Math.min(right - left, bottom - top) * 0.12));
+    let margin = Math.max(16, Math.min(32, Math.min(right - left, bottom - top) * 0.12));
+    if (touch && stage.clientWidth < 600 && !stage.dataset.layerRoot) {
+      const text = element.querySelector('text');
+      const fontSize = text && parseFloat(getComputedStyle(text).fontSize);
+      if (fontSize) {
+        // Spend optional padding before clipping a flow that can fit at 11 px.
+        // Retain a stroke's clearance, plus a small tolerance for SVG matrix rounding.
+        const readableMargin = Math.min((stage.clientWidth * fontSize / 11.01 - (right - left)) / 2,
+          (stage.clientHeight * fontSize / 11.01 - (bottom - top)) / 2);
+        if (readableMargin >= 1) margin = Math.min(margin, readableMargin);
+      }
+    }
     const width = right - left + margin * 2;
     const height = bottom - top + margin * 2;
     boardBounds = { x: left - margin, y: top - margin, width, height };

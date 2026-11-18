@@ -42,7 +42,9 @@ mode. Regenerate both through Export → Current board image (SVG) if the starte
 For the loading preview, match the live fit's 16-unit margin: the current starter's
 outer SVG is 548 × 100 with viewBox `0 0 548 100`, and its nested SVG is 548 × 100
 with viewBox `-5 -5 548 100`. (Image downloads retain their larger export margin.)
-The CSS caps this crop at 822 px wide, matching the live 1.5× ceiling. Recheck
+The CSS caps this crop at 822 px wide, matching the live 1.5× ceiling. Coarse
+pointers use a 377.085 px minimum to match the phone fit reducing spare padding
+before zooming. Recheck
 the static-to-live shape bounds on desktop and phone after changing the starter.
 
 The README screenshot, `docs/images/workspace.png`, shows the untouched Order flow

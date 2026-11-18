@@ -41,7 +41,8 @@ selector is under **View** in the header, separate from **Export**, which closes
 Use the preview's +, − and **Overview** controls or the mouse wheel to zoom. Drag empty
 space to pan, or hold Space and drag a shape or link; middle-button dragging also
 pans. Touch dragging works after zooming. Small diagrams open at a comfortable
-reading size, up to 1.5×. Phones start closer only when fitted labels would be under 11 px;
+reading size, up to 1.5×. Phones first reduce spare fit padding to keep every shape
+visible with labels at least 11 px tall. They start closer when the diagram still cannot fit at that size;
 **Overview** (or **0**) shows the whole diagram. Edits preserve zoom and pan, and
 renaming a focused shape keeps its centre and scale in place through layout changes.
 Returning to a board restores its view. A quiet dot grid follows the diagram as you pan

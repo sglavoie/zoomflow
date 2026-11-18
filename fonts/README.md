@@ -50,4 +50,7 @@ padding; reduce each side by 8 to match this short board's live 16-unit fit.
 Add 8 to the nested SVG viewBox's x/y and subtract 16 from its width/height;
 set both SVGs' dimensions to that width/height and the outer viewBox to
 `0 0 width height`. Set the starter background's maximum width in `style.css`
-to `width * 1.5`. Recheck light/dark on desktop and phone against the live fit.
+to `width * 1.5`; the coarse-pointer minimum is `width * 11.01 / 16` for
+these 16-unit labels. It matches the viewer spending spare padding to keep the
+whole flow readable on phones. Recheck light/dark on desktop, phone and touch
+phone against the live fit.
