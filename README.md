@@ -162,5 +162,5 @@ Report vulnerabilities privately as described in [SECURITY.md](SECURITY.md).
 
 Zoomflow is released under the [MIT License](LICENSE). It bundles a patched build of
 [D2](https://github.com/d2lang/d2) under the Mozilla Public License 2.0
-([details](vendor/d2/README.md)) and Source Sans Pro under the SIL Open Font
+([details](vendor/d2/README.md)) and Geist and Geist Mono under the SIL Open Font
 License 1.1 ([details](fonts/README.md)).

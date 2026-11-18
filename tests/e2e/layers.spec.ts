@@ -331,6 +331,8 @@ test('exports just the visible layers together as SVG and PNG', async ({ page },
   await download.saveAs(path);
   const svg = await readFile(path, 'utf8');
   expect(svg).toContain('data-layer-canvas');
+  expect(svg).toContain('font-family: zf-frame-regular;');
+  expect(svg).toContain('font-family="zf-frame-regular"');
   expect(svg).toContain('data-layer-board="root.layers.Plan the launch"');
   expect(svg).toContain('data-merged-root="n"');
   expect(svg).not.toContain('data-shape-id="n"');

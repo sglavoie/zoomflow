@@ -77,7 +77,7 @@ export class SourceEditor {
         } }),
         EditorView.theme({
           '&': { height: '100%', backgroundColor: 'transparent', color: 'inherit' },
-          '.cm-scroller': { overflow: 'auto', fontFamily: 'monospace' },
+          '.cm-scroller': { overflow: 'auto', fontFamily: '"Geist Mono", monospace' },
           '.cm-gutters': { backgroundColor: 'transparent', color: 'var(--subtle)', borderColor: 'var(--border)' },
           '.cm-activeLine, .cm-activeLineGutter': { backgroundColor: 'var(--active-line)' },
           '&.cm-focused .cm-selectionBackground, .cm-selectionBackground, ::selection': { backgroundColor: 'var(--selection)' },

@@ -102,7 +102,7 @@ export function registerCliExportCases() {
     expect(html).toContain('<title>cycle</title>');
     expect(embedded(html).map((b: { id: string }) => b.id)).toEqual(['root', 'root.layers.A', 'root.layers.B']);
     // One glyph render replaces every board's own font subset and theme block.
-    expect(html.match(/@font-face/g)).toHaveLength(1);
+    expect(html.match(/@font-face/g)).toHaveLength(2);
     expect(embedded(html).every((b: { svg: string }) => !b.svg.includes('<style'))).toBe(true);
     const context = await browser.newContext({ offline: true });
     try {

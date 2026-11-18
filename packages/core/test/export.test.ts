@@ -249,6 +249,13 @@ steps: {first: {Step}}`, { layout: 'elk' });
     // Styles are shared only between two or more shown boards, so one would waste the render.
     expect(exportGlyphSource(boards.slice(0, 2))).toBeUndefined();
   });
+
+  it('covers shell text and empty-board names even in a single-board export', async () => {
+    const boards = [{ empty: true, name: 'Łódź', svg: '' }] as ExportBoard[];
+    const source = exportGlyphSource(boards, 'Résumé — café')!;
+    const labels = (await d2.compile(source, { layout: 'elk' })).diagram.shapes.map((shape) => ('label' in shape && shape.label) || '').join('');
+    for (const char of 'ŁódźRésumé—café0123456789…−') expect(labels).toContain(char);
+  });
 });
 
 describe('atlas exports', () => {

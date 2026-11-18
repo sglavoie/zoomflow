@@ -132,11 +132,26 @@ export function setupExportMenu(activePane: () => DocumentPane | undefined, pick
     } catch { reportExport('Could not copy share link. Check clipboard permission and try again.', 'error', pane); }
   });
 
+  let frameFonts: { text: string; glyphs: Promise<string> } | undefined;
+  async function frameImage(pane: DocumentPane, svg: string, options: Parameters<typeof frameExportSvg>[1], dark: boolean) {
+    // Connected-canvas captions live outside the compiler's per-board SVGs.
+    const captions = svg.includes('zf-layer-label') ? [...new DOMParser().parseFromString(svg, 'image/svg+xml')
+      .querySelectorAll('.zf-layer-label')].map((label) => label.textContent ?? '').join('') : '';
+    const text = (options.frame ? (options.title ?? '') + (options.subtitle ?? '') : '') + captions;
+    if (!text) return frameExportSvg(svg, options, dark);
+    if (frameFonts?.text !== text) {
+      const glyphs = pane.documentExport!.renderSource(exportGlyphSource([], text)!);
+      frameFonts = { text, glyphs };
+      void glyphs.catch(() => { if (frameFonts?.glyphs === glyphs) frameFonts = undefined; });
+    }
+    return frameExportSvg(svg, options, dark, await frameFonts!.glyphs);
+  }
+
   /** Downloads and clipboard copies use the same visible board, theme and hidden-shape choices. */
   async function boardImage(pane: DocumentPane, render: RenderBoard, target: string, dark: boolean, options = presentation.read()) {
     const layers = await pane.viewer.renderVisibleLayers();
     const prepared = await prepareExportSvg(layers ?? await render(target), dark);
-    return { ...prepared, svg: frameExportSvg(prepared.svg, options, dark), layers: Boolean(layers) };
+    return { ...prepared, svg: await frameImage(pane, prepared.svg, options, dark), layers: Boolean(layers) };
   }
 
   document.querySelector<HTMLButtonElement>('#save-source')!.addEventListener('click', () => {
@@ -210,7 +225,7 @@ export function setupExportMenu(activePane: () => DocumentPane | undefined, pick
       const prepared = image ? await boardImage(pane, view.render, board.target, dark, settings)
         : await prepareExportSvg(await view.render(format === 'html' || format === 'atlas' ? opening?.target ?? '' : ''), dark, { interactive: format === 'html' || format === 'atlas' });
       const interactive = format === 'html' || format === 'atlas';
-      if (!image) prepared.svg = frameExportSvg(prepared.svg, interactive ? { frame: Boolean(settings.title || settings.subtitle), title: settings.title, subtitle: settings.subtitle } : settings, dark);
+      if (!image) prepared.svg = await frameImage(pane, prepared.svg, interactive ? { frame: Boolean(settings.title || settings.subtitle), title: settings.title, subtitle: settings.subtitle } : settings, dark);
       if (request !== thumbnailRevision || moreContent.hidden || pane.documentExport !== loaded || activePane() !== pane) return;
       thumbnailUrl = URL.createObjectURL(new Blob([prepared.svg], { type: 'image/svg+xml' }));
       thumbnail.src = thumbnailUrl;
@@ -380,7 +395,7 @@ export function setupExportMenu(activePane: () => DocumentPane | undefined, pick
     const prepareWith = (render: RenderBoard) => async (target: string) => {
       const result = await prepareExportSvg(await render(target), theme, { interactive });
       warnings.push(...result.warnings);
-      return interactive ? result.svg : frameExportSvg(result.svg, settings, dark);
+      return interactive ? result.svg : frameImage(pane, result.svg, settings, dark);
     };
     const prepare = prepareWith(view.render);
     const canceled = () => exportRevision !== pane.generation || pane.documentExport !== loaded;
@@ -446,17 +461,17 @@ export function setupExportMenu(activePane: () => DocumentPane | undefined, pick
           name += pngZip ? '-png.zip' : '.zip';
         } else {
           const boards = documents.flatMap((document) => document.boards);
-          const glyphSource = exportGlyphSource(boards);
-          const glyphs = glyphSource ? await loaded.renderSource(glyphSource).catch(() => undefined) : undefined;
+          const glyphSource = exportGlyphSource(boards, htmlPresentation.title + htmlPresentation.subtitle + documents.map((file) => file.path + file.name).join(''));
+          const glyphs = glyphSource ? await loaded.renderSource(glyphSource) : undefined;
           blob = new Blob([exportAtlasHtml(documents, { ...htmlPresentation, script: offlineViewerScript(),
             style: offlineViewerStyle, glyphs })], { type: 'text/html' });
           name += '-atlas.html';
         }
       } else {
         const boards = await renderExportBoards(view.diagram, prepare, loaded.diagnostics, renderOptions);
-        // Shared font subsets are an optimization; each board keeps its own fonts without them.
-        const glyphSource = format === 'html' ? exportGlyphSource(boards) : undefined;
-        const glyphs = glyphSource ? await loaded.renderSource(glyphSource).catch(() => undefined) : undefined;
+        // Shared subsets cover the shell as well as diagram labels, including a one-board export.
+        const glyphSource = format === 'html' ? exportGlyphSource(boards, htmlPresentation.title + htmlPresentation.subtitle) : undefined;
+        const glyphs = glyphSource ? await loaded.renderSource(glyphSource) : undefined;
         blob = zip ? await zipDownload([{ path: '', name: exportName, boards }])
           : new Blob([exportBoardsHtml(boards, { ...htmlPresentation, script: offlineViewerScript(),
             style: offlineViewerStyle, glyphs })], { type: 'text/html' });

@@ -109,7 +109,7 @@ export async function withEditorView<R, A = undefined>(page: Page, fn: (view: an
 export const d2Module = /\/@d2lang_d2\.js|\/assets\/d2-[\w-]+\.js/;
 
 /** The regular diagram font, by its source name or its hashed build asset. */
-export const regularFont = /\/SourceSansPro-Regular(-[\w-]+)?\.ttf$/;
+export const regularFont = /\/Geist-Regular(-[\w-]+)?\.ttf$/;
 
 /** Read CodeMirror's document, including lines outside its rendered viewport. */
 export const editorText = (page: Page) => withEditorView(page, view => view.state.doc.toString() as string);

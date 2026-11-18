@@ -25,6 +25,10 @@ the focused checks pass. See the [browser testing guide](../tests/e2e/README.md)
 for test selection and concurrency.
 `pnpm lint` runs Biome's linter (formatting is not enforced; see `biome.jsonc`). Node
 26 is required; `.node-version` pins the version CI uses.
+The UI and diagram compiler use vendored Geist, and the source editor uses Geist Mono.
+See [font provenance, checksums and compile wiring](../fonts/README.md); keep the
+base64 worker transport conversion when updating fonts.
+
 The app build is written to `apps/web/dist`. D2 is loaded lazily, but its bundled
 compiler is still a large download (roughly 8.5 MB gzip).
 
@@ -33,11 +37,12 @@ downloads. It is labelled as an example preview and is removed when the live
 preview arrives, the source changes, or startup fails. Other documents, saved
 export choices and non-root routes do not show it. The light and dark SVG assets
 in `apps/web/src/order-preview*.svg` are current-board SVG exports of `apps/web/src/examples/order.d2` in light and dark
-mode. Regenerate both through Export → Current board image (SVG) if the starter changes.
+mode. Regenerate both through Export → Current board image (SVG) if the starter changes;
+[font asset notes](../fonts/README.md#static-starter-images) describe the crop.
 For the loading preview, match the live fit's 16-unit margin: the current starter's
-outer SVG is 515 × 98 with viewBox `0 0 515 98`, and its nested SVG is 515 × 98
-with viewBox `-4 -4 515 98`. (Image downloads retain their larger export margin.)
-The CSS caps this crop at 772.5 px wide, matching the live 1.5× ceiling. Recheck
+outer SVG is 548 × 100 with viewBox `0 0 548 100`, and its nested SVG is 548 × 100
+with viewBox `-5 -5 548 100`. (Image downloads retain their larger export margin.)
+The CSS caps this crop at 822 px wide, matching the live 1.5× ceiling. Recheck
 the static-to-live shape bounds on desktop and phone after changing the starter.
 
 The README screenshot, `docs/images/workspace.png`, shows the untouched Order flow

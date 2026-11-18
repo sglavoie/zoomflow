@@ -102,12 +102,15 @@ test('PNG ZIP includes every linked project file once and keeps repeated board I
 test('downloads the current SVG and PNG and matches the root PNG snapshot', { tag: '@visual' }, async ({ page, browserName }, info) => {
   const fonts = new Set<string>();
   page.on('response', (response) => {
-    const face = response.url().match(/SourceSansPro-(Regular|Bold|Italic|Semibold)(-[\w-]+)?\.ttf/);
+    const face = response.url().match(/Geist-(Regular|Bold|Italic|SemiBold)(-[\w-]+)?\.ttf/);
     if (face && response.ok()) fonts.add(face[1]);
   });
   await page.goto('/');
   await board(page, 'root');
-  expect([...fonts].sort()).toEqual(['Bold', 'Italic', 'Regular', 'Semibold']);
+  expect([...fonts].sort()).toEqual(['Bold', 'Italic', 'Regular', 'SemiBold']);
+  expect(await page.locator('body').evaluate((node) => getComputedStyle(node).fontFamily)).toContain('Geist');
+  expect(await page.locator('.cm-scroller').evaluate((node) => getComputedStyle(node).fontFamily)).toContain('Geist Mono');
+  expect(await page.evaluate(async () => (await document.fonts.load('13px "Geist Mono"', 'a: Step')).length)).toBe(1);
   const png = await readFile(await download(page, 'png', info));
   expect(png.subarray(0, 8)).toEqual(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]));
   // The PNG is a page rendering, so like other baselines it is compared in Chromium on macOS.

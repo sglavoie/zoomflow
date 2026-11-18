@@ -1,3 +1,38 @@
+@font-face {
+  font-family: Geist;
+  src: url("../../../fonts/Geist-Regular.ttf") format("truetype");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: Geist;
+  src: url("../../../fonts/Geist-SemiBold.ttf") format("truetype");
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: Geist;
+  src: url("../../../fonts/Geist-Bold.ttf") format("truetype");
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: Geist;
+  src: url("../../../fonts/Geist-Italic.ttf") format("truetype");
+  font-weight: 400;
+  font-style: italic;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Geist Mono";
+  src: url("../../../fonts/GeistMono-Regular.ttf") format("truetype");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
 :root {
   color-scheme: light;
   --surface: #fff;
@@ -74,7 +109,7 @@
   --font-size-lg: 16px;
   --font-size-xl: 20px;
   font:
-    var(--font-size-base) system-ui,
+    var(--font-size-base) Geist,
     sans-serif;
   color: var(--text);
   background: var(--page);
@@ -698,7 +733,7 @@ header > strong {
   display: block;
   resize: vertical;
   min-height: 220px;
-  font-family: monospace;
+  font-family: "Geist Mono", monospace;
   font-size: var(--font-size-md);
   line-height: 1.5;
   tab-size: 2;
@@ -1542,8 +1577,8 @@ body.diagram-fullscreen {
   background-image: url('./order-preview.svg');
   background-position: center;
   background-repeat: no-repeat;
-  /* Same 515 × 98 fitted crop and 1.5× ceiling as the live starter. */
-  background-size: min(100%, 772.5px) auto;
+  /* Same 548 × 100 fitted crop and 1.5× ceiling as the live starter. */
+  background-size: min(100%, 822px) auto;
 }
 [data-theme="dark"] .zf-stage.zf-starter-preview {
   background-image: url('./order-preview-dark.svg');
@@ -1950,7 +1985,7 @@ footer {
   resize: vertical;
 }
 [data-part="ai-form"] [data-part="ai-environment"] {
-  font-family: monospace;
+  font-family: "Geist Mono", monospace;
 }
 [data-part="ai-send"] {
   align-self: flex-end;

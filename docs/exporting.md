@@ -90,9 +90,12 @@ and has a 64 megapixel limit.
 Static SVG and PNG images, including those in ZIP downloads, omit link glyphs.
 Interactive HTML keeps its navigation badges.
 
-The viewer and browser/CLI exports use the same shipped Source Sans Pro Regular,
-Bold, Italic and Semibold fonts, with embedded font subsets in SVG and HTML.
+The viewer and browser/CLI exports use the same shipped Geist Regular,
+Bold, Italic and SemiBold fonts, with embedded font subsets in SVG and HTML.
 Single-file HTML shares one subset per face across its boards.
+The app uses Geist for controls and Geist Mono for source. Offline HTML reuses
+embedded regular/bold subsets covering its headings and controls; framed images
+also embed their title/subtitle glyphs. No font installation or network is needed.
 See [font assets, license and renderer wiring](../fonts/README.md).
 
 ## Mobile editing and keyboard controls

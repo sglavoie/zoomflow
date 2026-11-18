@@ -16,7 +16,7 @@ test('opens a single HTML file offline and drills every level with history and b
   const html = await readFile(path, 'utf8');
   expect(html).not.toMatch(/<script[^>]+src=|d2\.wasm/);
   // Boards share one font subset per face instead of embedding their own.
-  expect(html.match(/@font-face/g)).toHaveLength(1);
+  expect(html.match(/@font-face/g)).toHaveLength(2);
   expect(html).toContain('@font-face{font-family:zf-font-bold;');
   await page.goto('about:blank');
   const network: string[] = [];
@@ -232,6 +232,51 @@ test('interactive HTML uses the document title unless the export name or display
   await page.locator('#export-title').fill('Explicit review');
   const titled = await readFile(await download(page, 'html', info), 'utf8');
   expect(titled).toContain('<title>Explicit review</title>');
+});
+
+test('single-board HTML embeds Geist for shell glyphs absent from the diagram', async ({ page, context }, info) => {
+  await page.goto('/'); await previewReady(page);
+  await page.locator('#file').setInputFiles({ name: 'one.d2', mimeType: 'text/plain', buffer: Buffer.from('a: A') });
+  await previewReady(page);
+  const title = 'Café Zèbre — Łódź';
+  const subtitle = 'Résumé: façade, 0123456789';
+  await selectMenuOption(page, '#export-format', 'html');
+  await page.locator('.export-presentation > summary').click();
+  await page.locator('#export-title').fill(title);
+  await page.locator('#export-subtitle').fill(subtitle);
+  const expected = await page.evaluate(async ({ title, subtitle }) => {
+    const canvas = document.createElement('canvas').getContext('2d')!;
+    // D2 subsets omit kerning tables; compare individual glyph advances (also in WebKit).
+    const width = async (text: string, weight: number) => {
+      await document.fonts.load(`${weight} 20px Geist`, text);
+      canvas.font = `${weight} 20px Geist`;
+      return Array.from(text, (char) => canvas.measureText(char).width);
+    };
+    return [await width(title, 700), await width(subtitle, 400)];
+  }, { title, subtitle });
+  const path = await download(page, 'html', info);
+  const html = await readFile(path, 'utf8');
+  // Small shared subsets, with no duplicate or full TTF font payload for the shell.
+  const fonts = [...html.matchAll(/data:application\/font-woff;base64,([\w+/=]+)/g)].map((match) => match[1]);
+  expect(fonts).toHaveLength(2);
+  expect(fonts.reduce((size, data) => size + data.length, 0)).toBeLessThan(60_000);
+  await context.setOffline(true);
+  await page.goto(pathToFileURL(path).href);
+  await board(page, 'root');
+  await expect(page.locator('h1')).toHaveText(title);
+  const actual = await page.evaluate(async ({ title, subtitle }) => {
+    const canvas = document.createElement('canvas').getContext('2d')!;
+    // D2 subsets omit kerning tables; compare individual glyph advances (also in WebKit).
+    const width = async (text: string, family: string) => {
+      await document.fonts.load(`20px ${family}`, text);
+      canvas.font = `20px ${family}`;
+      return Array.from(text, (char) => canvas.measureText(char).width);
+    };
+    return { family: getComputedStyle(document.body).fontFamily,
+      widths: [await width(title, 'zf-font-bold'), await width(subtitle, 'zf-font-regular')] };
+  }, { title, subtitle });
+  expect(actual.family).toContain('zf-font-regular');
+  actual.widths.forEach((widths, i) => widths.forEach((width, j) => expect(width).toBeCloseTo(expected[i][j], 1)));
 });
 
 test('exports a folder project as one offline atlas and links file SVGs in the ZIP', async ({ page, context }, info) => {

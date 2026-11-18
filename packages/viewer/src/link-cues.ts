@@ -128,7 +128,7 @@ export function decorateLinks(svg: Element, boards: Map<string, { name: string; 
         pill.setAttribute('stroke', `var(--zf-badge-ink, ${ink})`); pill.setAttribute('stroke-opacity', '0.25');
         const text = document.createElementNS(ns, 'text');
         text.setAttribute('x', '32'); text.setAttribute('y', '19'); text.setAttribute('text-anchor', 'start');
-        text.setAttribute('font-size', '10'); text.setAttribute('font-family', 'system-ui, sans-serif');
+        text.setAttribute('font-size', '10'); text.setAttribute('font-family', 'var(--zf-ui-font, Geist), sans-serif');
         text.setAttribute('fill', `var(--zf-badge-ink, ${ink})`); text.textContent = label;
         badge.prepend(pill, text);
       }

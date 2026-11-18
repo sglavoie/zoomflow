@@ -1,8 +1,8 @@
 import type { CompileOptions } from '@d2lang/d2';
-import regular from '../../../fonts/SourceSansPro-Regular.ttf?url';
-import bold from '../../../fonts/SourceSansPro-Bold.ttf?url';
-import italic from '../../../fonts/SourceSansPro-Italic.ttf?url';
-import semibold from '../../../fonts/SourceSansPro-Semibold.ttf?url';
+import regular from '../../../fonts/Geist-Regular.ttf?url';
+import bold from '../../../fonts/Geist-Bold.ttf?url';
+import italic from '../../../fonts/Geist-Italic.ttf?url';
+import semibold from '../../../fonts/Geist-SemiBold.ttf?url';
 
 type FontOptions = Pick<CompileOptions, 'fontRegular' | 'fontBold' | 'fontItalic' | 'fontSemibold'>;
 

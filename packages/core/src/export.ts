@@ -201,11 +201,16 @@ const scopeOf = (svg: string) => /<svg\b[^>]*\bclass="(d2-\d+) d2-svg"/.exec(svg
 
 /** D2 subsets each board's fonts to that board's text. Rendering this source once yields
  * faces covering every shown board: bold shape labels, regular shapes, italic edge labels.
- * Undefined for fewer than two shown boards, which keep their own fonts.
+ * With shellText, also covers HTML chrome, board metadata and user headings, even for one board.
+ * Without shellText, undefined for fewer than two shown boards.
  */
-export function exportGlyphSource(boards: readonly ExportBoard[]): string | undefined {
-  if (boards.filter((board) => !board.empty).length < 2) return undefined;
-  const chars = new Set<string>();
+export function exportGlyphSource(boards: readonly ExportBoard[], shellText?: string): string | undefined {
+  if (shellText === undefined && boards.filter((board) => !board.empty).length < 2) return undefined;
+  // ASCII covers search input and fixed viewer copy; include the viewer's decorative symbols.
+  const chrome = Array.from({ length: 95 }, (_, i) => String.fromCharCode(32 + i)).join('') + '·…−×→←↑↓↗›‹⇧⌘';
+  const metadata = shellText === undefined ? '' : chrome + shellText + boards.map((board) =>
+    [board.name, board.id, board.path, board.file, JSON.stringify(board.parentContext ?? []), JSON.stringify(board.missingLinks ?? []), JSON.stringify(board.searchShapes ?? []), JSON.stringify(board.walkthrough ?? {})].join('')).join('');
+  const chars = new Set<string>([...metadata].filter((char) => !/\s/.test(char)));
   for (const board of boards) {
     if (board.empty) continue;
     const text = unescapeXml(board.svg.replace(/<(style|script)\b[\s\S]*?<\/\1>/gi, '').replace(/<[^>]*>/g, ' '));
@@ -214,7 +219,8 @@ export function exportGlyphSource(boards: readonly ExportBoard[]): string | unde
   if (!chars.size) return undefined;
   // Single-quoted D2 strings are literal; only the quote itself needs a double-quoted label.
   const plain = [...chars].filter((char) => char !== "'");
-  const labels = plain.length ? Array.from({ length: Math.ceil(plain.length / 100) }, (_, i) => `'${plain.slice(i * 100, i * 100 + 100).join('')}'`) : [];
+  // Keep an interior space: D2 trims label ends, and omitting it makes HTML use a fallback space.
+  const labels = plain.length ? Array.from({ length: Math.ceil(plain.length / 100) }, (_, i) => `'${plain.slice(i * 100, i * 100 + 100).join('') + (shellText === undefined ? '' : ' .')}'`) : [];
   if (chars.has("'")) labels.push('"\'"');
   return labels.map((label, i) => `b${i}: ${label}\nr${i}: ${label} {style.bold: false}\nb${i} -> r${i}: ${label}\n`).join('');
 }
@@ -226,9 +232,10 @@ export function exportGlyphSource(boards: readonly ExportBoard[]): string | unde
  */
 function shareStyles(svgs: string[], glyphs?: string): { svgs: string[]; style: string } {
   const scopes = svgs.map(scopeOf);
-  if (svgs.length < 2 || scopes.some((scope) => !scope)) return { svgs, style: '' };
+  if (scopes.some((scope) => !scope)) return { svgs, style: '' };
   const faces = new Map([...(glyphs ?? '').matchAll(fontFace)].map((match) => [match[2], match[3]]));
-  const used = new Set<string>();
+  // Shell headings and controls reuse these same subsets; no duplicate data URLs.
+  const used = new Set(['font-regular', 'font-bold'].filter((face) => faces.has(face) && !/["<>&]/.test(faces.get(face)!)));
   svgs = svgs.map((svg, i) => {
     const scope = scopes[i]!;
     for (const [rule, owner, face] of [...svg.matchAll(fontFace)]) {
@@ -245,7 +252,7 @@ function shareStyles(svgs: string[], glyphs?: string): { svgs: string[]; style: 
     return { raw: match[0], css, hoistable, unscoped: css.replace(/[^{}]*\.zf-scope[^{}]*\{[^{}]*\}|@font-face\s*\{[^{}]*\}/g, '') };
   }));
   let common = 0;
-  while (blocks.every((list) => list[common] && list[common].unscoped === blocks[0][common].unscoped)) common++;
+  while (blocks.length && blocks.every((list) => list[common] && list[common].unscoped === blocks[0][common].unscoped)) common++;
   const variants = new Map<string, number>();
   const result = svgs.map((svg, i) => {
     let length = 0;
@@ -258,7 +265,8 @@ function shareStyles(svgs: string[], glyphs?: string): { svgs: string[]; style: 
     return classes.length ? svg.replace(`class="${scopes[i]} d2-svg"`, `class="${scopes[i]} d2-svg ${classes.join(' ')}"`) : svg;
   });
   const fonts = [...used].map((face) => `@font-face{font-family:zf-${face};src:url("${faces.get(face)}")}`);
-  const style = [...fonts, ...[...variants].map(([css, index]) => css.replace(/\.zf-scope(?![\w-])/g, `.zf-s${index}`))].join('\n');
+  const shell = faces.has('font-regular') && faces.has('font-bold') ? ':root{--zf-ui-font:zf-font-regular;--zf-ui-bold:zf-font-bold}' : '';
+  const style = [...fonts, ...(shell ? [shell] : []), ...[...variants].map(([css, index]) => css.replace(/\.zf-scope(?![\w-])/g, `.zf-s${index}`))].join('\n');
   return { svgs: result, style };
 }
 

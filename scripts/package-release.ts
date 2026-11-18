@@ -41,7 +41,7 @@ for (const kind of ['cli', 'web']) {
   const name = `zoomflow-${kind}-v${version}`;
   const stage = join(out, name);
   mkdirSync(stage);
-  for (const file of ['LICENSE', 'README.md', 'docs/cli.md', 'docs/releases.md', 'fonts/LICENSE.txt', 'vendor/d2/README.md']) {
+  for (const file of ['LICENSE', 'README.md', 'docs/cli.md', 'docs/releases.md', 'fonts/LICENSE.txt', 'fonts/README.md', 'fonts/SHA256SUMS', 'vendor/d2/README.md']) {
     copy(file, join(stage, file));
   }
   writeFileSync(join(stage, 'THIRD_PARTY_NOTICES.md'), notices);

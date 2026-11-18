@@ -224,7 +224,7 @@ export function composeLayers(items: LayerItem[]): SVGSVGElement {
     content.querySelector(':scope > svg > rect')?.remove();
     const group = create('g', { transform: `translate(${box.x} ${box.y})`, 'data-layer-board': board.id,
       role: 'group', 'aria-label': `${board.name} layer` });
-    const label = create('text', { x: 12, y: 20, fill: '#52657d', opacity: 0.65, 'font-size': 14, 'font-family': 'sans-serif', class: 'zf-layer-label fill-N1' });
+    const label = create('text', { x: 12, y: 20, fill: '#52657d', opacity: 0.65, 'font-size': 14, 'font-family': 'var(--zf-ui-font, Geist), sans-serif', class: 'zf-layer-label fill-N1' });
     label.textContent = board.name;
     content.setAttribute('x', '0'); content.setAttribute('y', '28');
     content.setAttribute('width', String(view.width)); content.setAttribute('height', String(view.height));

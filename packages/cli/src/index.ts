@@ -14,8 +14,8 @@ import { fileURLToPath } from 'node:url';
 const exec = promisify(execFile);
 // Resolve against the installed workspace, never the input file or caller's cwd.
 const fontArgs = Object.entries({
-  'font-regular': 'Regular', 'font-bold': 'Bold', 'font-italic': 'Italic', 'font-semibold': 'Semibold',
-}).map(([flag, face]) => `--${flag}=${fileURLToPath(new URL(`../../../fonts/SourceSansPro-${face}.ttf`, import.meta.url))}`);
+  'font-regular': 'Regular', 'font-bold': 'Bold', 'font-italic': 'Italic', 'font-semibold': 'SemiBold',
+}).map(([flag, face]) => `--${flag}=${fileURLToPath(new URL(`../../../fonts/Geist-${face}.ttf`, import.meta.url))}`);
 
 /** Native D2 rewrites shape links as file paths when rendering a child alone.
  * Recover the exact compiler links using D2's encoded shape wrapper identity.
@@ -406,13 +406,13 @@ export async function main(args = process.argv.slice(2)): Promise<number> {
             rendered.push({ path: file.path, name: file.path.replace(/\.d2$/i, ''), boards: exported });
           }
           if (format === 'html') {
-            // One extra render gives every board the same font subsets; without it each board keeps its own.
-            const glyphSource = exportGlyphSource(rendered.flatMap((document) => document.boards));
+            // One extra render supplies shared diagram and shell subsets, including a single board.
+            const glyphSource = exportGlyphSource(rendered.flatMap((document) => document.boards), basename(input).slice(0, -3) + rendered.map((file) => file.path + file.name).join(''));
             const glyphFile = join(temp, `.zoomflow-glyphs-${process.pid}.d2`);
             const glyphs = glyphSource ? await writeFile(glyphFile, glyphSource)
               .then(() => exec('d2', ['--layout=elk', '--bundle=true', '--watch=false', ...fontArgs, '--stdout-format=svg', glyphFile, '-'],
                 { encoding: 'utf8', maxBuffer: 128 * 1024 * 1024, timeout: 180_000 }))
-              .then((result) => result.stdout, () => undefined) : undefined;
+              .then((result) => result.stdout) : undefined;
             const options = { title: basename(input).slice(0, -3), script: offlineViewerScript(), style: offlineViewerStyle, glyphs };
             await save(output, atlas ? exportAtlasHtml(rendered, options) : exportBoardsHtml(rendered[0].boards, options));
           } else {

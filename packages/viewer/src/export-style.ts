@@ -5,10 +5,11 @@ import { viewerStyle } from './viewer-style';
 export const offlineViewerStyle = viewerStyle + `
 :root{--surface:var(--zf-surface);--border:var(--zf-border);--muted:var(--zf-muted);--focus:var(--zf-focus);--hover:#477de512;--space-2:8px;--radius:6px;color-scheme:light;--zf-page:#f4f6f9;--zf-text:#203044;--zf-surface:#fff;--zf-border:#8192a466;--zf-muted:#52657d;--zf-focus:#477de5;--zf-badge-surface:#fff;--zf-badge-ink:#52657d}
 *{box-sizing:border-box}
-body{margin:0;height:100dvh;display:flex;flex-direction:column;background:var(--zf-page);color:var(--zf-text);font:15px system-ui,sans-serif}
+body{margin:0;height:100dvh;display:flex;flex-direction:column;background:var(--zf-page);color:var(--zf-text);font:15px var(--zf-ui-font,Geist),sans-serif}
 header{overflow-wrap:anywhere;padding:16px 24px;border-bottom:1px solid var(--zf-border);font-size:20px}
 header p{margin:6px 0 0;color:var(--zf-muted);font-size:14px;line-height:1.5}
-header h1{margin:0;font:inherit;font-weight:bold}
+strong,b{font-family:var(--zf-ui-bold,Geist),sans-serif;font-weight:normal}
+header h1{margin:0;font:inherit;font-family:var(--zf-ui-bold,Geist),sans-serif;font-weight:normal}
 main{flex:1;min-height:0;overflow:auto;display:flex;flex-direction:column;padding:16px 24px}
 button{font:inherit;line-height:20px;min-height:36px;padding:7px 10px;border:1px solid var(--zf-border);border-radius:6px;background:var(--zf-surface);color:inherit;cursor:pointer}
 button:not(:disabled):hover{background:#477de512}
