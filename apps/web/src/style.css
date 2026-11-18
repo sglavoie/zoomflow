@@ -2940,6 +2940,8 @@ header > strong { letter-spacing: -0.7px; }
 .builder-appearance { border-top: 1px solid var(--border); margin-top: 20px; padding-top: 12px; }
 .builder-appearance > summary { padding: 6px 0; cursor: pointer; font-weight: 600; }
 .builder-appearance > summary span { color: var(--muted); font-size: 12px; font-weight: 400; margin-left: 8px; }
+/* Narrow layouts hide the summary's text spans; the chevron still marks the menu. */
+.builder-appearance > summary .picker-chevron { display: inline-block; }
 .builder-appearance .builder-look { margin-top: 8px; border: 0; padding: 0; }
 .builder-appearance .builder-look legend { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
 .look-thumbnail { max-height: 42px; }
@@ -3002,7 +3004,10 @@ header > strong { display: inline-flex; align-items: center; gap: 6px; font-size
   .header-actions { justify-self: end; gap: 4px; }
   .header-controls { grid-row: 2; grid-column: 1 / -1; display: flex; gap: 8px; }
   .document-control { flex: 1; width: auto; min-width: 0; }
-  #create-open > summary { font-size: 12px; padding: 8px; }
+  #create-open > summary { font-size: 12px; padding: 8px; gap: 4px; }
+  /* Smaller chevrons keep the document name on one line beside Create / open. */
+  .header-controls .picker-chevron { flex-basis: 12px; width: 12px; height: 12px; }
+  #example-picker > summary { gap: 4px; }
   .create-open-menu { left: auto; right: 0; }
   #example-picker > summary { min-width: 0; }
   .flow-builder-toolbar { margin-bottom: 2px; }
@@ -3021,7 +3026,7 @@ header > strong { display: inline-flex; align-items: center; gap: 6px; font-size
   [data-part="mobile-view-switch"] button { min-height: 32px; padding: 4px 8px; }
   .flow-builder-toolbar { position: relative; display: grid; grid-template-columns: auto auto minmax(0, 1fr) auto auto; gap: 2px; }
   .flow-builder-toolbar :is(button, summary) { padding-inline: 6px; font-size: 12px; }
-  .flow-builder-toolbar .diagram-search-trigger, .flow-builder-toolbar .project-search-trigger { font-size: 0; min-width: 32px; }
+  .flow-builder-toolbar .diagram-search-trigger, .flow-builder-toolbar .project-search-trigger { font-size: 0; min-width: 32px; white-space: nowrap; }
   .flow-builder-toolbar .project-search-trigger::after { content: '⌕'; font-size: 23px; }
   .flow-builder-toolbar .board-appearance { position: static; justify-self: end; }
   .board-appearance .builder-look { left: auto; right: 0; }
@@ -3035,6 +3040,8 @@ header > strong { display: inline-flex; align-items: center; gap: 6px; font-size
 @media (max-width: 600px) {
   #workspace[data-layout="single"] #pane-a > [data-part="mobile-view-switch"] { position: fixed; top: 8px; left: 132px; right: 84px; width: auto; padding: 0; border: 0; background: transparent; }
   #workspace[data-layout="single"] #pane-a > [data-part="mobile-view-switch"] button { flex: 1 0 auto; white-space: nowrap; padding-inline: 4px; font-size: 12px; }
+  /* The vector chevron must leave View inside the space the fixed view switch reserves. */
+  #workspace-view > summary { gap: 4px; padding-inline: 6px; }
 }
 @media (min-width: 601px) and (max-width: 999px) and (max-height: 500px) {
   header { display: flex; }
