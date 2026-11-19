@@ -12,7 +12,10 @@ export function setupArrivalMotion(stage: HTMLElement) {
     animations.clear();
     for (const element of elements) element.classList.remove('zf-arrival-shape');
     elements.clear();
-    if (active) stage.dispatchEvent(new Event('zf-arrivalend'));
+    if (active) {
+      stage.dispatchEvent(new Event('zf-arrivalend'));
+      stage.querySelector(':scope > svg')?.dispatchEvent(new Event('zf-viewportchange'));
+    }
   }
   function animate(element: SVGGraphicsElement, frames: Keyframe[], delay: number, duration: number) {
     const animation = element.animate(frames, { delay, duration, fill: 'both', easing: 'cubic-bezier(.2,.75,.25,1)' });
@@ -28,7 +31,7 @@ export function setupArrivalMotion(stage: HTMLElement) {
   function arrive() {
     cancel();
     const shapes = [...stage.querySelectorAll<SVGGraphicsElement>('[data-shape-id]')].map(shape => ({
-      id: shape.dataset.shapeId!, element: (shape.closest('a') ?? shape) as SVGGraphicsElement,
+      id: shape.dataset.shapeId!, element: shape,
       box: shape.getBoundingClientRect(),
     })).filter(shape => shape.box.width && shape.box.height);
     if (reduced.matches || !shapes.length || shapes.length > 60) {
@@ -40,6 +43,8 @@ export function setupArrivalMotion(stage: HTMLElement) {
       ? a.box.x - b.box.x : a.box.y - b.box.y);
     const gap = Math.min(40, 260 / Math.max(1, shapes.length - 1));
     const visible = new Map(shapes.map((shape, index) => [shape.id, index * gap + 180]));
+    // Apply the viewport's final fit to link cues before hiding or scaling paint.
+    stage.querySelector(':scope > svg')?.dispatchEvent(new Event('zf-arrivalstart'));
     stage.dataset.arrivalMotion = 'true';
     for (const [index, { element }] of shapes.entries()) {
       const base = getComputedStyle(element).transform;
@@ -47,6 +52,10 @@ export function setupArrivalMotion(stage: HTMLElement) {
       elements.add(element);
       animate(element, [{ opacity: 0, transform: `${base === 'none' ? '' : base} scale(.96)` },
         { opacity: 1, transform: base }], index * gap, 180);
+      // The link's badge and hit area keep their screen geometry during arrival.
+      // Only fade its decorative siblings; scale the shape itself.
+      for (const decoration of element.closest('a')?.querySelectorAll<SVGGraphicsElement>(':scope > .appendix-icon, :scope > .zf-depth-stack') ?? [])
+        animate(decoration, [{ opacity: 0 }, { opacity: 1 }], index * gap, 180);
     }
     for (const edge of stage.querySelectorAll<SVGGraphicsElement>('[data-connection-id]')) {
       const delay = Math.max(visible.get(edge.dataset.connectionFrom!) ?? shapes.length * gap,
@@ -61,6 +70,9 @@ export function setupArrivalMotion(stage: HTMLElement) {
   }
   for (const type of ['pointerdown', 'wheel', 'keydown', 'zf-beforerender', 'zf-boardchange', 'zf-sourcechange', 'zf-suspend', 'zf-destroy'])
     stage.addEventListener(type, cancel, { capture: true, signal: events.signal });
+  // Zoom controls sit beside the stage. Restore geometry before they handle input.
+  for (const type of ['pointerdown', 'wheel', 'keydown'])
+    stage.parentElement?.addEventListener(type, cancel, { capture: true, signal: events.signal });
   reduced.addEventListener('change', cancel);
   stage.addEventListener('zf-destroy', () => { events.abort(); reduced.removeEventListener('change', cancel); }, { once: true });
   return { arrive };

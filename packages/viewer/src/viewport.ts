@@ -384,7 +384,11 @@ export function createViewport(stage: HTMLElement, host: HTMLElement, clamp: typ
     }
     if (next) { reveal([next]); next.focus({ preventScroll: true }); }
   }, { signal });
+  let refitAfterArrival = false;
   function refit() {
+    // Font loading and ResizeObserver can settle during arrival. Fit the final
+    // shapes after that paint is removed, preserving the user's zoom and center.
+    if (stage.dataset.arrivalMotion) { refitAfterArrival = true; return; }
     // Refit the baseline as the available space changes, retaining the chosen magnification
     // and position. Otherwise desktop padding shrinks the content to tiny text on a phone.
     if (presentingView && presentationStep) {
@@ -402,6 +406,9 @@ export function createViewport(stage: HTMLElement, host: HTMLElement, clamp: typ
     }
     svg?.dispatchEvent(new Event('zf-viewportchange'));
   }
+  stage.addEventListener('zf-arrivalend', () => {
+    if (refitAfterArrival) { refitAfterArrival = false; refit(); }
+  }, { signal });
   const resize = new ResizeObserver(refit);
   resize.observe(stage);
   signal.addEventListener('abort', () => resize.disconnect());

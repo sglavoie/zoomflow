@@ -208,6 +208,8 @@ export function decorateLinks(svg: Element, boards: Map<string, { name: string; 
   let attached = false;
   let measured = false;
   function updateGeometry() {
+    // Arrival transforms are temporary paint, never the reference geometry for cues.
+    if (svg.parentElement?.dataset.arrivalMotion) { measured = false; return; }
     // Navigation scales the whole canvas temporarily. Keep badges in diagram space
     // during that motion; its completion or interruption requests a fresh measurement.
     if (svg.parentElement?.dataset.transition) return;
@@ -265,6 +267,7 @@ export function decorateLinks(svg: Element, boards: Map<string, { name: string; 
   }
   // Viewport changes fire on every pointermove and wheel event: measure once per frame.
   let frame = 0;
+  svg.addEventListener('zf-arrivalstart', () => { measured = false; updateGeometry(); });
   svg.addEventListener('zf-viewportchange', () => {
     if (frame) return;
     frame = requestAnimationFrame(() => {
@@ -275,7 +278,9 @@ export function decorateLinks(svg: Element, boards: Map<string, { name: string; 
   });
   updateGeometry();
   // Embedded fonts can still be loading on first paint; re-measure text once they settle.
-  void document.fonts?.ready.then(() => { if (cues.length && svg.isConnected && measure()) updateGeometry(); });
+  void document.fonts?.ready.then(() => {
+    if (cues.length && svg.isConnected) { measured = false; updateGeometry(); }
+  });
   if (!svg.querySelector('a[data-link-kind]')) return;
   const hint = document.createElement('div');
   hint.className = 'zf-link-hint';

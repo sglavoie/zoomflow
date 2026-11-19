@@ -4,6 +4,8 @@ export function setupCanvasCoach(stage: HTMLElement, keys: (target: Element) => 
   const preference = 'zoomflow.canvas-hint-dismissed';
   const drillPreference = 'zoomflow.drill-hint-dismissed';
   const events = new AbortController();
+  let inputEvents: AbortController | undefined;
+  let suspended = false;
   let drilled = false;
   let unlocked = false;
   let idle: ReturnType<typeof setTimeout> | undefined;
@@ -31,7 +33,7 @@ export function setupCanvasCoach(stage: HTMLElement, keys: (target: Element) => 
     drilled = true; hint?.remove(); hint = undefined;
   }, { signal: events.signal });
   function ready() {
-    return stage.querySelector('svg') && !stage.hasAttribute('data-arrival-motion') &&
+    return !suspended && stage.querySelector('svg') && !stage.hasAttribute('data-arrival-motion') &&
       !stage.hasAttribute('data-preview-state') && !stage.closest('[aria-busy="true"]');
   }
   function waitForIdle() {
@@ -55,9 +57,25 @@ export function setupCanvasCoach(stage: HTMLElement, keys: (target: Element) => 
     unlocked = true; clearTimeout(idle); stopHint();
     if (phase === 2) advance(3); else place();
   }, { signal: events.signal });
-  for (const type of ['pointerdown', 'keydown', 'wheel', 'input']) window.addEventListener(type, () => {
+  function input() {
     clearTimeout(idle); idle = undefined; waitForIdle();
-  }, { capture: true, passive: true, signal: events.signal });
+  }
+  function listenToInput() {
+    if (inputEvents) return;
+    suspended = false;
+    inputEvents = new AbortController();
+    for (const type of ['pointerdown', 'keydown', 'wheel', 'input'])
+      window.addEventListener(type, input, { capture: true, passive: true, signal: inputEvents.signal });
+  }
+  function suspend() {
+    suspended = true;
+    inputEvents?.abort(); inputEvents = undefined;
+    clearTimeout(idle); idle = undefined;
+    coach.hidden = true; hint?.remove(); hint = undefined;
+  }
+  listenToInput();
+  stage.addEventListener('zf-suspend', suspend, { signal: events.signal });
+  stage.addEventListener('zf-resume', () => { listenToInput(); place(); }, { signal: events.signal });
   window.addEventListener('storage', event => {
     if (event.key === drillPreference || event.key === preference || event.key === null) {
       try {
@@ -131,5 +149,5 @@ export function setupCanvasCoach(stage: HTMLElement, keys: (target: Element) => 
     attributeFilter: ['aria-busy', 'data-preview-state', 'data-arrival-motion', 'data-transition', 'class', 'data-walkthrough', 'open', 'hidden'] });
   stage.addEventListener('zf-viewportchange', schedule, { capture: true });
   const resize = new ResizeObserver(schedule); resize.observe(stage);
-  stage.addEventListener('zf-destroy', () => { clearTimeout(idle); events.abort(); hint?.remove(); cancelAnimationFrame(scheduled); observer.disconnect(); resize.disconnect(); coach.remove(); });
+  stage.addEventListener('zf-destroy', () => { suspend(); events.abort(); cancelAnimationFrame(scheduled); observer.disconnect(); resize.disconnect(); coach.remove(); });
 }
