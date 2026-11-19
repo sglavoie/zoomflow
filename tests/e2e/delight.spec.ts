@@ -520,12 +520,13 @@ test('pulses the drill arrow until the first drill', async ({ page }) => {
 });
 
 test('waits to coach until a drill or idle', async ({ page }) => {
+  // Install before loading so every coach idle timer belongs to the fake clock.
+  await page.clock.install();
   await open(page);
   const coach = page.locator('.canvas-coach');
   await expect(coach).toBeHidden();
   // The idle clock starts after arrival and resets on source, keyboard and pointer input.
   await expect(page.locator('#viewer .zf-stage')).not.toHaveAttribute('data-arrival-motion');
-  await page.clock.install();
   await page.mouse.click(12, 12);
   await page.clock.runFor(3500); await expect(coach).toBeHidden();
   await page.keyboard.press('Shift');
