@@ -66,10 +66,12 @@ export function createViewport(stage: HTMLElement, host: HTMLElement, clamp: typ
   let documentKey = '';
   let activeKey: string | undefined;
   let presentingView = false;
+  let preserveOnRender = false;
   let editAnchor: { key: string; shape: string; board?: string; x: number; y: number; pixels: number } | undefined;
   // Capture just before replacement, after any asynchronous render finishes. A pending edit never
   // overrides a pan or navigation that happened while it was compiling.
-  stage.addEventListener('zf-beforerender', () => {
+  stage.addEventListener('zf-beforerender', event => {
+    preserveOnRender = Boolean((event as CustomEvent).detail?.animate);
     editAnchor = undefined;
     if (!activeKey || !svg) return;
     const focused = document.activeElement;
@@ -453,6 +455,8 @@ export function createViewport(stage: HTMLElement, host: HTMLElement, clamp: typ
       width: width * padding, height: height * padding };
   }
   function reset() {
+    const preserveView = preserveOnRender;
+    preserveOnRender = false;
     remember();
     activeKey = `${documentKey}\n${stage.dataset.layerRoot ? `layers:${stage.dataset.layerRoot}` : stage.dataset.board ?? 'root'}`;
     const previous = views.get(activeKey);
@@ -506,16 +510,17 @@ export function createViewport(stage: HTMLElement, host: HTMLElement, clamp: typ
     resetFocus();
     svg?.dispatchEvent(new Event('zf-viewportchange'));
     // Text-only shapes (notably Markdown) change bounds when embedded fonts replace fallback
-    // glyphs. Load only this SVG's faces, then use the resize path to retain zoom and pan.
+    // glyphs. Refit only for pending faces; an edit's anchored view must stay untouched.
     const rendered = svg;
-    if (rendered && document.fonts) {
+    if (rendered && document.fonts && !preserveView) {
       const fonts = new Map<string, string>();
       for (const text of rendered.querySelectorAll('text')) {
         const style = getComputedStyle(text);
         const face = `${style.fontStyle} ${style.fontWeight} ${style.fontSize} ${style.fontFamily}`;
         fonts.set(face, (fonts.get(face) ?? '') + text.textContent);
       }
-      void Promise.allSettled([...fonts].map(([face, text]) => document.fonts.load(face, text))).then(() => {
+      const pending = [...fonts].filter(([face, text]) => !document.fonts.check(face, text));
+      if (pending.length) void Promise.allSettled(pending.map(([face, text]) => document.fonts.load(face, text))).then(() => {
         if (!signal.aborted && svg === rendered && rendered.isConnected) refit();
       });
     }
