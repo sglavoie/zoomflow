@@ -96,6 +96,8 @@ export const viewerStyle = `
 .zf-walkthrough-toolbar { padding: 6px 0; }
 .zf-walkthrough-current { filter: drop-shadow(0 0 4px var(--focus)); }
 .zf-walkthrough-muted { opacity: .72; }
+.zf-edge-pulse { fill: none; stroke: var(--focus, #235db8); stroke-width: 4px; stroke-linecap: round; vector-effect: non-scaling-stroke; pointer-events: none; filter: drop-shadow(0 0 3px var(--focus, #235db8)); }
+@media (prefers-reduced-motion: reduce) { .zf-edge-pulse { display: none; } }
 .zf-stage-area:has(.zf-stage[data-walkthrough]) > :is(.zf-pan-hint, .board-selection, .canvas-coach, .canvas-insert, .canvas-connections) { display: none; }
 .zf-walkthrough-trigger[aria-pressed="true"] { color: var(--focus); background: var(--hover); }
 @media (prefers-reduced-motion: no-preference) { .zf-walkthrough-muted, .zf-walkthrough-path { transition: opacity 160ms ease-out; } }

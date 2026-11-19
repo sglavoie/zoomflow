@@ -6,6 +6,163 @@ import { flowSource, flowTemplate, readFlow } from '../../apps/web/src/flow-mode
 const shape = (page: import('@playwright/test').Page, id: string) => page.locator(`#viewer [data-shape-id="${id}"]`);
 test.use({ viewport: { width: 1440, height: 1000 } });
 
+// Pause the real animation in the same task as the step, avoiding wall-clock races.
+async function advancePulse(page: import('@playwright/test').Page, reduced = false) {
+  await page.getByRole('button', { name: 'Next: Checkout', exact: true }).evaluate((button: HTMLButtonElement) => {
+    button.click();
+    const animation = document.querySelector('.zf-edge-pulse')?.getAnimations()[0];
+    if (animation) { animation.pause(); animation.currentTime = 100; }
+  });
+  const pulse = page.locator('.zf-edge-pulse');
+  if (reduced) { await expect(pulse).toHaveCount(0); return; }
+  await expect(pulse).toHaveCount(1);
+  expect(await pulse.evaluate(node => node.parentElement!.dataset.connectionId)).toBe('(Browse -> Checkout)[0]');
+  await expect(pulse).toHaveAttribute('aria-hidden', 'true');
+  await expect(pulse).toHaveCSS('pointer-events', 'none');
+  const state = await pulse.evaluate(node => {
+    const animation = node.getAnimations()[0];
+    const first = getComputedStyle(node).strokeDashoffset;
+    animation.currentTime = 350;
+    return { first, later: getComputedStyle(node).strokeDashoffset,
+      duration: animation.effect!.getTiming().duration, frames: (animation.effect as KeyframeEffect).getKeyframes() };
+  });
+  expect(state.duration).toBe(500);
+  expect(Number.parseFloat(state.later)).toBeLessThan(Number.parseFloat(state.first));
+  expect(state.frames).toHaveLength(2);
+}
+
+async function finishPulse(page: import('@playwright/test').Page) {
+  await page.locator('.zf-edge-pulse').evaluate(node => node.getAnimations()[0].finish());
+  await expect(page.locator('.zf-edge-pulse')).toHaveCount(0);
+}
+
+test('pulses the followed edge when a step advances', async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
+  await page.goto('/'); await previewReady(page);
+  const path = page.locator('[data-connection-id="(Browse -> Checkout)[0]"] path.connection');
+  const original = await path.getAttribute('style');
+  await shape(page, 'Browse').click();
+  await expect(page.locator('.zf-selection-ring')).toBeVisible();
+  await page.getByRole('button', { name: 'Walkthrough', exact: true }).click();
+  await expect(page.locator('.zf-selection-ring')).toBeHidden();
+  await expect(page.locator('.zf-edge-pulse')).toHaveCount(0);
+  await advancePulse(page);
+  expect(await path.getAttribute('style')).toBe(original);
+  await finishPulse(page);
+  await page.getByRole('button', { name: 'Present', exact: true }).click();
+  await expect(page.locator('.zf-edge-pulse')).toHaveCount(0);
+  await page.getByRole('button', { name: 'Back', exact: true }).click();
+  await expect(page.locator('.zf-edge-pulse')).toHaveCount(0);
+  await advancePulse(page);
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await expect(page.locator('.zf-edge-pulse')).toHaveCount(0);
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
+  await page.getByRole('button', { name: 'Back', exact: true }).click();
+  await advancePulse(page);
+  await page.locator('.zf-stage').dispatchEvent('wheel', { deltaY: 10 });
+  await expect(page.locator('.zf-edge-pulse')).toHaveCount(0);
+  await page.getByRole('button', { name: 'Back', exact: true }).click();
+  await advancePulse(page);
+  await page.getByRole('button', { name: 'End walkthrough', exact: true }).click();
+  await expect(page.locator('.zf-edge-pulse')).toHaveCount(0);
+  expect(await path.getAttribute('style')).toBe(original);
+  await expect(page.locator('.zf-selection-ring')).toBeVisible();
+});
+
+test('skips the edge pulse under reduced motion', async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.goto('/'); await previewReady(page);
+  await page.getByRole('button', { name: 'Walkthrough', exact: true }).click();
+  await advancePulse(page, true);
+  await page.getByRole('button', { name: 'Present', exact: true }).click();
+  await page.getByRole('button', { name: 'Back', exact: true }).click();
+  await advancePulse(page, true);
+  await expect(page.locator('.zf-walkthrough [role="status"]')).toHaveText('Checkout');
+});
+
+test('pulses the followed edge in exported HTML', async ({ page, context }, info) => {
+  await page.goto('/'); await previewReady(page);
+  await page.getByRole('button', { name: 'Export', exact: true }).click();
+  await page.locator('.export-presentation > summary').click();
+  const files = [];
+  for (const mode of ['walkthrough', 'presentation']) {
+    await page.locator('#export-start-mode').selectOption(mode);
+    const download = page.waitForEvent('download');
+    await page.getByRole('button', { name: 'Download HTML', exact: true }).click();
+    const file = info.outputPath(`pulse-${mode}.html`); await (await download).saveAs(file);
+    files.push({ mode, file });
+  }
+  await context.setOffline(true);
+  for (const { mode, file } of files) for (const reduced of [false, true]) {
+    const offline = await context.newPage();
+    await offline.emulateMedia({ reducedMotion: reduced ? 'reduce' : 'no-preference' });
+    await offline.goto(`file://${file}`);
+    await expect(offline.locator('.zf-walkthrough [role="status"]')).toHaveText('Browse');
+    await expect(offline.locator('[data-presentation]')).toHaveCount(mode === 'presentation' ? 1 : 0);
+    await advancePulse(offline, reduced);
+    if (!reduced) await finishPulse(offline);
+    if (mode === 'walkthrough') {
+      await offline.getByRole('button', { name: 'Present', exact: true }).click();
+      await offline.getByRole('button', { name: 'Back', exact: true }).click();
+      await advancePulse(offline, reduced);
+      if (!reduced) await finishPulse(offline);
+    }
+    const edge = offline.locator('[data-connection-id="(Browse -> Checkout)[0]"] path.connection');
+    await edge.hover({ force: true });
+    expect(await offline.locator('style').allTextContents()).not.toContainEqual(expect.stringContaining('zf-editor-edge-flow'));
+    expect(await edge.evaluate(node => getComputedStyle(node).animationName)).not.toContain('zf-editor-edge-flow');
+    await offline.close();
+  }
+});
+
+test('keeps presentation frame images free of edge animations', async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
+  await page.goto('/'); await previewReady(page);
+  await page.getByRole('button', { name: 'Export', exact: true }).click();
+  await page.locator('#export-format input[value="svg"]').check();
+  await page.locator('.export-presentation > summary').click();
+  await page.locator('#export-frame').check();
+  await page.locator('#export-title').fill('Static order flow');
+  await page.locator('#export-subtitle').fill('Ready to share');
+  const images = async (pulsing = false) => {
+    const result: Buffer[] = [];
+    for (const format of ['svg', 'png']) {
+      if (await page.getByRole('button', { name: 'Export', exact: true }).getAttribute('aria-expanded') !== 'true') {
+        await page.getByRole('button', { name: 'Export', exact: true }).click();
+      }
+      await page.locator(`#export-format input[value="${format}"]`).check();
+      if (pulsing) {
+        if (await page.getByRole('button', { name: 'Back', exact: true }).isEnabled()) {
+          await page.getByRole('button', { name: 'Back', exact: true }).evaluate((button: HTMLButtonElement) => button.click());
+        }
+        await advancePulse(page);
+      }
+      const download = page.waitForEvent('download');
+      // Advancing the walkthrough closes the popover; invoke its real download
+      // control without pointer input so the paused pulse survives preparation.
+      await page.locator('#export').evaluate((button: HTMLButtonElement) => button.click());
+      result.push(await readFile((await (await download).path())!));
+      if (pulsing) await expect(page.locator('.zf-edge-pulse')).toHaveCount(1);
+    }
+    const svg = result[0].toString();
+    expect(svg).toContain('Static order flow'); expect(svg).toContain('Ready to share');
+    expect(svg).not.toMatch(/zf-edge-pulse|zf-editor-edge-flow|zf-connection-selected|@keyframes/);
+    return result;
+  };
+  await page.mouse.move(0, 0);
+  const baseline = await images();
+  // Start editor selection flow while leaving export controls accessible.
+  await page.locator('[data-flow-connection="0"]').evaluate((edge: SVGElement) => {
+    edge.focus(); edge.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', bubbles: true }));
+  });
+  await expect(page.locator('.zf-connection-selected path.connection')).toHaveCSS('animation-name', 'zf-editor-edge-flow');
+  const flowing = await images();
+  expect(flowing[0]).toEqual(baseline[0]); expect(flowing[1]).toEqual(baseline[1]);
+  await page.getByRole('button', { name: 'Walkthrough', exact: true }).evaluate((button: HTMLButtonElement) => button.click());
+  const pulsing = await images(true);
+  expect(pulsing[0]).toEqual(baseline[0]); expect(pulsing[1]).toEqual(baseline[1]);
+});
+
 test('detail sheets reveal depth on hover and carry their accent into the destination breadcrumb', async ({ page }) => {
   await page.goto('/'); await previewReady(page);
   await expect(page.locator('#document-title')).toHaveText('Order flow');

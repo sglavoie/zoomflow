@@ -36,6 +36,31 @@ export function setupWalkthrough(stage: HTMLElement, toolbar: HTMLElement, host:
   const present = panel.querySelector<HTMLButtonElement>('.zf-present-toggle')!;
   const inert = new Map<HTMLElement, boolean>();
   let edgeAnimation: Animation | undefined;
+  let edgePulse: SVGPathElement | undefined;
+  const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
+  function clearPulse() {
+    edgeAnimation?.cancel(); edgeAnimation = undefined;
+    edgePulse?.remove(); edgePulse = undefined;
+  }
+  function pulse(id: string) {
+    if (reducedMotion.matches) return;
+    const edge = [...stage.querySelectorAll<SVGElement>('[data-connection-id]')].find(element => element.dataset.connectionId === id);
+    const path = edge?.querySelector<SVGPathElement>('path.connection');
+    if (!path) return;
+    const length = path.getTotalLength();
+    if (!length) return;
+    // A separate, decorative stroke leaves the authored line and arrowheads intact.
+    const overlay = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    overlay.setAttribute('d', path.getAttribute('d')!);
+    if (path.hasAttribute('transform')) overlay.setAttribute('transform', path.getAttribute('transform')!);
+    overlay.setAttribute('class', 'zf-edge-pulse');
+    overlay.setAttribute('aria-hidden', 'true');
+    overlay.style.strokeDasharray = `${length * .18} ${length}`;
+    path.after(overlay); edgePulse = overlay;
+    edgeAnimation = overlay.animate([{ strokeDashoffset: length * .18 }, { strokeDashoffset: -length }],
+      { duration: 500, easing: 'linear' });
+    edgeAnimation.onfinish = () => { if (edgePulse === overlay) clearPulse(); };
+  }
   function presentation(value: boolean) {
     if (presenting === value) return;
     presenting = value;
@@ -97,7 +122,7 @@ export function setupWalkthrough(stage: HTMLElement, toolbar: HTMLElement, host:
   function end(focus = true) {
     ++revision; navigating = false; stops = []; position = -1;
     if (presenting) presentation(false);
-    edgeAnimation?.cancel();
+    clearPulse();
     panel.hidden = true; delete stage.dataset.walkthrough;
     trigger.setAttribute('aria-pressed', 'false'); clearMarks();
     stage.dispatchEvent(new Event('zf-walkthroughend'));
@@ -109,7 +134,8 @@ export function setupWalkthrough(stage: HTMLElement, toolbar: HTMLElement, host:
     element.addEventListener('click', run); actions.append(element);
     return element;
   }
-  function render() {
+  function render(followedEdge?: string) {
+    clearPulse();
     clearMarks();
     const here = active();
     const model = here && host.boards().get(here.board);
@@ -156,18 +182,10 @@ export function setupWalkthrough(stage: HTMLElement, toolbar: HTMLElement, host:
     const neighbors = outgoing.map(edge => edge.to);
     stage.dispatchEvent(new CustomEvent('zf-walkthroughstep', { detail: { board: here.board, shape: here.shape,
       neighbors: [...new Set(neighbors)], presenting } }));
-    edgeAnimation?.cancel();
-    if (here.edge && !matchMedia('(prefers-reduced-motion: reduce)').matches) {
-      const edge = [...stage.querySelectorAll<SVGElement>('[data-connection-id]')].find(element => element.dataset.connectionId === here.edge);
-      const path = edge?.querySelector<SVGPathElement>('path.connection');
-      if (path) {
-        const length = path.getTotalLength();
-        edgeAnimation = path.animate([{ strokeDasharray: `${length}`, strokeDashoffset: length }, { strokeDasharray: `${length}`, strokeDashoffset: 0 }],
-          { duration: 360, easing: 'ease-out' });
-      }
-    }
+    if (followedEdge) pulse(followedEdge);
   }
-  async function show() {
+  async function show(followedEdge?: string) {
+    clearPulse();
     const here = active();
     if (!here) return;
     const request = ++revision;
@@ -177,7 +195,7 @@ export function setupWalkthrough(stage: HTMLElement, toolbar: HTMLElement, host:
       if (host.current() !== here.board) await host.navigate(here.board);
       if (request !== revision) return;
       navigating = false;
-      render();
+      render(followedEdge);
       // Keep keyboard focus in the controller, without invoking the shape's edit actions.
       if (panel.contains(document.activeElement) || document.activeElement === document.body) {
         (actions.querySelector('button:not(:disabled)') as HTMLButtonElement | null)?.focus({ preventScroll: true });
@@ -189,7 +207,7 @@ export function setupWalkthrough(stage: HTMLElement, toolbar: HTMLElement, host:
   function visit(stop: Stop) {
     if (navigating || stops.length >= 500) return;
     stops = [...stops.slice(0, position + 1), stop]; position = stops.length - 1;
-    void show();
+    void show(stop.edge);
   }
   function start(presenting = false) {
     if (active()) { if (presenting) presentation(true); return; }
@@ -229,6 +247,8 @@ export function setupWalkthrough(stage: HTMLElement, toolbar: HTMLElement, host:
       if ((event.key === 'Enter' || event.key === ' ') && target) activate(target);
     }
   }, { capture: true });
+  reducedMotion.addEventListener('change', clearPulse, { signal: events.signal });
+  for (const type of ['pointerdown', 'keydown', 'wheel']) area.addEventListener(type, clearPulse, { capture: true, passive: true, signal: events.signal });
   stage.addEventListener('zf-boardchange', () => { if (active() && !navigating) end(false); });
   stage.addEventListener('zf-sourcechange', () => end(false));
   stage.addEventListener('zf-visibilitychange', () => end(false));

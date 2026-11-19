@@ -314,6 +314,16 @@ header > strong {
   stroke: var(--focus);
   stroke-width: 3px;
 }
+@keyframes zf-editor-edge-flow {
+  from { stroke-dashoffset: 0; }
+  to { stroke-dashoffset: -20; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .zf-stage:not([data-walkthrough]) [data-connection-id]:is(:hover, .zf-connection-selected) path.connection {
+    stroke-dasharray: 8 12;
+    animation: zf-editor-edge-flow 1600ms linear infinite;
+  }
+}
 .zf-connecting [data-shape-id] {
   cursor: crosshair;
 }
@@ -2366,6 +2376,9 @@ footer {
 }
 .zf-stage .zf-selection {
   pointer-events: none;
+}
+.zf-stage[data-walkthrough] .zf-selection {
+  display: none;
 }
 .zf-stage .zf-selection-halo {
   fill: var(--focus);

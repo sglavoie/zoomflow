@@ -292,7 +292,15 @@ editing controls hidden. A compact controller keeps Back, branch choices and
 nested-board exploration available. The camera frames the current step and its
 neighbors; manual input interrupts the motion, and reduced-motion preferences
 skip it. **Exit presentation** or Escape returns to the walkthrough; its close
-button ends the walkthrough. Presentation also works in offline HTML exports.
+button ends the walkthrough. Each step advance sends a bright pulse along the
+followed edge for half a second, then restores its existing appearance. Back,
+mode changes and refreshes do not replay it; new input cancels it. Presentation
+and Walkthrough share this pulse in offline HTML, including files configured to
+open in Presentation mode. Reduced motion skips it.
+
+Hovering or selecting an edge in the editor shows a slower directional dash flow.
+This feedback stays in the editor and stops under reduced motion. SVG and PNG
+images, including those with a Presentation frame, contain neither effect.
 
 In **Export → Presentation**, set an optional display title and subtitle without
 renaming the source file. For interactive HTML, choose the opening board and

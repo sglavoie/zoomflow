@@ -68,3 +68,32 @@ Focused regression coverage lives in `delight.spec.ts`, `transition.spec.ts` and
 browser run, are documented in [Development](development.md) and the
 [README](../README.md#check-a-change); the ASL runner records their authoritative
 results separately from this implementation review.
+
+## Wow pass 2
+
+The `feat/wow-pass-2` branch refines the existing workspace in eight sessions,
+without runtime dependencies, new storage semantics or a layout redesign.
+
+| Session | Commits | Result |
+| --- | --- | --- |
+| 1 | `3a5c5fd`, `29cac47` | Linked shapes grow into their detail boards; return mirrors the motion, live and offline. |
+| 2 | `d92d83a`, `2e4062e` | Vendored Geist and Geist Mono throughout the UI, diagrams and exports; readable phone fits. |
+| 3 | `af71f4d`, `0eab1f8`, `6aa2319`, `1687d53` | Consistent stdlib examples, with font-ready fits that preserve edited views. |
+| 4 | `e5bf0f6` | Warmer dark surfaces, lit interactive shapes and verified contrast; static images retain their flat palette. |
+| 5 | `118d695`, `e7bc02b`, `444bba4` | Fresh diagrams arrive, a quiet arrow invites the first drill, and coaching waits for the reader. |
+| 6 | `02a1846`, `14660c8`, `9bba845`, `cd9c9fc` | Idle example-picture warming, described Create actions, stable search clicks and keyboard focus. |
+| 7 | `cb1e75c`, `32560d3`, `647d638` | Added/deleted shape motion, lifted branch drags, and coherent save/cancellation test probes. |
+| 8 | This commit | A 500 ms followed-edge pulse in Walkthrough/Present and offline HTML, slow editor edge flow, static framed-image regression coverage and the final visual review; hide stale editor selection rings during walkthroughs. |
+
+The final review uses fresh light and dark workspaces at 1440×900 and 390×844.
+It exercises drill and return, rename, add, delete, branch dragging, the example
+picker and Create menu, Walkthrough, Present, and downloaded HTML opened offline.
+The refreshed [workspace screenshot](images/workspace.png) shows the current
+canvas-first start. Motion remains interruptible and respects reduced motion.
+Image tests compare framed SVG and PNG downloads with their static counterparts
+while editor flow or a paused, visible pulse is active. The SVG must contain no
+pulse/flow markup or animation rules; both files must retain identical contents.
+
+The ASL runner owns the full lint, typecheck, unit, browser, build and production
+browser gates. Focused implementation checks and visual-review evidence are
+recorded in the session 8 handoff; authoritative results remain with the runner.

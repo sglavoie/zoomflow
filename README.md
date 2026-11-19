@@ -72,7 +72,9 @@ highlight. Exported HTML arrives once when opened, including offline.
    and click **+** to insert a step between its ends. **Walkthrough** lets you follow
    a path, choose branches, and explore detail boards. Choose **Present** for a focused
    canvas that smoothly centres the current step alongside its outgoing steps, with readable
-   muted paths and a name-first card; it also works in exported HTML. Use breadcrumbs or **Boards** to move around, hover a link or its badge to preview its
+   muted paths and a name-first card. A brief bright pulse follows each advanced edge,
+   including in offline HTML; hovered or selected editor edges flow slowly. Reduced
+   motion keeps both still, and SVG/PNG downloads keep their static appearance. Use breadcrumbs or **Boards** to move around, hover a link or its badge to preview its
    board, or zoom and drag to inspect the diagram. Board names follow their linking
    shape labels when those labels agree, with the document title at the root. **Overview** fits the whole diagram at a
    comfortable scale, up to 1.5×; phones start closer only when fitted labels fall below 11 px.

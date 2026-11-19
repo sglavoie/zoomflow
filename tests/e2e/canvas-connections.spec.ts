@@ -224,3 +224,37 @@ test.describe('touch connections', () => {
     await expect(edge(page, 2)).toHaveAttribute('aria-label', 'Connection 3: Complete to Submit request');
   });
 });
+
+
+test('flows hovered and selected edges', async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
+  await createFlow(page);
+  const path = edge(page, 0).locator('path.connection');
+  await page.mouse.move(0, 0);
+  await expect(path).toHaveCSS('animation-name', 'none');
+  await edge(page, 0).locator('.zf-connection-hit').hover();
+  await expect(path).toHaveCSS('animation-name', 'zf-editor-edge-flow');
+  await expect(path).toHaveCSS('stroke-dasharray', '8px, 12px');
+  await expect(path).toHaveCSS('animation-duration', '1.6s');
+  const direction = await path.evaluate(node => {
+    const animation = node.getAnimations()[0]; animation.pause(); animation.currentTime = 100;
+    const before = Number.parseFloat(getComputedStyle(node).strokeDashoffset);
+    animation.currentTime = 800;
+    return Number.parseFloat(getComputedStyle(node).strokeDashoffset) - before;
+  });
+  expect(direction).toBeLessThan(0);
+  await page.mouse.move(0, 0);
+  await expect(path).toHaveCSS('animation-name', 'none');
+  await edge(page, 0).focus(); await page.keyboard.press(' ');
+  await page.mouse.move(0, 0);
+  await expect(edge(page, 0)).toHaveClass(/zf-connection-selected/);
+  await expect(path).toHaveCSS('animation-name', 'zf-editor-edge-flow');
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await expect(path).toHaveCSS('animation-name', 'none');
+  await expect(edge(page, 0)).toHaveClass(/zf-connection-selected/);
+  await edge(page, 0).locator('.zf-connection-hit').hover();
+  await expect(path).toHaveCSS('animation-name', 'none');
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
+  await page.getByRole('button', { name: 'Walkthrough', exact: true }).click();
+  await expect(path).toHaveCSS('animation-name', 'none');
+});
