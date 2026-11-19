@@ -1,3 +1,4 @@
+import { exampleSource } from './draft-library';
 import { examples } from './examples';
 import type { Draft } from './draft-store';
 import type { createDraftLibrary } from './draft-library';
@@ -180,7 +181,7 @@ export function setupPickerMenu(ctx: Context) {
         syncSources();
         activate(item.key);
         schedulePersist();
-        open(ctx.target, item);
+        open(ctx.target, { ...item, arrive: !item.recoveredFrom && item.source === exampleSource(item.key) });
       },
       remove: () => removeDrafts(item),
       restore: async () => {

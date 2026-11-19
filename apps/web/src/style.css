@@ -3180,3 +3180,10 @@ header > strong { display: inline-flex; align-items: center; gap: 6px; font-size
 #command-results [aria-selected="true"] { background: var(--accent-soft); outline: 1px solid var(--accent); outline-offset: -1px; }
 #command-results kbd { flex-shrink: 0; color: var(--muted); font-size: var(--font-size-sm); }
 .command-help, .command-empty { color: var(--muted); font-size: var(--font-size-sm); margin: 12px 0 0; }
+
+/* A decorative invitation around the existing drill arrow; input stays immediate. */
+.zf-drill-hint { fill: none; stroke: var(--zf-detail-accent); stroke-width: 2; opacity: .65; pointer-events: none; transform-box: fill-box; transform-origin: center; }
+@media (prefers-reduced-motion: no-preference) {
+  .zf-drill-hint { animation: drill-hint 2400ms ease-out infinite; }
+  @keyframes drill-hint { 0%, 100% { opacity: .15; } 40% { opacity: .65; } 70% { opacity: .15; } }
+}

@@ -1,5 +1,5 @@
 import { boardBlocks, indexBoards, indexShapeSources, parseSourceRange, lint, rebaseFileLinks, type CompileResponse, type ShapeSource, type SourceRange, type LintResult } from '@zoomflow/core';
-import { type Viewer, ViewerRenderError, type RenderBoard, type ViewerRoute } from '@zoomflow/viewer';
+import { setupArrivalMotion, type Viewer, ViewerRenderError, type RenderBoard, type ViewerRoute } from '@zoomflow/viewer';
 import type { SourceEditor } from './editor';
 import { compilerDiagnostics, lintDiagnostics, type SourceDiagnostic } from './diagnostics';
 import { CompilerStartupError } from './compiler';
@@ -60,6 +60,8 @@ interface Context {
 }
 
 export function setupPanePreview(ctx: Context) {
+  let arrival: ReturnType<typeof setupArrivalMotion> | undefined;
+  let initialArrival = true;
   function setPreviewState(state: 'loading' | 'updating' | 'ready' | 'error' | 'unavailable') {
     if (state === 'updating') {
       if (ctx.previewTimer || ctx.previewStatus.dataset.state === 'updating') return;
@@ -98,6 +100,7 @@ export function setupPanePreview(ctx: Context) {
   }
 
   function invalidateSource() {
+    initialArrival = false;
     ctx.viewer.stage.classList.remove('zf-starter-preview');
     ctx.boardTools.invalidate();
     // Invalidate immediately, including requests still awaiting WASM/render startup.
@@ -173,11 +176,11 @@ export function setupPanePreview(ctx: Context) {
     if (range) ctx.editor.select(range, true);
   }
 
-  function load(source: string, name: string, preserveViewport = false) {
-    return ctx.previewQueue.run(() => loadPreview(source, name, preserveViewport));
+  function load(source: string, name: string, preserveViewport = false, arrive = false) {
+    return ctx.previewQueue.run(() => loadPreview(source, name, preserveViewport, arrive));
   }
 
-  async function loadPreview(source: string, name: string, preserveViewport: boolean) {
+  async function loadPreview(source: string, name: string, preserveViewport: boolean, arrive: boolean) {
     const attempt = ctx.previewAttempt = Symbol();
     let slowTimer: ReturnType<typeof setTimeout> | undefined;
     const request = ++ctx.generation;
@@ -186,6 +189,10 @@ export function setupPanePreview(ctx: Context) {
       ctx.currentDocumentKey === 'order.d2' && source === exampleSource('order.d2') &&
       (!location.hash || location.hash === '#/') && !view?.hidden?.length && !view?.layers?.root &&
       !ctx.viewer.stage.querySelector('svg'));
+    const starter = initialArrival && ctx.id === 'a' && ctx.currentDocumentKey === 'order.d2' &&
+      source === exampleSource('order.d2') && !ctx.viewer.stage.querySelector('svg') && (!location.hash || location.hash === '#/');
+    const arrivalView = ctx.picker().readView(ctx.currentDocumentKey ?? '');
+    const shouldArrive = (arrive || starter) && !arrivalView.hidden?.length && !arrivalView.layers?.root;
     ctx.viewer.setBusy(true);
     ctx.viewer.setMessage('');
     setPreviewState(ctx.viewer.stage.querySelector('svg') ? 'updating' : 'loading');
@@ -224,7 +231,12 @@ export function setupPanePreview(ctx: Context) {
       }
       await ctx.viewer.setDocument(diagram, render, diagnostics, preserveViewport);
       if (request === ctx.generation) {
+        initialArrival = false;
         ctx.viewer.stage.classList.remove('zf-starter-preview');
+        if (shouldArrive && (arrive || ctx.viewer.stage.dataset.board === 'root')) {
+          arrival ??= setupArrivalMotion(ctx.viewer.stage);
+          arrival.arrive();
+        }
         ctx.sourceMap = compiledSources;
         ctx.mappedSource = source;
         ctx.lintDocument = compiled;

@@ -34,7 +34,7 @@ interface Context {
   load: (source: string, name: string, preserveViewport?: boolean) => Promise<void>;
   boardTools: ReturnType<typeof setupBoardTools>;
   compileProjectFile: (path: string, fs: Record<string, string>) => Promise<Pick<DocumentExport, 'diagram' | 'render' | 'diagnostics'>>;
-  replaceDocument: (source: string, name: string, key: string, reset?: boolean, route?: ViewerRoute, stack?: FileVisit[]) => Promise<void>;
+  replaceDocument: (source: string, name: string, key: string, reset?: boolean, route?: ViewerRoute, stack?: FileVisit[], arrive?: boolean) => Promise<void>;
   adopt: (saved: { key: string; name: string; }) => void;
   showsAtlas: () => boolean;
   invalidateSource: () => void;

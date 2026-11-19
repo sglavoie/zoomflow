@@ -8,6 +8,7 @@ import { setupBreadcrumbs } from './breadcrumbs';
 import { followLink, linkTo, prepareLinks, resolveLink } from './links';
 import { sanitizeSvg } from './sanitize';
 import { fitExportBounds } from './export-bounds';
+import { setupArrivalMotion } from './arrival-motion';
 import { setupBoardMotion } from './board-motion';
 import { libraryTheme } from './library-theme';
 import { setupWalkthrough } from './walkthrough';
@@ -127,7 +128,7 @@ export async function rasterizeSvg(svg: string): Promise<Blob> {
 const runtime = { classifyHref, shapeClass, boardLabel, sanitizeSvg, restoreMissingLinks, simplifyTrail, renderParentContext,
   createViewport, clampBox, revealBox, decorateLinks, splitHitArea, setupBreadcrumbs, resolveRouteHash, routeFallbackNotice,
   normalizeRouteHash, restoreTrail, watchHistory, childToward, resolveLink, prepareLinks, followLink, linkTo, atlasHash, parseAtlasHash, resolveFilePath,
-  indexDiagramSearch, searchDiagram, setupOfflineSearch, setupBoardMotion, setupWalkthrough, setupMinimap };
+  indexDiagramSearch, searchDiagram, setupOfflineSearch, setupArrivalMotion, setupBoardMotion, setupWalkthrough, setupMinimap };
 
 // Keep this runtime self-contained: its compiled function body is embedded in HTML.
 // It consumes the same board IDs, hashes, parent and visited-trail model as Viewer.
@@ -175,6 +176,7 @@ function offlineViewer(lib: typeof runtime) {
   }
   const stage = document.querySelector<HTMLElement>('.zf-stage')!;
   const motion = lib.setupBoardMotion(stage);
+  const arrival = lib.setupArrivalMotion(stage);
   const crumbs = document.querySelector<HTMLElement>('.zf-breadcrumbs')!;
   const breadcrumbs = lib.setupBreadcrumbs(crumbs);
   const context = document.querySelector<HTMLElement>('.zf-context')!;
@@ -255,7 +257,8 @@ function offlineViewer(lib: typeof runtime) {
         }
         for (const edge of board.walkthrough?.connections ?? []) {
           const group = groups.get(lib.shapeClass(edge.id));
-          if (group) { group.dataset.connectionId = edge.id; group.dataset.connectionBoard = board.id; }
+          if (group) { group.dataset.connectionId = edge.id; group.dataset.connectionBoard = board.id;
+            group.dataset.connectionFrom = edge.from; group.dataset.connectionTo = edge.to; }
         }
       }
     }
@@ -387,6 +390,7 @@ function offlineViewer(lib: typeof runtime) {
   });
   lib.watchHistory(window, restore);
   restore();
+  arrival.arrive();
   if (presentation.startMode === 'walkthrough' || presentation.startMode === 'presentation') walkthrough.start(presentation.startMode === 'presentation');
 }
 

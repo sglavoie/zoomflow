@@ -265,7 +265,16 @@ adds a separate outgoing path. A step with several outgoing paths offers Add
 branch; use a particular connection's **+** to insert on that path. The new step
 is ready to name immediately. Keyboard addition follows the same rule.
 
-The first-use coach follows three actions: rename a step, add a step, and open a
+The starter board arrives with a short stagger and drawn connections, then a soft
+ring pulses around the first drill arrow (Checkout). Exploring a detail board or
+dismissing the coach stops the ring permanently in this browser. Pristine examples
+chosen from the filename menu arrive too; edits, navigation, theme changes and
+recovered drafts do not. Boards with more than 60 shapes skip arrival. Offline
+HTML arrives once on opening. Reduced motion skips arrival and keeps the ring
+static.
+
+The first-use coach waits until the first drill or about four seconds without
+input, and stays beside the shape it describes. It follows three actions: rename a step, add a step, and open a
 detail board. Progress is remembered in this browser. Dismiss the coach at any
 point to stop the sequence. Touch instructions use the shape's **More → Rename**
 action. Contextual editing hints appear beside a selected shape.

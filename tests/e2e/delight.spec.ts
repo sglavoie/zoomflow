@@ -1,6 +1,8 @@
 import { expect, test, type Page } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
-import { editorText, previewReady, source } from './helpers';
+import { chooseExample, editorText, previewReady, source } from './helpers';
+import { selectMenuOption } from './menu';
+import { devURL } from './servers';
 import { readFlow } from '../../apps/web/src/flow-model';
 
 test.use({ viewport: { width: 1440, height: 900 }, storageState: { cookies: [], origins: [] } });
@@ -15,7 +17,8 @@ async function quick(page: Page) {
 test('fresh workspace teaches direct editing, keeps attached boards, and remembers the chosen layout', async ({ page }) => {
   await open(page);
   await expect(page.locator('#source-pane')).toBeHidden();
-  await expect(page.locator('.canvas-coach')).toBeVisible();
+  // The first invitation waits for four seconds without input.
+  await expect(page.locator('.canvas-coach')).toBeVisible({ timeout: 7000 });
   await shape(page, 'Browse').dblclick();
   await page.getByRole('textbox', { name: 'Rename Browse', exact: true }).fill('Discover');
   await page.keyboard.press('Enter'); await previewReady(page);
@@ -220,7 +223,7 @@ test('walkthrough and zoom controls remain separate in fullscreen and on a narro
 test('coach hides for shape menus and toolbar overlays and returns when they close', async ({ page }) => {
   await open(page);
   const coach = page.locator('.canvas-coach');
-  await expect(coach).toBeVisible();
+  await expect(coach).toBeVisible({ timeout: 7000 });
   await shape(page, 'Browse').click();
   await page.getByRole('button', { name: 'More shape actions', exact: true }).click();
   await expect(coach).toBeHidden();
@@ -256,4 +259,166 @@ test('Escape ends a mouse-started walkthrough from the trigger and viewer toolba
   await page.keyboard.press('Escape');
   await expect(guide).toBeHidden();
   await expect(trigger).toBeFocused();
+});
+
+// Observe actual Web Animations without changing their timing or completion.
+async function watchArrival(page: Page) {
+  await page.addInitScript(() => {
+    (window as any).__arrival = [];
+    const animate = Element.prototype.animate;
+    Element.prototype.animate = function (frames, options) {
+      if (Array.isArray(frames) && (String(frames[0]?.transform).includes('scale(.96)') || 'strokeDashoffset' in (frames[0] ?? {}))) {
+        (window as any).__arrival.push({ id: this.getAttribute('data-shape-id') ?? this.querySelector('[data-shape-id]')?.getAttribute('data-shape-id'),
+          edge: this.closest('[data-connection-id]')?.getAttribute('data-connection-id'), frames, options });
+      }
+      return animate.call(this, frames, options);
+    };
+  });
+}
+const arrival = (page: Page) => page.evaluate(() => (window as any).__arrival as { id?: string; edge?: string; frames: Keyframe[]; options: KeyframeAnimationOptions }[]);
+
+test('arrives once on first load and not after an edit', async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
+  await watchArrival(page); await open(page);
+  const first = await arrival(page);
+  const shapes = first.filter(item => item.id);
+  expect(shapes.map(item => item.id)).toEqual(['Browse', 'Checkout', 'Receipt']);
+  expect(shapes.map(item => item.options.delay)).toEqual([0, 40, 80]);
+  const edges = first.filter(item => item.edge);
+  expect(edges).toHaveLength(2);
+  expect(edges.every(item => Number(item.frames[0].strokeDashoffset) > 0 && item.frames[1].strokeDashoffset === 0)).toBe(true);
+  expect(edges.map(item => item.options.delay)).toEqual([220, 260]);
+  expect(first.every(item => Number(item.options.delay) + Number(item.options.duration) <= 600)).toBe(true);
+  await expect(page.locator('#viewer .zf-stage')).not.toHaveAttribute('data-arrival-motion');
+  await page.locator('#toggle-source').click();
+  const original = await editorText(page);
+  await source(page).fill(''); await previewReady(page);
+  await source(page).fill(original); await previewReady(page);
+  expect(await arrival(page)).toHaveLength(first.length);
+  await source(page).fill(`${original}\n# edited`); await previewReady(page);
+  expect(await arrival(page)).toHaveLength(first.length);
+  await page.getByRole('link', { name: 'Open Checkout board', exact: true }).locator('.appendix-icon').click();
+  await expect(page.locator('#viewer .zf-stage')).toHaveAttribute('data-board', 'root.layers.checkout');
+  expect(await arrival(page)).toHaveLength(first.length);
+  await page.locator('#workspace-view > summary').click();
+  await page.locator('#theme button[value="dark"]').click();
+  expect(await arrival(page)).toHaveLength(first.length);
+  await page.reload(); await previewReady(page);
+  expect(await arrival(page)).toHaveLength(0);
+  await chooseExample(page, /Flows & mind maps/);
+  expect((await arrival(page)).some(item => item.id)).toBe(true);
+  const count = (await arrival(page)).length;
+  await chooseExample(page, /Order flow/);
+  // The picker reopens this example's edited browser draft without arrival.
+  await previewReady(page); expect(await arrival(page)).toHaveLength(count);
+  expect(await editorText(page)).toContain('# edited');
+});
+
+test('pulses the drill arrow until the first drill', async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: 'no-preference' }); await open(page);
+  const ring = page.locator('#viewer .zf-drill-hint');
+  await expect(ring).toHaveCount(1);
+  expect(await ring.evaluate(node => node.closest('a')?.getAttribute('aria-label'))).toBe('Open Checkout board');
+  expect(await ring.evaluate(node => getComputedStyle(node).animationName)).toBe('drill-hint');
+  await selectMenuOption(page, '#layout', 'tabs');
+  await page.locator('#pane-choose-b').click();
+  await page.locator('.example-menu').getByRole('button', { name: /Flows & mind maps/ }).and(page.locator('.example-option')).click();
+  await previewReady(page, 'b');
+  await expect(page.locator('#viewer-b .zf-drill-hint')).toHaveCount(1);
+  await page.getByRole('link', { name: 'Open Checkout board', exact: true }).locator('.appendix-icon').click();
+  await expect(page.locator('.zf-drill-hint')).toHaveCount(0);
+  expect(await page.evaluate(() => localStorage.getItem('zoomflow.drill-hint-dismissed'))).toBe('true');
+  await page.locator('#viewer .zf-breadcrumbs button').first().click();
+  await expect(ring).toHaveCount(0);
+  await page.reload(); await previewReady(page); await expect(ring).toHaveCount(0);
+});
+
+test('waits to coach until a drill or idle', async ({ page }) => {
+  await open(page);
+  const coach = page.locator('.canvas-coach');
+  await expect(coach).toBeHidden();
+  // The idle clock starts after arrival and resets on source, keyboard and pointer input.
+  await expect(page.locator('#viewer .zf-stage')).not.toHaveAttribute('data-arrival-motion');
+  await page.clock.install();
+  await page.mouse.click(12, 12);
+  await page.clock.runFor(3500); await expect(coach).toBeHidden();
+  await page.keyboard.press('Shift');
+  await page.clock.runFor(3500); await expect(coach).toBeHidden();
+  await page.clock.runFor(600); await expect(coach).toBeVisible();
+  const clear = await coach.boundingBox(); const target = await shape(page, 'Browse').boundingBox();
+  expect(clear && target && (clear.x + clear.width <= target.x || clear.x >= target.x + target.width ||
+    clear.y + clear.height <= target.y || clear.y >= target.y + target.height)).toBe(true);
+  await page.getByRole('button', { name: 'Dismiss editing hint', exact: true }).click();
+  await expect(coach).toBeHidden(); await expect(page.locator('.zf-drill-hint')).toHaveCount(0);
+  await page.reload(); await previewReady(page); await expect(coach).toBeHidden();
+  await page.clock.runFor(5000); await expect(coach).toBeHidden();
+  // Start fresh to exercise drill-before-idle, independently of dismissal.
+  await page.evaluate(() => localStorage.clear()); await page.reload(); await previewReady(page);
+  await expect(coach).toBeHidden();
+  await page.getByRole('link', { name: 'Open Checkout board', exact: true }).locator('.appendix-icon').click();
+  await expect(coach).toBeVisible();
+});
+
+test('skips arrival motion under reduced motion', async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: 'reduce' }); await watchArrival(page); await open(page);
+  expect(await arrival(page)).toHaveLength(0);
+  await expect(page.locator('#viewer .zf-stage')).not.toHaveAttribute('data-arrival-motion');
+  const ring = page.locator('.zf-drill-hint'); await expect(ring).toHaveCount(1);
+  expect(await ring.evaluate(node => getComputedStyle(node).animationName)).toBe('none');
+  await chooseExample(page, /Flows & mind maps/); expect(await arrival(page)).toHaveLength(0);
+});
+
+test('offline HTML arrives only on opening', async ({ page, context }, info) => {
+  await page.emulateMedia({ reducedMotion: 'reduce' }); await open(page);
+  await page.getByRole('button', { name: 'Export', exact: true }).click();
+  const downloaded = page.waitForEvent('download'); await page.getByRole('button', { name: 'Download HTML', exact: true }).click();
+  const path = info.outputPath('arrival.html'); await (await downloaded).saveAs(path);
+  await context.setOffline(true);
+  const offline = await context.newPage(); await offline.emulateMedia({ reducedMotion: 'no-preference' }); await watchArrival(offline);
+  const errors: string[] = []; offline.on('pageerror', error => errors.push(error.message));
+  await offline.goto(`file://${path}`);
+  await expect.poll(async () => (await arrival(offline)).filter(item => item.id).length).toBe(3);
+  const first = await arrival(offline); expect(first.filter(item => item.edge)).toHaveLength(2);
+  await offline.getByRole('link', { name: 'Open Checkout board', exact: true }).locator('.appendix-icon').click();
+  await expect(offline.locator('.zf-stage')).toHaveAttribute('data-board', 'root.layers.checkout');
+  expect(await arrival(offline)).toHaveLength(first.length);
+  await offline.emulateMedia({ reducedMotion: 'reduce' }); await offline.reload();
+  await expect(offline.locator('.zf-stage > svg')).toBeVisible(); expect(await arrival(offline)).toHaveLength(0);
+  expect(errors).toEqual([]);
+});
+
+
+test('arrival caps large boards and restores paint immediately when interrupted', async ({ page }) => {
+  // This fixture exercises the shared runtime directly, including in bundle-based runs.
+  await page.goto(devURL); await previewReady(page);
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
+  const result = await page.evaluate(async url => {
+    const { setupArrivalMotion } = await import(url);
+    const stage = document.createElement('div'); stage.id = 'arrival-fixture';
+    stage.innerHTML = `<svg width="600" height="600" xmlns="http://www.w3.org/2000/svg">${Array.from({ length: 60 }, (_, i) =>
+      `<g data-shape-id="s${i}" transform="translate(${(i % 10) * 50} ${Math.floor(i / 10) * 50})"><rect width="40" height="40"/></g>`).join('')}
+      <g data-connection-id="edge" data-connection-from="s0" data-connection-to="s59"><path class="connection" d="M0 0L500 300" fill="none" stroke="black" stroke-dasharray="4 2"/></g></svg>`;
+    document.body.append(stage);
+    const motion = setupArrivalMotion(stage);
+    const first = stage.querySelector<SVGGraphicsElement>('[data-shape-id]')!;
+    const paint = stage.querySelector<SVGPathElement>('path')!;
+    const before = { box: first.getBoundingClientRect().toJSON(), dash: getComputedStyle(paint).strokeDasharray };
+    motion.arrive();
+    const running = stage.getAnimations({ subtree: true });
+    const end = Math.max(...running.map(animation => Number(animation.effect!.getComputedTiming().endTime)));
+    for (const animation of running) { animation.pause(); animation.currentTime = 120; }
+    stage.dispatchEvent(new PointerEvent('pointerdown'));
+    const canceled = stage.getAnimations({ subtree: true }).length;
+    const after = { box: first.getBoundingClientRect().toJSON(), dash: getComputedStyle(paint).strokeDasharray };
+    const extra = first.cloneNode(true) as SVGGraphicsElement; extra.dataset.shapeId = 's60'; first.after(extra);
+    motion.arrive(); const large = stage.getAnimations({ subtree: true }).length;
+    extra.remove(); motion.arrive();
+    return { count: running.length, end, before, after, canceled, large };
+  }, `/@fs${process.cwd()}/packages/viewer/src/arrival-motion.ts`);
+  expect(result.count).toBe(62); expect(result.end).toBeLessThanOrEqual(600);
+  expect(result.after).toEqual(result.before); expect(result.canceled).toBe(0); expect(result.large).toBe(0);
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await expect(page.locator('#arrival-fixture')).not.toHaveAttribute('data-arrival-motion');
+  expect(await page.locator('#arrival-fixture').evaluate(stage => stage.getAnimations({ subtree: true }).length)).toBe(0);
+  await page.locator('#arrival-fixture').evaluate(stage => { stage.dispatchEvent(new Event('zf-destroy')); stage.remove(); });
 });

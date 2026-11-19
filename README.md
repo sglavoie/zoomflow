@@ -29,6 +29,13 @@ Open the local URL printed by Vite. The app starts with an editable order-flow e
 The diagram engine loads on first use; you can edit while it loads. If startup fails,
 use **Retry preview** to try again without losing your source.
 
+On first load, the starter arrives in reading order, then the Checkout arrow pulses
+until you explore a detail board or dismiss the coach. Tips wait for that first
+drill or about four seconds without input, and remember your progress. Pristine
+built-in examples also arrive when chosen from the filename menu; edits and
+recovered drafts stay still. Reduced motion skips arrival and uses a static arrow
+highlight. Exported HTML arrives once when opened, including offline.
+
 ## Edit → explore → export
 
 1. **Create:** choose **Create / open → New flow** to type one step per line and connect them automatically. Start with a single step,

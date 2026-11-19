@@ -35,7 +35,7 @@ export type DraftState = {
 /** What the picker needs from the workspace that shows its drafts. */
 export type PickerHost = {
   readSource: (pane: PaneId) => string;
-  open: (pane: PaneId, document: { source: string; name: string; key: string } | undefined, reset?: boolean) => void;
+  open: (pane: PaneId, document: { source: string; name: string; key: string; arrive?: boolean } | undefined, reset?: boolean) => void;
   onState: (pane: PaneId, state: DraftState) => void;
   /** Drop per-document editor, viewport and file state for a removed draft. */
   forget: (key: string) => void;

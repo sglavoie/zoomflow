@@ -1,5 +1,7 @@
 /** Canvas, navigation and controls shared by the workspace and standalone HTML. */
 export const viewerStyle = `
+.zf-arrival-shape { transform-box: fill-box; transform-origin: center; }
+
 .ui-icon { display: inline-block; width: 16px; height: 16px; flex-shrink: 0; vertical-align: -3px; margin-right: 6px; }
 
 /* One violet accent connects a detail node, its preview and the breadcrumb inside it. */

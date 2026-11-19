@@ -334,7 +334,7 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
   });
 
   /** Show a document; `route` overrides its remembered board. Without `stack`, it starts a new way through files. */
-  async function replaceDocument(source: string, name: string, key: string, reset = false, route?: ViewerRoute, stack: FileVisit[] = []) {
+  async function replaceDocument(source: string, name: string, key: string, reset = false, route?: ViewerRoute, stack: FileVisit[] = [], arrive = false) {
     ++documentOpens;
     boardTools.resetSearch();
     ai?.documentSwitched();
@@ -354,7 +354,7 @@ export function createDocumentPane(id: PaneId, root: HTMLElement, shared: PaneCo
     invalidateSource();
     compileError.hide();
     clearTimeout(debounce);
-    await load(source, name);
+    await load(source, name, false, arrive);
   }
 
   const editing = setupPaneEditing({

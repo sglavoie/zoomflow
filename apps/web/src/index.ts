@@ -188,7 +188,7 @@ panes.a = createDocumentPane('a', paneRoots.a, context('a'));
 const examplePicker = setupExamplePicker({
   readSource: (pane) => panes[pane]?.source ?? '',
   open: (pane, document, reset) => {
-    if (document) void panes[pane]?.replaceDocument(document.source, document.name, document.key, reset);
+    if (document) void panes[pane]?.replaceDocument(document.source, document.name, document.key, reset, undefined, [], document.arrive);
     else panes[pane]?.close();
   },
   onState: (pane, state) => {

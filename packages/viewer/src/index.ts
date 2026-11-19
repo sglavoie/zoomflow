@@ -15,6 +15,7 @@ export { ViewerRenderError, openFolderMessage, type RenderBoard, type ViewerRout
 import { ViewerRenderError, openFolderMessage, type RenderBoard, type ViewerRoute, type ViewerOptions, type TrailPrefixEntry } from './viewer-types';
 export { frameExportSvg, type ImagePresentation } from './export-frame';
 export { prepareExportSvg, rasterizeSvg, offlineViewerScript } from './export';
+export { setupArrivalMotion } from './arrival-motion';
 export { setupViewport } from './viewport';
 export { normalizeRouteHash, resolveRouteHash } from './navigation';
 export { offlineViewerStyle } from './export-style';
@@ -338,12 +339,14 @@ export class Viewer {
   async navigate(id: string, mode: 'push' | 'replace' = 'push', trail?: string[], preserveViewport = false, notice = '') {
     if (!this.boards.has(id)) return;
     const previous = this.layerView;
+    const drilling = Boolean(childToward(id, this.current, item => this.boards.get(item)?.parent));
     try {
       // Opening a board focuses its subtree. Selecting a shape for editing uses activateBoard instead,
       // preserving the canvas until the user chooses a different starting board.
       if (this.layerView.root) this.layerView = { ...this.layerView, root: id };
       this.refreshLayerExpansion();
       await this.showBoard(id, mode, trail, preserveViewport, notice);
+      if (drilling && this.current === id) this.stage.dispatchEvent(new Event('zf-drill'));
     }
     catch (error) { this.layerView = previous; this.navigationError(error); }
   }

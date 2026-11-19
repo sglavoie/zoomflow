@@ -174,7 +174,8 @@ test('framed SVG uses the same title, subtitle and geometry as its thumbnail wit
 test('touch coaching uses tap instructions and presentation stays within a narrow screen', async ({ browser }) => {
   const context = await browser.newContext({ viewport: { width: 320, height: 640 }, hasTouch: true, storageState: { cookies: [], origins: [] } });
   const page = await context.newPage(); await page.goto('/'); await previewReady(page);
-  await expect(page.locator('.canvas-coach')).toContainText('Tap a step');
+  await expect(page.locator('.canvas-coach')).toBeHidden();
+  await expect(page.locator('.canvas-coach')).toContainText('Tap a step', { timeout: 7000 });
   await expect(page.locator('.canvas-coach')).not.toContainText('Double-click');
   await page.getByRole('button', { name: 'Walkthrough', exact: true }).click();
   await page.getByRole('button', { name: 'Present', exact: true }).click();

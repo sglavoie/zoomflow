@@ -38,6 +38,8 @@ export function viewerSvg(svg: string, board: Board, boards: ReadonlyMap<string,
     const group = groups.get(shapeClass(edge.id));
     if (group) {
       group.dataset.connectionId = edge.id;
+      group.dataset.connectionFrom = edge.src;
+      group.dataset.connectionTo = edge.dst;
       group.dataset.connectionBoard = board.id;
     }
   }
