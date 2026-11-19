@@ -88,6 +88,49 @@ for (const modifier of ['Control', 'Meta']) {
   });
 }
 
+test('lifts a dragged shape and marks only the valid drop target', async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: 'no-preference' }); await createMap(page);
+  const stage = page.locator('.zf-stage');
+  const origin = shape(page, 'n_1_1'); const target = shape(page, 'n_2');
+  const start = (await origin.boundingBox())!;
+  const viewBox = await stage.locator(':scope > svg').getAttribute('viewBox');
+  await dragTo(page, origin, target);
+  await expect(origin).toHaveClass(/zf-branch-origin/);
+  await expect.poll(() => origin.evaluate(node => getComputedStyle(node).scale)).toBe('1.035');
+  const lifted = (await origin.boundingBox())!;
+  expect(lifted.width / start.width).toBeCloseTo(1.035, 3);
+  expect(lifted.x + lifted.width / 2).toBeCloseTo(start.x + start.width / 2, 1);
+  expect(lifted.y + lifted.height / 2).toBeCloseTo(start.y + start.height / 2, 1);
+  expect(await origin.evaluate(node => getComputedStyle(node).filter)).toContain('drop-shadow');
+  expect(await origin.evaluate(node => getComputedStyle(node).outlineStyle)).toBe('none');
+  await expect(page.locator('.zf-branch-target')).toHaveCount(1);
+  await expect(target).toHaveClass(/zf-branch-target/);
+  const accent = await stage.evaluate(node => getComputedStyle(node).getPropertyValue('--accent').trim());
+  const glow = await target.evaluate(node => getComputedStyle(node).filter);
+  expect(glow).toContain(await page.evaluate(color => { const probe = document.createElement('div'); probe.style.color = color; document.body.append(probe); const rgb = getComputedStyle(probe).color; probe.remove(); return rgb; }, accent));
+  // A descendant cannot receive its own branch. It must lose the previous glow.
+  const invalid = (await shape(page, 'n_1_1_1').boundingBox())!;
+  await page.mouse.move(invalid.x + invalid.width / 2, invalid.y + invalid.height / 2);
+  await expect(page.locator('.zf-branch-target')).toHaveCount(0);
+  expect(await shape(page, 'n_1_1_1').evaluate(node => getComputedStyle(node).filter)).toBe('none');
+  await page.mouse.up();
+  await expect(stage).not.toHaveClass(/zf-branch-dragging/);
+  await expect.poll(() => origin.evaluate(node => getComputedStyle(node).scale)).toBe('none');
+  const settled = (await origin.boundingBox())!;
+  expect(settled.width).toBeCloseTo(start.width, 2);
+  expect(settled.x).toBeCloseTo(start.x, 2); expect(settled.y).toBeCloseTo(start.y, 2);
+  expect(await stage.locator(':scope > svg').getAttribute('viewBox')).toBe(viewBox);
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await dragTo(page, origin, target);
+  await expect(target).toHaveClass(/zf-branch-target/);
+  expect(await target.evaluate(node => getComputedStyle(node).filter)).toBe(glow);
+  expect(await origin.evaluate(node => getComputedStyle(node).scale)).toBe('none');
+  expect(await origin.evaluate(node => node.getAnimations().length)).toBe(0);
+  await page.mouse.up(); await previewReady(page);
+  await expect(shape(page, 'n_2_2')).toBeFocused();
+  await expect(page.locator('.zf-branch-origin, .zf-branch-target')).toHaveCount(0);
+});
+
 test('moves a subtree by dragging, keeps the builder editable, and follows selection through undo and redo', async ({ page }) => {
   await createMap(page);
   const original = await editorText(page);

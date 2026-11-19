@@ -49,6 +49,8 @@ highlight. Exported HTML arrives once when opened, including offline.
    grouped shape menu, with shortcut hints and **Delete** at the end. On flow boards, **Connect to…**
    adds an arrow to another step; select an arrow to edit its label or delete it.
    Drag a node onto a new parent, or use **Move branch…** to choose from a list.
+   The dragged node lifts and valid parents glow; added steps scale in and deleted
+   steps briefly collapse. Reduced motion keeps only the static drop highlight.
    Mind maps move the whole topic branch; flows and custom D2 diagrams change the
    node's incoming connections and keep its downstream branch attached.
    Move flow or mind-map branches onto parents on other boards too; each branch

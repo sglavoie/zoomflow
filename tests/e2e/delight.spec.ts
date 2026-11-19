@@ -163,6 +163,135 @@ test('an empty board can start a flow or mind map without opening source syntax'
   await previewReady(page); await expect(page.getByRole('button', { name: 'Edit mind map', exact: true })).toBeVisible();
 });
 
+// Inspect real keyframes and geometry synchronously, then let the animation run normally.
+async function watchEditMotion(page: Page) {
+  await page.evaluate(() => {
+    (window as any).__editMotion = [];
+    const animate = Element.prototype.animate;
+    Element.prototype.animate = function (frames, options) {
+      const animation = animate.call(this, frames, options);
+      if (Array.isArray(frames) && (String(frames[0]?.transform).includes('scale(.9)') || this.classList.contains('zf-edit-ghost'))) {
+        const duration = Number(typeof options === 'number' ? options : options?.duration);
+        animation.pause(); animation.currentTime = 0;
+        const start = this.getBoundingClientRect().toJSON();
+        animation.currentTime = duration;
+        const end = this.getBoundingClientRect().toJSON();
+        (window as any).__editMotion.push({ id: this.getAttribute('data-shape-id'), ghost: this.classList.contains('zf-edit-ghost'),
+          frames, duration, start, end, fill: getComputedStyle(this).backgroundColor,
+          hidden: this.getAttribute('aria-hidden'), pointer: getComputedStyle(this).pointerEvents });
+        animation.currentTime = 0; animation.play();
+      }
+      return animation;
+    };
+  });
+}
+const editMotion = (page: Page) => page.evaluate(() => (window as any).__editMotion as {
+  id: string | null; ghost: boolean; frames: Keyframe[]; duration: number; start: DOMRect; end: DOMRect;
+  fill: string; hidden: string | null; pointer: string;
+}[]);
+
+test('scales in a new step', async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: 'no-preference' }); await open(page);
+  await shape(page, 'Browse').click(); await watchEditMotion(page);
+  const pixels = await page.locator('#viewer .zf-stage > svg').evaluate(node => (node as SVGSVGElement).getScreenCTM()!.a);
+  await page.getByRole('button', { name: 'Add branch', exact: true }).click();
+  await expect.poll(async () => (await editMotion(page)).length).toBe(1);
+  const added = (await editMotion(page))[0];
+  expect(added.id).toBe('step_1'); expect(added.duration).toBe(220);
+  expect(added.frames[0].opacity).toBe(0); expect(added.frames[1].opacity).toBe(1);
+  expect(added.start.width / added.end.width).toBeCloseTo(0.9, 3);
+  expect(added.start.height / added.end.height).toBeCloseTo(0.9, 3);
+  expect(added.start.x + added.start.width / 2).toBeCloseTo(added.end.x + added.end.width / 2, 1);
+  expect(added.start.y + added.start.height / 2).toBeCloseTo(added.end.y + added.end.height / 2, 1);
+  await expect(page.locator('#viewer .zf-stage')).not.toHaveAttribute('data-edit-motion');
+  await expect(page.locator('.zf-edit-enter')).toHaveCount(0);
+  expect(await page.locator('#viewer .zf-stage > svg').evaluate(node => (node as SVGSVGElement).getScreenCTM()!.a)).toBeCloseTo(pixels, 5);
+  await expect(page.getByRole('textbox', { name: 'Rename New step', exact: true })).toBeFocused();
+});
+
+test('collapses a deleted step without leaving a ghost', async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: 'no-preference' }); await open(page);
+  await page.locator('#toggle-source').click();
+  await source(page).fill('a -> b -> c\nb.style.fill: "#aabbcc"'); await previewReady(page);
+  await expect(page.locator('#viewer .zf-stage')).not.toHaveAttribute('data-edit-motion');
+  await page.locator('#viewer .zf-stage').evaluate(stage => {
+    stage.addEventListener('zf-beforerender', () => {
+      (window as any).__deletedBounds = stage.querySelector('[data-shape-id="b"]')!.getBoundingClientRect().toJSON();
+    }, { once: true, capture: true });
+  });
+  await watchEditMotion(page);
+  await source(page).fill('a -> c'); await previewReady(page);
+  await expect.poll(async () => (await editMotion(page)).filter(item => item.ghost).length).toBe(1);
+  const ghost = (await editMotion(page)).find(item => item.ghost)!;
+  const before = await page.evaluate(() => (window as any).__deletedBounds as DOMRect);
+  expect(ghost.duration).toBe(200); expect(ghost.hidden).toBe('true'); expect(ghost.pointer).toBe('none');
+  expect(ghost.fill).toBe('rgb(170, 187, 204)');
+  for (const key of ['x', 'y', 'width', 'height'] as const) expect(ghost.start[key]).toBeCloseTo(before[key], 1);
+  expect(ghost.end.width / ghost.start.width).toBeCloseTo(0.1, 3);
+  expect(ghost.start.x + ghost.start.width / 2).toBeCloseTo(ghost.end.x + ghost.end.width / 2, 1);
+  expect(ghost.start.y + ghost.start.height / 2).toBeCloseTo(ghost.end.y + ghost.end.height / 2, 1);
+  expect(ghost.frames[1].opacity).toBe(0);
+  await expect(shape(page, 'b')).toHaveCount(0);
+  await expect(page.locator('.zf-edit-ghost')).toHaveCount(0);
+  await expect(page.locator('#viewer .zf-stage')).not.toHaveAttribute('data-edit-motion');
+});
+
+test('skips edit motion under reduced motion', async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: 'reduce' }); await open(page);
+  await page.locator('#toggle-source').click(); await watchEditMotion(page);
+  await source(page).fill('a -> b -> c'); await previewReady(page);
+  await source(page).fill('a -> c'); await previewReady(page);
+  expect(await editMotion(page)).toEqual([]);
+  await expect(page.locator('.zf-edit-ghost, .zf-edit-enter')).toHaveCount(0);
+  expect(await page.locator('#viewer .zf-stage').evaluate(stage => stage.getAnimations({ subtree: true }).length)).toBe(0);
+});
+
+test('edit ghosts respect render boundaries, shape limits and interruption', async ({ page }) => {
+  await page.goto(devURL); await previewReady(page); await page.emulateMedia({ reducedMotion: 'no-preference' });
+  const result = await page.evaluate(async url => {
+    const { setupEditMotion } = await import(url);
+    const stage = document.createElement('div'); stage.id = 'edit-fixture';
+    stage.style.cssText = 'position:relative;width:600px;height:400px;border:1px solid black';
+    document.body.append(stage); stage.dataset.board = 'root'; setupEditMotion(stage);
+    const svg = (count: number) => `<svg width="600" height="400" xmlns="http://www.w3.org/2000/svg">
+      <defs><linearGradient id="zf-lit-fixture"><stop stop-color="#aabbcc"/><stop offset="1" stop-color="#778899"/></linearGradient></defs>
+      ${Array.from({ length: count }, (_, i) => `<g data-shape-id="s${i}" data-shape-board="root" transform="translate(${i * 2} 20)"><g class="shape"><rect width="80" height="50" rx="6" fill="url(#zf-lit-fixture)" stroke="#123456" stroke-width="2"/></g></g>`).join('')}</svg>`;
+    const initial = (count: number) => { stage.dispatchEvent(new Event('zf-sourcechange')); stage.dataset.board = 'root'; stage.innerHTML = svg(count); };
+    const render = async (count: number, board = 'root', animate = true) => {
+      stage.dispatchEvent(new CustomEvent('zf-beforerender', { detail: { animate } }));
+      stage.dataset.board = board; stage.innerHTML = svg(count); stage.dispatchEvent(new Event('zf-boardchange'));
+      await new Promise(requestAnimationFrame);
+      for (const animation of stage.getAnimations({ subtree: true })) { animation.pause(); animation.currentTime = 80; }
+      return stage.getAnimations({ subtree: true }).length;
+    };
+    initial(151); const oldLarge = await render(1);
+    initial(1); const newLarge = await render(151);
+    initial(2); const boardChange = await render(1, 'other');
+    initial(2); const staticRender = await render(1, 'root', false);
+    initial(150); const boundary = await render(149);
+    const ghost = stage.querySelector<HTMLElement>('.zf-edit-ghost')!;
+    const paint = { fill: ghost.style.backgroundImage, stroke: ghost.style.borderColor, radius: ghost.style.borderRadius };
+    const canceled = [];
+    for (const type of ['pointerdown', 'wheel', 'keydown', 'zf-sourcechange', 'zf-suspend', 'zf-destroy']) {
+      initial(2); await render(1); stage.dispatchEvent(new Event(type));
+      canceled.push({ type, ghosts: stage.querySelectorAll('.zf-edit-ghost').length, animations: stage.getAnimations({ subtree: true }).length,
+        marked: stage.hasAttribute('data-edit-motion') });
+    }
+    // Use a new controller after destruction for a live media-preference change.
+    setupEditMotion(stage); initial(2); await render(1);
+    return { oldLarge, newLarge, boardChange, staticRender, boundary, paint, canceled };
+  }, `/@fs${process.cwd()}/packages/viewer/src/edit-motion.ts`);
+  expect(result.oldLarge).toBe(0); expect(result.newLarge).toBe(0);
+  expect(result.boardChange).toBe(0); expect(result.staticRender).toBe(0); expect(result.boundary).toBe(1);
+  expect(result.paint.fill).toBe('linear-gradient(rgb(170, 187, 204), rgb(119, 136, 153))');
+  expect(result.paint.stroke).toBe('rgb(18, 52, 86)'); expect(result.paint.radius).toBe('6px');
+  for (const cancellation of result.canceled) expect(cancellation).toEqual({ type: cancellation.type, ghosts: 0, animations: 0, marked: false });
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await expect(page.locator('#edit-fixture .zf-edit-ghost')).toHaveCount(0);
+  expect(await page.locator('#edit-fixture').evaluate(stage => stage.getAnimations({ subtree: true }).length)).toBe(0);
+  await page.locator('#edit-fixture').evaluate(stage => { stage.dispatchEvent(new Event('zf-destroy')); stage.remove(); });
+});
+
 test('edits animate surviving shapes and reduced motion skips that animation', async ({ page }) => {
   await open(page);
   await page.emulateMedia({ reducedMotion: 'no-preference' });

@@ -265,6 +265,14 @@ adds a separate outgoing path. A step with several outgoing paths offers Add
 branch; use a particular connection's **+** to insert on that path. The new step
 is ready to name immediately. Keyboard addition follows the same rule.
 
+New shapes scale in about their centre over 220 ms. Deleted shapes leave a small,
+decorative outline that collapses and fades over 200 ms while neighbours glide
+into place. These edit effects skip board changes and boards with more than 150
+shapes. Dragging a branch lifts its shape with a soft shadow; only a valid new
+parent glows in the accent colour. Releasing settles the lift. **Move branch…**
+keeps its keyboard behaviour. Reduced motion skips these animations and retains
+the static drop highlight. Any new canvas action cancels edit motion.
+
 The starter board arrives with a short stagger and drawn connections, then a soft
 ring pulses around the first drill arrow (Checkout). Exploring a detail board or
 dismissing the coach stops the ring permanently in this browser. Pristine examples

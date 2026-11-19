@@ -326,6 +326,27 @@ header > strong {
 .zf-branch-target {
   filter: drop-shadow(0 0 5px var(--focus));
 }
+.zf-stage.zf-branch-dragging [data-shape-id].zf-branch-origin {
+  opacity: 1;
+  /* Pointer capture can retain focus; the lift supplies feedback during this gesture. */
+  outline: none !important;
+}
+.zf-stage.zf-branch-dragging [data-shape-id].zf-branch-target,
+.zf-stage.zf-branch-dragging [data-shape-id].zf-branch-target:hover {
+  filter: drop-shadow(0 0 5px var(--accent)) drop-shadow(0 0 2px var(--accent));
+}
+@media (prefers-reduced-motion: no-preference) {
+  .zf-branch-draggable {
+    transform-box: fill-box;
+    transform-origin: center;
+    transition: scale 140ms ease-out;
+  }
+  .zf-stage.zf-branch-dragging [data-shape-id].zf-branch-origin,
+  .zf-stage.zf-branch-dragging [data-shape-id].zf-branch-origin:hover {
+    scale: 1.035;
+    filter: drop-shadow(0 5px 7px #20304440);
+  }
+}
 .zf-branch-dragging, .zf-branch-dragging * {
   cursor: grabbing !important;
   user-select: none;
