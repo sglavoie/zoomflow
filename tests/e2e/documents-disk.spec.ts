@@ -40,14 +40,17 @@ test('saving asks before overwriting a file that changed on disk since it was op
 });
 
 test('a second tab checks the disk again after the first tab finishes saving', async ({ page, context }) => {
+  // A real disk is coherent across processes. WebKit's per-tab localStorage caches
+  // can lag even inside a Web Lock, so keep the mock disk outside either page.
+  const disk = { source: 'shared: Original', modified: 1 };
+  await context.exposeBinding('readSharedDisk', () => ({ ...disk }));
+  await context.exposeBinding('writeSharedDisk', (_caller, source: string) => { disk.source = source; disk.modified++; });
   await context.addInitScript(() => {
-    const read = () => JSON.parse(localStorage.getItem('test-shared-disk') ?? '{"source":"shared: Original","modified":1}') as
-      { source: string; modified: number };
     (window as any).showOpenFilePicker = async () => [{
       kind: 'file', name: 'shared.d2', isSameEntry: async () => true,
       queryPermission: async () => 'granted',
       getFile: async () => {
-        const disk = read();
+        const disk = await (window as any).readSharedDisk();
         return new File([disk.source], 'shared.d2', { lastModified: disk.modified });
       },
       createWritable: async () => {
@@ -61,8 +64,7 @@ test('a second tab checks the disk again after the first tab finishes saving', a
             }
           },
           close: async () => {
-            const disk = read();
-            localStorage.setItem('test-shared-disk', JSON.stringify({ source, modified: disk.modified + 1 }));
+            await (window as any).writeSharedDisk(source);
           },
           abort: async () => {},
         };
@@ -74,6 +76,8 @@ test('a second tab checks the disk again after the first tab finishes saving', a
   await page.locator('#create-open > summary').click();
   await page.locator('#file').click(); await second.locator('#create-open > summary').click();
   await second.locator('#file').click();
+  await expect(page.locator('#filename')).toHaveText('shared.d2');
+  await expect(second.locator('#filename')).toHaveText('shared.d2');
   await previewReady(page); await previewReady(second);
   await source(page).fill('shared: First tab');
   await source(second).fill('shared: Second tab');
@@ -86,10 +90,10 @@ test('a second tab checks the disk again after the first tab finishes saving', a
   await expect(page.locator('#draft-status')).toHaveText('Saved to file');
   const overwrite = second.getByRole('dialog', { name: 'File changed on disk — overwrite?' });
   await expect(overwrite).toContainText('shared.d2 changed outside Zoomflow');
-  expect(await second.evaluate(() => JSON.parse(localStorage.getItem('test-shared-disk')!).source)).toBe('shared: First tab');
+  expect(disk.source).toBe('shared: First tab');
   await overwrite.getByRole('button', { name: 'Cancel', exact: true }).click();
   await expect(second.locator('#save-file')).toBeEnabled();
-  expect(await second.evaluate(() => JSON.parse(localStorage.getItem('test-shared-disk')!).source)).toBe('shared: First tab');
+  expect(disk.source).toBe('shared: First tab');
 });
 
 test('simultaneous saves in both panes each ask before overwriting externally changed files', async ({ page }) => {

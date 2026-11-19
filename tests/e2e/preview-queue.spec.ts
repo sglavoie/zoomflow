@@ -13,14 +13,18 @@ test('example pictures yield to edits in either pane and leave failed examples n
     expect(body).toContain('const d2 = new D2();');
     await route.fulfill({ response, body: body.replace('const d2 = new D2();', `
       const d2 = new D2();
-      const probe = window.pictureProbe ||= { workers: 0, held: [], disposed: 0, hold: true, foreground: [] };
-      const background = ++probe.workers > 1;
+      const probe = window.pictureProbe ||= { workers: 0, held: [], active: 0, disposed: 0, hold: true, foreground: [] };
+      const worker = ++probe.workers;
+      const background = worker > 1;
       const compile = d2.compile.bind(d2);
       const dispose = d2.dispose.bind(d2);
-      d2.dispose = () => { if (background) probe.disposed++; return dispose(); };
+      d2.dispose = () => {
+        if (background) { probe.disposed++; if (probe.active === worker) probe.active = 0; }
+        return dispose();
+      };
       d2.compile = async (input, options) => {
         if (background) {
-          if (probe.hold) await new Promise(resolve => probe.held.push(resolve));
+          if (probe.hold) await new Promise(resolve => { probe.active = worker; probe.held.push(resolve); });
           if (input.inputPath === 'schema.d2') throw new Error('Simulated example failure');
         } else probe.foreground.push(input.fs[input.inputPath]);
         return compile(input, options);
@@ -36,9 +40,11 @@ test('example pictures yield to edits in either pane and leave failed examples n
   await page.locator('#example-options').getByRole('button', { name: 'Flowchart basics' }).click();
   await expect(page.locator('#viewer-b')).toHaveAttribute('aria-busy', 'false');
   for (const [suffix, text] of [['', 'first: Foreground A'], ['-b', 'second: Foreground B']]) {
-    const held = await page.evaluate(() => (window as any).pictureProbe.held.length);
-    await expect.poll(() => page.evaluate(() => (window as any).pictureProbe.held.length)).toBeGreaterThan(0);
-    const disposed = await page.evaluate(() => (window as any).pictureProbe.disposed);
+    // Held callbacks survive disposal, including during pane setup. Wait for a
+    // live held worker before editing so cancellation always has work to stop.
+    await expect.poll(() => page.evaluate(() => (window as any).pictureProbe.active)).toBeGreaterThan(0);
+    const { held, disposed } = await page.evaluate(() => ({ held: (window as any).pictureProbe.held.length,
+      disposed: (window as any).pictureProbe.disposed }));
     await page.locator(`#editor${suffix} .cm-content`).fill(text);
     await expect(page.locator(`#viewer${suffix} .zf-stage`)).toContainText(text.split(': ')[1]);
     await expect(page.locator(`#viewer${suffix}`)).toHaveAttribute('aria-busy', 'false');
