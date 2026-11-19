@@ -23,10 +23,10 @@
       <strong><svg class="brand-mark" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="20" height="20" aria-hidden="true" focusable="false"><rect width="32" height="32" rx="7" fill="#235db8"/><rect x="7" y="7" width="18" height="18" rx="3" fill="none" stroke="#fff" stroke-width="2.5"/><rect x="13" y="13" width="6" height="6" rx="1" fill="#fff"/></svg>Zoomflow</strong>
       <div class="header-controls">
         <details id="create-open"><summary>Create / open<span class="picker-chevron" aria-hidden="true"></span></summary><div class="create-open-menu">
-        <button id="new-flow" class="button-primary" type="button">New flow</button>
-        <button id="new-mind-map" type="button">New mind map</button>
-        <label class="file-button">Open .d2<input id="file" type="file" accept=".d2" /></label>
-        <button id="open-folder" type="button">Open folder</button>
+        <button id="new-flow" class="button-primary" type="button" aria-labelledby="new-flow-title" aria-describedby="new-flow-description"><span class="create-icon" data-icon="connect"></span><span class="create-copy"><span id="new-flow-title">New flow</span><span class="create-description" id="new-flow-description">Type steps, get a connected flow</span></span></button>
+        <button id="new-mind-map" type="button" aria-labelledby="new-mind-map-title" aria-describedby="new-mind-map-description"><span class="create-icon" data-icon="branch"></span><span class="create-copy"><span id="new-mind-map-title">New mind map</span><span class="create-description" id="new-mind-map-description">Turn an outline into connected ideas</span></span></button>
+        <label class="file-button"><span class="create-icon" data-icon="source"></span><span class="create-copy"><span id="open-file-title">Open .d2</span><span class="create-description" id="open-file-description">Continue from a D2 file on your device</span></span><input id="file" type="file" accept=".d2" aria-labelledby="open-file-title" aria-describedby="open-file-description" /></label>
+        <button id="open-folder" type="button" aria-labelledby="open-folder-title" aria-describedby="open-folder-description"><span class="create-icon" data-icon="boards"></span><span class="create-copy"><span id="open-folder-title">Open folder</span><span class="create-description" id="open-folder-description">Explore connected files in a project</span></span></button>
         <input id="folder" type="file" webkitdirectory multiple hidden />
         </div></details>
         <div class="document-control">

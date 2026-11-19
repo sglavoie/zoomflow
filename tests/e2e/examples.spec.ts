@@ -10,37 +10,95 @@ async function picturesReady(page: Page, count = 9) {
     !(image as HTMLImageElement).hidden && (image as HTMLImageElement).naturalWidth > 0).length)).toBe(count);
 }
 
-test('example picker shows a picture of each example', async ({ page }) => {
-  await page.emulateMedia({ colorScheme: 'light' });
-  // Hold only the separate background worker, leaving the user's preview usable.
+// Exercise the real compiler/worker, pausing only background compilation and an
+// explicitly marked foreground edit so cancellation can be observed without races.
+async function holdPictures(page: Page) {
   await page.route(url => url.pathname === '/src/compiler.ts', async route => {
     const response = await route.fetch();
     const body = await response.text();
     expect(body).toContain('const d2 = new D2();');
     await route.fulfill({ response, body: body.replace('const d2 = new D2();', `
       const d2 = new D2();
-      window.exampleWorkers = (window.exampleWorkers || 0) + 1;
-      if (window.exampleWorkers > 1) {
-        const compile = d2.compile.bind(d2);
-        let first = true;
-        d2.compile = async (...args) => {
-          if (first) { first = false; await new Promise(resolve => { window.releaseExample = resolve; }); }
-          return compile(...args);
-        };
-      }
+      const worker = (window.exampleWorkers = (window.exampleWorkers || 0) + 1);
+      window.pictureJobs ||= [];
+      window.holdPictures ??= true;
+      const compile = d2.compile.bind(d2);
+      const dispose = d2.dispose.bind(d2);
+      let job;
+      d2.dispose = (...args) => { if (job) job.disposed = true; return dispose(...args); };
+      d2.compile = async (...args) => {
+        if (worker > 1 && window.holdPictures) {
+          job = { path: args[0].inputPath, disposed: false };
+          window.pictureJobs.push(job);
+          await new Promise(resolve => { job.release = resolve; });
+        }
+        if (worker === 1 && Object.values(args[0].fs).some(text => text.includes('Held foreground edit'))) {
+          await new Promise(resolve => { window.releaseForeground = resolve; });
+        }
+        return compile(...args);
+      };
     `) });
   });
+}
+
+async function releasePictures(page: Page) {
+  await page.evaluate(() => {
+    (window as any).holdPictures = false;
+    for (const job of (window as any).pictureJobs) job.release();
+  });
+}
+
+test('warms example pictures before the picker opens', async ({ page }) => {
   await page.goto(devURL); await previewReady(page);
-  expect(await page.evaluate(() => (window as any).exampleWorkers)).toBe(1);
+  await picturesReady(page);
+  await expect(page.locator('#example-picker')).not.toHaveAttribute('open', '');
+  await page.locator('#example-picker summary').click();
+  await expect(page.locator('.example-picture[data-ready]')).toHaveCount(9);
+  await expect(page.locator('.example-picture img').first()).toBeVisible();
+});
+
+test('stops warming pictures during a foreground edit', async ({ page }) => {
+  await holdPictures(page);
+  await page.goto(devURL); await previewReady(page);
+  await expect.poll(() => page.evaluate(() => (window as any).pictureJobs.length)).toBe(1);
+  await source(page).fill('draft: Held foreground edit');
+  await expect(page.locator('#viewer')).toHaveAttribute('aria-busy', 'true');
+  await expect.poll(() => page.evaluate(() => (window as any).pictureJobs[0].disposed)).toBe(true);
+  await expect.poll(() => page.evaluate(() => typeof (window as any).releaseForeground)).toBe('function');
+  // Release the obsolete job while the edit is held: it must never publish or
+  // start another background worker ahead of the foreground preview.
+  await page.evaluate(() => (window as any).pictureJobs[0].release());
+  await expect(page.locator('.example-picture[data-ready]')).toHaveCount(0);
+  expect(await page.evaluate(() => (window as any).exampleWorkers)).toBe(2);
+  await page.evaluate(() => (window as any).releaseForeground());
+  await expect(page.locator('.zf-stage')).toContainText('Held foreground edit');
+  await previewReady(page);
+  await expect.poll(() => page.evaluate(() => (window as any).pictureJobs.length)).toBe(2);
+  await releasePictures(page);
+  await picturesReady(page);
+  expect(await page.locator('.example-picture img').first().getAttribute('src')).not.toContain('Held%20foreground');
+});
+
+test('example picker shows a picture of each example', async ({ page }) => {
+  await page.emulateMedia({ colorScheme: 'light', reducedMotion: 'no-preference' });
+  await holdPictures(page);
+  await page.goto(devURL); await previewReady(page);
   await source(page).fill('draft: My private edited example'); await previewReady(page);
   await page.locator('#example-picker summary').click();
-  await expect.poll(() => page.evaluate(() => typeof (window as any).releaseExample)).toBe('function');
+  await expect.poll(() => page.evaluate(() => (window as any).pictureJobs.some((job: any) => !job.disposed))).toBe(true);
   const rows = page.locator('#example-options .example-row');
   const heights = () => rows.evaluateAll(items => items.map(item => item.getBoundingClientRect().height));
   const before = await heights();
   await expect(page.locator('.example-picture img:not([hidden])')).toHaveCount(0);
-  await page.evaluate(() => (window as any).releaseExample());
+  const slot = page.locator('.example-picture').first();
+  expect(await slot.evaluate(node => getComputedStyle(node, '::before').animationName)).toBe('example-shimmer');
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  expect(await slot.evaluate(node => getComputedStyle(node, '::before').animationName)).toBe('none');
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
+  await releasePictures(page);
   await picturesReady(page);
+  await expect(page.locator('.example-picture[data-ready]')).toHaveCount(9);
+  expect(await slot.locator('img').evaluate(node => getComputedStyle(node).transitionProperty)).toBe('opacity');
   expect(await heights()).toEqual(before);
   const urls = () => page.locator('.example-picture img').evaluateAll(images => images.map(image => image.getAttribute('src')!));
   const light = await urls();
@@ -68,6 +126,19 @@ for (const theme of ['light', 'dark'] as const) for (const width of [1440, 390])
     await page.locator('#example-picker summary').click();
     await picturesReady(page);
     await expect(page.locator('.example-menu')).toHaveScreenshot(`example-pictures-${theme}-${width}.png`);
+  });
+}
+
+for (const theme of ['light', 'dark'] as const) for (const width of [1440, 390]) {
+  test(`example picker placeholders in ${theme} at ${width}`, { tag: '@visual' }, async ({ page, browserName }) => {
+    test.skip(!comparesVisuals(browserName), visualSkipReason);
+    await page.setViewportSize({ width, height: width === 390 ? 844 : 900 });
+    await page.emulateMedia({ colorScheme: theme, reducedMotion: 'reduce' });
+    await holdPictures(page);
+    await page.goto(devURL); await previewReady(page);
+    await page.locator('#example-picker summary').click();
+    await expect(page.locator('.example-picture[data-ready]')).toHaveCount(0);
+    await expect(page.locator('.example-menu')).toHaveScreenshot(`example-placeholders-${theme}-${width}.png`);
   });
 }
 

@@ -1483,6 +1483,7 @@ details[open] > summary > .picker-chevron {
 }
 .example-copy { flex: 1; min-width: 0; }
 .example-picture {
+  position: relative;
   flex: 0 0 72px;
   width: 72px;
   height: 54px;
@@ -1491,7 +1492,15 @@ details[open] > summary > .picker-chevron {
   border-radius: 6px;
   background: var(--hover);
 }
-.example-picture img { display: block; width: 100%; height: 100%; object-fit: contain; }
+.example-picture::before { content: ''; position: absolute; inset: 0; background: var(--accent-soft); opacity: .45; pointer-events: none; }
+.example-picture img { display: block; position: relative; width: 100%; height: 100%; object-fit: contain; opacity: 0; }
+.example-picture[data-ready] img { opacity: 1; }
+.example-picture:is([data-ready], [data-failed])::before { opacity: 0; }
+@media (prefers-reduced-motion: no-preference) {
+  .example-picture:not([data-ready], [data-failed])::before { background: linear-gradient(100deg, transparent 15%, var(--accent-soft) 50%, transparent 85%); animation: example-shimmer 1.8s ease-in-out infinite; }
+  .example-picture img, .example-picture::before { transition: opacity 180ms ease; }
+}
+@keyframes example-shimmer { from { transform: translateX(-100%); } to { transform: translateX(100%); } }
 .example-restore {
   align-self: center;
   margin-right: var(--space-1);
@@ -3035,17 +3044,22 @@ header > strong { display: inline-flex; align-items: center; gap: 6px; font-size
 #create-open > summary { display: flex; align-items: center; gap: 10px; cursor: pointer; list-style: none; padding: 8px 12px; border-radius: 8px; background: var(--accent); color: var(--on-accent); white-space: nowrap; }
 #create-open > summary::-webkit-details-marker { display: none; }
 #create-open > summary .picker-chevron { color: inherit; }
-.create-open-menu { position: absolute; left: 0; top: calc(100% + 8px); z-index: var(--z-popover); display: grid; gap: 6px; padding: 8px; min-width: 220px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); box-shadow: var(--shadow-dialog); }
-.create-open-menu :is(button, .file-button) { display: block; width: 100%; margin: 0; text-align: left; border-color: transparent; background: transparent; color: var(--text); font-size: 14px; padding: 9px 12px; }
+.create-open-menu { position: absolute; left: 0; top: calc(100% + 8px); z-index: var(--z-popover); display: grid; gap: 6px; padding: 8px; width: min(344px, calc(100vw - 24px)); max-height: calc(100dvh - 120px); overflow-y: auto; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); box-shadow: var(--shadow-dialog); }
+.create-open-menu :is(button, .file-button) { display: flex; align-items: flex-start; gap: 10px; width: 100%; margin: 0; text-align: left; border-color: transparent; background: transparent; color: var(--text); font-size: 14px; padding: 9px 12px; }
 .create-open-menu :is(button, .file-button):hover { background: var(--hover); }
-.create-open-menu :is(#new-mind-map, #open-folder) { display: block; }
+.create-open-menu :is(#new-mind-map, #open-folder) { display: flex; }
+.create-icon { display: flex; flex: 0 0 18px; padding-top: 2px; color: var(--muted); }
+.create-icon .ui-icon { width: 18px; height: 18px; }
+.create-copy { min-width: 0; }
+.create-description { display: block; margin-top: 3px; color: var(--muted); font-size: 12px; font-weight: 400; line-height: 1.5; }
 .create-open-menu #new-flow { color: var(--accent); background: var(--accent-soft); }
 #workspace-view .theme-control { display: flex; width: 100%; }
 #workspace-view .theme-control button { flex: 1; text-align: center; }
 @media (max-width: 999px) {
   header { display: grid; grid-template-columns: auto 1fr; gap: 8px; padding: 8px 12px; }
   .header-actions { justify-self: end; gap: 4px; }
-  .header-controls { grid-row: 2; grid-column: 1 / -1; display: flex; gap: 8px; }
+  .header-controls { position: relative; grid-row: 2; grid-column: 1 / -1; display: flex; gap: 8px; }
+  #create-open { position: static; }
   .document-control { flex: 1; width: auto; min-width: 0; }
   #create-open > summary { font-size: 12px; padding: 8px; gap: 4px; }
   /* Smaller chevrons keep the document name on one line beside Create / open. */

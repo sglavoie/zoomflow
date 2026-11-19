@@ -1,5 +1,5 @@
 import { decodeShareSource } from './share-link';
-import { iconLabel } from './icons';
+import { iconLabel, icons } from './icons';
 import { setupCommandPalette } from './command-palette';
 import { viewerStyle, type ViewerRoute } from '@zoomflow/viewer';
 import { setupExamplePicker } from './example-picker';
@@ -30,6 +30,9 @@ const incomingShare = incomingURL.searchParams.has('d')
 
 iconLabel(document.querySelector('#header-more-toggle')!, 'export', 'Export');
 iconLabel(document.querySelector('#toggle-source')!, 'source', 'Source');
+for (const slot of document.querySelectorAll<HTMLElement>('.create-icon')) {
+  slot.innerHTML = icons[slot.dataset.icon as keyof typeof icons];
+}
 
 const canvasStyle = document.createElement('style');
 canvasStyle.textContent = viewerStyle;
@@ -74,6 +77,13 @@ sourceToggle.addEventListener('click', () => { activePane().views.toggleSource()
 workspace.addEventListener('zf-workspaceviewchange', updateSourceToggle);
 const viewMenu = document.querySelector<HTMLDetailsElement>('#workspace-view')!;
 const createMenu = document.querySelector<HTMLDetailsElement>('#create-open')!;
+const createOptions = createMenu.querySelector<HTMLElement>('.create-open-menu')!;
+function fitCreateMenu() {
+  if (!createMenu.open) return;
+  createOptions.style.maxHeight = `${Math.max(0, window.innerHeight - createOptions.getBoundingClientRect().top - 12)}px`;
+}
+createMenu.addEventListener('toggle', fitCreateMenu);
+window.addEventListener('resize', fitCreateMenu);
 document.addEventListener('pointerdown', event => { if (!createMenu.contains(event.target as Node)) createMenu.open = false; });
 createMenu.addEventListener('click', event => {
   if (event.target instanceof Element && event.target.closest('button, .file-button')) createMenu.open = false;

@@ -9,10 +9,18 @@ test('a stalled preview can restart without losing the good diagram or latest ed
     const NativeWorker = window.Worker;
     (window as any).workersCreated = 0;
     window.Worker = class extends NativeWorker {
-      constructor(url: string | URL, options?: WorkerOptions) { super(url, options); (window as any).workersCreated++; }
+      private foreground = false;
       override postMessage(message: unknown, options?: StructuredSerializeOptions | Transferable[]) {
-        const request = message as { type?: string };
-        if (request.type === 'compile' && (window as any).holdCompile) {
+        const request = message as { type?: string; data?: { inputPath: string; fs: Record<string, string> } };
+        const text = request.data?.fs?.[request.data.inputPath];
+        // Count workers that actually compile this preview, allowing the independent
+        // picture worker to start and stop without changing the restart assertion.
+        if (request.type === 'compile' && !this.foreground &&
+          (!(window as any).workersCreated || text === 'a: Stalled revision' || text === 'b: Latest edit')) {
+          this.foreground = true;
+          (window as any).workersCreated++;
+        }
+        if (request.type === 'compile' && this.foreground && (window as any).holdCompile) {
           (window as any).compileHeld = true;
           (window as any).holdCompile = false;
           return; // Leave a real worker request pending until disposal rejects it.
@@ -118,7 +126,8 @@ test('editing the other pane keeps a stalled pane\'s restart notice', async ({ p
     const NativeWorker = window.Worker;
     window.Worker = class extends NativeWorker {
       override postMessage(message: unknown, options?: StructuredSerializeOptions | Transferable[]) {
-        if ((message as { type?: string }).type === 'compile' && (window as any).holdCompile) {
+        const request = message as { type?: string; data?: { inputPath: string; fs: Record<string, string> } };
+        if (request.type === 'compile' && request.data?.fs?.[request.data.inputPath] === 'a: Stalled first pane' && (window as any).holdCompile) {
           (window as any).compileHeld = true;
           (window as any).holdCompile = false;
           return;

@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
-import { chooseExample, editorText, previewReady, source } from './helpers';
+import { chooseExample, comparesVisuals, visualSkipReason, editorText, previewReady, source } from './helpers';
 import { selectMenuOption } from './menu';
 import { devURL } from './servers';
 import { readFlow } from '../../apps/web/src/flow-model';
@@ -12,6 +12,63 @@ async function quick(page: Page) {
   await page.locator('#create-open > summary').click();
   await page.getByRole('button', { name: 'New flow', exact: true }).click();
   return page.getByRole('dialog', { name: 'Create a flow' });
+}
+
+test('describes Create menu items without renaming them', async ({ page }) => {
+  await open(page);
+  const summary = page.locator('#create-open > summary');
+  const items = [
+    ['#new-flow', 'New flow', 'Type steps, get a connected flow'],
+    ['#new-mind-map', 'New mind map', 'Turn an outline into connected ideas'],
+    ['#file', 'Open .d2', 'Continue from a D2 file on your device'],
+    ['#open-folder', 'Open folder', 'Explore connected files in a project'],
+  ];
+  for (const [width, height] of [[1440, 900], [390, 844], [320, 844], [320, 320], [844, 390]]) {
+    await page.setViewportSize({ width, height });
+    await summary.focus(); await page.keyboard.press('Enter');
+    for (const [selector, name, description] of items) {
+      const control = page.locator(selector);
+      await expect(control).toHaveAccessibleName(name);
+      await expect(control).toHaveAccessibleDescription(description);
+      await expect(page.locator(`#${await control.getAttribute('aria-describedby')}`)).toBeVisible();
+    }
+    const menu = page.locator('.create-open-menu');
+    await expect(menu.locator('svg[aria-hidden="true"][focusable="false"]')).toHaveCount(4);
+    const box = (await menu.boundingBox())!;
+    expect(box.x).toBeGreaterThanOrEqual(0);
+    expect(box.x + box.width).toBeLessThanOrEqual(width);
+    await expect.poll(async () => {
+      const bounds = (await menu.boundingBox())!;
+      return bounds.y + bounds.height;
+    }).toBeLessThanOrEqual(height);
+    // Native file input remains in the keyboard path, with the description
+    // attached to the control rather than its enclosing decorative label.
+    await page.locator('#new-flow').focus();
+    for (const selector of ['#new-mind-map', '#file', '#open-folder']) {
+      await page.keyboard.press('Tab'); await expect(page.locator(selector)).toBeFocused();
+    }
+    await page.keyboard.press('Escape');
+    await expect(menu).toBeHidden(); await expect(summary).toBeFocused();
+  }
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await summary.click();
+  await page.getByRole('button', { name: 'New flow', exact: true }).click();
+  await expect(page.getByRole('dialog', { name: 'Create a flow' })).toBeVisible();
+  await page.getByRole('dialog').getByRole('button', { name: 'Cancel', exact: true }).click();
+  await page.locator('#file').setInputFiles({ name: 'menu.d2', mimeType: 'text/plain', buffer: Buffer.from('a: Opened from Create menu') });
+  await expect(page.locator('.zf-stage')).toContainText('Opened from Create menu');
+});
+
+for (const theme of ['light', 'dark'] as const) for (const width of [1440, 390]) {
+  test(`Create menu in ${theme} at ${width}`, { tag: '@visual' }, async ({ page, browserName }) => {
+    test.skip(!comparesVisuals(browserName), visualSkipReason);
+    await page.setViewportSize({ width, height: width === 390 ? 844 : 900 });
+    await page.emulateMedia({ colorScheme: theme, reducedMotion: 'reduce' });
+    await open(page);
+    await page.locator('#create-open > summary').click();
+    await page.mouse.move(0, 0);
+    await expect(page.locator('.create-open-menu')).toHaveScreenshot(`create-menu-${theme}-${width}.png`);
+  });
 }
 
 test('fresh workspace teaches direct editing, keeps attached boards, and remembers the chosen layout', async ({ page }) => {

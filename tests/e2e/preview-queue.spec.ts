@@ -69,16 +69,19 @@ test('a busy compiler skips superseded previews and compiles the latest edit nex
     expect(body).toContain('const d2 = new D2();');
     await route.fulfill({ response, body: body.replace('const d2 = new D2();', `
       const d2 = new D2();
-      const compile = d2.compile.bind(d2);
-      window.previewProbe = { inputs: [], hold: false };
-      d2.compile = async (input, options) => {
-        window.previewProbe.inputs.push(input.fs[input.inputPath]);
-        if (window.previewProbe.hold) {
-          window.previewProbe.hold = false;
-          await new Promise(resolve => { window.previewProbe.release = resolve; });
-        }
-        return compile(input, options);
-      };
+      // Only the foreground compiler owns this probe; idle pictures have their own worker.
+      if (!window.previewProbe) {
+        const compile = d2.compile.bind(d2);
+        window.previewProbe = { inputs: [], hold: false };
+        d2.compile = async (input, options) => {
+          window.previewProbe.inputs.push(input.fs[input.inputPath]);
+          if (window.previewProbe.hold) {
+            window.previewProbe.hold = false;
+            await new Promise(resolve => { window.previewProbe.release = resolve; });
+          }
+          return compile(input, options);
+        };
+      }
     `) });
   });
   await page.clock.install(); // Step past the 350 ms edit debounce without real waits.
@@ -109,14 +112,17 @@ test('a failed render keeps the good preview, disables export and offers retry w
     expect(body).toContain('const d2 = new D2();');
     await route.fulfill({ response, body: body.replace('const d2 = new D2();', `
       const d2 = new D2();
-      const render = d2.render.bind(d2);
-      d2.render = async (...args) => {
-        if (window.failNextRender) {
-          window.failNextRender = false;
-          throw new Error('Simulated render failure');
-        }
-        return render(...args);
-      };
+      if (!window.renderProbeInstalled) {
+        window.renderProbeInstalled = true;
+        const render = d2.render.bind(d2);
+        d2.render = async (...args) => {
+          if (window.failNextRender) {
+            window.failNextRender = false;
+            throw new Error('Simulated render failure');
+          }
+          return render(...args);
+        };
+      }
     `) });
   });
   const errors: string[] = [];

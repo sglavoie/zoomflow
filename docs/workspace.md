@@ -10,7 +10,7 @@ Start with the guide for the task you want to do:
 
 New workspaces start with the canvas filling the workspace. **Source** in the header
 opens the editor; the choice is remembered for each pane, including existing workspaces.
-**Create / open** groups flow and mind-map creation with file and folder opening. Source-editing actions reveal the editor automatically.
+**Create / open** groups flow and mind-map creation with file and folder opening. Each item has an icon and a short description of what it does. Source-editing actions reveal the editor automatically.
 **View** holds layout, theme, the command palette (⌘K / Ctrl+K), D2 reference,
 and keyboard shortcuts. On small screens,
 Preview and Source tabs keep the diagram and editor usable one at a time.
@@ -70,10 +70,10 @@ active project or draft first,
 followed by other drafts ordered by edit time, then built-in examples. It marks
 modified examples and shows edit timestamps and distinct draft numbers for same-name uploads.
 Built-in examples have small pictures of their original root boards. Pictures load
-one at a time after the menu first opens and the main preview is ready; editing in
-either pane interrupts this background work. They stay in memory for the visit and
-follow the current theme. A neutral space reserves their size while loading or if
-an example cannot be drawn. Edited drafts do not change these example pictures.
+one at a time during browser idle time after the first preview is ready, even before
+the menu opens; editing in either pane stops the disposable background worker. They stay in memory for the visit and
+follow the current theme. A quiet shimmer reserves their size until each picture fades in; reduced motion
+uses a static tint. Examples that cannot be drawn keep a neutral space. Edited drafts do not change these example pictures.
 **Restore** resets an example after confirmation; opened file drafts
 can be removed from the dropdown. Confirmation dialogs name the affected document
 or project and report unsaved changes. A 30-second **Undo** notice restores removed

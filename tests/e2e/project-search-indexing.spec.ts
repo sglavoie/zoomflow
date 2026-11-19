@@ -12,23 +12,26 @@ test.beforeEach(async ({ page }) => {
     expect(body).toContain('const d2 = new D2();');
     await route.fulfill({ response, body: body.replace('const d2 = new D2();', `
       const d2 = new D2();
-      const compile = d2.compile.bind(d2);
-      window.projectSearchProbe = { inputs: [], completed: [], hold: false, fail: false };
-      d2.compile = async (input, options) => {
-        const probe = window.projectSearchProbe;
-        probe.inputs.push(input.inputPath);
-        if (input.inputPath === 'health.d2' && probe.hold) {
-          probe.hold = false;
-          await new Promise(resolve => { probe.release = resolve; });
-        }
-        if (input.inputPath === 'health.d2' && probe.fail) {
-          probe.fail = false;
-          throw new Error('D2 instance has been disposed');
-        }
-        const result = await compile(input, options);
-        probe.completed.push(input.inputPath);
-        return result;
-      };
+      // Only the foreground compiler owns this probe; idle pictures have their own worker.
+      if (!window.projectSearchProbe) {
+        const compile = d2.compile.bind(d2);
+        window.projectSearchProbe = { inputs: [], completed: [], hold: false, fail: false };
+        d2.compile = async (input, options) => {
+          const probe = window.projectSearchProbe;
+          probe.inputs.push(input.inputPath);
+          if (input.inputPath === 'health.d2' && probe.hold) {
+            probe.hold = false;
+            await new Promise(resolve => { probe.release = resolve; });
+          }
+          if (input.inputPath === 'health.d2' && probe.fail) {
+            probe.fail = false;
+            throw new Error('D2 instance has been disposed');
+          }
+          const result = await compile(input, options);
+          probe.completed.push(input.inputPath);
+          return result;
+        };
+      }
     `) });
   });
   await page.goto('/');

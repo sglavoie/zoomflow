@@ -25,6 +25,8 @@ function gate<T>() {
 }
 beforeEach(() => {
   vi.clearAllMocks();
+  vi.stubGlobal('requestIdleCallback', vi.fn((callback: () => void) => setTimeout(callback, 0)));
+  vi.stubGlobal('cancelIdleCallback', vi.fn((id: number) => clearTimeout(id)));
   document.documentElement.dataset.theme = 'light';
   document.body.innerHTML = '<div data-part="preview-status" data-state="loading"></div><div id="a" data-part="viewer" aria-busy="false"></div><div id="b" data-part="viewer" aria-busy="false"></div><details></details>';
   picker = document.querySelector('details')!;
@@ -45,9 +47,9 @@ beforeEach(() => {
   }) as unknown as ReturnType<typeof createCompiler>);
   stop = setupExamplePictures(picker, buttons).dispose;
 });
-afterEach(() => stop());
+afterEach(() => { stop(); vi.unstubAllGlobals(); });
 
-it('waits for both opening and preview readiness, keeps failed slots and caches theme variants', async () => {
+it('waits for preview readiness, keeps failed slots and caches theme variants', async () => {
   picker.open = true;
   await new Promise(resolve => setTimeout(resolve, 10));
   expect(createCompiler).not.toHaveBeenCalled();
@@ -63,10 +65,36 @@ it('waits for both opening and preview readiness, keeps failed slots and caches 
   expect(boardPicture).toHaveBeenCalledTimes(4);
 });
 
-it('does no work before the first opening even when the main preview is ready', async () => {
+it('warms before opening only when the browser grants idle time', async () => {
+  let run!: () => void;
+  vi.mocked(window.requestIdleCallback).mockImplementation(callback => { run = () => callback({ didTimeout: false, timeRemaining: () => 50 }); return 42; });
   ready();
-  await new Promise(resolve => setTimeout(resolve, 10));
+  await vi.waitFor(() => expect(window.requestIdleCallback).toHaveBeenCalledOnce());
+  expect(picker.open).toBe(false);
   expect(createCompiler).not.toHaveBeenCalled();
+  run();
+  await vi.waitFor(() => expect(compile).toHaveBeenCalledOnce());
+  expect(buttons.get('one')!.querySelector('img')!.getAttribute('src')).toBe('original:one:false');
+});
+
+it('cancels queued idle work on foreground input and disposal', async () => {
+  vi.mocked(window.requestIdleCallback).mockReturnValue(42);
+  ready();
+  await vi.waitFor(() => expect(window.requestIdleCallback).toHaveBeenCalledOnce());
+  busy('a', true);
+  await vi.waitFor(() => expect(window.cancelIdleCallback).toHaveBeenCalledWith(42));
+  expect(createCompiler).not.toHaveBeenCalled();
+  busy('a', false);
+  await vi.waitFor(() => expect(window.requestIdleCallback).toHaveBeenCalledTimes(2));
+  stop();
+  expect(window.cancelIdleCallback).toHaveBeenCalledTimes(2);
+});
+
+it('yields with a cancellable timer when idle callbacks are unavailable', async () => {
+  vi.stubGlobal('requestIdleCallback', undefined);
+  ready();
+  await vi.waitFor(() => expect(compile).toHaveBeenCalledTimes(3));
+  expect(picker.open).toBe(false);
 });
 
 it('cancels active work for either pane, waits through their debounces and discards late results', async () => {
@@ -98,4 +126,23 @@ it('a theme change replaces an in-flight picture without publishing its late old
   await new Promise(resolve => setTimeout(resolve, 10));
   expect(buttons.get('one')!.querySelector('img')!.getAttribute('src')).toBe('original:one:true');
   expect(compile.mock.calls.filter(([input]) => input.inputPath === 'one')).toHaveLength(1);
+});
+
+it('restores a loaded picture when a theme switch returns before its replacement loads', async () => {
+  ready();
+  const picture = buttons.get('one')!.querySelector('img')!;
+  await vi.waitFor(() => expect(picture.getAttribute('src')).toBe('original:one:false'));
+  Object.defineProperty(picture, 'complete', { value: true });
+  Object.defineProperty(picture, 'naturalWidth', { value: 72 });
+  picture.dispatchEvent(new Event('load'));
+  expect(picture.parentElement!.dataset.ready).toBe('true');
+  const held = gate<string>();
+  vi.mocked(boardPicture).mockImplementationOnce(() => held.promise);
+  document.documentElement.dataset.theme = 'dark';
+  await vi.waitFor(() => expect(picture.hidden).toBe(true));
+  expect(picture.parentElement!.dataset.ready).toBeUndefined();
+  document.documentElement.dataset.theme = 'light';
+  await vi.waitFor(() => expect(picture.hidden).toBe(false));
+  expect(picture.parentElement!.dataset.ready).toBe('true');
+  held.resolve('obsolete-dark');
 });
