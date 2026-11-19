@@ -48,9 +48,14 @@ before zooming. Recheck
 the static-to-live shape bounds on desktop and phone after changing the starter.
 
 The README screenshot, `docs/images/workspace.png`, shows the untouched Order flow
-at 1440×900 in light mode with Source open and the editing hint dismissed. Capture
-a fresh workspace after the live preview and fonts finish loading, with menus closed
-and no shape selected. Keep this same view when refreshing the image.
+at 1440×900 in light mode with Source open and the editing coach and drill-arrow
+hint dismissed. Capture a fresh workspace after the live preview and fonts finish
+loading and the arrival animation settles, with menus closed and no shape selected.
+Dismiss the editing hint to remove both the coach and the pulsing arrow ring; the
+navigation guidance below the canvas remains visible. For an automated capture,
+set `zoomflow.source-visible.a`, `zoomflow.canvas-hint-dismissed` and
+`zoomflow.drill-hint-dismissed` to `true` in local storage before loading the app.
+Keep this same view when refreshing the image.
 
 To measure cold loading, see `spike/first-preview.mjs`. On this Mac, against the
 local production preview at 10 Mbps and 40 ms latency, the pre-change median of

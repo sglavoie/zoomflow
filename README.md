@@ -14,7 +14,7 @@ Ask AI needs a local server, so it is available only when you [run locally](#run
 [GitHub Releases](https://github.com/sglavoie/zoomflow/releases), or run from source.
 The project is not published to npm.
 
-![Zoomflow with a drill-down diagram beside its D2 source](docs/images/workspace.png)
+![Zoomflow showing the Order flow diagram beside its D2 source](docs/images/workspace.png)
 
 ## Run locally
 
