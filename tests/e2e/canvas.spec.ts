@@ -7,7 +7,10 @@ import { comparesVisuals, source, previewReady, stubAiStatus, selectSource, curs
 /** Diagram canvas: zoom, pan, fit, keyboard and touch navigation, and source reveal. */
 
 test('preview zooms and pans, then fits again', async ({ page }) => {
-  await page.goto('/');
+  await page.goto('/'); await previewReady(page);
+  // Compare fit against settled geometry, after arrival's deferred refit.
+  await expect(page.locator('.zf-stage')).not.toHaveAttribute('data-arrival-motion');
+  await page.evaluate(() => document.fonts.ready);
   const svg = page.locator('.zf-stage > svg');
   await expect(svg).toBeVisible();
   const box = async () => svg.getAttribute('viewBox').then((value) => value!.split(/\s+/).map(Number));
@@ -38,7 +41,10 @@ test('preview zooms and pans, then fits again', async ({ page }) => {
 });
 
 test('zoom out reaches 10% with the diagram centered, then fits again', async ({ page }) => {
-  await page.goto('/');
+  await page.goto('/'); await previewReady(page);
+  // Compare fit against settled geometry, after arrival's deferred refit.
+  await expect(page.locator('.zf-stage')).not.toHaveAttribute('data-arrival-motion');
+  await page.evaluate(() => document.fonts.ready);
   const svg = page.locator('.zf-stage > svg');
   await expect(svg).toBeVisible();
   const box = async () => (await svg.getAttribute('viewBox'))!.split(/\s+/).map(Number);

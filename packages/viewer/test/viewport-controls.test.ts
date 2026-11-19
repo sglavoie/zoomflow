@@ -75,6 +75,22 @@ describe('createViewport', () => {
     } finally { now.mockRestore(); }
   });
 
+  it('keeps pointer framing when Escape closes a shape menu and restores focus', () => {
+    const { stage, link, frame } = mount();
+    const item = document.createElement('button');
+    stage.after(item);
+    item.addEventListener('keydown', event => { event.stopPropagation(); link.focus(); });
+    const now = vi.spyOn(performance, 'now').mockReturnValue(1000);
+    try {
+      link.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+      link.focus();
+      item.focus();
+      item.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+      expect(document.activeElement).toBe(link);
+      expect(frame).not.toHaveBeenCalled();
+    } finally { now.mockRestore(); }
+  });
+
   it('reveals a shape focused from the keyboard, not one focused by a click', () => {
     const { link, frame } = mount();
     link.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));

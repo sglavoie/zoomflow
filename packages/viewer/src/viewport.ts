@@ -108,9 +108,13 @@ export function createViewport(stage: HTMLElement, host: HTMLElement, clamp: typ
     if (windowEvents || signal.aborted) return;
     windowEvents = new AbortController();
     const options = { signal: windowEvents.signal };
-    // A keyboard action can refocus the canvas within 500 ms of a pointer press.
-    // Capture before rename fields or dialogs handle the key and restore focus.
-    window.addEventListener('keydown', () => { pointerAt = -Infinity; }, { ...options, capture: true });
+    // Tab moves focus; Enter/Escape in an editor can restore it to the canvas.
+    // Other keys (including a shape menu's Escape) must preserve pointer framing.
+    window.addEventListener('keydown', event => {
+      const field = event.target instanceof Element && !stage.contains(event.target) &&
+        event.target.closest('input, textarea, select, [contenteditable]:not([contenteditable="false"])');
+      if (event.key === 'Tab' || field && (event.key === 'Enter' || event.key === 'Escape')) pointerAt = -Infinity;
+    }, { ...options, capture: true });
     window.addEventListener('keydown', onKeyDown, options);
     window.addEventListener('keyup', onKeyUp, options);
     window.addEventListener('blur', releaseSpace, options);
