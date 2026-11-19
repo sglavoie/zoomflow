@@ -372,11 +372,15 @@ test('format preserves selection, cursor and scroll inside a large edited docume
 });
 
 test('format success returns to file state, while failures persist and later edits clear them', async ({ page }) => {
-  await page.clock.install();
+  await page.clock.install({ time: new Date('2026-01-01T00:00:00Z') });
   await page.goto('/'); await previewReady(page);
   await source(page).fill('a:{label: Hello}'); await previewReady(page);
+  // Hold expiry while the asynchronous compile/render settles, even on a busy
+  // worker. Advance the editor debounce and status lifetime explicitly below.
+  await page.clock.pauseAt(new Date('2026-01-02T00:00:00Z'));
   await page.locator('#format-source').click();
   await expect(page.locator('#format-status')).toHaveText('Source formatted.');
+  await page.clock.runFor(350);
   await previewReady(page);
   await expect(page.locator('#draft-status')).toBeHidden();
   await page.clock.fastForward(4100);
@@ -390,7 +394,7 @@ test('format success returns to file state, while failures persist and later edi
   await expect(page.locator('#format-status')).toContainText('Formatting failed:');
   await page.clock.fastForward(5000);
   await expect(page.locator('#format-status')).toBeVisible();
-  await source(page).fill('a: Repaired'); await previewReady(page);
+  await source(page).fill('a: Repaired'); await page.clock.runFor(350); await previewReady(page);
   await expect(page.locator('#format-status')).toBeHidden();
   await expect(page.locator('#draft-status')).toBeVisible();
 });
