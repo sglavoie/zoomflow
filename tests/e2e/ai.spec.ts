@@ -75,7 +75,7 @@ test('asking AI to fix diagnostics includes all current lint issues and enabled 
     expect(request.prompt).toBe('Fix the diagnostics issues');
     expect(request.diagnostics).toEqual(expect.arrayContaining([
       expect.objectContaining({ severity: 'error', source: 'Zoomflow dangling-link', filename: 'diagnostics.d2',
-        line: 7, message: expect.stringContaining('missing') }),
+        line: 8, message: expect.stringContaining('missing') }),
       expect.objectContaining({ severity: 'warning', source: 'Zoomflow orphan-board', message: expect.stringContaining('root.layers.details') }),
       expect.objectContaining({ severity: 'warning', source: 'Zoomflow missing-backlink', message: expect.stringContaining('root.layers.details') }),
     ]));
