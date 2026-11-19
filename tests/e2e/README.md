@@ -1,7 +1,7 @@
 # Browser tests
 
 Playwright starts the Vite app and runs the behavioral specs in Chromium, Firefox and
-WebKit. `production.spec.ts` runs only in its production projects (see below), and screenshot
+WebKit (Firefox locally only with `ZOOMFLOW_E2E_FIREFOX=1`; CI always includes it). `production.spec.ts` runs only in its production projects (see below), and screenshot
 comparisons run in Chromium on macOS only: `visual.spec.ts` and `controls-visual.spec.ts`
 skip elsewhere, while `export.spec.ts`, `export-visual.spec.ts` and `touch.spec.ts` run
 their behavioral checks in every engine but compare baselines only in Chromium on macOS

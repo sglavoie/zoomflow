@@ -12,6 +12,9 @@ const vite = 'node apps/web/node_modules/vite/bin/vite.js';
 const production = Boolean(process.env.CI || process.env.ZOOMFLOW_PRODUCTION_E2E);
 const appURL = production ? previewURL : devURL;
 const productionSpec = /production\.spec\.ts$/;
+// CI always runs Firefox. Locally it is opt-in with ZOOMFLOW_E2E_FIREFOX=1, so a
+// machine where Playwright's Firefox cannot launch can still run the suite.
+const firefox = Boolean(process.env.CI || process.env.ZOOMFLOW_E2E_FIREFOX);
 // macOS 27 WebKit can abort in STScreenTimeConfigurationObserver dealloc when
 // closing a WKWebView. Disable that integration in the test browser before view
 // initialization; tests/e2e/README.md explains the native workaround and check.
@@ -54,7 +57,9 @@ export default defineConfig({
   ],
   projects: [
     { name: 'chromium', testIgnore: productionSpec, use: { ...devices['Desktop Chrome'] } },
-    { name: 'firefox', testIgnore: productionSpec, use: { ...devices['Desktop Firefox'] } },
+    ...firefox ? [
+      { name: 'firefox', testIgnore: productionSpec, use: { ...devices['Desktop Firefox'] } },
+    ] : [],
     { name: 'webkit', testIgnore: productionSpec, use: { ...devices['Desktop Safari'], launchOptions: webkitLaunchOptions } },
     // WebKit also loads the bundle: the vendored D2 build carries a WebKit-specific patch.
     ...production ? [

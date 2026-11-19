@@ -10,7 +10,9 @@ pnpm test:e2e:production
 ```
 
 `pnpm test` runs unit tests followed by browser tests. Playwright covers Chromium,
-Firefox and WebKit; install them with `pnpm exec playwright install` if needed. Browser
+Firefox and WebKit; install them with `pnpm exec playwright install` if needed. CI
+always runs Firefox; locally it is opt-in with `ZOOMFLOW_E2E_FIREFOX=1` (for example
+`ZOOMFLOW_E2E_FIREFOX=1 pnpm test:e2e --project=firefox`). Browser
 tests run against the Vite dev server locally. In CI, and locally with
 `ZOOMFLOW_PRODUCTION_E2E=1` after `pnpm build`, they load the built app through
 `vite preview` instead. The `production` and `production-webkit` projects add
