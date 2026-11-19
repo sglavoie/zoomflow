@@ -4,7 +4,11 @@
 ...@zoomflow
 direction: down
 request: Support request {class: [zf-terminal; zf-filled]}
-decision: Enough information? {class: [zf-decision; zf-filled]}
+# Raw D2 shapes work alongside the library classes.
+decision: Enough information? {
+  class: [zf-decision; zf-filled]
+  shape: diamond
+}
 clarify: Ask for details {class: [zf-step; zf-filled]}
 resolve: Resolve the issue {class: [zf-step; zf-filled]; style.border-radius: 12}
 done: Customer notified {class: [zf-terminal; zf-filled]}
