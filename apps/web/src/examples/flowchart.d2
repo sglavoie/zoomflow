@@ -1,17 +1,17 @@
 # Flowchart basics: labels, shapes, edge labels, direction and Markdown.
 # Try editing a label, then click Format. Click a shape to find its source.
 # Reference: https://d2lang.com/tour/shapes/
+...@zoomflow
 direction: down
-request: Support request {shape: oval}
-triage: Review the request
-decision: Enough information? {shape: diamond}
-clarify: Ask for details
-resolve: Resolve the issue {style.border-radius: 12}
-done: Customer notified {shape: oval}
-request -> triage -> decision
-decision -> clarify: No
-clarify -> triage: Updated request {style.stroke-dash: 4}
-decision -> resolve: Yes
+request: Support request {class: [zf-terminal; zf-filled]}
+decision: Enough information? {class: [zf-decision; zf-filled]}
+clarify: Ask for details {class: [zf-step; zf-filled]}
+resolve: Resolve the issue {class: [zf-step; zf-filled]; style.border-radius: 12}
+done: Customer notified {class: [zf-terminal; zf-filled]}
+request -> decision
+decision -> clarify: No {class: zf-no}
+clarify -> decision: Updated request {style.stroke-dash: 4}
+decision -> resolve: Yes {class: zf-yes}
 resolve -> done
 guide: |md
   **Try it**

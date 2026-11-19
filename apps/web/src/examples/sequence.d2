@@ -1,17 +1,17 @@
 # Sequence diagrams preserve message order from top to bottom.
 # Declare participants before using them inside a group.
 # Reference: https://d2lang.com/tour/sequence-diagrams/
+...@zoomflow
 shape: sequence_diagram
-customer: Customer {shape: person}
-store: Storefront
-payments: Payments
-warehouse: Warehouse
+customer: Customer {class: [zf-step; zf-icon-user; zf-filled]}
+store: Storefront {class: [zf-step; zf-filled]}
+payments: Payments {class: [zf-step; zf-filled]}
+warehouse: Warehouse {class: [zf-step; zf-filled]}
 customer -> store: Place order
-store -> store: Validate basket
 payment: Authorize payment {
+  class: zf-group
   store -> payments: Create authorization
-  payments -> store: Authorized {style.stroke-dash: 4}
+  payments -> store: Authorized {class: zf-optional}
 }
 store -> warehouse: Reserve items
-warehouse -> store: Reservation confirmed {style.stroke-dash: 4}
-store -> customer: Order confirmation {style.stroke-dash: 4}
+store -> customer: Order confirmation {class: zf-optional}

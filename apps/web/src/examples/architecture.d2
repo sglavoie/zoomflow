@@ -1,33 +1,33 @@
 # Containers, dotted paths, parent scope, variables and reusable styles.
-# All visuals are local: no imports, remote icons or images are needed.
+# The bundled stdlib supplies offline icons; the local class reuses a variable.
 # Reference: https://d2lang.com/tour/containers/
-direction: right
+...@zoomflow
+direction: down
 vars: {
   product: Bookshop
-  accent: "#dcefe4"
+  accent: "#64748b"
 }
 classes: {
   service: {
-    style.fill: ${accent}
-    style.font-color: "#203044"
-    style.stroke: "#497760"
-    style.border-radius: 10
+    style.stroke: ${accent}
   }
 }
-reader: Reader {shape: person}
+reader: Storefront {class: [zf-step; service; zf-filled]}
 platform: ${product} {
-  web: Storefront {class: service}
-  api: Catalogue API {class: service}
-  cache: Cache {shape: cylinder}
-  database: Books {shape: cylinder}
-  web -> api: HTTPS
+  class: zf-lane
+  api: Catalogue API {class: [zf-step; service; zf-filled]; link: layers.delivery}
+  cache: Cache {class: [zf-step; zf-filled]}
+  database: Books {class: [zf-step; zf-filled]}
   api <-> cache: Read / refresh
   api -> database: Query
-  _.reader -> web: Browse
+  _.reader -> api: HTTPS
 }
-queue: Event queue {shape: queue}
-worker: Email worker {class: service}
-platform.api -> queue: Order placed {style.stroke-dash: 4}
-queue -> worker: Deliver
-monitor: Metrics {shape: hexagon}
-monitor -- platform.api: Observes
+layers.delivery: {
+  direction: right
+  queue: Event queue {class: [zf-step; zf-stack; zf-filled]}
+  worker: Email worker {class: [zf-step; service; zf-filled]}
+  monitor: Metrics {class: [zf-step; zf-icon-server; zf-filled]}
+  queue -> worker: Deliver {class: zf-async}
+  monitor -- worker: Observes {class: zf-optional}
+  back: Overview {class: [zf-step; zf-filled]; link: _; near: top-left}
+}

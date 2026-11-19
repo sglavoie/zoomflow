@@ -2,14 +2,18 @@
 # Open "Show diagnostics" to see one error and one warning.
 # Repair it by changing layers.missing to layers.details below.
 # Both diagnostics disappear when the details layer is reachable.
+...@zoomflow
 direction: right
-start: Start
-inspect: Inspect details {link: layers.missing}
-finish: Finish
+start: Start {class: [zf-terminal; zf-filled]}
+inspect: Inspect details {class: [zf-step; zf-filled]; link: layers.missing}
+finish: Finish {class: [zf-terminal; zf-filled]}
 start -> inspect -> finish
 layers: {
   details: {
+    direction: right
+    validate: Validate {class: [zf-step; zf-filled]}
+    save: Save {class: [zf-step; zf-filled]}
     validate -> save
-    back: Overview {link: _; near: top-left; width: 88; height: 32; style.font-size: 14}
+    back: Overview {class: [zf-step; zf-filled]; link: _; near: top-left; width: 88; height: 32; style.font-size: 14}
   }
 }

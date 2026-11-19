@@ -12,13 +12,13 @@ export function libraryTheme(svg: string): string {
 .zf-decision.zf-filled > .shape > [fill="#e9f0fa"] { fill: #fff3db; }
 .zf-terminal.zf-filled > .shape > [fill="#e9f0fa"] { fill: #e3f3eb; }
 .zf-topic.zf-filled > .shape > [fill="#e9f0fa"] { fill: #eee9f8; }
-.zf-filled > text[fill="#203044"] { fill: #203044; }
+.zf-filled > text[fill="#203044"], .zf-filled > .shape > text[fill="#203044"] { fill: #203044; }
 @media screen and (prefers-color-scheme:dark) {
   .zf-filled > .shape > [fill="#e9f0fa"] { fill: #26364c; }
   .zf-decision.zf-filled > .shape > [fill="#e9f0fa"] { fill: #443721; }
   .zf-terminal.zf-filled > .shape > [fill="#e9f0fa"] { fill: #203d36; }
   .zf-topic.zf-filled > .shape > [fill="#e9f0fa"] { fill: #342d49; }
-  .zf-filled > text[fill="#203044"] { fill: #e4eaf2; }
+  .zf-filled > text[fill="#203044"], .zf-filled > .shape > text[fill="#203044"] { fill: #e4eaf2; }
 }
 </style></svg>`);
 }

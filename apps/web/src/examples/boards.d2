@@ -2,18 +2,22 @@
 # Layers start fresh, scenarios inherit their parent, steps accumulate changes.
 # Export Single-file HTML to keep every board and its navigation offline.
 # Reference: https://d2lang.com/tour/layers/
+...@zoomflow
 direction: right
-client: Client
-api: API
+client: Client {class: [zf-step; zf-icon-user; zf-filled]}
+api: API {class: [zf-step; zf-icon-server; zf-filled]}
 client -> api: Request
-detail: Implementation {link: layers.implementation}
-failure: Failure scenario {link: scenarios.failure}
-rollout: Rollout steps {link: steps.cache}
+detail: Implementation {class: [zf-step; zf-filled]; link: layers.implementation}
+failure: Failure scenario {class: [zf-step; zf-filled]; link: scenarios.failure}
+rollout: Rollout steps {class: [zf-step; zf-filled]; link: steps.cache}
 layers: {
   implementation: {
     direction: right
+    validate: Validate {class: [zf-step; zf-filled]}
+    execute: Execute {class: [zf-step; zf-filled]}
+    respond: Respond {class: [zf-terminal; zf-filled]}
     validate -> execute -> respond
-    back: Overview {link: _; near: top-left; width: 88; height: 32; style.font-size: 14}
+    back: Overview {class: [zf-step; zf-filled]; link: _; near: top-left; width: 88; height: 32; style.font-size: 16}
   }
 }
 scenarios: {
@@ -21,6 +25,7 @@ scenarios: {
     # These shapes and the request edge are inherited from the root.
     api.label: API unavailable
     api.style.stroke-dash: 4
+    fallback: Cached response {class: [zf-step; zf-icon-database; zf-filled]}
     client -> fallback: Use cached response
     # Inherited navigation is relative to this board: point back to root.
     detail.link: _.layers.implementation
@@ -31,17 +36,19 @@ scenarios: {
 }
 steps: {
   cache: {
+    direction: down
     api -> cache: Add cache
-    cache.shape: cylinder
+    cache: Cache {class: [zf-step; zf-icon-database; zf-filled]}
     detail.link: _.layers.implementation
     failure.link: _.scenarios.failure
     rollout.link: _.steps.worker
     rollout.label: Next step
-    back: Overview {link: _; near: top-left; width: 88; height: 32; style.font-size: 14}
+    back: Overview {class: [zf-step; zf-filled]; link: _; near: top-left; width: 88; height: 32; style.font-size: 16}
   }
   worker: {
     # Inherits the cache and API connection from the previous step.
-    api -> worker: Add background jobs
+    worker: Worker {class: [zf-step; zf-icon-server; zf-filled]}
+    api -> worker: Add background jobs {class: zf-async}
     rollout.link: _.steps.cache
     rollout.label: Previous step
   }

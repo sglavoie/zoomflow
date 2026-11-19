@@ -48,7 +48,7 @@ use **Retry preview** to try again without losing your source.
    keeps its own editor, including when moving between flows and mind maps.
    Or open **Source** to change the D2 source and watch
    the preview update. Use the
-   filename menu for built-in examples with small board pictures, **Open .d2** for a
+   filename menu for built-in examples with the same filled style and small board pictures, **Open .d2** for a
    file, or **Open folder** for a project with relative imports. In a folder,
    **Link to diagram…** and **New linked
    diagram…** on a shape's menu make it open another file of the project

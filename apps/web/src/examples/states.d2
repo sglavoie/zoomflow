@@ -1,45 +1,29 @@
-# Zoomflow boundary ports and state pieces, defined inline for portability.
-# These classes mirror the bundled zoomflow.d2 library without needing an import.
+# State transitions with explicit input/output contracts.
 # Enable "Check boundary ports": this example has one matched input and output.
-# Port identifiers must match the neighbouring shapes on the parent board.
+# Port identifiers match the neighbouring shapes on the parent board.
+...@zoomflow
 direction: right
-classes: {
-  zf-in: {shape: oval; style.stroke-dash: 3}
-  zf-out: {shape: oval; style.stroke-dash: 3}
-  zf-state: {style.border-radius: 8; style.stroke-width: 2}
-  zf-initial: {
-    shape: circle
-    label: ""
-    width: 20
-    height: 20
-  }
-  zf-final: {
-    shape: circle
-    label: ""
-    width: 24
-    height: 24
-    style.double-border: true
-  }
-}
-submitted: Submitted
-review: Review {link: layers.review}
-published: Published
+submitted: Submitted {class: [zf-step; zf-filled]}
+review: Review {class: [zf-step; zf-filled]; link: layers.review}
+published: Published {class: [zf-terminal; zf-filled]}
 submitted -> review -> published
 layers: {
   review: {
     direction: right
-    submitted: Entry {class: zf-in}
-    published: Exit {class: zf-out}
+    submitted: Entry {class: [zf-in; zf-filled]}
+    published: Exit {class: [zf-out; zf-filled]}
     start: {class: zf-initial}
-    checking: Checking {class: zf-state}
-    revision: Needs revision {class: zf-state}
-    approved: Approved {class: zf-state}
+    checking: Checking {class: [zf-state; zf-filled]}
+    revision: Needs revision {class: [zf-state; zf-filled]}
+    approved: Approved {class: [zf-state; zf-filled]}
     finish: {class: zf-final}
-    submitted -> start -> checking
-    checking -> revision: Changes requested
+    submitted -> checking
+    start -> checking
+    checking -> revision: Revise
     revision -> checking: Resubmit
     checking -> approved: Accept
-    approved -> finish -> published
-    back: Overview {link: _; near: top-left; width: 88; height: 32; style.font-size: 14}
+    approved -> finish
+    approved -> published
+    back: Overview {class: [zf-step; zf-filled]; link: _; near: top-left; width: 88; height: 32; style.font-size: 16}
   }
 }

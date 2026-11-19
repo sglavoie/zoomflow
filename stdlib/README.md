@@ -72,6 +72,30 @@ Lint warns about a class that nothing defines, which catches a misspelt name
 or a missing import. D2 reports a connection class used on a shape, such as
 `zf-to-many`, as a compile error.
 
+## Built-in examples
+
+Every example in the document picker imports the library and uses the filled look
+from **Order flow**. They also keep the D2 feature they teach:
+
+- **Flowchart basics** combines filled actions, decisions and terminals with labelled
+  branches, a Markdown note and explicit style overrides.
+- **Service architecture** uses lanes, offline icons and asynchronous connections,
+  alongside a local reusable class, variables and a parent-scope reference.
+- **Sequence diagram** keeps native sequence layout, participants, ordered messages,
+  a group and dashed replies. **Database schema** keeps native SQL tables, constraints
+  and links between columns; `zf-filled` supplies their surface and heading colours.
+  Its local B2/AA2 overrides keep column names and constraints legible when fitted.
+- **Layers, scenarios & steps** keeps independent layers, inherited scenarios and
+  cumulative steps. **States & boundary ports** uses the library's state and port
+  roles, with matched input/output identifiers.
+- **Flows & mind maps** reopens in its builders with the filled look selected.
+  **Find & fix a broken link** deliberately keeps one error and one warning until
+  `layers.missing` is changed to `layers.details`.
+
+These are ordinary editable D2 files. Their layout keeps fitted labels at least
+12 px at 1440 × 900, including detail boards, without changing the viewer's fit
+rules. Importing the library remains an author choice for other documents.
+
 ## Project style sheet
 
 Name what a shape is with a class, and keep how each class looks in one file. A

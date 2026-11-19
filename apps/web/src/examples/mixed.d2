@@ -2,13 +2,13 @@
 ...@zoomflow
 direction: down
 
-step_1: "New idea" {class: zf-terminal}
-step_2: "Plan the launch" {class: zf-step}
-step_3: "Ready to build?" {class: zf-decision}
-step_4: "Build and test" {class: zf-step}
-step_5: "Launched" {class: zf-terminal}
+step_1: "New idea" {class: [zf-terminal; zf-filled]}
+step_2: "Plan the launch" {class: [zf-step; zf-filled]}
+step_3: "Ready to build?" {class: [zf-decision; zf-filled]}
+step_4: "Build and test" {class: [zf-step; zf-filled]}
+step_5: "Launched" {class: [zf-terminal; zf-filled]}
 
-step_1 -> step_2: ""
+step_1 -> step_3: ""
 step_2 -> step_3: ""
 step_3 -> step_4: "Yes" {class: zf-yes}
 step_3 -> step_2: "No" {class: zf-no}
@@ -22,17 +22,17 @@ layers."Plan the launch": {
   ...@zoomflow
   direction: right
 
-  n: "Plan the launch" {class: zf-topic}
-  n_1: "Audience" {class: [zf-branch; zf-accent-1]}
-  n_1_1: "Early adopters" {class: [zf-leaf; zf-accent-1]}
-  n_1_2: "Small teams" {class: [zf-leaf; zf-accent-1]}
-  n_2: "Marketing" {class: [zf-branch; zf-accent-2]}
-  n_2_1: "Newsletter" {class: [zf-leaf; zf-accent-2]}
-  n_2_2: "Short videos" {class: [zf-leaf; zf-accent-2]}
-  n_3: "Product" {class: [zf-branch; zf-accent-3]}
-  n_3_1: "Pricing" {class: [zf-leaf; zf-accent-3]}
-  n_3_2: "Onboarding" {class: [zf-leaf; zf-accent-3]}
-  n_4: "Risks" {class: [zf-branch; zf-accent-4]}
+  n: "Plan the launch" {class: [zf-topic; zf-filled]}
+  n_1: "Audience" {class: [zf-branch; zf-accent-1; zf-filled]}
+  n_1_1: "Early adopters" {class: [zf-leaf; zf-accent-1; zf-filled]}
+  n_1_2: "Small teams" {class: [zf-leaf; zf-accent-1; zf-filled]}
+  n_2: "Marketing" {class: [zf-branch; zf-accent-2; zf-filled]}
+  n_2_1: "Newsletter" {class: [zf-leaf; zf-accent-2; zf-filled]}
+  n_2_2: "Short videos" {class: [zf-leaf; zf-accent-2; zf-filled]}
+  n_3: "Product" {class: [zf-branch; zf-accent-3; zf-filled]}
+  n_3_1: "Pricing" {class: [zf-leaf; zf-accent-3; zf-filled]}
+  n_3_2: "Onboarding" {class: [zf-leaf; zf-accent-3; zf-filled]}
+  n_4: "Risks" {class: [zf-branch; zf-accent-4; zf-filled]}
 
   n -- n_1: {class: zf-accent-1}
   n_1 -- n_1_1: {class: zf-accent-1}
@@ -52,10 +52,10 @@ layers."Plan the launch": {
     ...@zoomflow
     direction: right
 
-    step_1: "Sign up" {class: zf-terminal}
-    step_2: "Guided tour" {class: zf-step}
-    step_3: "First project" {class: zf-step}
-    step_4: "Invite a teammate" {class: zf-terminal}
+    step_1: "Sign up" {class: [zf-terminal; zf-filled]}
+    step_2: "Guided tour" {class: [zf-step; zf-filled]}
+    step_3: "First project" {class: [zf-step; zf-filled]}
+    step_4: "Invite a teammate" {class: [zf-terminal; zf-filled]}
 
     step_1 -> step_2: ""
     step_2 -> step_3: ""
@@ -69,10 +69,10 @@ layers."Build and test": {
   ...@zoomflow
   direction: down
 
-  step_1: "Freeze features" {class: zf-step}
-  step_2: "Tests pass?" {class: zf-decision}
-  step_3: "Release" {class: zf-step}
-  step_4: "Fix issues" {class: zf-step}
+  step_1: "Freeze features" {class: [zf-step; zf-filled]}
+  step_2: "Tests pass?" {class: [zf-decision; zf-filled]}
+  step_3: "Release" {class: [zf-step; zf-filled]}
+  step_4: "Fix issues" {class: [zf-step; zf-filled]}
 
   step_1 -> step_2: ""
   step_2 -> step_3: "Yes" {class: zf-yes}

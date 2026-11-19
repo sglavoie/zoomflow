@@ -1,7 +1,9 @@
 import { expect, test, type Page } from '@playwright/test';
 import { selectMenuOption, downloadExport } from './menu';
-import { comparesVisuals, visualSkipReason, d2Module, source, previewReady, stubAiStatus, openFolder, openView } from './helpers';
+import { comparesVisuals, visualSkipReason, d2Module, source, previewReady, stubAiStatus, openFolder, openView, openBoards } from './helpers';
 import { devURL } from './servers';
+import { pathToFileURL } from 'node:url';
+import { download } from './export-helpers';
 
 async function picturesReady(page: Page, count = 9) {
   await expect.poll(() => page.locator('.example-picture img').evaluateAll(images => images.filter(image =>
@@ -80,6 +82,139 @@ async function choose(page: Page, title: string | RegExp, name: string) {
   await expect(page.locator('#filename')).toHaveText(name);
   await ready(page);
   await expect(page.locator('#compile-error')).toBeHidden();
+}
+
+const builtIns = [
+  ['Order flow', 'order.d2', 3],
+  ['Flows & mind maps', 'mixed.d2', 4],
+  ['Flowchart basics', 'flowchart.d2', 1],
+  ['Service architecture', 'architecture.d2', 2],
+  ['Sequence diagram', 'sequence.d2', 1],
+  ['Database schema', 'schema.d2', 1],
+  ['Layers, scenarios & steps', 'boards.d2', 5],
+  ['States & boundary ports', 'states.d2', 2],
+  ['Find & fix a broken link', 'diagnostics.d2', 2],
+] as const;
+
+test('renders every built-in example with stdlib styling and readable labels', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.goto('/'); await ready(page);
+  await expect(page.locator('#example-options .example-option')).toHaveCount(builtIns.length);
+  for (const theme of ['light', 'dark'] as const) {
+    await page.emulateMedia({ colorScheme: theme });
+    for (const [title, name, expectedBoards] of builtIns) {
+      await choose(page, title, name);
+      await expect(source(page)).toContainText('...@zoomflow');
+      const outline = page.locator('.board-outline:visible').first();
+      const count = await outline.count() ? await outline.locator('.board-outline-open').count() : 1;
+      expect(count, `${name}: all boards are covered`).toBe(expectedBoards);
+      // Check detail layers, scenarios and cumulative steps as well as the picker view.
+      for (let index = 0; index < count; index++) {
+        if (index) {
+          await openBoards(page);
+          await outline.locator('.board-outline-open').nth(index).click();
+          await previewReady(page);
+        }
+        const stage = page.locator('.zf-stage');
+        const board = await stage.getAttribute('data-board');
+        await expect(stage.locator('.zf-filled').first(), `${name} ${board} ${theme}`).toBeVisible();
+        const surface = stage.locator('.zf-filled > .shape > [fill="#e9f0fa"]').first();
+        await expect(surface).toBeVisible();
+        const fills = theme === 'light'
+          ? ['rgb(237, 242, 248)', 'rgb(255, 243, 219)', 'rgb(227, 243, 235)', 'rgb(238, 233, 248)']
+          : ['rgb(38, 54, 76)', 'rgb(68, 55, 33)', 'rgb(32, 61, 54)', 'rgb(52, 45, 73)'];
+        expect(fills).toContain(await surface.evaluate(node => getComputedStyle(node).fill));
+        await expect(stage.locator('text').first()).toBeVisible();
+        // SQL headings live inside .shape; ordinary node labels are its siblings.
+        expect(await stage.locator('.zf-filled text[fill="#203044"]').evaluateAll(nodes =>
+          [...new Set(nodes.map(node => getComputedStyle(node).fill))])).toEqual([
+          theme === 'light' ? 'rgb(32, 48, 68)' : 'rgb(228, 234, 242)',
+        ]);
+        await expect(page.locator('.zf-zoom-controls span')).toHaveText('Fitted');
+        await expect.poll(() => stage.locator('text').evaluateAll(nodes => {
+          const labels = nodes.filter(node => node.textContent?.trim() && !node.closest('.appendix-icon'));
+          return Math.min(...labels.map(node => parseFloat(getComputedStyle(node).fontSize) *
+            Math.abs((node as SVGGraphicsElement).getScreenCTM()!.a)));
+        }), { message: `${name} ${board} ${theme}: every fitted label is at least 12 px` }).toBeGreaterThanOrEqual(12);
+      }
+      if (count > 1) {
+        await page.getByRole('navigation', { name: 'Breadcrumb' }).getByRole('button').first().click();
+        await ready(page);
+      }
+    }
+  }
+});
+
+async function readableTables(page: Page, theme: 'light' | 'dark') {
+  const headings = page.locator('.zf-filled > .shape > text[fill="#203044"]');
+  await expect(headings).toHaveText(['Customers', 'Orders', 'Order items']);
+  await expect.poll(() => headings.evaluateAll(nodes => [...new Set(nodes.map(node => getComputedStyle(node).fill))]))
+    .toEqual([theme === 'light' ? 'rgb(32, 48, 68)' : 'rgb(228, 234, 242)']);
+  await expect.poll(() => page.locator('.zf-filled > .shape > text').evaluateAll(nodes => {
+    const luminance = (color: string) => {
+      const [r, g, b] = color.match(/[\d.]+/g)!.slice(0, 3).map(value => {
+        const channel = Number(value) / 255;
+        return channel <= .04045 ? channel / 12.92 : ((channel + .055) / 1.055) ** 2.4;
+      });
+      return .2126 * r + .7152 * g + .0722 * b;
+    };
+    return Math.min(...nodes.map(node => {
+      const header = node.hasAttribute('fill');
+      const surface = node.parentElement!.querySelector(header ? '.class_header' : 'rect.fill-N7')!;
+      const ink = luminance(getComputedStyle(node).fill);
+      const fill = luminance(getComputedStyle(surface).fill);
+      return (Math.max(ink, fill) + .05) / (Math.min(ink, fill) + .05);
+    }));
+  })).toBeGreaterThanOrEqual(4.5);
+}
+
+test('keeps SQL table labels legible live, in frozen SVGs and in offline HTML', async ({ page, browser }, info) => {
+  await page.goto('/'); await ready(page);
+  await choose(page, 'Database schema', 'schema.d2');
+  const offline = await browser.newContext({ offline: true, reducedMotion: 'reduce', storageState: { cookies: [], origins: [] } });
+  try {
+    const exported = await offline.newPage();
+    for (const theme of ['light', 'dark'] as const) {
+      await page.emulateMedia({ colorScheme: theme });
+      await readableTables(page, theme);
+      const path = await download(page, 'svg', info);
+      // A frozen image keeps the exported palette even in the opposite system theme.
+      await exported.emulateMedia({ colorScheme: theme === 'light' ? 'dark' : 'light' });
+      await exported.goto(pathToFileURL(path).href);
+      await readableTables(exported, theme);
+    }
+    const html = await download(page, 'html', info);
+    await exported.goto(pathToFileURL(html).href);
+    for (const theme of ['light', 'dark'] as const) {
+      await exported.emulateMedia({ colorScheme: theme });
+      await readableTables(exported, theme);
+    }
+  } finally { await offline.close(); }
+});
+
+for (const theme of ['light', 'dark'] as const) for (const width of [1440, 390]) {
+  test(`built-in example styling in ${theme} at ${width}`, { tag: '@visual' }, async ({ page, browserName }) => {
+    test.skip(!comparesVisuals(browserName), visualSkipReason);
+    await page.setViewportSize({ width, height: width === 390 ? 844 : 900 });
+    await page.emulateMedia({ colorScheme: theme, reducedMotion: 'reduce' });
+    await page.goto('/'); await ready(page);
+    for (const [title, name] of builtIns) {
+      await choose(page, title, name);
+      await page.mouse.move(0, 0);
+      await expect(page.locator('.zf-stage')).toHaveScreenshot(`example-${name.slice(0, -3)}-${theme}-${width}.png`);
+      if (width !== 1440) continue;
+      const outline = page.locator('.board-outline:visible').first();
+      const count = await outline.count() ? await outline.locator('.board-outline-open').count() : 1;
+      for (let index = 1; index < count; index++) {
+        await openBoards(page);
+        await outline.locator('.board-outline-open').nth(index).click();
+        await previewReady(page);
+        await page.mouse.move(0, 0);
+        await expect(page.locator('.zf-stage')).toHaveScreenshot(`example-${name.slice(0, -3)}-board-${index}-${theme}-${width}.png`);
+      }
+    }
+  });
 }
 
 test('examples switch source and preview, start at root and export under their own name', async ({ page }) => {

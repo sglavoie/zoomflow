@@ -15,7 +15,7 @@ it.each(examples)('compiles and renders every board of $name with no imports but
   const diagnostics = lint(compiled).diagnostics;
   if (example.name === 'diagnostics.d2') {
     expect(diagnostics.map((item) => item.severity).sort()).toEqual(['error', 'warning']);
-    const repaired = await d2.compile(example.source.replaceAll('layers.missing', 'layers.details'), { layout: 'elk' });
+    const repaired = await d2.compile(projectFileSystem('index', {}, example.source.replaceAll('layers.missing', 'layers.details')), { layout: 'elk' });
     expect(lint(repaired).diagnostics).toEqual([]);
   } else {
     expect(diagnostics).toEqual([]);
