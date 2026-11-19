@@ -37,7 +37,7 @@ downloads. It is labelled as an example preview and is removed when the live
 preview arrives, the source changes, or startup fails. Other documents, saved
 export choices and non-root routes do not show it. The light and dark SVG assets
 in `apps/web/src/order-preview*.svg` are current-board SVG exports of `apps/web/src/examples/order.d2` in light and dark
-mode. Regenerate both through Export → Current board image (SVG) if the starter changes;
+mode, with viewer lighting applied to the dark asset. Regenerate both through Export → Current board image (SVG) if the starter changes;
 [font asset notes](../fonts/README.md#static-starter-images) describe the crop.
 For the loading preview, match the live fit's 16-unit margin: the current starter's
 outer SVG is 548 × 100 with viewBox `0 0 548 100`, and its nested SVG is 548 × 100

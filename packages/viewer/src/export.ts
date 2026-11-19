@@ -27,7 +27,7 @@ function dataUrl(blob: Blob): Promise<string> {
 /** Embed resources before downloading or drawing onto a canvas. A `dark` boolean freezes the theme;
  * leaving it undefined keeps D2's `prefers-color-scheme` rules so the SVG follows its reader. */
 export async function prepareExportSvg(svg: string, dark?: boolean, { interactive = false, fit = false }: { interactive?: boolean; fit?: boolean } = {}): Promise<{ svg: string; warnings: string[] }> {
-  const doc = new DOMParser().parseFromString(libraryTheme(svg), 'image/svg+xml');
+  const doc = new DOMParser().parseFromString(libraryTheme(svg, interactive), 'image/svg+xml');
   const root = doc.documentElement;
   if (doc.querySelector('parsererror') || !sanitizeSvg(root)) throw new Error('Invalid SVG from renderer');
   let removedLinks = false;

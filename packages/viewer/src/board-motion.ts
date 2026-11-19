@@ -29,13 +29,19 @@ export function setupBoardMotion(stage: HTMLElement) {
     const surface = shape?.querySelector<SVGGraphicsElement>('rect, ellipse, circle, polygon, path');
     if (!surface) return;
     const style = getComputedStyle(surface);
+    // A CSS frame cannot use an SVG paint-server URL. Carry the stdlib's two-stop
+    // vertical lighting across as CSS before the outgoing board is replaced.
+    const id = /#(zf-lit-[\w-]+)/.exec(style.fill)?.[1];
+    const gradient = id && [...stage.querySelectorAll('linearGradient')].find(node => node.id === id);
+    const stops = gradient ? [...gradient.querySelectorAll('stop')].map(stop => getComputedStyle(stop).stopColor) : [];
+    const image = stops.length === 2 ? `linear-gradient(${stops.join(', ')})` : '';
     const matrix = surface.getScreenCTM();
     const scale = matrix ? Math.hypot(matrix.a, matrix.b) : 1;
     const box = surface.getBoundingClientRect();
     // SVG radii are in diagram units. Paths (diamonds, cylinders, etc.) keep a
     // simple bounding frame; even an oval's radius is bounded to a gentle corner.
     const radius = Number.parseFloat(style.getPropertyValue('rx') || style.borderTopLeftRadius) || 0;
-    return { fill: style.fill === 'none' ? 'transparent' : style.fill, stroke: style.stroke === 'none' ? 'transparent' : style.stroke, strokeWidth: (Number.parseFloat(style.strokeWidth) || 0) * scale,
+    return { fill: image ? stops[0] : style.fill === 'none' ? 'transparent' : style.fill, image, stroke: style.stroke === 'none' ? 'transparent' : style.stroke, strokeWidth: (Number.parseFloat(style.strokeWidth) || 0) * scale,
       radius: Math.min(radius * scale, box.width / 2, box.height / 2, surface.localName === 'rect' ? Infinity : 24) };
   }
   function capture(anchor?: Element) {
@@ -143,13 +149,18 @@ export function setupBoardMotion(stage: HTMLElement) {
       frame = document.createElement('div');
       frame.className = 'zf-board-frame';
       frame.setAttribute('aria-hidden', 'true');
-      Object.assign(frame.style, { borderColor: colors.stroke, borderWidth: `${colors.strokeWidth}px` });
+      Object.assign(frame.style, { backgroundImage: colors.image, backgroundColor: colors.fill, borderColor: colors.stroke, borderWidth: `${colors.strokeWidth}px` });
       stage.append(frame);
       overlays.add(frame);
       const shapeBox = { left: `${origin.x}px`, top: `${origin.y}px`, width: `${origin.width}px`, height: `${origin.height}px`, borderRadius: `${colors.radius}px` };
       const stageBox = { left: '0px', top: '0px', width: `${width}px`, height: `${height}px`, borderRadius: getComputedStyle(stage).borderTopLeftRadius };
       pending.push(animate(frame, direction === 'in' ? [shapeBox, stageBox] : [stageBox, shapeBox], duration, easing));
-      pending.push(animate(frame, direction === 'in' ? [
+      // Gradients fade as a whole; background-color interpolation only fades solid paint.
+      pending.push(animate(frame, colors.image ? (direction === 'in' ? [
+        { opacity: 1 }, { opacity: 1, offset: 0.3 }, { opacity: 0, offset: 0.8 }, { opacity: 0 },
+      ] : [
+        { opacity: 0 }, { opacity: 1, offset: 0.4 }, { opacity: 1, offset: 0.65 }, { opacity: 0 },
+      ]) : direction === 'in' ? [
         { backgroundColor: colors.fill, opacity: 1 },
         { backgroundColor: colors.fill, opacity: 1, offset: 0.3 },
         { backgroundColor: 'transparent', opacity: 1, offset: 0.8 },

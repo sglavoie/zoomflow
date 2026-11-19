@@ -14,6 +14,13 @@ opens the editor; the choice is remembered for each pane, including existing wor
 **View** holds layout, theme, the command palette (⌘K / Ctrl+K), D2 reference,
 and keyboard shortcuts. On small screens,
 Preview and Source tabs keep the diagram and editor usable one at a time.
+Light, Dark, and System select the workspace theme. Dark mode uses deeper, slightly
+warmer surfaces, subtly lit stdlib filled nodes, and brighter neutral connectors.
+Offline HTML uses the same colors and lighting and follows its reader's system
+theme. Downloaded SVG and PNG images retain their flat palette and the theme
+selected when downloading. Custom diagram fills and palette overrides remain as authored.
+Source syntax, detail badges, text, focus rings and control outlines keep AA contrast
+in both themes.
 
 The workspace opens local `.d2` files or a folder of related D2 files and starts
 with the styled order drill-down example. Click the filename dropdown to explore the

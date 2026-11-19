@@ -73,7 +73,7 @@ test('HTML export follows its reader\'s color scheme and shares viewer controls'
   const background = () => offline.locator('body').evaluate((node) => getComputedStyle(node).backgroundColor);
   expect(await background()).toBe('rgb(244, 246, 249)');
   await offline.emulateMedia({ colorScheme: 'dark' });
-  expect(await background()).toBe('rgb(17, 23, 34)');
+  expect(await background()).toBe('rgb(18, 21, 30)');
   const canvas = (await offline.locator('.zf-stage').boundingBox())!;
   expect((await offline.locator('.zf-zoom-controls').boundingBox())!.y).toBeGreaterThanOrEqual(canvas.y + canvas.height);
   expect(await offline.locator('.zf-visually-hidden').evaluate((node) => ({
@@ -205,12 +205,12 @@ test('exported HTML restyles its canvas and link badges when the reader switches
   }));
   const light = await colors();
   expect(light.stage).toBe(light.board);
-  expect([light.badge, light.ink]).toEqual(['rgb(255, 255, 255)', 'rgb(130, 114, 180)']);
+  expect([light.badge, light.ink]).toEqual(['rgb(255, 255, 255)', 'rgb(121, 104, 170)']);
   await offline.emulateMedia({ colorScheme: 'dark' });
   await expect.poll(async () => (await colors()).stage).not.toBe(light.stage);
   const dark = await colors();
   expect(dark.stage).toBe(dark.board);
-  expect([dark.badge, dark.ink]).toEqual(['rgb(24, 34, 49)', 'rgb(130, 114, 180)']);
+  expect([dark.badge, dark.ink]).toEqual(['rgb(26, 32, 44)', 'rgb(173, 154, 217)']);
   await offline.emulateMedia({ colorScheme: 'light' });
   await expect.poll(colors).toEqual(light);
 });

@@ -26,3 +26,22 @@ it('coordinates elevated connectors without changing an authored heavier stroke'
   expect(result).toContain('stroke-width:3;');
   expect(libraryTheme(result)).toBe(result);
 });
+
+it('carries viewer lighting through interactive preparation without adding it to image exports', async () => {
+  const input = svg.replace('</svg>', '<style>@media (prefers-color-scheme:dark){.d2 .stroke-B1{stroke:#8eaed7;}.d2 .fill-N7{fill:#121c2a;}}</style></svg>');
+  const viewer = libraryTheme(input, true);
+  expect(viewer).toContain('id="zf-lit-step"');
+  expect(viewer).toContain('fill: #0e111d');
+  expect(viewer).toContain('stroke: #a1bbde');
+  expect(libraryTheme(viewer, true)).toBe(viewer);
+  const interactive = await prepareExportSvg(input, undefined, { interactive: true });
+  expect(interactive.svg).toContain('id="zf-library-surfaces"');
+  expect(interactive.svg).toContain('prefers-color-scheme:dark');
+  const image = await prepareExportSvg(input, true);
+  expect(image.svg).not.toContain('zf-lit-');
+  expect(image.svg).toContain('fill: #26364c');
+  expect(image.svg).not.toContain('#a1bbde');
+  const custom = libraryTheme(input.replace('#8eaed7', '#123456').replace('#121c2a', '#223344'), true);
+  expect(custom).not.toContain('#a1bbde');
+  expect(custom).not.toContain('fill: #0e111d');
+});

@@ -168,7 +168,7 @@ for (const { mobile, touch } of [{ mobile: false, touch: false }, { mobile: true
         // Using the wall clock here can race installation in Firefox.
         await page.clock.install({ time: new Date('2026-01-01T00:00:00Z') });
         await page.clock.pauseAt(new Date('2026-01-02T00:00:00Z'));
-        let before: { label: string; x: number; y: number; width: number; height: number }[];
+        let before: { label: string; ink: string; fill: string; x: number; y: number; width: number; height: number }[];
         try {
           await page.goto('/', { waitUntil: 'domcontentloaded' });
           const stage = page.locator('.zf-stage');
@@ -191,7 +191,10 @@ for (const { mobile, touch } of [{ mobile: false, touch: false }, { mobile: true
               const font = getComputedStyle(text);
               return document.fonts.load(`${font.fontSize} ${font.fontFamily}`, text.textContent ?? '');
             }));
-            const result = [...svg.querySelectorAll('text')].map(text => ({ label: text.textContent!, ...text.getBoundingClientRect().toJSON() }));
+            const result = [...svg.querySelectorAll('text')].map(text => ({ label: text.textContent!,
+              ink: getComputedStyle(text).fill,
+              fill: getComputedStyle(text.parentElement!.querySelector('.shape > [fill="#e9f0fa"]')!).fill,
+              ...text.getBoundingClientRect().toJSON() }));
             box.remove(); return result;
           });
         } finally {
@@ -203,7 +206,9 @@ for (const { mobile, touch } of [{ mobile: false, touch: false }, { mobile: true
         expect(before.map(text => text.label)).toEqual(['Browse', 'Checkout', 'Receipt']);
         for (const old of before) {
           const live = await page.locator('.zf-stage text').getByText(old.label, { exact: true })
-            .evaluate(text => text.getBoundingClientRect().toJSON());
+            .evaluate(text => ({ ...text.getBoundingClientRect().toJSON(), ink: getComputedStyle(text).fill,
+              fill: getComputedStyle(text.parentElement!.querySelector('.shape > [fill="#e9f0fa"]')!).fill }));
+          expect(live.ink).toBe(old.ink); expect(live.fill).toBe(old.fill);
           for (const key of ['x', 'y', 'width', 'height'] as const) expect(Math.abs(live[key] - old[key])).toBeLessThan(1);
         }
       });

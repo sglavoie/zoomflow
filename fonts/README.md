@@ -45,7 +45,11 @@ platform fallback, as in the compiler. Board snapshots copy the shared `zoomflow
 To regenerate `apps/web/src/order-preview{,-dark}.svg`, start `pnpm dev`, open
 the untouched Order flow, and download the current-board SVG once in each theme
 with the Presentation frame off. Use the browser compiler and bundled fonts,
-including the bundled `zoomflow.d2` import. The image export has 24 units of
+including the bundled `zoomflow.d2` import. For the dark loading asset, apply
+`libraryTheme(svg, true)` from `packages/viewer/src/library-theme.ts` to the
+downloaded SVG and freeze its added dark query with `@media all`. This keeps the
+loading preview aligned with viewer lighting while image downloads stay flat.
+The image export has 24 units of
 padding; reduce each side by 8 to match this short board's live 16-unit fit.
 Add 8 to the nested SVG viewBox's x/y and subtract 16 from its width/height;
 set both SVGs' dimensions to that width/height and the outer viewBox to

@@ -44,4 +44,16 @@
   .zf-topic.zf-filled &gt; .shape &gt; [fill="#e9f0fa"] { fill: #342d49; }
   .zf-filled &gt; text[fill="#203044"] { fill: #e4eaf2; }
 }
+</style><defs><linearGradient id="zf-lit-step" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#2c374b"/><stop offset="1" stop-color="#252e3f"/></linearGradient><linearGradient id="zf-lit-decision" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#483c2c"/><stop offset="1" stop-color="#3c3225"/></linearGradient><linearGradient id="zf-lit-terminal" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#294238"/><stop offset="1" stop-color="#22382f"/></linearGradient><linearGradient id="zf-lit-topic" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#3b344d"/><stop offset="1" stop-color="#312b41"/></linearGradient></defs><style id="zf-library-surfaces">
+@media all {
+  .zf-filled > .shape > [fill="#e9f0fa"] { fill: url(#zf-lit-step); }
+  .zf-decision.zf-filled > .shape > [fill="#e9f0fa"] { fill: url(#zf-lit-decision); }
+  .zf-terminal.zf-filled > .shape > [fill="#e9f0fa"] { fill: url(#zf-lit-terminal); }
+  .zf-topic.zf-filled > .shape > [fill="#e9f0fa"] { fill: url(#zf-lit-topic); }
+svg.d2-svg > rect.fill-N7 { fill: #0e111d; }
+  /* Match only the stdlib's neutral connector palette, including its arrowheads. */
+
+  .connection.stroke-B1, marker .stroke-B1 { stroke: #a1bbde; }
+  marker .fill-B1 { fill: #a1bbde; }
+}
 </style></svg>

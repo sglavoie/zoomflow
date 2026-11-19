@@ -9,7 +9,7 @@ import { libraryTheme } from './library-theme';
 export function viewerSvg(svg: string, board: Board, boards: ReadonlyMap<string, Board>,
   diagnostics: readonly LintDiagnostic[], sourceShapes: readonly ShapeSource[],
   resolve: (href: string) => ReturnType<typeof resolveLink>): SVGElement {
-  const doc = new DOMParser().parseFromString(libraryTheme(svg), 'image/svg+xml');
+  const doc = new DOMParser().parseFromString(libraryTheme(svg, true), 'image/svg+xml');
   // File content can contain labels and links; never insert executable markup. Sanitize while
   // the parsed SVG is still inert: importing an element into this document can start loading it.
   if (doc.querySelector('parsererror') || !sanitizeSvg(doc.documentElement)) throw new Error(`Invalid SVG for ${board.name}`);

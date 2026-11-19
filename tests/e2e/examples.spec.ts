@@ -123,8 +123,8 @@ test('renders every built-in example with stdlib styling and readable labels', a
         await expect(surface).toBeVisible();
         const fills = theme === 'light'
           ? ['rgb(237, 242, 248)', 'rgb(255, 243, 219)', 'rgb(227, 243, 235)', 'rgb(238, 233, 248)']
-          : ['rgb(38, 54, 76)', 'rgb(68, 55, 33)', 'rgb(32, 61, 54)', 'rgb(52, 45, 73)'];
-        expect(fills).toContain(await surface.evaluate(node => getComputedStyle(node).fill));
+          : ['step', 'decision', 'terminal', 'topic'].map(role => `url("#zf-lit-${role}")`);
+        expect(fills).toContain(await surface.evaluate(node => getComputedStyle(node).fill.replace(/url\("[^"#]+#/, 'url("#')));
         await expect(stage.locator('text').first()).toBeVisible();
         // SQL headings live inside .shape; ordinary node labels are its siblings.
         expect(await stage.locator('.zf-filled text[fill="#203044"]').evaluateAll(nodes =>
@@ -216,8 +216,13 @@ async function readableTables(page: Page, theme: 'light' | 'dark') {
       const header = node.hasAttribute('fill');
       const surface = node.parentElement!.querySelector(header ? '.class_header' : 'rect.fill-N7')!;
       const ink = luminance(getComputedStyle(node).fill);
-      const fill = luminance(getComputedStyle(surface).fill);
-      return (Math.max(ink, fill) + .05) / (Math.min(ink, fill) + .05);
+      const paint = getComputedStyle(surface).fill;
+      const gradient = paint.startsWith('url(') ? document.getElementById(paint.match(/#([^" )]+)/)![1]) : null;
+      const fills = gradient ? [...gradient.querySelectorAll('stop')].map(stop => getComputedStyle(stop).stopColor) : [paint];
+      return Math.min(...fills.map(color => {
+        const fill = luminance(color);
+        return (Math.max(ink, fill) + .05) / (Math.min(ink, fill) + .05);
+      }));
     }));
   })).toBeGreaterThanOrEqual(4.5);
 }

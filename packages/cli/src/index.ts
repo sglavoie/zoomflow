@@ -43,8 +43,8 @@ const unescapeXml = (text: string) => text.replace(/&(?:#(\d+)|#x([\da-f]+)|(amp
  * Other anchors stay but lose their href, so `javascript:` and `data:` links never reach the output.
  * `files` says whether the export holds the file a link's relative path opens.
  */
-function safeLinks(svg: string, boards: boolean, files?: (path: string) => boolean): string {
-  return libraryTheme(svg).replace(/<a\b(?:[^>"]|"[^"]*")*>/g, (anchor) => anchor.replace(/\s(?:xlink:)?href="([^"]*)"/g, (attribute, href: string) => {
+function safeLinks(svg: string, boards: boolean, files?: (path: string) => boolean, interactive = false): string {
+  return libraryTheme(svg, interactive).replace(/<a\b(?:[^>"]|"[^"]*")*>/g, (anchor) => anchor.replace(/\s(?:xlink:)?href="([^"]*)"/g, (attribute, href: string) => {
     const link = classifyHref(unescapeXml(href));
     return link.kind === 'external' || (boards && link.kind === 'board') || (link.kind === 'file' && files?.(link.path)) ? attribute : '';
   }));
@@ -400,7 +400,7 @@ export async function main(args = process.argv.slice(2)): Promise<number> {
               if (format === 'png') binaries.set(JSON.stringify([file.path, board.id]), data);
               // Links from imported files are rewritten to resolve from this file, as the atlas resolves them.
               const link = (item: { id: string; link?: string }) => item.link && rebaseFileHref(item.link, sources.get(JSON.stringify([board.id, item.id])), file.path);
-              return format === 'png' ? '' : safeLinks(compilerLinks(data.toString('utf8'), board.diagram, link), true, follows);
+              return format === 'png' ? '' : safeLinks(compilerLinks(data.toString('utf8'), board.diagram, link), true, follows, format === 'html');
             }, format === 'html' ? file.diagnostics : [], { concurrency: availableParallelism(), skipEmpty: format === 'html',
               extension: format === 'png' ? 'png' : 'svg' });
             rendered.push({ path: file.path, name: file.path.replace(/\.d2$/i, ''), boards: exported });

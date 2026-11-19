@@ -50,8 +50,8 @@ test('filled roles distinguish decisions and outcomes in both themes and elevate
   expect(await fill('step_2')).toBe('rgb(255, 243, 219)');
   expect(await fill('step_3')).toBe('rgb(227, 243, 235)');
   await page.locator('#workspace-view > summary').click(); await page.locator('#theme button[value="dark"]').click();
-  await expect.poll(() => fill('step_2')).toBe('rgb(68, 55, 33)');
-  await expect.poll(() => fill('step_3')).toBe('rgb(32, 61, 54)');
+  await expect.poll(() => fill('step_2')).toBe('url("#zf-lit-decision")');
+  await expect.poll(() => fill('step_3')).toBe('url("#zf-lit-terminal")');
   const size = await shape(page, 'step_4').locator('text').evaluate(node => getComputedStyle(node).fontSize);
   await page.locator('.board-appearance > details > summary').click();
   await page.locator('.board-appearance').getByRole('button', { name: 'Elevated', exact: true }).click(); await previewReady(page);

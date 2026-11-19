@@ -74,7 +74,7 @@ async function sampleMotion(page: Page, progress: number) {
       return { opacity: Number(style.opacity), scale: matrix.a, scaleY: matrix.d, x: matrix.e, y: matrix.f };
     };
     return { incoming: read(content), outgoing: read(snapshot), frame: frame ? {
-      ...frame.getBoundingClientRect().toJSON(), fill: getComputedStyle(frame).backgroundColor,
+      ...frame.getBoundingClientRect().toJSON(), fill: getComputedStyle(frame).backgroundColor, image: getComputedStyle(frame).backgroundImage, opacity: Number(getComputedStyle(frame).opacity),
       stroke: getComputedStyle(frame).borderColor, strokeWidth: Number.parseFloat(getComputedStyle(frame).borderTopWidth), radius: Number.parseFloat(getComputedStyle(frame).borderTopLeftRadius),
     } : null, gridRadius: Number.parseFloat((stage as HTMLElement).style.getPropertyValue('--zf-grid-radius')), width: stage.clientWidth, height: stage.clientHeight };
   }, progress);
@@ -138,7 +138,10 @@ for (const runtime of ['live', 'offline']) for (const colorScheme of ['light', '
         outer.x += stage.clientLeft; outer.y += stage.clientTop;
         const surface = link.querySelector<SVGGraphicsElement>('[data-shape-id] rect')!;
         const style = getComputedStyle(surface);
-        const paint = { fill: style.fill, stroke: style.stroke, radius: Number.parseFloat(style.getPropertyValue('rx')) * surface.getScreenCTM()!.a };
+        const id = /#(zf-lit-[\w-]+)/.exec(style.fill)?.[1];
+        const gradient = id && [...stage.querySelectorAll('linearGradient')].find(node => node.id === id);
+        const stops = gradient ? [...gradient.querySelectorAll('stop')].map(stop => getComputedStyle(stop).stopColor) : [];
+        const paint = { fill: stops[0] || style.fill, stops, stroke: style.stroke, radius: Number.parseFloat(style.getPropertyValue('rx')) * surface.getScreenCTM()!.a };
         const siblings = [...stage.querySelectorAll('[data-shape-id]')].filter(node => !link.contains(node)).map(node => node.getBoundingClientRect().toJSON());
         link.querySelector('.appendix-icon')!.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
         return { shape, outer, paint, siblings };
@@ -153,6 +156,7 @@ for (const runtime of ['live', 'offline']) for (const colorScheme of ['light', '
       await expect(stage.locator('.zf-board-frame')).toHaveAttribute('aria-hidden', 'true');
       for (const key of ['x', 'y', 'width', 'height'] as const) expect(start.frame![key]).toBeCloseTo(shape[key], 0);
       expect(start.frame!.fill).toBe(paint.fill);
+      expect(start.frame!.image).toBe(paint.stops.length ? `linear-gradient(${paint.stops.join(', ')})` : 'none');
       expect(start.frame!.stroke).toBe(paint.stroke);
       expect(start.frame!.radius).toBeCloseTo(paint.radius, 1);
       const hidden = await stage.locator('.zf-board-snapshot').evaluate((image: HTMLImageElement) => {
@@ -163,6 +167,7 @@ for (const runtime of ['live', 'offline']) for (const colorScheme of ['light', '
       expect(start.incoming.scale).toBeCloseTo(shape.width / start.width);
       expect(start.outgoing.scale).toBe(1);
       await sampleHandoff(page, info, 'in');
+      if (paint.stops.length) expect((await sampleMotion(page, .8)).frame!.opacity).toBeCloseTo(0, 6);
       const end = await sampleMotion(page, 0.999);
       const zoom = Math.max(end.width / shape.width, end.height / shape.height);
       expect(end.outgoing.scale).toBeCloseTo(zoom, 2);

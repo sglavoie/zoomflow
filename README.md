@@ -73,7 +73,8 @@ use **Retry preview** to try again without losing your source.
    Commands follow the last focused pane and list only available actions.
    A small minimap appears when part of a board is outside the view; click or drag it to pan.
    It also works offline and stays out of downloaded images.
-   A quiet dot grid follows pan and zoom, including in offline HTML, and stays out of SVG and PNG images. **Find in diagram** (⌘⇧F / Ctrl+Shift+F)
+   A quiet dot grid follows pan and zoom, including in offline HTML, and stays out of SVG and PNG images.
+   Dark mode uses warmer surfaces and softly lit filled nodes in the workspace and offline HTML; SVG and PNG downloads keep their flat image palette. **Find in diagram** (⌘⇧F / Ctrl+Shift+F)
    finds board names and shape labels across the current document and jumps to a match.
    In an open folder, **Find in project** searches every project file, including unsaved
    edits and unlinked diagrams; ⌘⇧F / Ctrl+Shift+F opens project search there.

@@ -3,7 +3,7 @@ export const viewerStyle = `
 .ui-icon { display: inline-block; width: 16px; height: 16px; flex-shrink: 0; vertical-align: -3px; margin-right: 6px; }
 
 /* One violet accent connects a detail node, its preview and the breadcrumb inside it. */
-.zf-detail-link, .zf-detail-crumb { --zf-detail-accent: #8272b4; }
+.zf-detail-link, .zf-detail-crumb { --zf-detail-accent: var(--detail-accent, #7968aa); }
 .zf-depth-sheet { pointer-events: none; transform: translate(4px, -4px); opacity: .7; }
 .zf-depth-2 { transform: translate(8px, -8px); opacity: .4; }
 .zf-depth-sheet > * { fill: var(--surface, #fff); stroke: var(--zf-detail-accent); stroke-width: 1; }
@@ -28,7 +28,7 @@ export const viewerStyle = `
 .zf-context { padding-top: 8px; font-size: 13px; line-height: 1.5; overflow-wrap: anywhere; }
 .zf-message { min-height: 26px; padding: 6px 0; }
 .zf-message:not(:has(> :not(:empty))) { min-height: 12px; padding: 0; }
-.zf-message > [role="alert"] { color: #d64e52; }
+.zf-message > [role="alert"] { color: var(--danger, #a73539); }
 .zf-stage-area { position: relative; flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-rows: minmax(0, 1fr) minmax(40px, max-content); gap: var(--space-2); }
 .zf-zoom-controls { grid-row: 2; grid-column: 1; justify-self: start; align-self: center; display: flex; align-items: center; gap: 2px; padding: 2px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); }
 .zf-zoom-controls button { border: 0; min-width: 36px; min-height: 32px; padding: 5px; background: transparent; }

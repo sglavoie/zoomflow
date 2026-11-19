@@ -8,6 +8,38 @@ import { temp, browser, run, success, embedded } from './cli-helpers';
 
 export function registerCliExportCases() {
 
+  it('lights CLI HTML like the viewer while standalone and ZIP images keep their flat palette', async () => {
+    const input = 'apps/web/src/examples/order.d2';
+    const htmlPath = join(temp, 'lit-order.html');
+    const svgPath = join(temp, 'flat-order.svg');
+    const zipPath = join(temp, 'flat-order.zip');
+    const results = await Promise.all([
+      run(['export', input, '--format', 'html', '-o', htmlPath]),
+      run(['export', input, '-o', svgPath]),
+      run(['export', input, '--all', '-o', zipPath]),
+    ]);
+    results.forEach(success);
+    const html = await readFile(htmlPath, 'utf8');
+    expect(html).toContain('zf-library-surfaces');
+    expect(await readFile(svgPath, 'utf8')).not.toContain('zf-lit-');
+    for (const bytes of Object.values(unzipSync(await readFile(zipPath)))) expect(strFromU8(bytes)).not.toContain('zf-lit-');
+    const page = await browser.newPage({ offline: true, colorScheme: 'dark', reducedMotion: 'reduce' });
+    try {
+      await page.goto(pathToFileURL(htmlPath).href);
+      const stage = page.locator('.zf-stage');
+      expect(await stage.evaluate(node => getComputedStyle(node).backgroundColor)).toBe('rgb(14, 17, 29)');
+      const paint = () => stage.locator('.zf-step.zf-filled > .shape > [fill="#e9f0fa"]').first().evaluate(node => getComputedStyle(node).fill);
+      expect(await paint()).toBe('url("#zf-lit-step")');
+      expect(await stage.locator('#zf-lit-step stop').evaluateAll(nodes => nodes.map(node => getComputedStyle(node).stopColor)))
+        .toEqual(['rgb(44, 55, 75)', 'rgb(37, 46, 63)']);
+      await stage.locator('a[data-board="root.layers.checkout"] .appendix-icon').click();
+      expect(await paint()).toBe('url("#zf-lit-step")');
+      await page.emulateMedia({ colorScheme: 'light' });
+      expect(await paint()).toBe('rgb(237, 242, 248)');
+    } finally { await page.close(); }
+  });
+
+
   it('exports PNG ZIPs without file/folder collisions for boards named like images', async () => {
     const input = join(temp, 'png-names.d2');
     const output = join(temp, 'png-names.zip');

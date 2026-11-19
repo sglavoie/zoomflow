@@ -163,7 +163,7 @@ test('style controls preserve attachments and filled shapes follow dark mode', a
   await expect(page.getByRole('link', { name: 'Open Checkout board', exact: true })).toBeVisible();
   await page.locator('#workspace-view > summary').click();
   await page.locator('#theme button[value="dark"]').click();
-  await expect.poll(() => shape(page, 'Browse').locator('.shape rect').evaluate(node => getComputedStyle(node).fill)).toBe('rgb(38, 54, 76)');
+  await expect.poll(() => shape(page, 'Browse').locator('.shape rect').evaluate(node => getComputedStyle(node).fill)).toBe('url("#zf-lit-step")');
   await expect.poll(() => shape(page, 'Browse').locator('text').evaluate(node => getComputedStyle(node).fill)).toBe('rgb(228, 234, 242)');
 });
 
