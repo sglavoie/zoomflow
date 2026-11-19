@@ -1,7 +1,7 @@
 import { selectMenuOption } from './menu';
 import { expect, test } from '@playwright/test';
 import { openDownloads } from './menu';
-import { source, previewReady, stubAiStatus, chooseExample } from './helpers';
+import { source, previewReady, stubAiStatus, chooseExample, editorText } from './helpers';
 
 /** Documents: drafts, recovery, saving to disk, downloads and removal with undo. */
 
@@ -32,14 +32,23 @@ test('two drafts opened from the same disk file cannot overwrite a pending save'
   await page.locator('#create-open > summary').click();
   await page.locator('#file').click();
   await expect(page.locator('#filename')).toHaveText('shared.d2');
-  await source(page).fill('x: First draft');
+  await previewReady(page);
+  // CodeMirror's select-all updates its model selection synchronously. A native
+  // DOM fill can lose its selection while the opening compile updates the editor.
+  await source(page).focus();
+  await page.keyboard.press('ControlOrMeta+a');
+  await page.keyboard.insertText('x: First draft');
+  expect(await editorText(page)).toBe('x: First draft');
   await selectMenuOption(page, '#layout', 'quad');
   await page.locator('#pane-start-empty-b').click();
   await page.locator('#create-open > summary').click();
   await page.locator('#file').click();
   await expect(page.locator('#pane-document-b .pane-document-name')).toHaveText('shared.d2');
   await previewReady(page, 'b');
-  await page.locator('#editor-b .cm-content').fill('x: Second draft');
+  await page.locator('#editor-b .cm-content').focus();
+  await page.keyboard.press('ControlOrMeta+a');
+  await page.keyboard.insertText('x: Second draft');
+  await expect(page.locator('#editor-b .cm-content')).toHaveText('x: Second draft');
   // Save in the inactive pane must activate it and write on the same click, including in WebKit.
   await page.locator('#save-file').click();
   await expect.poll(() => page.evaluate(() => typeof (window as any).saveProbe.finish)).toBe('function');
