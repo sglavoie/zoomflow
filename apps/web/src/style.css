@@ -1804,6 +1804,12 @@ footer {
   color: var(--mark-ink);
   border-radius: 2px;
 }
+.reference-topic pre,
+.reference-topic code,
+.empty-board-help code,
+.ai-error-details pre {
+  font-family: "Geist Mono", monospace;
+}
 .reference-topic pre {
   padding: 10px var(--space-3);
   overflow: auto;
@@ -2354,7 +2360,7 @@ footer {
 }
 .zf-stage .zf-hidden-label {
   fill: var(--muted);
-  font: 11px sans-serif;
+  font: 11px var(--zf-ui-font, Geist), sans-serif;
   pointer-events: none;
 }
 /* Steps and topics open their board from the arrow badge alone. */
