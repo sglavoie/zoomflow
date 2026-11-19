@@ -80,3 +80,24 @@ test('an engine interruption offers retry without blaming a source file', async 
   await expect(page.locator('.zf-stage')).toHaveAttribute('data-board', 'root.layers.Sleep');
   await expect(page.locator('[data-shape-id="Night"]')).toHaveClass(/zf-source-selected/);
 });
+
+test('keeps a pressed result attached while project indexing publishes more files', async ({ page }) => {
+  await page.evaluate(() => { (window as any).projectSearchProbe.hold = true; });
+  await page.getByRole('button', { name: 'Find in project', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: 'Find in project', exact: true });
+  await dialog.getByRole('searchbox').fill('Home');
+  const match = dialog.getByRole('button', { name: 'Home Shape · broken/links.d2 · Links', exact: true });
+  await expect(match).toBeVisible();
+  await expect.poll(() => page.evaluate(() => typeof (window as any).projectSearchProbe.release)).toBe('function');
+  await match.evaluate(element => { (window as any).pressedSearchResult = element; });
+  const bounds = (await match.boundingBox())!;
+  await page.mouse.move(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2);
+  await page.mouse.down();
+  await page.evaluate(() => (window as any).projectSearchProbe.release());
+  await expect(dialog).toContainText('Searched 5 files.');
+  expect(await match.evaluate(element => element === (window as any).pressedSearchResult)).toBe(true);
+  await page.mouse.up();
+  await expect(dialog).toBeHidden();
+  await expect(page.locator('#filename')).toHaveAttribute('title', 'atlas/broken/links.d2');
+  await previewReady(page);
+});

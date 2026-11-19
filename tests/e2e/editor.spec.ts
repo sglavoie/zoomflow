@@ -278,9 +278,12 @@ test('formats nested boards with D2 rules, refreshes navigation, and supports un
 });
 
 test('format errors leave source and last good preview intact', async ({ page }) => {
+  // Compare settled preview markup; arrival has its own motion regressions.
+  await page.emulateMedia({ reducedMotion: 'reduce' });
   await page.goto('/');
   await ready(page);
   await expect(page.locator('.zf-stage')).not.toHaveAttribute('data-transition');
+  await page.evaluate(() => document.fonts.ready);
   const before = await previewMarkup(page);
   await replace(page, 'broken: {');
   await page.getByRole('button', { name: 'Format', exact: true }).click();

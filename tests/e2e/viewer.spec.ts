@@ -194,6 +194,8 @@ test('collapses sibling-board cycles while preserving browser history', async ({
   await expect(crumbs).toHaveText(['Cycle', 'A', 'B']);
   await drill(page, 'root.layers.A');
   await expect(crumbs).toHaveText(['Cycle', 'A']);
+  // Leave link hover before testing Escape navigation: a shown card owns Escape.
+  await page.mouse.move(0, 0);
   await page.goBack();
   await board(page, 'root.layers.B');
   await expect(crumbs).toHaveText(['Cycle', 'A', 'B']);

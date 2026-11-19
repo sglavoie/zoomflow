@@ -53,8 +53,11 @@ test('finds a shape in an unvisited, unlinked file, frames it and returns throug
   await source(page).press('ControlOrMeta+Shift+f');
   await expect(query(page)).toBeFocused();
   await query(page).fill('  REFUND APPROVAL  ');
-  await expect(matches(page)).toHaveCount(2);
   await settled(page);
+  // The step also names the Other board it links to, so both are search matches.
+  await expect(matches(page)).toHaveCount(3);
+  await expect(matches(page).nth(1)).toHaveText('Refund approvalBoard · finance/C# refunds.d2 · C# refunds › Refund approval');
+  await expect(matches(page).last()).toHaveText('Refund approvalShape · work.d2 · Work');
   await expect(matches(page).first()).toHaveText('Refund approvalShape · finance/C# refunds.d2 · C# refunds › Refunds');
   await query(page).press('ArrowDown');
   await page.keyboard.press('Enter');
@@ -68,6 +71,8 @@ test('finds a shape in an unvisited, unlinked file, frames it and returns throug
   await expect(shape.locator('..')).toBeFocused();
   expect(await withEditorView(page, view => view.state.doc.sliceString(view.state.selection.main.from, view.state.selection.main.to))).toBe('step');
   await expect(page.locator('.zf-breadcrumbs')).toContainText('index');
+  // Keep incidental hover cards out of this history/keyboard navigation check.
+  await page.mouse.move(0, 0);
   await page.goBack();
   await expect(page.locator('#filename')).toHaveAttribute('title', 'atlas/index.d2');
   await expect(stage(page)).toHaveAttribute('data-board', 'root.layers.Start');
@@ -132,7 +137,8 @@ test('activates a result already open in the other pane without duplicating its 
   await chooseSecond(page, 'work.d2');
   const hash = await page.evaluate(() => location.hash);
   await find(page, 'Refund approval');
-  await expect(matches(page)).toHaveCount(2);
+  await settled(page);
+  await expect(matches(page)).toHaveCount(3);
   await matches(page).filter({ hasText: 'work.d2' }).click();
   await expect(page.locator('#pane-b')).toHaveAttribute('data-active', '');
   await expect(page.locator('#pane-document')).toContainText('index.d2');
@@ -145,7 +151,8 @@ test('supports narrow dark screens and keeps diagram-only search available', asy
   await page.setViewportSize({ width: 390, height: 844 });
   await page.emulateMedia({ colorScheme: 'dark' });
   await find(page, 'Refund approval');
-  await expect(matches(page)).toHaveCount(2);
+  await settled(page);
+  await expect(matches(page)).toHaveCount(3);
   await expect(dialog(page)).toBeInViewport({ ratio: 1 });
   await matches(page).filter({ hasText: 'work.d2' }).click();
   await expect(stage(page)).toContainText('Refund approval');
@@ -163,7 +170,8 @@ test('searches from the atlas map and returns to it from the result', async ({ p
   await expect(page.locator('#filename')).toHaveText('Atlas map');
   await previewReady(page);
   await find(page, 'Refund approval');
-  await expect(matches(page)).toHaveCount(2);
+  await settled(page);
+  await expect(matches(page)).toHaveCount(3);
   await matches(page).filter({ hasText: 'work.d2' }).click();
   await expect(page.locator('#filename')).toHaveAttribute('title', 'atlas/work.d2');
   await previewReady(page);

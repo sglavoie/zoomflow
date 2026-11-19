@@ -98,7 +98,15 @@ export function setupDiagramSearch(host: HTMLElement, scope: PaneScope, viewer: 
       ? `Could not search ${state.failures.map(item => `${item.path}: ${item.message}`).join('; ')}` : '');
     retry.hidden = !projectMode || !state || state.indexing || !state.error && !state.failures.length;
     let focus: HTMLButtonElement | undefined;
-    results.replaceChildren(...matches.map(entry => {
+    // Indexing publishes files while a result can be between pointerdown and click.
+    // Keep unchanged result nodes attached so that progress cannot swallow that click.
+    const previous = new Map([...results.children].map(item => [destinations.get(item.querySelector('button')!)!, item]));
+    const items = matches.map(entry => {
+      const existing = previous.get(entry);
+      if (existing) {
+        if (entry === focused) focus = existing.querySelector('button')!;
+        return existing;
+      }
       const item = document.createElement('li');
       const open = document.createElement('button');
       open.type = 'button';
@@ -116,7 +124,11 @@ export function setupDiagramSearch(host: HTMLElement, scope: PaneScope, viewer: 
       });
       item.append(open);
       return item;
-    }));
+    });
+    for (const [index, item] of items.entries()) {
+      if (results.children[index] !== item) results.insertBefore(item, results.children[index] ?? null);
+    }
+    for (const item of [...results.children].slice(items.length)) item.remove();
     if (focused) (focus ?? input).focus({ preventScroll: true });
   }
   function refresh() {

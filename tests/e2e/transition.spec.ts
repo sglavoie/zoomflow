@@ -326,6 +326,10 @@ test('a second navigation owns the canvas while the first zoom is still running'
 
 test('reduced motion skips zooming and still highlights the return node', async ({ page }) => {
   await page.emulateMedia({ reducedMotion: 'reduce' });
+  // The reduced-motion return ring lasts 600 ms. Keep that lifetime independent
+  // of worker load and automation latency while still exercising real renders.
+  await page.clock.install({ time: new Date('2026-01-01T00:00:00Z') });
+  await page.clock.pauseAt(new Date('2026-01-02T00:00:00Z'));
   await page.goto('/');
   const stage = page.locator('.zf-stage');
   await expect(stage).toHaveAttribute('data-board', 'root');
@@ -337,6 +341,8 @@ test('reduced motion skips zooming and still highlights the return node', async 
   await expect(stage).toHaveAttribute('data-board', 'root');
   await expect(stage.locator('.zf-return-highlight')).toBeAttached();
   expect(await stage.evaluate(el => el.getAnimations({ subtree: true }).length)).toBe(0);
+  await page.clock.runFor(601);
+  await expect(stage.locator('.zf-return-highlight')).toHaveCount(0);
 });
 
 test('scroll input cancels motion and rapid keyboard navigation restores a stable canvas', async ({ page }) => {
