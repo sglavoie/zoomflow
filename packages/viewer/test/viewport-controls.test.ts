@@ -58,6 +58,23 @@ describe('createViewport', () => {
     expect(repeat.defaultPrevented).toBe(true);
   });
 
+  it('reveals keyboard focus immediately after a pointer press even when a form handles the key', () => {
+    const { stage, link, frame } = mount();
+    const input = document.createElement('input');
+    stage.after(input);
+    input.addEventListener('keydown', event => { event.stopPropagation(); link.focus(); });
+    const now = vi.spyOn(performance, 'now').mockReturnValue(1000);
+    try {
+      link.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+      link.focus();
+      expect(frame).not.toHaveBeenCalled();
+      input.focus();
+      input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+      expect(document.activeElement).toBe(link);
+      expect(frame).toHaveBeenCalledOnce();
+    } finally { now.mockRestore(); }
+  });
+
   it('reveals a shape focused from the keyboard, not one focused by a click', () => {
     const { link, frame } = mount();
     link.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));

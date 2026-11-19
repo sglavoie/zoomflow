@@ -108,6 +108,9 @@ export function createViewport(stage: HTMLElement, host: HTMLElement, clamp: typ
     if (windowEvents || signal.aborted) return;
     windowEvents = new AbortController();
     const options = { signal: windowEvents.signal };
+    // A keyboard action can refocus the canvas within 500 ms of a pointer press.
+    // Capture before rename fields or dialogs handle the key and restore focus.
+    window.addEventListener('keydown', () => { pointerAt = -Infinity; }, { ...options, capture: true });
     window.addEventListener('keydown', onKeyDown, options);
     window.addEventListener('keyup', onKeyUp, options);
     window.addEventListener('blur', releaseSpace, options);
