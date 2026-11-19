@@ -382,7 +382,7 @@ export function createViewport(stage: HTMLElement, host: HTMLElement, clamp: typ
     }
     if (next) { reveal([next]); next.focus({ preventScroll: true }); }
   }, { signal });
-  const resize = new ResizeObserver(() => {
+  function refit() {
     // Refit the baseline as the available space changes, retaining the chosen magnification
     // and position. Otherwise desktop padding shrinks the content to tiny text on a phone.
     if (presentingView && presentationStep) {
@@ -399,7 +399,8 @@ export function createViewport(stage: HTMLElement, host: HTMLElement, clamp: typ
         y: base.y + base.height * centerY - height / 2, width, height }, false);
     }
     svg?.dispatchEvent(new Event('zf-viewportchange'));
-  });
+  }
+  const resize = new ResizeObserver(refit);
   resize.observe(stage);
   signal.addEventListener('abort', () => resize.disconnect());
   function fittedBox(element: SVGSVGElement, fallback: Box): Box {
@@ -504,6 +505,20 @@ export function createViewport(stage: HTMLElement, host: HTMLElement, clamp: typ
     updateControls();
     resetFocus();
     svg?.dispatchEvent(new Event('zf-viewportchange'));
+    // Text-only shapes (notably Markdown) change bounds when embedded fonts replace fallback
+    // glyphs. Load only this SVG's faces, then use the resize path to retain zoom and pan.
+    const rendered = svg;
+    if (rendered && document.fonts) {
+      const fonts = new Map<string, string>();
+      for (const text of rendered.querySelectorAll('text')) {
+        const style = getComputedStyle(text);
+        const face = `${style.fontStyle} ${style.fontWeight} ${style.fontSize} ${style.fontFamily}`;
+        fonts.set(face, (fonts.get(face) ?? '') + text.textContent);
+      }
+      void Promise.allSettled([...fonts].map(([face, text]) => document.fonts.load(face, text))).then(() => {
+        if (!signal.aborted && svg === rendered && rendered.isConnected) refit();
+      });
+    }
   }
   stage.addEventListener('zf-boardchange', reset, { signal });
   reset();

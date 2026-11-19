@@ -146,6 +146,59 @@ test('renders every built-in example with stdlib styling and readable labels', a
   }
 });
 
+for (const zoomed of [false, true]) test(`Markdown font loading keeps the fitted bounds stable${zoomed ? ' while zoomed' : ''}`, async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  let release!: () => void;
+  const gate = new Promise<void>(resolve => { release = resolve; });
+  let requested = 0;
+  // Deliver the actual embedded font bytes late, so the first fit must use fallback metrics.
+  await page.route(url => url.pathname === '/src/compiler.ts', async route => {
+    const response = await route.fetch();
+    const body = await response.text();
+    expect(body).toContain('const d2 = new D2();');
+    await route.fulfill({ response, body: body.replace('const d2 = new D2();', `
+      const d2 = new D2();
+      const render = d2.render.bind(d2);
+      d2.render = async (...args) => {
+        const svg = await render(...args);
+        if (!svg.includes('Try it')) return svg;
+        window.delayedDiagramFonts = {};
+        let index = 0;
+        return svg.replace(/data:application\\/font-woff;base64,([^"]+)/g, (_, data) => {
+          const path = '/delayed-diagram-font/' + index++;
+          window.delayedDiagramFonts[path] = data;
+          return location.origin + path;
+        });
+      };
+    `) });
+  });
+  await page.route('**/delayed-diagram-font/*', async route => {
+    requested++;
+    await gate;
+    const data = await page.evaluate(path => (window as any).delayedDiagramFonts[path], new URL(route.request().url()).pathname);
+    await route.fulfill({ contentType: 'font/woff', body: Buffer.from(data, 'base64') });
+  });
+  try {
+    await page.goto(devURL); await ready(page);
+    await choose(page, 'Flowchart basics', 'flowchart.d2');
+    await expect.poll(() => requested).toBeGreaterThanOrEqual(3);
+    if (zoomed) await page.getByRole('button', { name: 'Zoom in', exact: true }).click();
+    release();
+    await page.evaluate(() => document.fonts.ready);
+    const frames = () => page.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
+    await frames();
+    const view = () => page.locator('.zf-stage > svg').getAttribute('viewBox').then(value => value!.split(/\s+/).map(Number));
+    const loaded = await view();
+    // A real resize remeasures the same loaded fonts. It must not repair a stale first fit.
+    await page.setViewportSize({ width: 1439, height: 900 }); await frames();
+    await page.setViewportSize({ width: 1440, height: 900 }); await frames();
+    const resized = await view();
+    for (let index = 0; index < 4; index++) expect(Math.abs(loaded[index] - resized[index])).toBeLessThan(.25);
+    await expect(page.locator('.zf-zoom-controls span')).toHaveText(zoomed ? '150%' : 'Fitted');
+  } finally { release(); await page.unrouteAll({ behavior: 'wait' }); }
+});
+
 async function readableTables(page: Page, theme: 'light' | 'dark') {
   const headings = page.locator('.zf-filled > .shape > text[fill="#203044"]');
   await expect(headings).toHaveText(['Customers', 'Orders', 'Order items']);
